@@ -1,0 +1,19 @@
+site_name: Family Knowledge Base
+
+theme:
+  name: material
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Family: family/
+  - Finances: finances/
+  - Games: games/
+  - Guitar: guitar/
+  - House: house/
+  - Investments: investments/
+  - Research: research/
+  - Travel: travel/
+  - Vehicles: vehicles/

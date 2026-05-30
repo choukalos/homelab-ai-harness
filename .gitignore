@@ -1,0 +1,10 @@
+# Never commit private content
+media/
+outputs/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+.env
+

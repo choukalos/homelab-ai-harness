@@ -1,0 +1,118 @@
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - ai-net
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../litellm/config.yml:/app/config.yaml:ro
+      - /home/chuck/data/litellm:/app/data
+    extra_hosts:
+      - "macstudio:${MAC_STUDIO_IP}"
+      - "matrix:${MATRIX_IP}"
+      - "host.docker.internal:host-gateway"
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    ports:
+      - "3000:8080"
+    environment:
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - ENABLE_OPENAI_API=True
+      - OPENAI_API_BASE_URL=http://litellm-proxy:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - ENABLE_OLLAMA_API=False
+      - ENABLE_PERSISTENT_CONFIG=False
+      - ENABLE_IMAGE_GENERATION=true
+      - IMAGE_GENERATION_API_URL=http://${MATRIX_IP}:8188
+      - HARNESS_URL=http://ai-harness:8090
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+    volumes:
+      - /home/chuck/data/open-webui:/app/backend/data
+    depends_on:
+      - litellm
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    networks:
+      - ai-net
+    ports:
+      - "6333:6333"
+    volumes:
+      - /home/chuck/data/qdrant:/qdrant/storage
+
+  ai-redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    networks:
+      - ai-net
+    volumes:
+      - /home/chuck/data/redis:/data
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    ports:
+      - "8088:8080"
+    volumes:
+      - /home/chuck/homelab/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - /home/chuck/data/searxng:/var/cache/searxng
+    depends_on:
+      - searxng-valkey
+
+  searxng-valkey:
+    image: valkey/valkey:9-alpine
+    container_name: searxng-valkey
+    restart: unless-stopped
+    networks:
+      - ai-net
+    command: valkey-server --save 30 1 --loglevel warning
+    volumes:
+      - /home/chuck/data/searxng-valkey:/data
+
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: crawl4ai
+    restart: unless-stopped
+    networks:
+      - ai-net
+    ports:
+      - "11235:11235"
+    shm_size: "3g"
+    volumes:
+      - /home/chuck/data/crawl4ai:/app/data
+
+  family-wiki:
+    image: squidfunk/mkdocs-material:latest
+    container_name: family-wiki
+    restart: unless-stopped
+    networks:
+      - ai-net
+    command: serve -a 0.0.0.0:8000
+    ports:
+      - "8011:8000"
+    volumes:
+      - /home/chuck/homelab/mkdocs/mkdocs.yml:/docs/mkdocs.yml:ro
+      - /home/chuck/data/ai-kb/repo:/docs/docs
+
+

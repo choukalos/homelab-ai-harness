@@ -1,0 +1,82 @@
+services:
+  home-ai-harness:
+    build:
+      context: ../ai-harness
+    image: home-ai-harness:local
+    container_name: ai-harness
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+      - public-net
+    ports:
+      - "${THOR_IP}:8090:8090"
+    environment:
+      - LITELLM_URL=http://litellm-proxy:4000
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - CRAWL4AI_BASE_URL=http://crawl4ai:11235
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://ai-redis:6379/0
+
+      - KB_ROOT=/data/ai-kb/repo
+      - KB_RAW=/data/ai-kb/raw
+      - KB_PROCESSED=/data/ai-kb/processed
+      - KB_FAILED=/data/ai-kb/failed
+      - EMBED_MODEL=BAAI/bge-small-en-v1.5
+
+      - MATRIX_IP=${MATRIX_IP}
+      - COMFY_PORT=8188
+      - COMFY_BASE_URL=http://${MATRIX_IP}:8188
+
+      - MEDIA_OUTPUT_DIR=/data/media
+      - MEDIA_INTERNAL_BASE_URL=http://${THOR_IP}:8090/media/files
+      - MEDIA_PUBLIC_BASE_URL=https://siri.choukalos.com/media/files
+
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+      - SIRI_API_KEY=${SIRI_API_KEY}
+
+    volumes:
+      - /home/chuck/data/ai-kb:/data/ai-kb
+      - /home/chuck/data/media:/data/media
+
+    depends_on:
+      - litellm
+      - searxng
+      - crawl4ai
+      - qdrant
+      - ai-redis
+
+  home-ai-kb-watcher:
+    image: home-ai-harness:local
+    container_name: ai-kb-watcher
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - KB_ROOT=/data/ai-kb/repo
+      - KB_RAW=/data/ai-kb/raw
+      - KB_PROCESSED=/data/ai-kb/processed
+      - KB_FAILED=/data/ai-kb/failed
+      - EMBED_MODEL=BAAI/bge-small-en-v1.5
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+    volumes:
+      - /home/chuck/data/ai-kb:/data/ai-kb
+    command: python family_kb_watch.py
+    depends_on:
+      - qdrant
+
+networks:
+  ai-net:
+    external: true
+  public-net:
+    external: true
+
+
+
+    

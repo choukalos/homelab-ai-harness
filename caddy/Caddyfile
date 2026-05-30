@@ -1,0 +1,76 @@
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	@www host www.choukalos.com
+	redir @www https://choukalos.com{uri} permanent
+
+	@ghost host choukalos.com
+	handle @ghost {
+		reverse_proxy http://ghost-blog:2368 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+	#		header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+		}
+	}
+
+	# Invest
+	# @invest host invest.choukalos.com
+	# handle @invest {
+	# 	reverse_proxy http://invest:3000 {
+	# 		header_up Host {host}
+	# 		header_up X-Real-IP {remote_host}
+	# 		header_up X-Forwarded-For {remote_host}
+	# 		header_up X-Forwarded-Host {host}
+	# 		header_up X-Forwarded-Proto https
+	# 		header_up X-Forwarded-Port 443
+	# 	}
+	# }
+
+	@siri host siri.choukalos.com
+	handle @siri {
+		# Public generated files: images + one-page HTML demos
+		handle_path /media/files/* {
+			reverse_proxy http://ai-harness:8090
+		}
+
+		# Optional health check
+		handle /health {
+			reverse_proxy http://ai-harness:8090
+		}
+
+		# Siri API requires auth
+		handle /siri/* {
+			@noAuth not header X-API-Key {$SIRI_API_KEY}
+			respond @noAuth "Unauthorized" 401
+
+			reverse_proxy http://ai-harness:8090
+		}
+
+		respond "Not Found" 404
+	}
+
+
+	@llm host llm.choukalos.com
+	handle @llm {
+		@noAuth not header X-API-Key {$LITELLM_PUBLIC_API_KEY}
+		respond @noAuth "Unauthorized" 401
+
+		reverse_proxy http://litellm-proxy:4000
+	}
+
+	respond "Not Found" 404
+}
+

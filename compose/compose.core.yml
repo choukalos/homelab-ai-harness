@@ -1,0 +1,32 @@
+name: homelab
+
+networks:
+  edge-net:
+    name: edge-net
+
+  public-net:
+    name: public-net
+
+  ai-net:
+    name: ai-net
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - edge-net
+      - public-net
+      - ai-net
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /home/chuck/homelab/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /home/chuck/data/caddy/data:/data
+      - /home/chuck/data/caddy/config:/config
+
+

@@ -1,0 +1,84 @@
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    env_file: .env
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm/config.yml:/app/config.yaml:ro
+    extra_hosts:
+      - "macstudio:${MAC_STUDIO_IP}"
+      - "matrix:${MATRIX_IP}"
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - ai-net
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    env_file: .env
+    ports:
+      - "3000:8080"
+    volumes:
+      - ../data/open-webui:/app/backend/data
+    environment:
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - ENABLE_OPENAI_API=True
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - ENABLE_OLLAMA_API=False
+      - ENABLE_PERSISTENT_CONFIG=False
+      - ENABLE_IMAGE_GENERATION=true
+      - IMAGE_GENERATION_API_URL=http://${MATRIX_IP}":8188
+    depends_on:
+      - litellm
+    networks:
+      - ai-net
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    env_file: .env
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${PGR_DB_NAME}
+      - DB_POSTGRESDB_USER=${PGR_DB_USER}
+      - DB_POSTGRESDB_PASSWORD=${PGR_DB_PASS}
+      - N8N_ENCRYPTION_KEY=${N8N_ENC_KEY}
+      - TZ=${TZ}
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      - ../data/n8n:/home/node/.n8n
+    depends_on:
+      - postgres
+    networks:
+      - ai-net
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    env_file: .env
+    environment:
+      - POSTGRES_USER=${PGR_DB_USER}
+      - POSTGRES_PASSWORD=${PGR_DB_PASS}
+      - POSTGRES_DB=${PGR_DB_NAME}
+      - TZ=${TZ}
+    volumes:
+      - ../data/postgres:/var/lib/postgresql/data
+    networks:
+      - ai-net
+    restart: unless-stopped
+
+networks:
+  ai-net:
+    name: ai-net
+
+

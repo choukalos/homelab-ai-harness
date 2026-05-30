@@ -1,0 +1,43 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASS}
+      - N8N_ENCRYPTION_KEY=${N8N_ENC_KEY}
+      - TZ=${TZ}
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      - /home/chuck/data/n8n:/home/node/.n8n
+    depends_on:
+      - n8n-postgres
+
+  n8n-postgres:
+    image: postgres:16
+    container_name: n8n-postgres
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    environment:
+      - POSTGRES_USER=${N8N_DB_USER}
+      - POSTGRES_PASSWORD=${N8N_DB_PASS}
+      - POSTGRES_DB=${N8N_DB_NAME}
+      - TZ=${TZ}
+    volumes:
+      - /home/chuck/data/n8n-postgres:/var/lib/postgresql/data
+
+

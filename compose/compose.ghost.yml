@@ -1,0 +1,24 @@
+services:
+  ghost-blog:
+    image: ghost:5-alpine
+    container_name: ghost-blog
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - public-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - url=https://choukalos.com
+      - server__trustProxy=true
+      - NODE_ENV=production
+      - database__client=mysql
+      - database__connection__host=host.docker.internal
+      - database__connection__user=${GHOST_DB_USER}
+      - database__connection__password=${GHOST_DB_PASS}
+      - database__connection__database=${GHOST_DB_NAME}
+    volumes:
+      - /home/chuck/data/ghost:/var/lib/ghost/content
+
+
