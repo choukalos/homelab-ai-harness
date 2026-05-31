@@ -26,18 +26,17 @@
 		}
 	}
 
-	# Invest
-	# @invest host invest.choukalos.com
-	# handle @invest {
-	# 	reverse_proxy http://invest:3000 {
-	# 		header_up Host {host}
-	# 		header_up X-Real-IP {remote_host}
-	# 		header_up X-Forwarded-For {remote_host}
-	# 		header_up X-Forwarded-Host {host}
-	# 		header_up X-Forwarded-Proto https
-	# 		header_up X-Forwarded-Port 443
-	# 	}
-	# }
+	@invest host invest.choukalos.com
+	handle @invest {
+	          reverse_proxy http://invest:3000 {
+              header_up Host {host}
+              header_up X-Real-IP {remote_host}
+              header_up X-Forwarded-For {remote_host}
+              header_up X-Forwarded-Host {host} 
+              header_up X-Forwarded-Proto https
+              header_up X-Forwarded-Port 443
+            }
+	}
 
 	@siri host siri.choukalos.com
 	handle @siri {

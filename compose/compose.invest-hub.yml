@@ -1,6 +1,29 @@
 services:
+  github-runner:
+    image: myoung34/github-runner:latest
+    container_name: github-runner
+    restart: unless-stopped
+    environment:
+      # You get these from GitHub Settings -> Actions -> Runners
+      - REPO_URL=https://github.com/choukalos/invest-hub
+      - RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
+      - LABELS=self-hosted,linux,docker
+    volumes:
+      # Allows the runner to control the host's Docker engine
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Allows the runner to access your compose files to run 'docker compose up'
+      - /home/chuck/homelab/compose:/home/github-runner/work/compose
+      # Allows the runner to see your .env files
+      - /home/chuck/homelab/.env:/home/docker-runner/work/.env
+    networks:
+      - public-net
+
   invest-hub-server:
-    image: ghcr.io/choukalos/invest-hub-server:latest
+    # The runner will build the image and tag it as 'invest-hub-server:latest'
+    image: invest-hub-server:latest
+    build:
+      context: ../../workspace/invest-hub/server
+      dockerfile: Dockerfile
     container_name: invest-hub-server
     restart: unless-stopped
     env_file:
@@ -12,22 +35,41 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8080
-      - DATABASE_HOST=host.docker.internal
-      - DATABASE_PORT=3306
-      - DATABASE_NAME=${INVEST_DB_NAME}
-      - DATABASE_USER=${INVEST_DB_USER}
-      - DATABASE_PASSWORD=${INVEST_DB_PASS}
+      - DATABASE_URL="mysql://${INVEST_DB_USER}:${INVEST_DB_PASS}@host.docker.internal:3306/${INVEST_DB_NAME}"
+      #- DATABASE_HOST=host.docker.internal
+      #- DATABASE_PORT=3306
+      #- DATABASE_NAME=${INVEST_DB_NAME}
+      #- DATABASE_USER=${INVEST_DB_USER}
+      #- DATABASE_PASSWORD=${INVEST_DB_PASS}
       - PUBLIC_BASE_URL=https://invest.choukalos.com
+      - JWT_SECRET=${INVEST_JWT_SECRET}
+      - YF_REQUEST_DELAY_MS=750
+      - YF_REQUEST_JITTER_MS=750
+      - YF_MAX_RETRIES=5
+      - YF_RETRY_BASE_MS=2000
+      - YF_RETRY_MAX_MS=30000
+      - YF_SYMBOL_DELAY_MS=2000
+      - YF_SYMBOL_JITTER_MS=1000
+      - YF_RATE_LIMIT_COOLOFF_MS=45000
+
 
   invest-hub-client:
-    image: ghcr.io/choukalos/invest-hub-client:latest
+    image: invest-hub-client:latest
+    build:
+      context: ../../workspace/invest-hub/client
+      dockerfile: Dockerfile
     container_name: invest-hub-client
     restart: unless-stopped
     env_file:
       - ../.env
+#    environment:
+#      - PORT="${THOR_IP}:2680:2680"
     networks:
       - public-net
     depends_on:
       - invest-hub-server
 
+networks:
+  public-net:
+    external: true 
 
