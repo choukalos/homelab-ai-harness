@@ -35,7 +35,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8080
-      - DATABASE_URL="mysql://${INVEST_DB_USER}:${INVEST_DB_PASS}@host.docker.internal:3306/${INVEST_DB_NAME}"
+      - DATABASE_URL=${INVEST_DATABASE_URL}
       #- DATABASE_HOST=host.docker.internal
       #- DATABASE_PORT=3306
       #- DATABASE_NAME=${INVEST_DB_NAME}
