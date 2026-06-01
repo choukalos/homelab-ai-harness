@@ -28,7 +28,7 @@
 
 	@invest host invest.choukalos.com
 	handle @invest {
-	          reverse_proxy http://invest:3000 {
+	          reverse_proxy http://invest-hub-client:3000 {
               header_up Host {host}
               header_up X-Real-IP {remote_host}
               header_up X-Forwarded-For {remote_host}

@@ -62,8 +62,6 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
-#    environment:
-#      - PORT="${THOR_IP}:2680:2680"
     networks:
       - public-net
     depends_on:
