@@ -26,17 +26,10 @@
 	}
 
     @invest host invest.choukalos.com
-	handle @invest {
-		# 1. Route API requests to the backend server container
+    handle @invest {
+		# 1. Route API requests to the backend server via public API host
 		handle_path /api/* {
-			reverse_proxy http://invest-hub-server:4000 {
-				header_up Host {host}
-				header_up X-Real-IP {remote_host}
-				header_up X-Forwarded-For {remote_host}
-				header_up X-Forwarded-Host {host} 
-				header_up X-Forwarded-Proto https
-				header_up X-Forwarded-Port 443
-			}
+			redir https://api.choukalos.com{uri}
 		}
 
 		# 2. Route everything else to the frontend React client container
@@ -45,10 +38,22 @@
 				header_up Host {host}
 				header_up X-Real-IP {remote_host}
 				header_up X-Forwarded-For {remote_host}
-				header_up X-Forwarded-Host {host} 
+				header_up X-Forwarded-Host {host}
 				header_up X-Forwarded-Proto https
 				header_up X-Forwarded-Port 443
 			}
+		}
+	}
+
+	@api host api.choukalos.com
+	handle @api {
+		reverse_proxy http://invest-hub-server:4000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
 		}
 	}
 
