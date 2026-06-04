@@ -19,6 +19,9 @@ COMFY_BASE_URL = os.getenv(
 	f"http://{MATRIX_IP}:{COMFY_PORT}" if MATRIX_IP else "http://matrix.local:8188",
 )
 
+# Workspace directory for local file tools (container mount point)
+WORKSPACE = os.environ.get("WORKSPACE", "/home/chuck/workspace")
+
 # Media storage base directory (container mount point)
 MEDIA_OUTPUT_DIR = os.getenv("MEDIA_OUTPUT_DIR", "/data/media")
 

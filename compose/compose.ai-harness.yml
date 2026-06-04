@@ -37,10 +37,12 @@ services:
 
       - HARNESS_API_KEY=${HARNESS_API_KEY}
       - SIRI_API_KEY=${SIRI_API_KEY}
+      - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
 
     volumes:
       - /home/chuck/data/ai-kb:/data/ai-kb
       - /home/chuck/data/media:/data/media
+      - /home/chuck/workspace:/home/chuck/workspace:rw
 
     depends_on:
       - litellm

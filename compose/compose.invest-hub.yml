@@ -22,7 +22,7 @@ services:
     # The runner will build the image and tag it as 'invest-hub-server:latest'
     image: invest-hub-server:latest
     build:
-      context: ../../workspace/invest-hub/server
+      context: ../../workspace/code/invest-hub/server
       dockerfile: Dockerfile
     container_name: invest-hub-server
     restart: unless-stopped
@@ -56,7 +56,7 @@ services:
   invest-hub-client:
     image: invest-hub-client:latest
     build:
-      context: ../../workspace/invest-hub/client
+      context: ../../workspace/code/invest-hub/client
       dockerfile: Dockerfile
     container_name: invest-hub-client
     restart: unless-stopped
