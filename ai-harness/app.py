@@ -8,6 +8,7 @@ from media.router import router as media_router
 from pm_demo.router import router as pm_demo_router
 from siri.router import router as siri_router
 from filetools.router import router as filetools_router
+from layout.router import router as layout_router
 
 app = FastAPI(title="AI Harness")
 
@@ -17,6 +18,7 @@ app.include_router(media_router, prefix="/media", tags=["media"])
 app.include_router(pm_demo_router, prefix="/pm", tags=["pm-demo"])
 app.include_router(siri_router, prefix="/siri", tags=["siri"])
 app.include_router(filetools_router, prefix="/files", tags=["filetools"])
+app.include_router(layout_router, prefix="/layout", tags=["layout"])
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 
