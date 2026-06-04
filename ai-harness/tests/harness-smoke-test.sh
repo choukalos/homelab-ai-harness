@@ -282,6 +282,19 @@ PY
     echo "Skipping Media Image Edit From Upload: missing ${MEDIA_TEST_IMAGE}"
     echo
   fi
+
+  call_post "Media Clip Generation" "/media/clip" '{
+    "prompt": "cinematic drone shot of a serene mountain lake at golden hour",
+    "negative_prompt": "text, watermark",
+    "width": 1024,
+    "height": 576,
+    "seed": -1,
+    "steps": 15,
+    "cfg": 8.0,
+    "video_frames": 25,
+    "fps": 6,
+    "motion_bucket_id": 127
+  }' "1"
 else
   echo "Skipping media tests. Run with RUN_MEDIA_TESTS=1 to enable."
   echo

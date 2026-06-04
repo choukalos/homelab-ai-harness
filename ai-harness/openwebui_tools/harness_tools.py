@@ -499,4 +499,69 @@ class Tools:
 
         return "\n".join(lines)
 
+    def generate_clip(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        width: int = 1024,
+        height: int = 576,
+        seed: int = -1,
+        video_frames: int = 25,
+        fps: int = 6,
+        motion_bucket_id: int = 127,
+    ) -> str:
+        """
+        Generate a short video clip from a text prompt using the AI Harness media pipeline.
+        The pipeline first generates an image from the prompt, then animates it into a clip.
+        Use this for concept videos, short animations, cinematic scenes,
+        motion visualization, or any prompt-to-clip request.
+        """
+
+        payload = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt or "text, watermark",
+            "width": width,
+            "height": height,
+            "seed": seed,
+            "steps": 15,
+            "cfg": 8.0,
+            "video_frames": video_frames,
+            "fps": fps,
+            "motion_bucket_id": motion_bucket_id,
+        }
+
+        data = self._post(
+            "/media/clip",
+            payload,
+            timeout=600,
+        )
+
+        lines = [
+            "Clip generated successfully.",
+            "",
+        ]
+
+        if data.get("job_id"):
+            lines.append(f"Job ID: {data['job_id']}")
+
+        files = data.get("files", [])
+
+        if not files:
+            lines.append("No output files returned.")
+            return "\n".join(lines)
+
+        lines.append("")
+        lines.append("Generated files:")
+
+        for item in files:
+            url = self._absolute_url(item.get("url") or "")
+            file_type = item.get("type") or "unknown"
+
+            lines.append(f"- {file_type}: {url}")
+
+            if url:
+                lines.append(f"![Generated clip]({url})")
+
+        return "\n".join(lines)
+
         
