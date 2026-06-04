@@ -12,11 +12,18 @@ HARNESS_MODEL = os.getenv("HARNESS_MODEL", "gemma-moe")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
-MATRIX_IP = os.getenv("MATRIX_IP","192.168.4.55")
-COMFY_PORT = os.getenv("COMFY_PORT","8188")
+MATRIX_IP = os.getenv("MATRIX_IP", "192.168.4.55")
+COMFY_PORT = os.getenv("COMFY_PORT", "8188")
 COMFY_BASE_URL = os.getenv(
 	"COMFY_BASE_URL",
 	f"http://{MATRIX_IP}:{COMFY_PORT}" if MATRIX_IP else "http://matrix.local:8188",
 )
+
+# Media storage base directory (container mount point)
 MEDIA_OUTPUT_DIR = os.getenv("MEDIA_OUTPUT_DIR", "/data/media")
-MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "/media/files")
+
+# Base URLs for serving generated media
+# INTERNAL_BASE_URL: used by internal API responses (e.g. thor.local:8090)
+# PUBLIC_BASE_URL: used only by Siri-facing responses (e.g. https://siri.choukalos.com)
+INTERNAL_BASE_URL = os.getenv("INTERNAL_BASE_URL", "http://thor.local:8090")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://siri.choukalos.com")

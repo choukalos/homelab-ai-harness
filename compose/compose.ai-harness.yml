@@ -32,8 +32,8 @@ services:
       - COMFY_BASE_URL=http://${MATRIX_IP}:8188
 
       - MEDIA_OUTPUT_DIR=/data/media
-      - MEDIA_INTERNAL_BASE_URL=http://${THOR_IP}:8090/media/files
-      - MEDIA_PUBLIC_BASE_URL=https://siri.choukalos.com/media/files
+      - INTERNAL_BASE_URL=http://thor.local:8090
+      - PUBLIC_BASE_URL=https://siri.choukalos.com
 
       - HARNESS_API_KEY=${HARNESS_API_KEY}
       - SIRI_API_KEY=${SIRI_API_KEY}

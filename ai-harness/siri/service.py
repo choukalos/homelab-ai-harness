@@ -1,11 +1,23 @@
 import httpx
 
+from core.config import PUBLIC_BASE_URL
 from core.llm import chat_completion
 from media.comfy_client import ComfyClient
 from media.schemas import ImageRequest
 from pm_demo.service import generate_demo_html
 from siri.schemas import SiriChatRequest, SiriChatResponse
 from web_search.service import run_research_brief
+
+
+# Rewrite internal media URLs to public-facing URLs for Siri responses
+def _rewrite_to_public_urls(media_url: str) -> str:
+    """Replace internal base URL with public base URL in media URLs."""
+    from core.config import INTERNAL_BASE_URL
+    internal = INTERNAL_BASE_URL.rstrip("/")
+    public = PUBLIC_BASE_URL.rstrip("/")
+    if internal and media_url.startswith(internal):
+        return media_url.replace(internal, public, 1)
+    return media_url
 
 
 def _shorten_for_voice(text: str, max_len: int = 700) -> str:
@@ -92,13 +104,12 @@ async def _handle_image(req: SiriChatRequest) -> SiriChatResponse:
     )
 
     media = []
-    if result.url:
-        media.append(
-            {
-                "type": "image",
-                "url": result.url,
-            }
-        )
+    for f in result.get("files", []):
+        public_url = _rewrite_to_public_urls(f.get("url", ""))
+        media.append({
+            "type": "image",
+            "url": public_url,
+        })
 
     return SiriChatResponse(
         speak="I generated the image.",
@@ -118,17 +129,18 @@ async def _handle_demo(req: SiriChatRequest) -> SiriChatResponse:
     )
 
     links = []
-    if result.url:
+    if result.get("url"):
+        public_demo_url = _rewrite_to_public_urls(result["url"])
         links.append(
             {
                 "title": "Open HTML demo",
-                "url": result.url,
+                "url": public_demo_url,
             }
         )
 
     return SiriChatResponse(
         speak="I created the one page demo.",
-        display=f"Demo created: {result.url}",
+        display=f"Demo created: {public_demo_url}",
         session_id=req.session_id,
         links=links,
         data=result.model_dump() if hasattr(result, "model_dump") else dict(result),
