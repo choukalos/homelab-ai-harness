@@ -6,14 +6,19 @@ from watchdog.observers import Observer
 
 from family_kb.config import KB_RAW
 from family_kb.ingest_files import ensure_kb_dirs, ingest_existing_raw_files, ingest_source_file
+from family_kb.nav_gen import regenerate_all
 
 
 class KBFileHandler(FileSystemEventHandler):
     def on_created(self, event):
         ingest_source_file(Path(event.src_path))
+        # Regenerate indexes after each new file
+        regenerate_all()
 
     def on_moved(self, event):
         ingest_source_file(Path(event.dest_path))
+        # Regenerate indexes after each new file
+        regenerate_all()
 
 
 def watch_raw_folder() -> None:

@@ -112,7 +112,7 @@ services:
     ports:
       - "8011:8000"
     volumes:
-      - /home/chuck/homelab/mkdocs/mkdocs.yml:/docs/mkdocs.yml:ro
+      - /home/chuck/data/ai-kb/mkdocs.yml:/docs/mkdocs.yml
       - /home/chuck/data/ai-kb/repo:/docs/docs
 
 

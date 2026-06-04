@@ -34,3 +34,13 @@ class FileIngestResponse(BaseModel):
     message: str | None = None
 
 
+class NavRegenResponse(BaseModel):
+    categories: list[str]
+    category_indexes: int
+    root_index: bool
+    mkdocs_updated: bool
+    mkdocs_path: str | None = None
+    files: dict[str, int] | None = None
+    mkdocs_error: str | None = None
+
+

@@ -7,6 +7,7 @@ from family_kb.config import KB_ROOT
 from family_kb.embeddings import embed_query, embed_texts
 from family_kb.ids import point_id
 from family_kb.markdown import clean_markdown
+from family_kb.nav_gen import regenerate_all
 from family_kb.qdrant_store import search_points, upsert_points
 from family_kb.schemas import IngestResponse, SearchRequest
 
@@ -48,6 +49,9 @@ def ingest_markdown_repo() -> IngestResponse:
             indexed_chunks += 1
 
     upsert_points(points)
+
+    # Regenerate index files and mkdocs nav after re-indexing
+    regenerate_all()
 
     return IngestResponse(
         indexed_files=indexed_files,

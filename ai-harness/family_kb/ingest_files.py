@@ -4,6 +4,7 @@ from pathlib import Path
 
 from family_kb.config import KB_FAILED, KB_PROCESSED, KB_RAW, KB_ROOT, SUPPORTED_EXTENSIONS
 from family_kb.markdown import build_markdown_document, slug_for, source_to_markdown
+from family_kb.nav_gen import regenerate_all
 from family_kb.schemas import FileIngestResponse
 
 
@@ -80,6 +81,9 @@ def ingest_existing_raw_files() -> list[FileIngestResponse]:
     for path in KB_RAW.rglob("*"):
         if path.is_file():
             results.append(ingest_source_file(path))
+
+    # Regenerate indexes and nav after batch ingest
+    regenerate_all()
 
     return results
 
