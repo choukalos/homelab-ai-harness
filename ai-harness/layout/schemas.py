@@ -247,6 +247,201 @@ class CreateTableResponse(BaseModel):
 
 # ------ PDF Export ------
 
+class AddGeneratedImageRequest(BaseModel):
+    """Request to generate an image and insert it into a layout zone in one step."""
+
+    layout_id: str = Field(description="Layout ID from create endpoint.")
+    zone: str = Field(description="Zone name to place the generated image in.")
+    prompt: str = Field(description="Prompt for image generation.")
+    negative_prompt: str = Field(
+        default="blurry, distorted, low quality",
+        description="Negative prompt for image generation.",
+    )
+    width: int = Field(
+        default=1024,
+        ge=256,
+        le=2048,
+        description="Generated image width.",
+    )
+    height: int = Field(
+        default=576,
+        ge=256,
+        le=2048,
+        description="Generated image height.",
+    )
+    seed: int = Field(
+        default=-1,
+        description="Seed for reproducibility (-1 for random).",
+    )
+    steps: int = Field(
+        default=30,
+        ge=1,
+        le=80,
+        description="Denoising steps for generation.",
+    )
+    cfg: float = Field(
+        default=7.0,
+        ge=1.0,
+        le=20.0,
+        description="CFG scale for generation.",
+    )
+    alignment: Optional[Literal["left", "center", "right"]] = Field(
+        default="center",
+        description="Content alignment within the zone.",
+    )
+    style_class: Optional[str] = Field(
+        default="",
+        description="Additional CSS class name(s) to apply.",
+    )
+    append: bool = Field(
+        default=False,
+        description="If True, append to existing zone content instead of replacing.",
+    )
+
+
+class AddGeneratedImageResponse(BaseModel):
+    """Response after generating an image and inserting it into a layout."""
+
+    layout_id: str
+    zone: str
+    image_url: str
+    image_filename: str
+    job_id: str
+    status: str = "generated_and_placed"
+
+
+class BuildDocumentRequest(BaseModel):
+    """
+    Request to build a complete document by orchestrating layout creation,
+    content placement (text, images, tables), and rendering in a single API call.
+
+    The AI agent provides a high-level document spec and the service handles
+    the full pipeline: create layout → generate images → add content → render & save.
+    """
+
+    orientation: Literal["portrait", "slide"] = Field(
+        default="portrait",
+        description="Page orientation: portrait (document) or slide (presentation).",
+    )
+    template: str = Field(
+        default="minimal",
+        description="Layout template name.",
+    )
+    title: str = Field(
+        default="",
+        description="Document title.",
+    )
+    background_color: str = Field(
+        default="#ffffff",
+        description="Background color.",
+    )
+    text_color: str = Field(
+        default="#1a1a1a",
+        description="Primary text color.",
+    )
+    accent_color: str = Field(
+        default="#3b82f6",
+        description="Accent color.",
+    )
+    font_family: str = Field(
+        default="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+        description="CSS font-family string.",
+    )
+    page_margin: int = Field(
+        default=40,
+        ge=0,
+        le=120,
+        description="Page margin in pixels.",
+    )
+    zones: list["ZoneContentSpec"] = Field(
+        description="List of zone content specifications.",
+    )
+    output_path: str = Field(
+        description="Path to save the rendered HTML (e.g. 'output/report.html').",
+    )
+    export_pdf: bool = Field(
+        default=False,
+        description="If True, also export as PDF to media directory.",
+    )
+    pdf_path: Optional[str] = Field(
+        default=None,
+        description="PDF output path in media directory (used when export_pdf=True).",
+    )
+    pdf_page_size: Literal["A4", "Letter", "Legal", "A3", "A5"] = Field(
+        default="Letter",
+        description="PDF page size.",
+    )
+
+
+class ZoneContentSpec(BaseModel):
+    """Specification for a single zone's content in a document build."""
+
+    zone: str = Field(description="Zone name to populate.")
+    content_type: Literal["text", "image", "table", "gen_image"] = Field(
+        description="Content type. Use 'gen_image' to generate an image inline.",
+    )
+    content: Optional[str] = Field(
+        default=None,
+        description="Text content (markdown/HTML). Required when content_type='text'.",
+    )
+    image_url: Optional[str] = Field(
+        default=None,
+        description="URL to existing image. Required when content_type='image'.",
+    )
+    image_prompt: Optional[str] = Field(
+        default=None,
+        description="Prompt for image generation. Required when content_type='gen_image'.",
+    )
+    image_negative_prompt: Optional[str] = Field(
+        default="blurry, distorted, low quality",
+        description="Negative prompt for image generation.",
+    )
+    image_width: Optional[int] = Field(
+        default=1024,
+        description="Width for generated image.",
+    )
+    image_height: Optional[int] = Field(
+        default=576,
+        description="Height for generated image.",
+    )
+    image_seed: Optional[int] = Field(default=-1, description="Seed for generated image.")
+    image_steps: Optional[int] = Field(default=30, description="Steps for generated image.")
+    image_cfg: Optional[float] = Field(default=7.0, description="CFG for generated image.")
+    alignment: Optional[Literal["left", "center", "right"]] = Field(
+        default="center",
+        description="Content alignment within the zone.",
+    )
+    style_class: Optional[str] = Field(default="", description="Additional CSS classes.")
+    append: bool = Field(default=False, description="Append to existing zone content.")
+    table_columns: Optional[list[TableColumnDef]] = Field(
+        default=None,
+        description="Column definitions when content_type='table'.",
+    )
+    table_rows: Optional[list[dict]] = Field(
+        default=None,
+        description="Row data when content_type='table'.",
+    )
+    table_style: Optional[TableStyle] = Field(
+        default=None,
+        description="Style options when content_type='table'.",
+    )
+
+
+class BuildDocumentResponse(BaseModel):
+    """Response after building a complete document."""
+
+    layout_id: str
+    html_path: str
+    html_bytes: int
+    pdf_path: Optional[str] = None
+    pdf_url: Optional[str] = None
+    pdf_bytes: Optional[int] = None
+    generated_images: list[dict] = Field(
+        default_factory=list,
+        description="List of generated image info (filename, url).",
+    )
+
+
 class ExportPdfRequest(BaseModel):
     """Request to export a layout as a PDF file."""
 

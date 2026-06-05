@@ -6,6 +6,10 @@ from core.security import require_harness_auth
 from layout.schemas import (
     AddContentRequest,
     AddContentResponse,
+    AddGeneratedImageRequest,
+    AddGeneratedImageResponse,
+    BuildDocumentRequest,
+    BuildDocumentResponse,
     CreateLayoutRequest,
     CreateLayoutResponse,
     CreateTableRequest,
@@ -19,6 +23,8 @@ from layout.schemas import (
     SaveLayoutResponse,
 )
 from layout.service import (
+    add_generated_image,
+    build_document,
     layout_add_content,
     layout_create,
     layout_delete,
@@ -101,3 +107,29 @@ def export_pdf(
 ):
     """Render the layout and export as a PDF file to the media directory."""
     return layout_export_pdf(req)
+
+
+@router.post("/build", response_model=BuildDocumentResponse)
+def build(
+    req: BuildDocumentRequest,
+    _: None = Depends(require_harness_auth),
+):
+    """
+    Build a complete document in one call: create layout, populate zones
+    (including inline image generation via ComfyUI), then render and save.
+    Option to also export as PDF.
+    """
+    return build_document(req)
+
+
+@router.post("/add-generated-image", response_model=AddGeneratedImageResponse)
+def add_gen_image(
+    req: AddGeneratedImageRequest,
+    _: None = Depends(require_harness_auth),
+):
+    """
+    Generate an image via ComfyUI and place it directly into a layout zone.
+    Bridges the media pipeline with the layout engine so callers don't need
+    to manage intermediate image URLs.
+    """
+    return add_generated_image(req)

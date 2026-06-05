@@ -372,6 +372,18 @@ Purpose:
 - workflows
 - agents
 - Siri shortcut APIs
+- visual document generation (HTML + PDF with layout templates, styled tables, and AI-generated images)
+
+### Visual Document Pipeline
+
+The harness can produce polished HTML documents and PDFs by combining:
+- **Layout engine** — 10+ templates (magazine, split, grid, pitch, etc.), zone-based content
+- **Image generation** — inline AI image generation via ComfyUI, placed directly into layout zones
+- **Styled tables** — fully themed HTML tables with configurable colors, striping, hover
+- **PDF export** — WeasyPrint converts layouts to PDFs with configurable page sizes and margins
+- **One-shot build** — `/layout/build` orchestrates the entire pipeline (create, generate images, populate, render, export) in a single call
+
+Docs: `ai-harness/layout/README.md`
 
 ---
 

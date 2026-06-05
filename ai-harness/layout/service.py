@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
+from core.config import INTERNAL_BASE_URL
 
 # ------------------------------------------------------------------
 # In-memory layout store
@@ -1094,6 +1095,243 @@ def layout_save_table(req) -> Dict[str, Any]:
         "path": req.output_path,
         "bytes_written": len(html_doc.encode("utf-8")),
     }
+
+
+def build_document(req) -> Dict[str, Any]:
+    """
+    Build a complete document in one shot: create layout, populate zones
+    (generating images inline where needed), render, and optionally export PDF.
+    """
+    from core.security import require_harness_auth
+
+    _ensure_init()
+
+    # Step 1: Create the layout
+    from layout.schemas import CreateLayoutRequest
+
+    create_req = CreateLayoutRequest(
+        orientation=req.orientation,
+        template=req.template,
+        title=req.title,
+        background_color=req.background_color,
+        text_color=req.text_color,
+        accent_color=req.accent_color,
+        font_family=req.font_family,
+        page_margin=req.page_margin,
+    )
+
+    create_result = layout_create(create_req)
+    layout_id = create_result["layout_id"]
+    generated_images: list[dict] = []
+
+    # Step 2: Populate each zone
+    for zone_spec in req.zones:
+        if zone_spec.content_type == "gen_image":
+            # Generate the image then place it
+            gen_result = _generate_and_place_image(
+                layout_id=layout_id,
+                zone=zone_spec.zone,
+                prompt=zone_spec.image_prompt or "",
+                negative_prompt=zone_spec.image_negative_prompt
+                or "blurry, distorted, low quality",
+                width=zone_spec.image_width or 1024,
+                height=zone_spec.image_height or 576,
+                seed=zone_spec.image_seed or -1,
+                steps=zone_spec.image_steps or 30,
+                cfg=zone_spec.image_cfg or 7.0,
+                alignment=zone_spec.alignment or "center",
+                style_class=zone_spec.style_class or "",
+                append=zone_spec.append,
+            )
+            generated_images.append({
+                "filename": gen_result["image_filename"],
+                "url": gen_result["image_url"],
+                "zone": zone_spec.zone,
+            })
+        elif zone_spec.content_type == "text":
+            from layout.schemas import AddContentRequest
+
+            add_req = AddContentRequest(
+                layout_id=layout_id,
+                zone=zone_spec.zone,
+                content_type="text",
+                content=zone_spec.content,
+                alignment=zone_spec.alignment,
+                style_class=zone_spec.style_class,
+                append=zone_spec.append,
+            )
+            layout_add_content(add_req)
+        elif zone_spec.content_type == "image":
+            from layout.schemas import AddContentRequest
+
+            add_req = AddContentRequest(
+                layout_id=layout_id,
+                zone=zone_spec.zone,
+                content_type="image",
+                image_url=zone_spec.image_url,
+                alignment=zone_spec.alignment,
+                style_class=zone_spec.style_class,
+                append=zone_spec.append,
+            )
+            layout_add_content(add_req)
+        elif zone_spec.content_type == "table":
+            from layout.schemas import AddContentRequest
+
+            add_req = AddContentRequest(
+                layout_id=layout_id,
+                zone=zone_spec.zone,
+                content_type="table",
+                table_columns=zone_spec.table_columns,
+                table_rows=zone_spec.table_rows,
+                table_style=zone_spec.table_style,
+                alignment=zone_spec.alignment,
+                style_class=zone_spec.style_class,
+                append=zone_spec.append,
+            )
+            layout_add_content(add_req)
+
+    # Step 3: Save HTML
+    from layout.schemas import SaveLayoutRequest
+
+    save_req = SaveLayoutRequest(layout_id=layout_id, output_path=req.output_path)
+    save_result = layout_save(save_req)
+
+    response: Dict[str, Any] = {
+        "layout_id": layout_id,
+        "html_path": save_result["path"],
+        "html_bytes": save_result["bytes_written"],
+        "generated_images": generated_images,
+    }
+
+    # Step 4: Optionally export PDF
+    if req.export_pdf:
+        if not req.pdf_path:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="pdf_path is required when export_pdf=True",
+            )
+
+        from layout.schemas import ExportPdfRequest
+
+        pdf_req = ExportPdfRequest(
+            layout_id=layout_id,
+            output_path=req.pdf_path,
+            page_size=req.pdf_page_size,
+            margins=None,
+        )
+        pdf_result = layout_export_pdf(pdf_req)
+        response["pdf_path"] = pdf_result["path"]
+        response["pdf_url"] = pdf_result["url"]
+        response["pdf_bytes"] = pdf_result["bytes_written"]
+
+    return response
+
+
+def _generate_and_place_image(
+    layout_id: str,
+    zone: str,
+    prompt: str,
+    negative_prompt: str = "blurry, distorted, low quality",
+    width: int = 1024,
+    height: int = 576,
+    seed: int = -1,
+    steps: int = 30,
+    cfg: float = 7.0,
+    alignment: str = "center",
+    style_class: str = "",
+    append: bool = False,
+) -> Dict[str, Any]:
+    """
+    Generate an image via ComfyUI and place it directly into a layout zone.
+
+    Bridges the media (ComfyClient) pipeline with the layout engine so the
+    AI agent does not need to manage intermediate image URLs.
+    """
+    from media.comfy_client import ComfyClient
+    from media.schemas import ImageRequest
+
+    # Validate the layout exists
+    _get_layout(layout_id)
+
+    # Generate the image
+    image_req = ImageRequest(
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        width=width,
+        height=height,
+        seed=seed,
+        steps=steps,
+        cfg=cfg,
+        upscale=False,
+    )
+
+    comfy = ComfyClient()
+    gen_result = comfy.generate_image(image_req, media_type="image")
+
+    if not gen_result.get("files"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Image generation returned no output files",
+        )
+
+    # Use the first generated file
+    first_file = gen_result["files"][0]
+    image_url = first_file["url"]
+
+    # If the URL is relative (starts with /media/files/), make it absolute
+    # so the layout can reference it correctly
+    if image_url.startswith("/"):
+        image_url = f"{INTERNAL_BASE_URL}{image_url}"
+
+    # Place the image in the zone
+    layout = _get_layout(layout_id)
+    item: Dict[str, Any] = {
+        "type": "image",
+        "alignment": alignment,
+        "style_class": style_class or "",
+        "image_url": image_url,
+    }
+
+    if zone not in layout["zones"]:
+        layout["zones"][zone] = []
+        layout["zone_order"].append(zone)
+
+    if append:
+        layout["zones"][zone].append(item)
+    else:
+        layout["zones"][zone] = [item]
+
+    return {
+        "layout_id": layout_id,
+        "zone": zone,
+        "image_url": image_url,
+        "image_filename": first_file["filename"],
+        "job_id": gen_result.get("job_id", ""),
+        "status": "generated_and_placed",
+    }
+
+
+def add_generated_image(req) -> Dict[str, Any]:
+    """
+    Convenience endpoint: generate an image and place it into a layout zone.
+
+    This bridges the media (ComfyClient) pipeline with the layout engine
+    so callers do not need to manage intermediate image URLs.
+    """
+    return _generate_and_place_image(
+        layout_id=req.layout_id,
+        zone=req.zone,
+        prompt=req.prompt,
+        negative_prompt=req.negative_prompt,
+        width=req.width,
+        height=req.height,
+        seed=req.seed,
+        steps=req.steps,
+        cfg=req.cfg,
+        alignment=req.alignment or "center",
+        style_class=req.style_class or "",
+        append=req.append,
+    )
 
 
 # ------------------------------------------------------------------

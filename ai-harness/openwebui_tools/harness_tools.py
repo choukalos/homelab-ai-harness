@@ -1,11 +1,12 @@
 """
 title: AI Harness Tools
 author: Chuck
-version: 0.4.0
-description: Web search, research briefs, family knowledge base, media generation, and PM clickable demo tools using Chuck's local AI Harness.
+version: 0.5.0
+description: Web search, research briefs, family knowledge base, media generation, visual document creation with inline image generation, and PM clickable demo tools using Chuck's local AI Harness.
 """
 
 import os
+import re
 import requests
 from pydantic import BaseModel, Field
 
@@ -563,5 +564,104 @@ class Tools:
                 lines.append(f"![Generated clip]({url})")
 
         return "\n".join(lines)
+
+    def create_document(
+        self,
+        title: str,
+        template: str = "minimal",
+        orientation: str = "portrait",
+        zones: str = "",
+        output_path: str = "",
+        background_color: str = "#ffffff",
+        text_color: str = "#1a1a1a",
+        accent_color: str = "#3b82f6",
+        export_pdf: bool = True,
+        pdf_path: str = "",
+        pdf_page_size: str = "Letter",
+    ) -> str:
+        """
+        Create a complete formatted document with text, images (AI-generated),
+        and tables using the AI Harness layout engine.
+
+        Use this for reports, presentations, research summaries, articles,
+        marketing materials, or any structured visual document.
+
+        Zones is a JSON string defining the content for each zone. Example:
+        [
+          {"zone": "header", "content_type": "text", "content": "# My Report"},
+          {"zone": "image_area", "content_type": "gen_image",
+           "image_prompt": "cinematic landscape at sunset"},
+          {"zone": "content", "content_type": "text",
+           "content": "## Summary\n\nKey findings here..."}
+        ]
+
+        Content types: 'text', 'image' (existing URL), 'gen_image' (AI generate), 'table'
+        """
+        import json
+
+        # Parse zones JSON
+        try:
+            zones_list = json.loads(zones) if zones else []
+        except json.JSONDecodeError:
+            return f"Error parsing zones JSON: {zones[:100]}... Ensure valid JSON."
+
+        # Default output path
+        if not output_path:
+            safe_title = re.sub(r"[^a-zA-Z0-9]+", "-", title).lower().strip("-")
+            output_path = f"documents/{safe_title}.html"
+
+        payload: dict = {
+            "orientation": orientation,
+            "template": template,
+            "title": title,
+            "background_color": background_color,
+            "text_color": text_color,
+            "accent_color": accent_color,
+            "zones": zones_list,
+            "output_path": output_path,
+            "export_pdf": export_pdf,
+        }
+
+        if export_pdf:
+            if not pdf_path:
+                safe_title = re.sub(r"[^a-zA-Z0-9]+", "-", title).lower().strip("-")
+                pdf_path = f"documents/{safe_title}.pdf"
+            payload["pdf_path"] = pdf_path
+            payload["pdf_page_size"] = pdf_page_size
+
+        data = self._post("/layout/build", payload, timeout=1200)
+
+        html_url = self._absolute_url(f"/media/files/{data.get('html_path', '')}")
+
+        lines = [
+            "Document created successfully.",
+            "",
+            f"Title: {data.get('title') or title}",
+            f"Layout ID: {data.get('layout_id', '')}",
+            f"HTML file: {data.get('html_path', '')}",
+            f"HTML size: {data.get('html_bytes', 0)} bytes",
+        ]
+
+        if data.get("generated_images"):
+            lines.append("")
+            lines.append(f"Generated {len(data['generated_images'])} image(s):")
+            for img in data["generated_images"]:
+                img_url = self._absolute_url(img.get("url", ""))
+                lines.append(f"  - {img.get('filename', '')}")
+                lines.append(f"    {img_url}")
+
+        if data.get("pdf_path"):
+            pdf_url = self._absolute_url(data["pdf_url"] or f"/media/files/{data['pdf_path']}")
+            lines.append("")
+            lines.append(f"PDF exported: {data['pdf_path']}")
+            lines.append(f"PDF size: {data.get('pdf_bytes', 0)} bytes")
+            lines.append("")
+            lines.append(f"[Open PDF]({pdf_url})")
+
+        lines.append("")
+        lines.append(f"[Open HTML]({html_url})")
+
+        return "\n".join(lines)
+      
 
         

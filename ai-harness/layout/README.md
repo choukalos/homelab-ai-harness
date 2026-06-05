@@ -1,9 +1,9 @@
 # layout — HTML Page / Slide Layout Engine + PDF Export
 
-AI-driven page and presentation layout service for the AI Harness. Create visually
-appealing, self-contained HTML documents with multiple layout templates, portrait
-(document) or slide (16:9 presentation) orientation, zone-based content placement,
-and **PDF export** for shareable, printable output.
+AI-driven document composition service for the AI Harness. Build visually structured
+HTML documents and presentation slides with zone-based templates, styled tables,
+AI-generated images (inline via ComfyUI), and PDF export — from the step-by-step
+pattern all the way up to one-shot multi-zone document builds.
 
 ---
 
@@ -11,14 +11,94 @@ and **PDF export** for shareable, printable output.
 
 | Concept | Detail |
 |---------|--------|
-| **Purpose** | Let an AI agent compose visually structured HTML pages or presentation slides programmatically |
-| **Orientation** | `portrait` (A4-style document) or `slide` (1920×1080, 16:9) |
+| **Endpoint prefix** | `/layout` — all require API-key auth |
+| **Purpose** | Compose visually structured HTML pages, presentation slides, and PDFs programmatically |
+| **Orientation** | `portrait` (document) or `slide` (1920×1080, 16:9) |
 | **Templates** | 10 built-in: `minimal`, `hero`, `grid`, `split`, `gallery`, `cards`, `timeline`, `magazine`, `pitch`, `blank` |
-| **Content types** | `text` (markdown → HTML), `image` (URL-based), `table` (styled HTML table) |
-| **Output formats** | HTML (self-contained), **PDF** (via WeasyPrint) |
-| **PDF storage** | Any subdirectory under `/data/media/` — each workflow chooses its own (e.g. `presentation/`, `research/`). Served publicly via `/media/files/` |
-| **Storage** | In-memory during container lifecycle; `/layout/save` persists HTML to workspace; `/layout/export-pdf` persists PDF to media |
-| **Integration** | Works with existing `filetools` (workspace file I/O) and `media` (image generation) modules |
+| **Content types** | `text` (markdown → HTML), `image` (URL-based), `gen_image` (AI-generated inline), `table` (styled HTML) |
+| **Output formats** | HTML (self-contained, offline-ready), **PDF** (via WeasyPrint) |
+| **Storage** | HTML saved to workspace (`/layout/save`); PDFs and images saved to `/data/media/` |
+| **Image pipeline** | Direct ComfyUI bridge — no intermediate URL tracking needed |
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|--|-|
+| `POST` | `/layout/create` | Create a new layout document |
+| `POST` | `/layout/add` | Add content (text / image / table) to a zone |
+| `POST` | `/layout/add-generated-image` | Generate an image via ComfyUI and place it in a zone |
+| `POST` | `/layout/build` | One-shot: create + populate (with inline images) + render + save |
+| `POST` | `/layout/render` | Preview layout as HTML (no save) |
+| `POST` | `/layout/save` | Render layout and save HTML to workspace |
+| `POST` | `/layout/export-pdf` | Render layout and export PDF to media directory |
+| `POST` | `/layout/table` | Render a standalone styled HTML table (no layout needed) |
+| `GET` | `/layout/active` | List all active in-memory layouts |
+| `DELETE` | `/layout/{layout_id}` | Discard a layout |
+
+---
+
+## Workflow Patterns
+
+Three patterns are available, from granular to one-shot:
+
+### Pattern A — Step-by-step build (original)
+
+```
+POST /layout/create      → { layout_id: "abc123" }
+POST /media/image        → { files: [{ url: "..." }] }   // optional, generate images separately
+POST /layout/add         → zone: "header",   content_type: "text", content: "..."
+POST /layout/add         → zone: "body",     content_type: "image", image_url: "..."
+POST /layout/render      → { html: "<!DOCTYPE html>..." }
+POST /layout/save        → { path: "output/my-doc.html" }
+POST /layout/export-pdf  → { path: "reports/my-doc.pdf", url: "/media/files/reports/my-doc.pdf" }
+```
+
+### Pattern B — Inline image generation
+
+Same as above, but skip the separate `/media/image` call. Use
+`/layout/add-generated-image` to generate and place the image in one step:
+
+```
+POST /layout/create           → { layout_id: "abc123" }
+POST /layout/add              → zone: "header", content_type: "text", content: "..."
+POST /layout/add-generated-image → zone: "hero_bg",
+  prompt: "cinematic sunset over futuristic cityscape, volumetric light",
+  width: 1920, height: 1080
+POST /layout/render           → { html: "..." }
+POST /layout/save             → { path: "output/deck.html" }
+```
+
+The image is generated, saved to `/data/media/images/`, and its URL is
+automatically placed into the zone. No intermediate URL tracking required.
+
+### Pattern C — One-shot document build
+
+```
+POST /layout/build  →  {
+  orientation: "portrait",
+  template: "magazine",
+  title: "AI Market Report",
+  zones: [
+    { zone: "header",    content_type: "text",       content: "# Report ..." },
+    { zone: "image_area",content_type: "gen_image",  image_prompt: "infographic ..." },
+    { zone: "column_a",  content_type: "text",       content: "## Summary ..." },
+    { zone: "column_b",  content_type: "table",      table_columns: [...], table_rows: [...] },
+  ],
+  output_path: "reports/ai-report.html",
+  export_pdf: true,
+  pdf_path: "reports/ai-report.pdf",
+  pdf_page_size: "Letter"
+}
+→  {
+    html_path: "reports/ai-report.html",
+    html_bytes: 45678,
+    pdf_path: "reports/ai-report.pdf",
+    pdf_url: "/media/files/reports/ai-report.pdf",
+    generated_images: [{ filename: "...", url: "...", zone: "image_area" }],
+  }
+```
 
 ---
 
@@ -26,544 +106,442 @@ and **PDF export** for shareable, printable output.
 
 ### Zones
 
-Each template defines **zones** — named regions where the AI can place content.
-Think of zones as "slots" on a page. The AI calls `/layout/add` for each zone
-it wants to fill.
+Each template defines **zones** — named regions where content is placed. Think of
+zones as "slots" on a page. The AI fills each zone via `/layout/add`,
+`/layout/add-generated-image`, or by specifying them in `/layout/build`.
 
 ```
-┌──────────────────────────────────────┐
-│  [ header zone ]                     │
-├────────────┬─────────────────────────┤
-│            │                         │
-│ col_left   │      col_center         │
-│  zone      │        zone             │
-│            │                         │
-├────────────┴─────────────────────────┤
-│  [ footer zone ]                     │
-└──────────────────────────────────────┘
+┌──────────────────────────────────┐
+│  [ header zone ]                 │
+├─────────────┬────────────────────┤
+│             │                   │
+│  col_left   │    col_center     │
+│  zone       │    zone           │
+│             │                   │
+├─────────────┴────────────────────┤
+│  [ footer zone ]                 │
+└──────────────────────────────────┘
 ```
 
-### The AI Workflow Pattern
+### Two-Stage Content Placement
 
-```
-POST /layout/create  →  { layout_id: "abc123" }
-POST /media/image    →  { files: [{ url: "..." }] }   (optional)
-POST /layout/add     →  zone: "header",      type: "text", content: "..."
-POST /layout/add     →  zone: "col_left",    type: "image", image_url: "..."
-POST /layout/add     →  zone: "col_center",  type: "text", content: "..."
-POST /layout/add     →  zone: "footer",      type: "text", content: "..."
-POST /layout/render  →  { html: "<!DOCTYPE html>..." }
+The AI always works in two stages:
 
-# Save as HTML
-POST /layout/save    →  { path: "output/pitch-deck.html" }
+1. **Create** — define the layout shell (template, orientation, colors)
+2. **Fill zones** — push content into zones one at a time
+   - Multiple calls to the same zone **replace** unless `append: true`
 
-# OR save as PDF (see PDF Export section below)
-POST /layout/export-pdf → { path: "presentation/slide1.pdf", url: "/media/files/presentation/slide1.pdf" }
-```
+### Append vs. Replace
+
+Default behavior: each call to `/layout/add` **replaces** the zone's previous
+content. Set `"append": true` to add to existing content instead.
 
 ---
 
-## PDF Export
+## Templates Reference
 
-**Key capability:** Export any layout to a PDF file that is:
-1. **Persisted** under a workflow-specific subdirectory within `/data/media/` (e.g. `/data/media/presentation/report.pdf`, `/data/media/research/analysis.pdf`)
-2. **Publicly accessible** via `/media/files/<subdirectory>/<filename>.pdf` — the same static file server that serves images
-3. **Properly paginated** with configurable page size and margins
-
-### Workflow Directory Design
-
-There is no hardcoded "pdf" subdirectory. Each workflow module that uses the layout
-engine owns its own subdirectory under the media root. The `output_path` you pass
-to `/layout/export-pdf` determines where the PDF lands:
-
-| Workflow | Example `output_path` | On-disk location | Public URL |
-|----------|-----------------------|------------------|------------|
-| Presentations | `presentation/q4-deck.pdf` | `/data/media/presentation/q4-deck.pdf` | `/media/files/presentation/q4-deck.pdf` |
-| Research | `research/saas-analysis.pdf` | `/data/media/research/saas-analysis.pdf` | `/media/files/research/saas-analysis.pdf` |
-| Reports | `reports/annual-summary.pdf` | `/data/media/reports/annual-summary.pdf` | `/media/files/reports/annual-summary.pdf` |
-
-The parent directory is created automatically if it doesn't exist. The PDFs are
-served by the **same** `StaticFiles` mount (`/media/files/`) that serves generated
-images — no separate mount is needed.
-
-### How It Works
-
-```
-         ┌───────────────┐
-         │  AI workflow  │
-         ├───────────────┤
-         │ 1. /create    │  Build layout in memory (zones, content)
-         │ 2. /add × N   │  Fill zones with text, images, tables
-         │ 3. /export-pdf│  ──► HTML rendered with PDF-specific CSS
-         │               │     ──► WeasyPrint converts to PDF bytes
-         │               │     ──► Written to /data/media/<workflow>/
-         │               │     ──► Returns path + public URL
-         └───────────────┘
-                │
-                ▼
-         ┌───────────────┐
-         │  Static Serve  │  /media/files/ mounted as FastAPI StaticFiles
-         │  (app.py)     │  Accessible at http://<harness>/media/files/<path>/
-         └───────────────┘
-```
-
-### `POST /layout/export-pdf`
-
-Render the layout and export as a PDF file.
-
-**Request:**
-
-```jsonc
-{
-  "layout_id": "abc123def456",       // required — from /layout/create
-  "output_path": "presentation/q4-deck.pdf",  // required — path relative to /data/media/
-  "page_size": "Letter",            // optional — "A4" | "Letter" | "Legal" | "A3" | "A5" (default: Letter)
-  "margins": {                      // optional — page margins in mm (default: {top:20, bottom:20, left:15, right:15})
-    "top": 20,
-    "bottom": 20,
-    "left": 15,
-    "right": 15
-  }
-}
-```
-
-**Response:**
-
-```jsonc
-{
-  "layout_id": "abc123def456",
-  "path": "presentation/q4-deck.pdf",
-  "url": "/media/files/presentation/q4-deck.pdf",
-  "bytes_written": 45678
-}
-```
-
-The PDF is immediately available at:
-- **Internal:** `http://thor.local:8090/media/files/presentation/q4-deck.pdf`
-- **Via Caddy (Siri-facing):** `https://siri.choukalos.com/media/files/presentation/q4-deck.pdf`
-
-### PDF-Specific Rendering
-
-The PDF export uses a *different CSS pipeline* than the browser HTML render:
-
-| Aspect | Browser HTML | PDF Export |
-|--------|---------------|------------|
-| Page size | Fixed dimensions (slide) or full-width (portrait) | Driven by `page_size` parameter (A4/Letter/etc.) via `@page` |
-| Viewport meta | Included | Stripped (irrelevant for PDF) |
-| Backgrounds | Standard CSS | Forces `@page { background: ... }` so WeasyPrint renders solid colors |
-| Pagination | Single-page layout | WeasyPrint paginates automatically; `page` CSS page breaks respected |
-| Engine | Browser rendering | WeasyPrint (HTML/CSS → PDF, headless) |
-
-### PDF Export — Usage as an AI Agent
-
-When asked to produce a PDF, follow this pattern:
-
-```
-// Step 1: Create the layout (portrait is best for documents)
-POST /layout/create {
-  "orientation": "portrait",
-  "template": "minimal",          // or "magazine", "grid", etc.
-  "title": "Market Research — SaaS Sector Q2 2025",
-  "background_color": "#ffffff",
-  "text_color": "#1a1a1a",
-  "accent_color": "#2563eb"
-}
-→ { "layout_id": "a1b2c3" }
-
-// Step 2: Fill zones
-POST /layout/add {
-  "layout_id": "a1b2c3",
-  "zone": "header",
-  "content_type": "text",
-  "content": "# **Market Research Report**\n\nSaaS Sector — Q2 2025"
-}
-
-POST /layout/add {
-  "layout_id": "a1b2c3",
-  "zone": "content",
-  "content_type": "text",
-  "content": "## Executive Summary\n\nThis report analyzes the SaaS market..."
-}
-
-POST /layout/add {
-  "layout_id": "a1b2c3",
-  "zone": "content",
-  "content_type": "table",
-  "table_columns": [
-    { "name": "Company", "key": "company" },
-    { "name": "Revenue", "key": "revenue", "align": "right" },
-    { "name": "Growth", "key": "growth", "align": "center" }
-  ],
-  "table_rows": [
-    { "company": "Acme Inc", "revenue": "$12.4M", "growth": "+22%" },
-    { "company": "Globex", "revenue": "$8.1M", "growth": "+15%" }
-  ],
-  "append": true
-}
-
-// Step 3: Export to PDF — choose your workflow directory
-POST /layout/export-pdf {
-  "layout_id": "a1b2c3",
-  "output_path": "research/saas-market-q2-2025.pdf",
-  "page_size": "Letter"
-}
-→ { "path": "research/saas-market-q2-2025.pdf", "url": "/media/files/research/saas-market-q2-2025.pdf" }
-
-// Share the URL with the user
-"The PDF is available at http://thor.local:8090/media/files/research/saas-market-q2-2025.pdf"
-```
-
-### Multi-Page PDF Strategy
-
-The layout engine works with *single-page layouts*. For multi-page documents
-(e.g., a 20-page market research report), the AI should:
-
-1. **Create multiple layouts** — one per page (use the template that fits each page's content)
-2. **Export each to a separate PDF** via `/layout/export-pdf`
-3. **Merge PDFs** using an external tool (future: a `/layout/merge-pdfs` endpoint)
-
-> **Future enhancement:** Add a `/layout/merge-pdfs` endpoint that takes multiple
-> PDF filenames (anywhere under `/data/media/`) and merges them into a single
-> multi-page PDF using `pypdf`.
-
-### Choosing a Workflow Directory
-
-When building a new workflow that produces PDFs, pick a sensible subdirectory name
-under `/data/media/`. Some guidelines:
-
-| Workflow type | Recommended directory | Rationale |
-|---------------|----------------------|-----------|
-| Presentations, pitch decks, slide shows | `presentation/` | Clear, self-documenting |
-| Market research, analysis reports | `research/` | Separates research output from other content |
-| Business reports, summaries | `reports/` | Generic catch-all for report-style output |
-
-The directory is created automatically by the service — you only need to decide
-on the name when wiring up your workflow.
-
----
-
-## Orientation Modes
-
-| Mode | Value | Dimensions | Use Case |
-|------|-------|------------|----------|
-| **Portrait** | `portrait` | ~8.5×11 (full-width browser) | Reports, articles, long-form content, essays |
-| **Slide** | `slide` | 1920×1080 (16:9) | Presentations, pitch decks, single-screen slides |
-
----
-
-## Built-in Templates
-
-### `minimal`
-Clean single-column with header, content, and footer.
+### `minimal` — Clean single-column
 - **Zones:** `header`, `content`, `footer`
 
-### `hero`
-Full-width hero banner with title/subtitle overlay + body section.
-- **Zones:** `hero_background` (image), `hero_title`, `hero_subtitle`, `body`
+### `hero` — Full-width hero banner with overlay title + body
+- **Zones:** `hero_background` (image, rendered as CSS background), `hero_title`, `hero_subtitle`, `body`
 
-### `grid`
-Three-column grid with header and footer.
+### `grid` — Three-column grid
 - **Zones:** `header`, `col_left`, `col_center`, `col_right`, `footer`
 
-### `split`
-Two-column layout (50/50) with header and footer.
+### `split` — Two-column (50/50)
 - **Zones:** `header`, `panel_left`, `panel_right`, `footer`
 
-### `gallery`
-Masonry-style image grid with header and caption area.
+### `gallery` — Masonry-style image grid
 - **Zones:** `header`, `gallery_grid`, `caption`
 
-### `cards`
-Four card slots in a 2×2 grid with header and footer.
+### `cards` — Four card slots (2×2)
 - **Zones:** `header`, `card_1`, `card_2`, `card_3`, `card_4`, `footer`
 
-### `timeline`
-Vertical timeline with 4 milestone markers (circle + content).
+### `timeline` — Vertical timeline with 4 milestone markers
 - **Zones:** `header`, `timeline_1`, `timeline_2`, `timeline_3`, `timeline_4`, `footer`
 
-### `magazine`
-Editorial two-column layout with pull quote and image area.
-- **Zones:** `header`, `lead`, `column_a`, `column_b`, `pull_quote`, `image_area`, `footer`
+### `magazine` — Editorial two-column with pull quote and spanning image area
+- **Zones:** `header` (large masthead title), `lead` (italic summary), `column_a`, `column_b`, `pull_quote`, `image_area`, `footer`
 
-### `pitch`
-Pitch-deck style: hero background, large headline, supporting text, CTA button.
-- **Zones:** `hero_bg` (image), `headline`, `supporting_text`, `cta`
+### `pitch` — Pitch-deck style with hero background, headline, body, CTA button
+- **Zones:** `hero_bg` (image, 30% opacity overlay), `headline`, `supporting_text`, `cta`
 
-### `blank`
-No predefined zones. AI can create arbitrary zone names with custom CSS grid positioning.
-- **Zones:** None — fully custom
+### `blank` — No predefined zones — fully custom CSS grid
+- **Zones:** None — define arbitrary zone names with custom CSS grid positioning
 
 ---
 
-## Endpoints
-
-Base: `/layout` — all require `HARNESS_API_KEY` auth.
+## Endpoint Reference
 
 ### `POST /layout/create`
 
-Create a new layout.
+Create a new layout. Returns a `layout_id` used by all subsequent calls.
 
-```jsonc
-{
-  "orientation": "slide",          // "portrait" | "slide"
-  "template": "pitch",            // template name
-  "title": "My Product Launch",
-  "background_color": "#0f172a",   // hex, rgb, or named CSS color
-  "text_color": "#f1f5f9",
-  "accent_color": "#38bdf8",
-  "font_family": "Georgia, serif" // optional override
-}
-```
+**Request — `CreateLayoutRequest`:**
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `orientation` | `portrait | slide` | `"portrait"` | portrait = document, slide = 1920×1080 |
+| `template` | string | `"minimal"` | One of the 10 template names |
+| `title` | string | `""` | Page title (appears in HTML \<title\>) |
+| `background_color` | string | `"#ffffff"` | Hex, rgb, or named CSS color |
+| `text_color` | string | `"#1a1a1a"` | Primary text color |
+| `accent_color` | string | `"#3b82f6"` | Headings, links, highlights |
+| `font_family` | string | `"system-ui, ..."` | CSS font-family string |
+| `page_margin` | int (0–120) | `40` | Page margin in pixels |
 
 **Response:**
 
-```jsonc
+```json
 {
   "layout_id": "abc123def456",
-  "orientation": "slide",
-  "template": "pitch",
-  "title": "My Product Launch",
-  "zones": ["hero_bg", "headline", "supporting_text", "cta"],
+  "orientation": "portrait",
+  "template": "minimal",
+  "title": "My Doc",
+  "zones": ["header", "content", "footer"],
   "content_count": 0
 }
 ```
+
+---
 
 ### `POST /layout/add`
 
 Push content into a zone.
 
-```jsonc
-// Text content
-{
-  "layout_id": "abc123def456",
-  "zone": "headline",
-  "content_type": "text",
-  "content": "# **Launch Day**\n\nThe future is here.",
-  "alignment": "center"
-}
+**Request — `AddContentRequest`:**
 
-// Image content
+| Field | Type | Required When | Notes |
+|-------|------|--|-------|
+| `layout_id` | string | always | From `/layout/create` |
+| `zone` | string | always | Zone name for the chosen template |
+| `content_type` | `text | image | table` | always | |
+| `content` | string | `content_type == "text"` | Markdown or raw HTML snippet |
+| `image_url` | string | `content_type == "image"` | **Absolute** URL (http/https) |
+| `table_columns` | array | `content_type == "table"` | Column definitions (see below) |
+| `table_rows` | array of dicts | `content_type == "table"` | Row data keyed by column `key` |
+| `table_style` | object | | Optional table style override |
+| `alignment` | `left | center | right` | | Default `"center"` |
+| `style_class` | string | | Additional CSS class names |
+| `append` | bool | | Default `false` — set `true` to append |
+
+**Table column definition:**
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `name` | string | | Header text |
+| `key` | string | | Lookup key for row values |
+| `align` | `left | center | right` | `"left"` | |
+| `width` | string | | CSS width e.g. `"120px"` |
+
+**Table style (optional override):**
+
+| Field | Type | Default |
+|-------|------|---------|
+| `header_bg` | string | `"#1e3a5f"` |
+| `header_color` | string | `"#ffffff"` |
+| `row_alt_bg` | string | `"#f8fafc"` |
+| `border_color` | string | `"#e2e8f0"` |
+| `text_color` | string | `"#334155"` |
+| `font_family` | string | `"system-ui, ..."` |
+| `font_size` | string | `"14px"` |
+| `border_radius` | int | `8` |
+| `striping` | bool | `true` |
+| `hover` | bool | `true` |
+| `compact` | bool | `false` |
+
+---
+
+### `POST /layout/add-generated-image`
+
+Generate an image via ComfyUI and place it directly into a zone in one call.
+
+**Request — `AddGeneratedImageRequest`:**
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `layout_id` | string | | From `/layout/create` |
+| `zone` | string | | Zone name |
+| `prompt` | string | | Image generation prompt |
+| `negative_prompt` | string | `"blurry, distorted, low quality"` | |
+| `width` | int (256–2048) | `1024` | |
+| `height` | int (256–2048) | `576` | |
+| `seed` | int | `-1` | `-1` = random; positive = reproducible |
+| `steps` | int (1–80) | `30` | Denoising steps |
+| `cfg` | float (1.0–20.0) | `7.0` | CFG scale |
+| `alignment` | `left | center | right` | `"center"` | |
+| `style_class` | string | `""` | Additional CSS class names |
+| `append` | bool | `false` | Append to existing zone content |
+
+**Response — `AddGeneratedImageResponse`:**
+
+```json
 {
   "layout_id": "abc123def456",
   "zone": "hero_bg",
-  "content_type": "image",
-  "image_url": "http://thor.local:8090/media/files/images/hero-shot.png"
-}
-
-// Append text to existing zone
-{
-  "layout_id": "abc123def456",
-  "zone": "body",
-  "content_type": "text",
-  "content": "\n\nAdditional paragraph here.",
-  "append": true
+  "image_url": "http://thor.local:8090/media/files/images/...png",
+  "image_filename": "my-prompt-hash.png",
+  "job_id": "a1b2c3",
+  "status": "generated_and_placed"
 }
 ```
 
-### `POST /layout/table`
+The image is saved to `/data/media/images/` and the absolute URL is placed into
+the layout zone automatically.
 
-Render a standalone styled HTML table — **no layout needed**.
+---
 
-```jsonc
+### `POST /layout/build`
+
+Build a complete document in a **single call**. Orchestrates the entire pipeline:
+create layout → populate zones (with inline image generation) → render → save HTML
+→ optionally export PDF.
+
+**Request — `BuildDocumentRequest`:**
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `orientation` | `portrait | slide` | `"portrait"` | |
+| `template` | string | `"minimal"` | |
+| `title` | string | `""` | |
+| `background_color` | string | `"#ffffff"` | |
+| `text_color` | string | `"#1a1a1a"` | |
+| `accent_color` | string | `"#3b82f6"` | |
+| `font_family` | string | `"system-ui, ..."` | |
+| `page_margin` | int (0–120) | `40` | |
+| `zones` | array of `ZoneContentSpec` | **required** | Zone content specs (see below) |
+| `output_path` | string | **required** | Path within workspace (e.g. `"reports/q2.html"`) |
+| `export_pdf` | bool | `false` | If `true`, also export PDF |
+| `pdf_path` | string | | Required when `export_pdf=true` |
+| `pdf_page_size` | `A4 | Letter | Legal | A3 | A5` | `"Letter"` | |
+
+**Zone content spec — `ZoneContentSpec`:**
+
+| Field | Type | Required When | Notes |
+|-------|------|--|-------|
+| `zone` | string | always | Zone name |
+| `content_type` | `text | image | table | gen_image` | always | Use `gen_image` for inline AI image gen |
+| `content` | string | `content_type == "text"` | Markdown or HTML snippet |
+| `image_url` | string | `content_type == "image"` | Absolute URL |
+| `image_prompt` | string | `content_type == "gen_image"` | Prompt for ComfyUI |
+| `image_negative_prompt` | string | | Default `"blurry, distorted, low quality"` |
+| `image_width` | int | | Default `1024` |
+| `image_height` | int | | Default `576` |
+| `image_seed` | int | | Default `-1` (random) |
+| `image_steps` | int | | Default `30` |
+| `image_cfg` | float | | Default `7.0` |
+| `table_columns` | array of column defs | `content_type == "table"` | Same as `/layout/add` table columns |
+| `table_rows` | array of dicts | `content_type == "table"` | Same as `/layout/add` table rows |
+| `table_style` | object | | Optional table style |
+| `alignment` | `left | center | right` | | Default `"center"` |
+| `style_class` | string | | Default `""` |
+| `append` | bool | | Default `false` |
+
+**Response — `BuildDocumentResponse`:**
+
+```json
 {
-  "title": "Q4 Sales Summary",
-  "columns": [
-    { "name": "Region", "key": "region", "align": "left" },
-    { "name": "Revenue", "key": "revenue", "align": "right", "width": "120px" },
-    { "name": "Growth", "key": "growth", "align": "center" }
-  ],
-  "rows": [
-    { "region": "North America", "revenue": "$1.2M", "growth": "+18%" },
-    { "region": "Europe", "revenue": "$890K", "growth": "+7%" },
-    { "region": "Asia Pacific", "revenue": "$650K", "growth": "+24%" }
-  ],
-  "standalone": true,   // full HTML document (default) vs fragment only
-  "style": {            // optional — all fields have sensible defaults
-    "header_bg": "#1e3a5f",
-    "header_color": "#ffffff",
-    "row_alt_bg": "#f8fafc",
-    "border_color": "#e2e8f0",
-    "text_color": "#334155",
-    "font_size": "14px",
-    "border_radius": 8,
-    "striping": true,
-    "hover": true,
-    "compact": false
-  }
+  "layout_id": "a1b2c3d4e5",
+  "html_path": "reports/q2-report.html",
+  "html_bytes": 45678,
+  "pdf_path": "reports/q2-report.pdf",
+  "pdf_url": "/media/files/reports/q2-report.pdf",
+  "pdf_bytes": 123456,
+  "generated_images": [
+    {
+      "filename": "infographic-hash.png",
+      "url": "http://thor.local:8090/media/files/images/infographic-hash.png",
+      "zone": "image_area"
+    }
+  ]
 }
 ```
 
-**Response:** `{ "html": "<!DOCTYPE html>...", "file_size_bytes": 2345 }`
-
-### `POST /layout/add` — table content
-
-Place a styled table inside an existing layout zone.
-
-```jsonc
-{
-  "layout_id": "abc123def456",
-  "zone": "content",
-  "content_type": "table",
-  "table_columns": [
-    { "name": "Name", "key": "name" },
-    { "name": "Score", "key": "score", "align": "center" }
-  ],
-  "table_rows": [
-    { "name": "Alice", "score": "95" },
-    { "name": "Bob", "score": "87" }
-  ],
-  "table_style": { "header_bg": "#3b82f6", "compact": true },
-  "append": false
-}
-```
-
-The table inherits the layout's `accent_color` for the wrapper styling and is
-returned as a fragment (no `<html>` wrapper) so it renders cleanly inside the zone.
+---
 
 ### `POST /layout/render`
 
-Render to HTML (preview before saving).
+Preview the layout as HTML without saving.
 
-```jsonc
-{
-  "layout_id": "abc123def456",
-  "include_meta": true,
-  "minify": false
-}
-```
+**Request — `RenderLayoutRequest`:**
+
+| Field | Type | Default |
+|-------|------|---------|
+| `layout_id` | string | (required) |
+| `include_meta` | bool | `true` |
+| `minify` | bool | `false` |
 
 **Response:** `{ "layout_id": "...", "html": "<!DOCTYPE html>...", "file_size_bytes": 12345 }`
 
+---
+
 ### `POST /layout/save`
 
-Render and save to workspace.
+Render and save the layout as self-contained HTML to workspace.
 
-```jsonc
-{
-  "layout_id": "abc123def456",
-  "output_path": "presentations/q4-review.html"
-}
-```
+**Request — `SaveLayoutRequest`:**
 
-**Response:** `{ "layout_id": "...", "path": "presentations/q4-review.html", "bytes_written": 12345 }`
+| Field | Type | Notes |
+|-------|------|-------|
+| `layout_id` | string | |
+| `output_path` | string | Relative path within workspace, e.g. `"presentations/q4.html"` |
+
+**Response:** `{ "layout_id": "...", "path": "...", "bytes_written": 12345 }`
+
+---
 
 ### `POST /layout/export-pdf`
 
-Render and export as a PDF file. See the **PDF Export** section above for full details.
+Render and export the layout as a PDF to the media directory.
+
+**Request — `ExportPdfRequest`:**
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `layout_id` | string | | |
+| `output_path` | string | | Path under `/data/media/`, e.g. `"reports/rpt.pdf"` |
+| `page_size` | `A4 | Letter | Legal | A3 | A5` | `"Letter"` | |
+| `margins` | `{ top, bottom, left, right }` | `{ top:20, bottom:20, left:15, right:15 }` | Values in mm |
+
+**Response:** `{ "layout_id": "...", "path": "...", "url": "/media/files/...", "bytes_written": 45678 }`
+
+The PDF is immediately available at:
+- Internal: `http://thor.local:8090/media/files/<output_path>`
+- Via Caddy: `https://siri.choukalos.com/media/files/<output_path>`
+
+PDFs live in the **same media tree** as images and are served by the same
+`/media/files/` static mount.
+
+---
+
+### `POST /layout/table`
+
+Render a standalone styled HTML table — no layout needed.
+
+**Request — `CreateTableRequest`:**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title` | string | Optional table title |
+| `columns` | array of column defs | Required |
+| `rows` | array of dicts | Required |
+| `style` | TableStyle object | Optional — all fields have defaults |
+| `standalone` | bool | Default `true` (full HTML doc); `false` returns fragment only |
+
+**Response:** `{ "html": "<!DOCTYPE html>...", "file_size_bytes": 2345 }`
+
+---
 
 ### `GET /layout/active`
 
-List all in-memory layouts.
+List all active in-memory layouts. Returns an array of `{ layout_id, template, orientation, title, content_count, created_at }`.
 
 ### `DELETE /layout/{layout_id}`
 
-Discard a layout.
+Discard a layout from memory. Returns `{ "layout_id": "...", "deleted": true }`.
 
 ---
 
 ## Markdown Support
 
-Text content accepts a **lightweight markdown subset** (no external library — pure Python):
+Text content (`content_type: "text"`) accepts a lightweight markdown subset
+(converted to HTML in pure Python, no external library):
 
-| Syntax | Renders As |
-|--------|------------|
-| `# H1` … `###### H6` | Headings |
-| `**bold**` | Bold |
-| `*italic*` | Italic |
-| `` `code` `` | Inline code |
-| `[text](url)` | Hyperlink (opens in new tab) |
-| `- item` | Unordered list |
-| `![alt](url)` | Inline image |
+| Syntax | Renders | Notes |
+|--------|---------|-------|
+| `# H1` … `###### H6` | Headings | |
+| `**bold**` | Bold | |
+| `*italic*` | Italic | |
+| `***bold italic***` | Bold + Italic | |
+| `` `code` `` | Inline code | |
+| `[text](url)` | Hyperlink | Opens in new tab |
+| `- item` | Unordered list | Consecutive `-` items merge into one \<ul\> |
+| `![alt](url)` | Inline image | Uses `.md-image` CSS class |
 
-AI can also pass raw HTML snippets directly for fine-grained control.
+Raw HTML snippets can also be passed directly for fine-grained control.
 
 ---
 
-## Integration with Existing Modules
+## PDF Export
 
-### With `media` (image generation)
+PDF export uses WeasyPrint with PDF-specific CSS rendering:
 
-```
-# 1. Generate an image
-POST /media/image { "prompt": "futuristic cityscape at sunset, 16:9" }
-→ { "files": [{ "url": "/media/files/images/...", "filename": "..." }] }
+| Aspect | Browser HTML | PDF |
+|--------|:--:|:--:|
+| Page size | Fixed (slide) or full-width (portrait) | Driven by `page_size` via `@page` |
+| Viewport meta | Included | Stripped |
+| Backgrounds | Standard CSS | Forces `@page { background: ... }` |
+| Pagination | Single-page | Auto-paginates; CSS page breaks respected |
+| Engine | Browser | WeasyPrint (headless) |
 
-# 2. Use that image in a layout
-POST /layout/add {
-  "layout_id": "...",
-  "zone": "hero_bg",
-  "content_type": "image",
-  "image_url": "http://thor.local:8090/media/files/images/..."
-}
-```
+### Multi-Page Documents
 
-### With `filetools` (workspace file management)
+Each layout is a single page. For multi-page documents:
+1. Create multiple layouts (one per page)
+2. Export each to PDF via `/layout/export-pdf`
+3. Merge PDFs externally (future: `/layout/merge-pdfs`)
 
-```
-# Save the layout as HTML
-POST /layout/save { "output_path": "output/my-doc.html" }
+### Choosing a Workflow Directory
 
-# Verify with filetools
-POST /files/read { "path": "output/my-doc.html" }
+Under `/data/media/`, pick a subdirectory that matches your workflow:
 
-# Clean up
-POST /files/delete { "path": "output/my-doc.html" }
-```
+| Workflow | Recommended directory |
+|----------|------|
+| Presentations | `presentation/` |
+| Research / analysis | `research/` |
+| Business reports | `reports/` |
+| Documents / articles | `documents/` |
 
-### PDF Output — File Lifecycle
+The service creates parent directories automatically.
 
-```
-# PDFs are saved anywhere under /data/media/ — the same tree as images.
-# They are served by the SAME static server that serves /media/files/.
+---
 
-# Export to workflow-specific directory
-POST /layout/export-pdf {
-  "layout_id": "abc123",
-  "output_path": "research/my-report.pdf"
-}
-→ { "url": "/media/files/research/my-report.pdf" }
+## File Locations
 
-# The PDF is now at:
-#   Container:  /data/media/research/my-report.pdf
-#   Internal:   http://thor.local:8090/media/files/research/my-report.pdf
-#   Public (Caddy): https://siri.choukalos.com/media/files/research/my-report.pdf
-```
+| What | Where | Served At |
+|------|-------|----------|
+| HTML (from `/layout/save`) | `/home/chuck/workspace/` | Workspace file system |
+| Images (generated) | `/data/media/images/` | `/media/files/images/` |
+| PDFs (from `/layout/export-pdf` or `/layout/build`) | `/data/media/<your-path>/` | `/media/files/<your-path>/` |
 
 ---
 
 ## Design Decisions
 
-1. **In-memory layouts** — no database dependency. Layouts live until the container restarts.
-   Use `/layout/active` to discover existing layouts. For multi-page documents, the AI
-   creates separate layouts and saves each independently.
+1. **In-memory layouts** — no database. Layouts persist until the container restarts.
+   Use `GET /layout/active` to discover existing layouts.
 
-2. **Self-contained HTML** — all CSS is inline. No external stylesheets, CDNs, or fonts.
-   The generated file works offline and in any browser.
+2. **Self-contained HTML** — all CSS inline, no external dependencies, CDNs, or fonts.
+   Works offline in any browser.
 
-3. **Zone-based, not free-form** — templates constrain the AI to produce consistent
-   visual output. The `blank` template exists for maximum creativity when needed.
+3. **Zone-based, not free-form** — templates constrain the AI to consistent output.
+   `blank` template exists for maximum freedom.
 
-4. **No server-side image handling** — image zones reference URLs. The AI is responsible
-   for generating/storing images via the `media` module before referencing them.
+4. **Images are URL-referenced** — absolute URLs in image zones. The AI may:
+   - Generate via `/media/image` then reference the returned URL
+   - Use `/layout/add-generated-image` (auto-managed URL)
+   - Use `/layout/build` with `content_type: "gen_image"` (fully inline)
 
-5. **PDF via WeasyPrint** — the layout HTML is rendered through WeasyPrint's HTML→PDF
-   engine. CSS `@page` rules control page size and margins. Backgrounds are explicitly
-   set on `@page` so WeasyPrint (which strips backgrounds by default) includes them.
+5. **PDF via WeasyPrint** — CSS `@page` rules control size and margins. Backgrounds
+   are explicitly set on `@page` so WeasyPrint renders solid colors.
 
-6. **PDFs live in the media tree** — no separate `/pdfs/` directory. PDFs go wherever
-   the workflow code says they belong (`presentation/`, `research/`, etc.). The
-   existing `/media/files/` static mount serves the entire `/data/media/` tree,
-   including any subdirectory the workflow creates.
+6. **PDFs live in the media tree** — no separate `/pdfs/` directory. Served by the
+   same `/media/files/` static mount as images.
 
-7. **Workflow-owned directories** — each workflow module decides its own output path
-   within `/data/media/`. The service creates parent directories automatically. No
-   hardcoded paths or separate static files mounts are needed.
+---
+
+## Auth
+
+All endpoints require `HARNESS_API_KEY` via either:
+- `X-API-Key: <key>` header
+- `Authorization: Bearer <key>` header
 
 ---
 
 ## Extending Templates
 
-To add a new template, edit `service.py` and add to `_register_templates()`:
+To add a custom template, edit `service.py` and register in `_register_templates()`:
 
 ```python
 _TEMPLATES["my_template"] = {
@@ -579,82 +557,48 @@ _TEMPLATES["my_template"] = {
 }
 ```
 
-Then add template-specific CSS in `_build_stylesheet()` under the `tpl == "my_template"` branch.
+Then add template-specific CSS in `_build_stylesheet()` under a new
+`tpl == "my_template"` branch.
 
 ---
 
-## Future Development Notes
+## OpenWebUI Tool
 
-### Multi-page PDF Merge
+The `create_document()` tool (harness_tools v0.5.0) exposes the full document build
+pipeline from OpenWebUI. Call it with a title, template, JSON zones spec, and optional
+PDF export settings:
 
-Add a `/layout/merge-pdfs` endpoint that takes multiple PDF filenames from
-anywhere under `/data/media/` and merges them into a single multi-page PDF using
-`pypdf`. Workflow:
-1. AI creates N layouts (one per page)
-2. Exports each to PDF via `/layout/export-pdf`
-3. Calls `/layout/merge-pdfs` with the list of filenames
-4. Result: single combined PDF ready for sharing
+```python
+create_document(
+    title="Q2 Market Report",
+    template="magazine",
+    orientation="portrait",
+    zones='[
+      {"zone": "header", "content_type": "text", "content": "# Q2 Report"},
+      {"zone": "image_area", "content_type": "gen_image", "image_prompt": "AI market infographic"},
+      {"zone": "column_a", "content_type": "text", "content": "## Summary\n\n..."},
+    ]',
+    output_path="reports/q2-report.html",
+    export_pdf=True,
+    pdf_path="reports/q2-report.pdf",
+)
+```
 
-### Slide Transitions
-
-For presentation-mode slide layouts:
-- Could add `<style>` transition CSS between pages
-- Add keyboard navigation (←→ keys to flip pages)
-
-### Dynamic Images
-
-Currently images are URL-referenced. Future option:
-- Embed images as base64 data URIs for fully portable output
-- Require an endpoint that reads the image bytes and inlines them
-
-### PDF Cover Pages / Table of Contents
-
-For report-style PDFs:
-- Add endpoint or template support for auto-generated TOC
-- Add cover page template with title, subtitle, date, author
-
-### Theming
-
-- Pre-built theme presets (dark mode, corporate, playful, etc.)
-- Pass `theme: "dark"` instead of individual colors
-
-### Rich Content Types
-
-- Tables are fully implemented (`content_type: "table"`). See above.
-- `chart` — inline SVG chart generation (bar, pie, line) — planned
-- `video` — embed video clips from media module — planned
-
-### Validation Hooks
-
-- Add zone validation (reject adding content to non-existent zones in strict mode)
-- Add content length guards for slide templates (keep text scannable)
+This is the highest-level interface — one tool call produces a complete formatted
+document (HTML + optional PDF) with AI-generated images placed automatically.
 
 ---
 
-## API Key & Auth
+## Future Development
 
-All endpoints require `HARNESS_API_KEY` via either:
-- `X-API-Key: <key>` header
-- `Authorization: Bearer <key>` header
-
-Same auth as the rest of the AI Harness (`core/security.py`).
-
----
-
-## Quick Reference — Adding PDF to a Workflow
-
-When asked to add PDF output to a workflow, follow this checklist:
-
-1. **The layout is already built** (via `/layout/create` + `/layout/add` calls)
-2. **Call `/layout/export-pdf` with:**
-   - `layout_id` from the create step
-   - `output_path` as `<workflow-subdir>/filename.pdf` (e.g. `"research/report.pdf"`)
-   - `page_size` matching the document type (`Letter` for US reports, `A4` for international)
-3. **Return the `url` from the response** to the user/client — it will be
-   `/media/files/<the-output-path-you-gave>`
-4. **For multi-page documents:** create multiple layouts, export each, then call (future) `/layout/merge-pdfs`
-
-### When wiring up a new workflow module:
-1. Decide on a subdirectory name under `/data/media/` (e.g. if building a presentation module, use `"presentation/"`)
-2. Hard-code that prefix into your workflow's export calls, or pass it as a config
-3. No other configuration needed — the directory is auto-created, and `/media/files/` already serves it
+| Feature | Status |
+|---------|--------|
+| `/layout/merge-pdfs` — merge multiple page PDFs | Planned |
+| Slide transitions + keyboard navigation | Planned |
+| Base64 image embedding for fully portable HTML | Planned |
+| Auto-generated TOC / cover pages | Planned |
+| Theme presets (`theme: "dark"`, etc.) | Planned |
+| Inline SVG charts (bar, pie, line) | Planned |
+| Video embedding from media module | Planned |
+| Strict zone validation mode | Planned |
+| Content length guards for slide templates | Planned |
