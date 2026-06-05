@@ -8,6 +8,8 @@ from layout.schemas import (
     AddContentResponse,
     CreateLayoutRequest,
     CreateLayoutResponse,
+    CreateTableRequest,
+    CreateTableResponse,
     ListLayoutsResponse,
     RenderLayoutRequest,
     RenderLayoutResponse,
@@ -20,6 +22,7 @@ from layout.service import (
     layout_delete,
     layout_list,
     layout_render,
+    layout_render_table,
     layout_save,
 )
 
@@ -77,3 +80,12 @@ def delete(
 ):
     """Discard a layout from active memory."""
     return layout_delete(layout_id)
+
+
+@router.post("/table", response_model=CreateTableResponse)
+def render_table(
+    req: CreateTableRequest,
+    _: None = Depends(require_harness_auth),
+):
+    """Render a standalone styled HTML table (no layout needed)."""
+    return layout_render_table(req)

@@ -13,7 +13,7 @@ appealing, self-contained HTML documents with multiple layout templates, portrai
 | **Purpose** | Let an AI agent compose visually structured HTML pages or presentation slides programmatically |
 | **Orientation** | `portrait` (A4-style document) or `slide` (1920×1080, 16:9) |
 | **Templates** | 10 built-in: `minimal`, `hero`, `grid`, `split`, `gallery`, `cards`, `timeline`, `magazine`, `pitch`, `blank` |
-| **Content types** | `text` (markdown → HTML) or `image` (URL-based) |
+| **Content types** | `text` (markdown → HTML), `image` (URL-based), `table` (styled HTML table) |
 | **Storage** | In-memory during container lifecycle; `/layout/save` persists to workspace |
 | **Integration** | Works with existing `filetools` (workspace file I/O) and `media` (image generation) modules |
 
@@ -173,6 +173,66 @@ Push content into a zone.
 }
 ```
 
+### `POST /layout/table`
+
+Render a standalone styled HTML table — **no layout needed**.
+
+```jsonc
+{
+  "title": "Q4 Sales Summary",
+  "columns": [
+    { "name": "Region", "key": "region", "align": "left" },
+    { "name": "Revenue", "key": "revenue", "align": "right", "width": "120px" },
+    { "name": "Growth", "key": "growth", "align": "center" }
+  ],
+  "rows": [
+    { "region": "North America", "revenue": "$1.2M", "growth": "+18%" },
+    { "region": "Europe", "revenue": "$890K", "growth": "+7%" },
+    { "region": "Asia Pacific", "revenue": "$650K", "growth": "+24%" }
+  ],
+  "standalone": true,   // full HTML document (default) vs fragment only
+  "style": {            // optional — all fields have sensible defaults
+    "header_bg": "#1e3a5f",
+    "header_color": "#ffffff",
+    "row_alt_bg": "#f8fafc",
+    "border_color": "#e2e8f0",
+    "text_color": "#334155",
+    "font_size": "14px",
+    "border_radius": 8,
+    "striping": true,
+    "hover": true,
+    "compact": false
+  }
+}
+```
+
+**Response:** `{ "html": "<!DOCTYPE html>...", "file_size_bytes": 2345 }`
+
+### `POST /layout/add` — table content
+
+Place a styled table inside an existing layout zone.
+
+```jsonc
+{
+  "layout_id": "abc123def456",
+  "zone": "content",
+  "content_type": "table",
+  "table_columns": [
+    { "name": "Name", "key": "name" },
+    { "name": "Score", "key": "score", "align": "center" }
+  ],
+  "table_rows": [
+    { "name": "Alice", "score": "95" },
+    { "name": "Bob", "score": "87" }
+  ],
+  "table_style": { "header_bg": "#3b82f6", "compact": true },
+  "append": false
+}
+```
+
+The table inherits the layout's `accent_color` for the wrapper styling and is
+returned as a fragment (no `<html>` wrapper) so it renders cleanly inside the zone.
+
 ### `POST /layout/render`
 
 Render to HTML (preview before saving).
@@ -244,6 +304,57 @@ POST /layout/add {
   "content_type": "image",
   "image_url": "http://thor.local:8090/media/files/images/..."
 }
+```
+
+
+### Standalone tables (no layout needed)
+
+```
+# Quick table — use /layout/table directly
+POST /layout/table {
+  "title": "Project Status",
+  "columns": [
+    { "name": "Project", "key": "project" },
+    { "name": "Owner", "key": "owner", "align": "center" },
+    { "name": "Status", "key": "status", "align": "center" }
+  ],
+  "rows": [
+    { "project": "Alpha", "owner": "Alice", "status": "On track" },
+    { "project": "Beta", "owner": "Bob", "status": "At risk" }
+  ]
+}
+```
+
+### Tables inside layouts
+
+```
+# Create a layout, then drop a table into a zone
+POST /layout/create { "template": "split" }
+→ { "layout_id": "abc" }
+
+POST /layout/add {
+  "layout_id": "abc",
+  "zone": "panel_left",
+  "content_type": "table",
+  "table_columns": [
+    { "name": "Feature", "key": "feature" },
+    { "name": "Priority", "key": "pri", "align": "center" }
+  ],
+  "table_rows": [
+    { "feature": "Login overhaul", "pri": "P0" },
+    { "feature": "Dashboard redesign", "pri": "P1" }
+  ],
+  "table_style": { "compact": true }
+}
+
+POST /layout/add {
+  "layout_id": "abc",
+  "zone": "panel_right",
+  "content_type": "text",
+  "content": "## Notes\n\nSee left column for priorities."
+}
+
+POST /layout/save { "layout_id": "abc", "output_path": "plan.html" }
 ```
 
 ### With `filetools` (workspace file management)
@@ -333,9 +444,9 @@ Currently images are URL-referenced. Future option:
 
 ### Rich Content Types
 
-Beyond text and image:
-- `table` — structured data rendering
-- `chart` — inline SVG chart generation (bar, pie, line)
+- Tables are fully implemented (`content_type: "table"`). See above.
+- `chart` — inline SVG chart generation (bar, pie, line) — planned
+- `video` — embed video clips from media module — planned
 - `video` — embed video clips from media module
 
 ### Validation Hooks

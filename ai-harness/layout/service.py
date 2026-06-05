@@ -342,7 +342,7 @@ def _get_layout(layout_id: str) -> Dict[str, Any]:
 
 
 def layout_add_content(req) -> Dict[str, Any]:
-    """Add content (text or image) to a specific zone."""
+    """Add content (text, image, or table) to a specific zone."""
     layout = _get_layout(req.layout_id)
 
     item: Dict[str, Any] = {
@@ -359,6 +359,23 @@ def layout_add_content(req) -> Dict[str, Any]:
             )
         item["content"] = req.content
         item["html"] = _md_to_html(req.content)
+    elif req.content_type == "table":
+        if not req.table_columns:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="table_columns is required when content_type='table'",
+            )
+        item["table_columns"] = req.table_columns
+        item["table_rows"] = req.table_rows or []
+        item["table_style"] = req.table_style
+        item["html"] = _build_table_html(
+            title="",
+            columns=req.table_columns,
+            rows=req.table_rows or [],
+            style=req.table_style,
+            accent_color=layout.get("accent_color", "#3b82f6"),
+            standalone=False,
+        )
     else:
         if not req.image_url:
             raise HTTPException(
@@ -622,6 +639,9 @@ def _build_zone_html(
                     parts.append(f'<div class="{cls}"><div class="timeline-item"><span class="timeline-marker">{milestone_num}</span><div class="timeline-content">{raw_html}</div></div></div>')
                 else:
                     parts.append(f'<div class="{cls}">{raw_html}</div>')
+            elif item["type"] == "table":
+                table_html = item.get("html", "")
+                parts.append(f'<div class="{cls} table-zone">{table_html}</div>')
             else:
                 img_url = item.get("image_url", "")
                 if tpl == "hero" and zone_name == "hero_background":
@@ -897,3 +917,180 @@ def _minify(html_str: str) -> str:
     html_str = re.sub(r"\s+", " ", html_str)
     html_str = re.sub(r"> <", "><", html_str)
     return html_str
+
+
+# ------------------------------------------------------------------
+# Styled HTML table generation
+# ------------------------------------------------------------------
+
+def _build_table_html(
+    title: str,
+    columns,
+    rows,
+    style,
+    accent_color: str = "#3b82f6",
+    standalone: bool = True,
+) -> str:
+    """Build a fully styled HTML table. Returns full document when standalone=True."""
+
+    hdr_bg = style.header_bg if style else "#1e3a5f"
+    hdr_clr = style.header_color if style else "#ffffff"
+    alt_bg = style.row_alt_bg if style else "#f8fafc"
+    bd_clr = style.border_color if style else "#e2e8f0"
+    txt_clr = style.text_color if style else "#334155"
+    fnt = style.font_family if style else "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    fsize = style.font_size if style else "14px"
+    bradius = style.border_radius if style else 8
+    do_strip = style.striping if style else True
+    do_hover = style.hover if style else True
+    compact = style.compact if style else False
+
+    pv = "6px" if compact else "10px"
+    ph = "8px" if compact else "14px"
+
+    p: list[str] = []
+
+    # --- standalone wrapper ---
+    if standalone:
+        p += [
+            "<!DOCTYPE html>",
+            '<html lang="en">',
+            "<head>",
+            '  <meta charset="UTF-8" />',
+            '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+            f"  <title>{html_mod.escape(title) if title else 'Table'}</title>",
+            "  <style>",
+            "    * { margin: 0; padding: 0; box-sizing: border-box; }",
+            "    body {",
+            "      background: #f1f5f9;",
+            "      display: flex;",
+            "      justify-content: center;",
+            "      align-items: flex-start;",
+            "      min-height: 100vh;",
+            "      padding: 40px 16px;",
+            f"      font-family: {fnt};",
+            "    }",
+            "    .table-wrapper {",
+            "      max-width: 1200px;",
+            "      width: 100%;",
+            "      background: #ffffff;",
+            "      border-radius: 12px;",
+            "      box-shadow: 0 4px 24px rgba(0,0,0,0.08);",
+            "      overflow: hidden;",
+            "    }",
+            "    .table-title {",
+            "      padding: 24px 28px 0 28px;",
+            "      font-size: 1.6em;",
+            "      font-weight: 700;",
+            f"      color: {accent_color};",
+            "    }",
+            "    .styled-tbl {",
+            "      border-collapse: separate;",
+            "      border-spacing: 0;",
+            f"      border-radius: {bradius}px;",
+            f"      border: 1px solid {bd_clr};",
+            f"      font-family: {fnt};",
+            f"      font-size: {fsize};",
+            f"      color: {txt_clr};",
+            "      width: 100%;",
+            "    }",
+            "  </style>",
+            "</head>",
+            "<body>",
+            '<div class="table-wrapper">',
+        ]
+
+    # --- title ---
+    if title:
+        p.append(f'<h2 class="table-title">{html_mod.escape(title)}</h2>')
+
+    # --- table open + thead ---
+    p.append('<table class="styled-tbl"><thead><tr>')
+
+    for ci, col in enumerate(columns):
+        ws = f"width:{col.width};" if col.width else ""
+        hs_parts = [
+            f"background:{hdr_bg}",
+            f"color:{hdr_clr}",
+            f"text-align:{col.align}",
+            f"padding:{pv} {ph}",
+            f"border-bottom:2px solid {bd_clr}",
+            "font-weight:600",
+            ws,
+        ]
+        if ci == 0:
+            hs_parts.append(f"border-top-left-radius:{bradius}px")
+        if ci == len(columns) - 1:
+            hs_parts.append(f"border-top-right-radius:{bradius}px")
+        hs = "; ".join(hs_parts) + ";"
+        p.append(f'<th style="{hs}">{html_mod.escape(col.name)}</th>')
+
+    p.append("</tr></thead><tbody>")
+
+    # --- tbody rows ---
+    for ri, row in enumerate(rows):
+        bg = alt_bg if do_strip and ri % 2 == 0 else "#ffffff"
+        tr_parts = [f"background:{bg}", "transition:background 0.15s"]
+        tr_style_str = "; ".join(tr_parts) + ";"
+        hover_attr = ""
+        if do_hover:
+            hover_attr = (
+                f" onmouseover=\"this.style.background='#e0e7ef'\""
+                f" onmouseout=\"this.style.background='{bg}'\""
+            )
+        p.append(f'<tr style="{tr_style_str}"{hover_attr}>')
+        for col in columns:
+            val = str(row.get(col.key, ""))
+            td_parts = [
+                f"text-align:{col.align}",
+                f"padding:{pv} {ph}",
+                f"border-bottom:1px solid {bd_clr}",
+            ]
+            td_style = "; ".join(td_parts) + ";"
+            p.append(f'<td style="{td_style}">{html_mod.escape(val)}</td>')
+        p.append("</tr>")
+
+    p.append("</tbody></table>")
+
+    if standalone:
+        p += ["</div>", "</body>", "</html>"]
+
+    return "\n".join(p)
+
+
+def layout_render_table(req) -> Dict[str, Any]:
+    """Render a standalone styled HTML table (does not require an existing layout)."""
+    html_doc = _build_table_html(
+        title=req.title,
+        columns=req.columns,
+        rows=req.rows,
+        style=req.style,
+        standalone=req.standalone,
+    )
+    return {
+        "html": html_doc,
+        "file_size_bytes": len(html_doc.encode("utf-8")),
+    }
+
+
+def layout_save_table(req) -> Dict[str, Any]:
+    """Render and save a standalone styled table to a file."""
+    from core.config import WORKSPACE
+    from pathlib import Path
+
+    html_doc = _build_table_html(
+        title=req.title,
+        columns=req.columns,
+        rows=req.rows,
+        style=req.style,
+        standalone=True,
+    )
+
+    target = Path(WORKSPACE) / req.output_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(html_doc, encoding="utf-8")
+
+    return {
+        "path": req.output_path,
+        "bytes_written": len(html_doc.encode("utf-8")),
+    }

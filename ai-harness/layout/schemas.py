@@ -83,9 +83,9 @@ class AddContentRequest(BaseModel):
 
     layout_id: str = Field(description="Layout ID from create endpoint.")
     zone: str = Field(description="Zone name to place content in.")
-    content_type: Literal["text", "image"] = Field(
+    content_type: Literal["text", "image", "table"] = Field(
         default="text",
-        description="Type of content: text (markdown/html) or image.",
+        description="Type of content: text (markdown/html), image, or table.",
     )
     content: Optional[str] = Field(
         default=None,
@@ -106,6 +106,18 @@ class AddContentRequest(BaseModel):
     append: bool = Field(
         default=False,
         description="If True, append to existing zone content instead of replacing.",
+    )
+    table_columns: Optional[list[TableColumnDef]] = Field(
+        default=None,
+        description="Column definitions when content_type='table'.",
+    )
+    table_rows: Optional[list[dict]] = Field(
+        default=None,
+        description="Row data dicts when content_type='table'.",
+    )
+    table_style: Optional[TableStyle] = Field(
+        default=None,
+        description="Style options when content_type='table'.",
     )
 
 
@@ -179,3 +191,55 @@ class ListLayoutsResponse(BaseModel):
     """Response listing all active layouts."""
 
     layouts: list[ActiveLayout] = Field(default_factory=list)
+
+
+# ------ Styled HTML Table ------
+
+class TableColumnDef(BaseModel):
+    """Definition of a single table column."""
+
+    name: str = Field(description="Column header text.")
+    key: str = Field(description="Key used to look up cell values in row dicts.")
+    align: Literal["left", "center", "right"] = Field(default="left")
+    width: Optional[str] = Field(
+        default=None,
+        description="CSS width string, e.g. '120px' or '20%'.",
+    )
+
+
+class TableStyle(BaseModel):
+    """Visual style knobs for the generated HTML table."""
+
+    header_bg: str = Field(default="#1e3a5f", description="Header row background.")
+    header_color: str = Field(default="#ffffff", description="Header text color.")
+    row_alt_bg: str = Field(default="#f8fafc", description="Even-row alternating background.")
+    border_color: str = Field(default="#e2e8f0", description="Cell border color.")
+    text_color: str = Field(default="#334155", description="Body text color.")
+    font_family: str = Field(
+        default="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    )
+    font_size: str = Field(default="14px")
+    border_radius: int = Field(default=8, ge=0, le=24)
+    striping: bool = Field(default=True)
+    hover: bool = Field(default=True)
+    compact: bool = Field(default=False)
+
+
+class CreateTableRequest(BaseModel):
+    """Request to generate a standalone styled HTML table."""
+
+    title: str = Field(default="", description="Optional table title / caption.")
+    columns: list[TableColumnDef] = Field(description="Column definitions.")
+    rows: list[dict] = Field(description="Row data — list of dicts keyed by column keys.")
+    style: Optional[TableStyle] = None
+    standalone: bool = Field(
+        default=True,
+        description="If True wrap in a full HTML document; if False return only the table fragment.",
+    )
+
+
+class CreateTableResponse(BaseModel):
+    """Response with the generated HTML table."""
+
+    html: str
+    file_size_bytes: int
