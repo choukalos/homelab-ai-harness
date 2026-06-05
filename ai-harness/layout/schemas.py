@@ -243,3 +243,36 @@ class CreateTableResponse(BaseModel):
 
     html: str
     file_size_bytes: int
+
+
+# ------ PDF Export ------
+
+class ExportPdfRequest(BaseModel):
+    """Request to export a layout as a PDF file."""
+
+    layout_id: str = Field(description="Layout ID from create endpoint.")
+    output_path: str = Field(
+        description=(
+            "Path within the media directory where the PDF will be saved. "
+            "Includes subdirectory for workflow organization. "
+            "Examples: 'presentation/report.pdf', 'research/analysis.pdf'. "
+            "Parent directories are created automatically."
+        ),
+    )
+    page_size: Literal["A4", "Letter", "Legal", "A3", "A5"] = Field(
+        default="Letter",
+        description="PDF page size. Defaults to Letter to match portrait document use case.",
+    )
+    margins: Optional[dict] = Field(
+        default=None,
+        description="Page margins as dict with keys: top, bottom, left, right. Values in mm (e.g. {'top': 20, 'bottom': 20, 'left': 15, 'right': 15}).",
+    )
+
+
+class ExportPdfResponse(BaseModel):
+    """Response after saving PDF."""
+
+    layout_id: str
+    path: str
+    url: str
+    bytes_written: int

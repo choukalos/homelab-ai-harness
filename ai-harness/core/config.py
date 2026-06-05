@@ -22,7 +22,8 @@ COMFY_BASE_URL = os.getenv(
 # Workspace directory for local file tools (container mount point)
 WORKSPACE = os.environ.get("WORKSPACE", "/home/chuck/workspace")
 
-# Media storage base directory (container mount point)
+# Media storage base directory (container mount point). All generated media
+# (images, PDFs, etc.) live under this tree and are served via /media/files/.
 MEDIA_OUTPUT_DIR = os.getenv("MEDIA_OUTPUT_DIR", "/data/media")
 
 # Base URLs for serving generated media

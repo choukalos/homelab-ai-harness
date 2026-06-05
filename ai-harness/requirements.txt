@@ -17,3 +17,4 @@ docling
 python-multipart
 
 
+weasyprint

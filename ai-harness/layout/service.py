@@ -1094,3 +1094,209 @@ def layout_save_table(req) -> Dict[str, Any]:
         "path": req.output_path,
         "bytes_written": len(html_doc.encode("utf-8")),
     }
+
+
+# ------------------------------------------------------------------
+# PDF Export (WeasyPrint)
+# ------------------------------------------------------------------
+
+
+# Default margins in mm — reasonable defaults for a printable document
+_DEFAULT_PDF_MARGINS = {"top": 20, "bottom": 20, "left": 15, "right": 15}
+
+
+def _to_pdf(html_str: str, page_size: str, margins: Optional[dict] = None) -> bytes:
+    """Convert an HTML string to PDF bytes using WeasyPrint."""
+    from weasyprint import HTML
+
+    margin_cfg = margins or _DEFAULT_PDF_MARGINS
+
+    # WeasyPrint does not accept the "Letter name directly;
+    # map to the canonical CSS page-size identifiers it expects.
+    size_map = {
+        "A4": "A4",
+        "Letter": "Letter",
+        "Legal": "Legal",
+        "A3": "A3",
+        "A5": "A5",
+    }
+    css_size = size_map.get(page_size, "Letter")
+
+    # Build a PDF-ready version of the HTML. We wrap any raw HTML
+    # fragment in a full document (the service already builds full-doc HTML
+    # via _build_html, so this is just a safety net).
+    if not html_str.strip().startswith("<!DOCTYPE"):
+        html_str = f"<!DOCTYPE html><html><head><meta charset='utf-8'/></head><body>{html_str}</body></html>"
+
+    # Inject @page rules so the output PDF respects user margins and size.
+    # We prepend them inside the <style> block (or create one if missing).
+    page_rule = (
+        f"@page {{"
+        f"  size: {css_size}; "
+        f"  margin-top: {margin_cfg.get('top', 20)}mm; "
+        f"  margin-bottom: {margin_cfg.get('bottom', 20)}mm; "
+        f"  margin-left: {margin_cfg.get('left', 15)}mm; "
+        f"  margin-right: {margin_cfg.get('right', 15)}mm; "
+        f"}}"
+    )
+
+    # Insert the @page rule before the first closing </style> (if any),
+    # or right before </head>.
+    if "</style>" in html_str:
+        html_str = html_str.replace("</style>", f"{page_rule}\n</style>", 1)
+    elif "</head>" in html_str:
+        html_str = html_str.replace(
+            "</head>", f"<style>{page_rule}</style>\n</head>", 1
+        )
+    else:
+        # Last resort: prepend a <style> block with the page rule
+        html_str = f"<style>{page_rule}</style>\n" + html_str
+
+    return HTML(string=html_str).write_pdf()
+
+
+def layout_export_pdf(req) -> Dict[str, Any]:
+    """Render the layout HTML then convert to PDF and save to disk."""
+    from pathlib import Path
+    from core.config import MEDIA_OUTPUT_DIR
+
+    layout = _get_layout(req.layout_id)
+
+    # 1. Build the HTML document
+    html_doc = _build_pdf_ready_html(layout)
+
+    # 2. Convert to PDF
+    pdf_bytes = _to_pdf(html_doc, req.page_size, req.margins)
+
+    # 3. Ensure .pdf extension
+    output_path = req.output_path
+    if not output_path.lower().endswith(".pdf"):
+        output_path = output_path + ".pdf"
+
+    # 4. Write to media output directory (full path including workflow subdir)
+    target_dir = Path(MEDIA_OUTPUT_DIR) / Path(output_path).parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = Path(MEDIA_OUTPUT_DIR) / output_path
+    target_path.write_bytes(pdf_bytes)
+
+    return {
+        "layout_id": req.layout_id,
+        "path": output_path,
+        "url": f"/media/files/{output_path}",
+        "bytes_written": len(pdf_bytes),
+    }
+
+
+def _build_pdf_ready_html(layout: Dict[str, Any]) -> str:
+    """Build a PDF-optimized HTML document from a layout.
+
+    Differences from the browser HTML:
+    - No viewport meta (irrelevant for PDF)
+    - Body/page styled for print with proper page-size awareness
+    - Forces background rendering (WeasyPrint strips backgrounds by default)
+    """
+    tpl = layout["template"]
+    orientation = layout["orientation"]
+    title = layout["title"] or "Untitled"
+    bg = layout["background_color"]
+    text_col = layout["text_color"]
+    accent = layout["accent_color"]
+    font = layout["font_family"]
+    margin = layout["page_margin"]
+    template_def = layout["template_def"]
+    zones_content = layout["zones"]
+
+    zone_map = template_def["zone_map"]
+    grid_rows = template_def.get("grid_rows", "1fr")
+    grid_cols = template_def.get("grid_cols", "1fr")
+
+    grid_areas = _compute_grid_areas(zone_map, grid_rows, grid_cols)
+
+    zone_html = _build_zone_html(zones_content, zone_map, tpl, accent, text_col, font)
+
+    # For PDF the page element should fill the PDF page naturally;
+    # WeasyPrint will paginate automatically on break-before: page.
+    # We add `background: {bg}` directly on body for solid color PDFs.
+    pdf_css = f"""
+    @page {{
+      background: {bg};
+      margin: 0;
+    }}
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+      background: {bg};
+      color: {text_col};
+      font-family: {font};
+      padding: {margin}px;
+    }}
+    .page {{
+      width: 100%;
+      background: {bg};
+      color: {text_col};
+      font-family: {font};
+      padding: {margin}px;
+      display: grid;
+      grid-template-rows: {grid_rows};
+      grid-template-columns: {grid_cols};
+      grid-template-areas:
+{grid_areas}
+      gap: 16px;
+    }}
+    .zone {{
+      padding: 16px;
+      overflow: hidden;
+    }}
+    .align-left {{ text-align: left; }}
+    .align-center {{ text-align: center; }}
+    .align-right {{ text-align: right; }}
+    .zone-image {{
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+      border-radius: 4px;
+    }}
+    .md-image {{
+      max-width: 100%;
+      border-radius: 4px;
+    }}
+    a {{ color: {accent}; text-decoration: underline; }}
+    code {{
+      background: rgba(0,0,0,0.06);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }}
+    h1, h2, h3, h4, h5, h6 {{ color: {accent}; }}
+    """
+
+    tpl_css = _build_stylesheet(
+        bg=bg,
+        text_col=text_col,
+        accent=accent,
+        font=font,
+        margin=margin,
+        page_width="100%",
+        page_height="auto",
+        grid_rows=grid_rows,
+        grid_cols=grid_cols,
+        grid_areas="",  # already in pdf_css
+        tpl=tpl,
+        orientation_css="",
+    )
+
+    # Merge the template-specific template CSS (tpl_css) into our pdf_css
+    combined_css = pdf_css + "\n" + tpl_css
+
+    parts: list[str] = ['<!DOCTYPE html>\n<html lang="en">']
+    parts.append(f'<head>\n  <meta charset="UTF-8" />\n')
+    # No viewport for PDF — WeasyPrint handles page size via @page
+    parts.append(f'  <title>{html_mod.escape(title)}</title>\n')
+    parts.append(f'  <style>\n{combined_css}\n  </style>\n</head>')
+    parts.append("<body>")
+    parts.append(f'<div class="page">')
+    parts.append(zone_html)
+    parts.append("</div>\n</body>\n</html>")
+
+    return "\n".join(parts)

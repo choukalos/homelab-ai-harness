@@ -1,8 +1,9 @@
-# layout — HTML Page / Slide Layout Engine
+# layout — HTML Page / Slide Layout Engine + PDF Export
 
 AI-driven page and presentation layout service for the AI Harness. Create visually
 appealing, self-contained HTML documents with multiple layout templates, portrait
-(document) or slide (16:9 presentation) orientation, and zone-based content placement.
+(document) or slide (16:9 presentation) orientation, zone-based content placement,
+and **PDF export** for shareable, printable output.
 
 ---
 
@@ -14,7 +15,9 @@ appealing, self-contained HTML documents with multiple layout templates, portrai
 | **Orientation** | `portrait` (A4-style document) or `slide` (1920×1080, 16:9) |
 | **Templates** | 10 built-in: `minimal`, `hero`, `grid`, `split`, `gallery`, `cards`, `timeline`, `magazine`, `pitch`, `blank` |
 | **Content types** | `text` (markdown → HTML), `image` (URL-based), `table` (styled HTML table) |
-| **Storage** | In-memory during container lifecycle; `/layout/save` persists to workspace |
+| **Output formats** | HTML (self-contained), **PDF** (via WeasyPrint) |
+| **PDF storage** | Any subdirectory under `/data/media/` — each workflow chooses its own (e.g. `presentation/`, `research/`). Served publicly via `/media/files/` |
+| **Storage** | In-memory during container lifecycle; `/layout/save` persists HTML to workspace; `/layout/export-pdf` persists PDF to media |
 | **Integration** | Works with existing `filetools` (workspace file I/O) and `media` (image generation) modules |
 
 ---
@@ -50,8 +53,192 @@ POST /layout/add     →  zone: "col_left",    type: "image", image_url: "..."
 POST /layout/add     →  zone: "col_center",  type: "text", content: "..."
 POST /layout/add     →  zone: "footer",      type: "text", content: "..."
 POST /layout/render  →  { html: "<!DOCTYPE html>..." }
+
+# Save as HTML
 POST /layout/save    →  { path: "output/pitch-deck.html" }
+
+# OR save as PDF (see PDF Export section below)
+POST /layout/export-pdf → { path: "presentation/slide1.pdf", url: "/media/files/presentation/slide1.pdf" }
 ```
+
+---
+
+## PDF Export
+
+**Key capability:** Export any layout to a PDF file that is:
+1. **Persisted** under a workflow-specific subdirectory within `/data/media/` (e.g. `/data/media/presentation/report.pdf`, `/data/media/research/analysis.pdf`)
+2. **Publicly accessible** via `/media/files/<subdirectory>/<filename>.pdf` — the same static file server that serves images
+3. **Properly paginated** with configurable page size and margins
+
+### Workflow Directory Design
+
+There is no hardcoded "pdf" subdirectory. Each workflow module that uses the layout
+engine owns its own subdirectory under the media root. The `output_path` you pass
+to `/layout/export-pdf` determines where the PDF lands:
+
+| Workflow | Example `output_path` | On-disk location | Public URL |
+|----------|-----------------------|------------------|------------|
+| Presentations | `presentation/q4-deck.pdf` | `/data/media/presentation/q4-deck.pdf` | `/media/files/presentation/q4-deck.pdf` |
+| Research | `research/saas-analysis.pdf` | `/data/media/research/saas-analysis.pdf` | `/media/files/research/saas-analysis.pdf` |
+| Reports | `reports/annual-summary.pdf` | `/data/media/reports/annual-summary.pdf` | `/media/files/reports/annual-summary.pdf` |
+
+The parent directory is created automatically if it doesn't exist. The PDFs are
+served by the **same** `StaticFiles` mount (`/media/files/`) that serves generated
+images — no separate mount is needed.
+
+### How It Works
+
+```
+         ┌───────────────┐
+         │  AI workflow  │
+         ├───────────────┤
+         │ 1. /create    │  Build layout in memory (zones, content)
+         │ 2. /add × N   │  Fill zones with text, images, tables
+         │ 3. /export-pdf│  ──► HTML rendered with PDF-specific CSS
+         │               │     ──► WeasyPrint converts to PDF bytes
+         │               │     ──► Written to /data/media/<workflow>/
+         │               │     ──► Returns path + public URL
+         └───────────────┘
+                │
+                ▼
+         ┌───────────────┐
+         │  Static Serve  │  /media/files/ mounted as FastAPI StaticFiles
+         │  (app.py)     │  Accessible at http://<harness>/media/files/<path>/
+         └───────────────┘
+```
+
+### `POST /layout/export-pdf`
+
+Render the layout and export as a PDF file.
+
+**Request:**
+
+```jsonc
+{
+  "layout_id": "abc123def456",       // required — from /layout/create
+  "output_path": "presentation/q4-deck.pdf",  // required — path relative to /data/media/
+  "page_size": "Letter",            // optional — "A4" | "Letter" | "Legal" | "A3" | "A5" (default: Letter)
+  "margins": {                      // optional — page margins in mm (default: {top:20, bottom:20, left:15, right:15})
+    "top": 20,
+    "bottom": 20,
+    "left": 15,
+    "right": 15
+  }
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "layout_id": "abc123def456",
+  "path": "presentation/q4-deck.pdf",
+  "url": "/media/files/presentation/q4-deck.pdf",
+  "bytes_written": 45678
+}
+```
+
+The PDF is immediately available at:
+- **Internal:** `http://thor.local:8090/media/files/presentation/q4-deck.pdf`
+- **Via Caddy (Siri-facing):** `https://siri.choukalos.com/media/files/presentation/q4-deck.pdf`
+
+### PDF-Specific Rendering
+
+The PDF export uses a *different CSS pipeline* than the browser HTML render:
+
+| Aspect | Browser HTML | PDF Export |
+|--------|---------------|------------|
+| Page size | Fixed dimensions (slide) or full-width (portrait) | Driven by `page_size` parameter (A4/Letter/etc.) via `@page` |
+| Viewport meta | Included | Stripped (irrelevant for PDF) |
+| Backgrounds | Standard CSS | Forces `@page { background: ... }` so WeasyPrint renders solid colors |
+| Pagination | Single-page layout | WeasyPrint paginates automatically; `page` CSS page breaks respected |
+| Engine | Browser rendering | WeasyPrint (HTML/CSS → PDF, headless) |
+
+### PDF Export — Usage as an AI Agent
+
+When asked to produce a PDF, follow this pattern:
+
+```
+// Step 1: Create the layout (portrait is best for documents)
+POST /layout/create {
+  "orientation": "portrait",
+  "template": "minimal",          // or "magazine", "grid", etc.
+  "title": "Market Research — SaaS Sector Q2 2025",
+  "background_color": "#ffffff",
+  "text_color": "#1a1a1a",
+  "accent_color": "#2563eb"
+}
+→ { "layout_id": "a1b2c3" }
+
+// Step 2: Fill zones
+POST /layout/add {
+  "layout_id": "a1b2c3",
+  "zone": "header",
+  "content_type": "text",
+  "content": "# **Market Research Report**\n\nSaaS Sector — Q2 2025"
+}
+
+POST /layout/add {
+  "layout_id": "a1b2c3",
+  "zone": "content",
+  "content_type": "text",
+  "content": "## Executive Summary\n\nThis report analyzes the SaaS market..."
+}
+
+POST /layout/add {
+  "layout_id": "a1b2c3",
+  "zone": "content",
+  "content_type": "table",
+  "table_columns": [
+    { "name": "Company", "key": "company" },
+    { "name": "Revenue", "key": "revenue", "align": "right" },
+    { "name": "Growth", "key": "growth", "align": "center" }
+  ],
+  "table_rows": [
+    { "company": "Acme Inc", "revenue": "$12.4M", "growth": "+22%" },
+    { "company": "Globex", "revenue": "$8.1M", "growth": "+15%" }
+  ],
+  "append": true
+}
+
+// Step 3: Export to PDF — choose your workflow directory
+POST /layout/export-pdf {
+  "layout_id": "a1b2c3",
+  "output_path": "research/saas-market-q2-2025.pdf",
+  "page_size": "Letter"
+}
+→ { "path": "research/saas-market-q2-2025.pdf", "url": "/media/files/research/saas-market-q2-2025.pdf" }
+
+// Share the URL with the user
+"The PDF is available at http://thor.local:8090/media/files/research/saas-market-q2-2025.pdf"
+```
+
+### Multi-Page PDF Strategy
+
+The layout engine works with *single-page layouts*. For multi-page documents
+(e.g., a 20-page market research report), the AI should:
+
+1. **Create multiple layouts** — one per page (use the template that fits each page's content)
+2. **Export each to a separate PDF** via `/layout/export-pdf`
+3. **Merge PDFs** using an external tool (future: a `/layout/merge-pdfs` endpoint)
+
+> **Future enhancement:** Add a `/layout/merge-pdfs` endpoint that takes multiple
+> PDF filenames (anywhere under `/data/media/`) and merges them into a single
+> multi-page PDF using `pypdf`.
+
+### Choosing a Workflow Directory
+
+When building a new workflow that produces PDFs, pick a sensible subdirectory name
+under `/data/media/`. Some guidelines:
+
+| Workflow type | Recommended directory | Rationale |
+|---------------|----------------------|-----------|
+| Presentations, pitch decks, slide shows | `presentation/` | Clear, self-documenting |
+| Market research, analysis reports | `research/` | Separates research output from other content |
+| Business reports, summaries | `reports/` | Generic catch-all for report-style output |
+
+The directory is created automatically by the service — you only need to decide
+on the name when wiring up your workflow.
 
 ---
 
@@ -260,6 +447,10 @@ Render and save to workspace.
 
 **Response:** `{ "layout_id": "...", "path": "presentations/q4-review.html", "bytes_written": 12345 }`
 
+### `POST /layout/export-pdf`
+
+Render and export as a PDF file. See the **PDF Export** section above for full details.
+
 ### `GET /layout/active`
 
 List all in-memory layouts.
@@ -275,7 +466,7 @@ Discard a layout.
 Text content accepts a **lightweight markdown subset** (no external library — pure Python):
 
 | Syntax | Renders As |
-|--------|-----------|
+|--------|------------|
 | `# H1` … `###### H6` | Headings |
 | `**bold**` | Bold |
 | `*italic*` | Italic |
@@ -306,61 +497,10 @@ POST /layout/add {
 }
 ```
 
-
-### Standalone tables (no layout needed)
-
-```
-# Quick table — use /layout/table directly
-POST /layout/table {
-  "title": "Project Status",
-  "columns": [
-    { "name": "Project", "key": "project" },
-    { "name": "Owner", "key": "owner", "align": "center" },
-    { "name": "Status", "key": "status", "align": "center" }
-  ],
-  "rows": [
-    { "project": "Alpha", "owner": "Alice", "status": "On track" },
-    { "project": "Beta", "owner": "Bob", "status": "At risk" }
-  ]
-}
-```
-
-### Tables inside layouts
-
-```
-# Create a layout, then drop a table into a zone
-POST /layout/create { "template": "split" }
-→ { "layout_id": "abc" }
-
-POST /layout/add {
-  "layout_id": "abc",
-  "zone": "panel_left",
-  "content_type": "table",
-  "table_columns": [
-    { "name": "Feature", "key": "feature" },
-    { "name": "Priority", "key": "pri", "align": "center" }
-  ],
-  "table_rows": [
-    { "feature": "Login overhaul", "pri": "P0" },
-    { "feature": "Dashboard redesign", "pri": "P1" }
-  ],
-  "table_style": { "compact": true }
-}
-
-POST /layout/add {
-  "layout_id": "abc",
-  "zone": "panel_right",
-  "content_type": "text",
-  "content": "## Notes\n\nSee left column for priorities."
-}
-
-POST /layout/save { "layout_id": "abc", "output_path": "plan.html" }
-```
-
 ### With `filetools` (workspace file management)
 
 ```
-# Save the layout
+# Save the layout as HTML
 POST /layout/save { "output_path": "output/my-doc.html" }
 
 # Verify with filetools
@@ -368,6 +508,25 @@ POST /files/read { "path": "output/my-doc.html" }
 
 # Clean up
 POST /files/delete { "path": "output/my-doc.html" }
+```
+
+### PDF Output — File Lifecycle
+
+```
+# PDFs are saved anywhere under /data/media/ — the same tree as images.
+# They are served by the SAME static server that serves /media/files/.
+
+# Export to workflow-specific directory
+POST /layout/export-pdf {
+  "layout_id": "abc123",
+  "output_path": "research/my-report.pdf"
+}
+→ { "url": "/media/files/research/my-report.pdf" }
+
+# The PDF is now at:
+#   Container:  /data/media/research/my-report.pdf
+#   Internal:   http://thor.local:8090/media/files/research/my-report.pdf
+#   Public (Caddy): https://siri.choukalos.com/media/files/research/my-report.pdf
 ```
 
 ---
@@ -386,6 +545,19 @@ POST /files/delete { "path": "output/my-doc.html" }
 
 4. **No server-side image handling** — image zones reference URLs. The AI is responsible
    for generating/storing images via the `media` module before referencing them.
+
+5. **PDF via WeasyPrint** — the layout HTML is rendered through WeasyPrint's HTML→PDF
+   engine. CSS `@page` rules control page size and margins. Backgrounds are explicitly
+   set on `@page` so WeasyPrint (which strips backgrounds by default) includes them.
+
+6. **PDFs live in the media tree** — no separate `/pdfs/` directory. PDFs go wherever
+   the workflow code says they belong (`presentation/`, `research/`, etc.). The
+   existing `/media/files/` static mount serves the entire `/data/media/` tree,
+   including any subdirectory the workflow creates.
+
+7. **Workflow-owned directories** — each workflow module decides its own output path
+   within `/data/media/`. The service creates parent directories automatically. No
+   hardcoded paths or separate static files mounts are needed.
 
 ---
 
@@ -413,12 +585,15 @@ Then add template-specific CSS in `_build_stylesheet()` under the `tpl == "my_te
 
 ## Future Development Notes
 
-### Multi-page Support
+### Multi-page PDF Merge
 
-Current design handles single pages. For multi-page documents:
-- AI creates multiple layouts (`/layout/create` × N)
-- Optionally combine them with a wrapper HTML or generate a table of contents
-- Or add a new endpoint: `POST /layout/concat` that merges rendered HTML pages
+Add a `/layout/merge-pdfs` endpoint that takes multiple PDF filenames from
+anywhere under `/data/media/` and merges them into a single multi-page PDF using
+`pypdf`. Workflow:
+1. AI creates N layouts (one per page)
+2. Exports each to PDF via `/layout/export-pdf`
+3. Calls `/layout/merge-pdfs` with the list of filenames
+4. Result: single combined PDF ready for sharing
 
 ### Slide Transitions
 
@@ -432,10 +607,11 @@ Currently images are URL-referenced. Future option:
 - Embed images as base64 data URIs for fully portable output
 - Require an endpoint that reads the image bytes and inlines them
 
-### PDF Export
+### PDF Cover Pages / Table of Contents
 
-- Add `/layout/export-pdf` endpoint using `weasyprint` or similar
-- Renders the same HTML through a PDF engine
+For report-style PDFs:
+- Add endpoint or template support for auto-generated TOC
+- Add cover page template with title, subtitle, date, author
 
 ### Theming
 
@@ -447,7 +623,6 @@ Currently images are URL-referenced. Future option:
 - Tables are fully implemented (`content_type: "table"`). See above.
 - `chart` — inline SVG chart generation (bar, pie, line) — planned
 - `video` — embed video clips from media module — planned
-- `video` — embed video clips from media module
 
 ### Validation Hooks
 
@@ -463,3 +638,23 @@ All endpoints require `HARNESS_API_KEY` via either:
 - `Authorization: Bearer <key>` header
 
 Same auth as the rest of the AI Harness (`core/security.py`).
+
+---
+
+## Quick Reference — Adding PDF to a Workflow
+
+When asked to add PDF output to a workflow, follow this checklist:
+
+1. **The layout is already built** (via `/layout/create` + `/layout/add` calls)
+2. **Call `/layout/export-pdf` with:**
+   - `layout_id` from the create step
+   - `output_path` as `<workflow-subdir>/filename.pdf` (e.g. `"research/report.pdf"`)
+   - `page_size` matching the document type (`Letter` for US reports, `A4` for international)
+3. **Return the `url` from the response** to the user/client — it will be
+   `/media/files/<the-output-path-you-gave>`
+4. **For multi-page documents:** create multiple layouts, export each, then call (future) `/layout/merge-pdfs`
+
+### When wiring up a new workflow module:
+1. Decide on a subdirectory name under `/data/media/` (e.g. if building a presentation module, use `"presentation/"`)
+2. Hard-code that prefix into your workflow's export calls, or pass it as a config
+3. No other configuration needed — the directory is auto-created, and `/media/files/` already serves it

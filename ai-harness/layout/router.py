@@ -10,6 +10,8 @@ from layout.schemas import (
     CreateLayoutResponse,
     CreateTableRequest,
     CreateTableResponse,
+    ExportPdfRequest,
+    ExportPdfResponse,
     ListLayoutsResponse,
     RenderLayoutRequest,
     RenderLayoutResponse,
@@ -20,6 +22,7 @@ from layout.service import (
     layout_add_content,
     layout_create,
     layout_delete,
+    layout_export_pdf,
     layout_list,
     layout_render,
     layout_render_table,
@@ -89,3 +92,12 @@ def render_table(
 ):
     """Render a standalone styled HTML table (no layout needed)."""
     return layout_render_table(req)
+
+
+@router.post("/export-pdf", response_model=ExportPdfResponse)
+def export_pdf(
+    req: ExportPdfRequest,
+    _: None = Depends(require_harness_auth),
+):
+    """Render the layout and export as a PDF file to the media directory."""
+    return layout_export_pdf(req)
