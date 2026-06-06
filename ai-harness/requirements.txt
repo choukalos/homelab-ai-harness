@@ -16,6 +16,10 @@ pymupdf
 docling
 python-multipart
 
+# Celery task queue + durable scheduling
+celery[redis]
+redbeat
+
 
 weasyprint
 

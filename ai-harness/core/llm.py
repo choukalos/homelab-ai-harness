@@ -11,6 +11,8 @@ def litellm_headers() -> dict[str, str]:
     return headers
 
 
+# ------ async version used by FastAPI endpoints --------
+
 async def chat_completion(
     client: httpx.AsyncClient,
     prompt: str,
@@ -46,4 +48,44 @@ async def chat_completion(
             status_code=502,
             detail={"service": "litellm", "error": str(e)},
         )
+
+
+# ------ sync version used inside Celery workers --------
+
+from typing import Any
+
+def chat_completion_sync(
+    messages: list[dict[str, str]],
+    model: str | None = None,
+    max_tokens: int | None = None,
+    temperature: float = 0.2,
+    timeout: float = 300.0,
+) -> str:
+    """Synchronous LiteLLM call — used inside Celery tasks.
+
+    Parameters
+    ----------
+    messages:
+        OpenAI-style message list.
+    model:
+        Optional model override (defaults to HARNESS_MODEL env var).
+    max_tokens:
+        Optional max_tokens override.
+    """
+    payload: dict[str, Any] = {
+        "model": model or HARNESS_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    with httpx.Client(timeout=timeout) as client:
+        r = client.post(
+            f"{LITELLM_BASE_URL}/chat/completions",
+            headers=litellm_headers(),
+            json=payload,
+        )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
 

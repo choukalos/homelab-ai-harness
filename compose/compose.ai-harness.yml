@@ -51,6 +51,109 @@ services:
       - qdrant
       - ai-redis
 
+  home-ai-harness-worker-1:
+    image: home-ai-harness:local
+    container_name: ai-harness-worker-1
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    environment:
+      - LITELLM_URL=http://litellm-proxy:4000
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - CRAWL4AI_BASE_URL=http://crawl4ai:11235
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://ai-redis:6379/0
+      - HARNESS_MODEL=${HARNESS_MODEL}
+      - MATRIX_IP=${MATRIX_IP}
+      - COMFY_PORT=8188
+      - COMFY_BASE_URL=http://${MATRIX_IP}:8188
+      - MEDIA_OUTPUT_DIR=/data/media
+      - INTERNAL_BASE_URL=http://thor.local:8090
+      - PUBLIC_BASE_URL=https://siri.choukalos.com
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+      - SIRI_API_KEY=${SIRI_API_KEY}
+      - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+    volumes:
+      - /home/chuck/data/media:/data/media
+      - /home/chuck/workspace:/home/chuck/workspace:rw
+    command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
+    depends_on:
+      - ai-redis
+
+  home-ai-harness-worker-2:
+    image: home-ai-harness:local
+    container_name: ai-harness-worker-2
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    environment:
+      - LITELLM_URL=http://litellm-proxy:4000
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - CRAWL4AI_BASE_URL=http://crawl4ai:11235
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://ai-redis:6379/0
+      - HARNESS_MODEL=${HARNESS_MODEL}
+      - MATRIX_IP=${MATRIX_IP}
+      - COMFY_PORT=8188
+      - COMFY_BASE_URL=http://${MATRIX_IP}:8188
+      - MEDIA_OUTPUT_DIR=/data/media
+      - INTERNAL_BASE_URL=http://thor.local:8090
+      - PUBLIC_BASE_URL=https://siri.choukalos.com
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+      - SIRI_API_KEY=${SIRI_API_KEY}
+      - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+    volumes:
+      - /home/chuck/data/media:/data/media
+      - /home/chuck/workspace:/home/chuck/workspace:rw
+    command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
+    depends_on:
+      - ai-redis
+
+  home-ai-harness-beat:
+    image: home-ai-harness:local
+    container_name: ai-harness-beat
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    networks:
+      - ai-net
+    environment:
+      - LITELLM_URL=http://litellm-proxy:4000
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - CRAWL4AI_BASE_URL=http://crawl4ai:11235
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://ai-redis:6379/0
+      - HARNESS_MODEL=${HARNESS_MODEL}
+      - MATRIX_IP=${MATRIX_IP}
+      - COMFY_PORT=8188
+      - COMFY_BASE_URL=http://${MATRIX_IP}:8188
+      - MEDIA_OUTPUT_DIR=/data/media
+      - INTERNAL_BASE_URL=http://thor.local:8090
+      - PUBLIC_BASE_URL=https://siri.choukalos.com
+      - HARNESS_API_KEY=${HARNESS_API_KEY}
+      - SIRI_API_KEY=${SIRI_API_KEY}
+      - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+    volumes:
+      - /home/chuck/data/media:/data/media
+      - /home/chuck/workspace:/home/chuck/workspace:rw
+    command: >
+      celery -A core.celery_app.celery beat
+      -S redbeat.RedBeatScheduler
+      --loglevel=info
+      --max-interval=5
+    depends_on:
+      - ai-redis
+
   home-ai-kb-watcher:
     image: home-ai-harness:local
     container_name: ai-kb-watcher

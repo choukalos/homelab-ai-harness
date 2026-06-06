@@ -10,6 +10,8 @@ from siri.router import router as siri_router
 from filetools.router import router as filetools_router
 from layout.router import router as layout_router
 from charts.router import router as charts_router
+from tasks.router import router as tasks_router
+from scheduler.router import router as scheduler_router
 
 app = FastAPI(title="AI Harness")
 
@@ -21,6 +23,8 @@ app.include_router(siri_router, prefix="/siri", tags=["siri"])
 app.include_router(filetools_router, prefix="/files", tags=["filetools"])
 app.include_router(layout_router, prefix="/layout", tags=["layout"])
 app.include_router(charts_router, prefix="/chart", tags=["charts"])
+app.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
+app.include_router(scheduler_router, prefix="/schedules", tags=["schedules"])
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 
