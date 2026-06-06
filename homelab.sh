@@ -174,6 +174,9 @@ case "${COMMAND}" in
     ;;
 
   rebuild)
+    # Stop existing containers first to avoid name-conflict race conditions
+    # when docker compose tries to recreate containers in parallel.
+    run_compose down "${STACK}" "$@"
     run_compose up "${STACK}" -d --build --force-recreate --remove-orphans "$@"
     ;;
 
