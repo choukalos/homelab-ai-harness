@@ -12,8 +12,13 @@ from layout.router import router as layout_router
 from charts.router import router as charts_router
 from tasks.router import router as tasks_router
 from scheduler.router import router as scheduler_router
+from workflows import register as register_workflows
+from workflows.router import router as workflows_router
 
 app = FastAPI(title="AI Harness")
+
+# Ensure workflow DB tables exist on startup
+register_workflows(app)
 
 app.include_router(web_search_router, prefix="/web", tags=["web"])
 app.include_router(family_kb_router, prefix="/kb", tags=["family-kb"])
@@ -25,6 +30,7 @@ app.include_router(layout_router, prefix="/layout", tags=["layout"])
 app.include_router(charts_router, prefix="/chart", tags=["charts"])
 app.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 app.include_router(scheduler_router, prefix="/schedules", tags=["schedules"])
+app.include_router(workflows_router)
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 

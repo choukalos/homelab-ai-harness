@@ -78,6 +78,39 @@ class CreateLayoutResponse(BaseModel):
     content_count: int = 0
 
 
+# ------ Styled HTML Table ------
+# Defined here early so AddContentRequest below can reference these types
+
+class TableColumnDef(BaseModel):
+    """Definition of a single table column."""
+
+    name: str = Field(description="Column header text.")
+    key: str = Field(description="Key used to look up cell values in row dicts.")
+    align: Literal["left", "center", "right"] = Field(default="left")
+    width: Optional[str] = Field(
+        default=None,
+        description="CSS width string, e.g. '120px' or '20%'.",
+    )
+
+
+class TableStyle(BaseModel):
+    """Visual style knobs for the generated HTML table."""
+
+    header_bg: str = Field(default="#1e3a5f", description="Header row background.")
+    header_color: str = Field(default="#ffffff", description="Header text color.")
+    row_alt_bg: str = Field(default="#f8fafc", description="Even-row alternating background.")
+    border_color: str = Field(default="#e2e8f0", description="Cell border color.")
+    text_color: str = Field(default="#334155", description="Body text color.")
+    font_family: str = Field(
+        default="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    )
+    font_size: str = Field(default="14px")
+    border_radius: int = Field(default=8, ge=0, le=24)
+    striping: bool = Field(default=True)
+    hover: bool = Field(default=True)
+    compact: bool = Field(default=False)
+
+
 # ------ Content Placement ------
 
 class AddContentRequest(BaseModel):
@@ -199,36 +232,6 @@ class ListLayoutsResponse(BaseModel):
     layouts: list[ActiveLayout] = Field(default_factory=list)
 
 
-# ------ Styled HTML Table ------
-
-class TableColumnDef(BaseModel):
-    """Definition of a single table column."""
-
-    name: str = Field(description="Column header text.")
-    key: str = Field(description="Key used to look up cell values in row dicts.")
-    align: Literal["left", "center", "right"] = Field(default="left")
-    width: Optional[str] = Field(
-        default=None,
-        description="CSS width string, e.g. '120px' or '20%'.",
-    )
-
-
-class TableStyle(BaseModel):
-    """Visual style knobs for the generated HTML table."""
-
-    header_bg: str = Field(default="#1e3a5f", description="Header row background.")
-    header_color: str = Field(default="#ffffff", description="Header text color.")
-    row_alt_bg: str = Field(default="#f8fafc", description="Even-row alternating background.")
-    border_color: str = Field(default="#e2e8f0", description="Cell border color.")
-    text_color: str = Field(default="#334155", description="Body text color.")
-    font_family: str = Field(
-        default="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-    )
-    font_size: str = Field(default="14px")
-    border_radius: int = Field(default=8, ge=0, le=24)
-    striping: bool = Field(default=True)
-    hover: bool = Field(default=True)
-    compact: bool = Field(default=False)
 
 
 class CreateTableRequest(BaseModel):

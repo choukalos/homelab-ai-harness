@@ -14,8 +14,8 @@ services:
       - ../litellm/config.yml:/app/config.yaml:ro
       - /home/chuck/data/litellm:/app/data
     extra_hosts:
-      - "macstudio:${MAC_STUDIO_IP}"
-      - "matrix:${MATRIX_IP}"
+      - "macstudio:${MAC_STUDIO_IP:-127.0.0.1}"
+      - "matrix:${MATRIX_IP:-127.0.0.1}"
       - "host.docker.internal:host-gateway"
 
   open-webui:

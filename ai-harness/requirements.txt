@@ -26,3 +26,6 @@ weasyprint
 # Plotly + Kaleido for server-side chart rendering
 plotly
 kaleido
+
+# MySQL for workflow run state store
+pymysql

@@ -178,7 +178,6 @@ def _register_templates():
         "grid_cols": "1fr 1fr 1fr 1fr",
         "zone_map": {},
     }
-    _register_templates()
 
 
 _init_done = False
