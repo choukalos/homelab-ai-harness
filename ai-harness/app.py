@@ -14,6 +14,8 @@ from tasks.router import router as tasks_router
 from scheduler.router import router as scheduler_router
 from workflows import register as register_workflows
 from workflows.router import router as workflows_router
+from market_research.router import router as market_research_router
+from market_research.tasks import register as register_market_tasks
 
 app = FastAPI(title="AI Harness")
 
@@ -31,6 +33,10 @@ app.include_router(charts_router, prefix="/chart", tags=["charts"])
 app.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 app.include_router(scheduler_router, prefix="/schedules", tags=["schedules"])
 app.include_router(workflows_router)
+app.include_router(market_research_router, prefix="/markets", tags=["market-research"])
+
+# Register Celery tasks for market research before first task dispatch
+register_market_tasks()
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 
