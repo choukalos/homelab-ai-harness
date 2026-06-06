@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 from core.config import INTERNAL_BASE_URL
+import charts.service as _charts
 
 # ------------------------------------------------------------------
 # In-memory layout store
@@ -377,6 +378,20 @@ def layout_add_content(req) -> Dict[str, Any]:
             accent_color=layout.get("accent_color", "#3b82f6"),
             standalone=False,
         )
+    elif req.content_type == "chart":
+        if not req.chart_spec:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="chart_spec is required when content_type='chart'",
+            )
+        chart_result = _charts.chart_from_zone_spec(req.chart_spec)
+        if chart_result.get("url"):
+            item["image_url"] = chart_result["url"]
+            item["chart_id"] = chart_result["chart_id"]
+        elif chart_result.get("html_fragment"):
+            item["content"] = chart_result["html_fragment"]
+            item["html"] = chart_result["html_fragment"]
+            item["type"] = "text"
     else:
         if not req.image_url:
             raise HTTPException(
@@ -1184,6 +1199,19 @@ def build_document(req) -> Dict[str, Any]:
                 table_columns=zone_spec.table_columns,
                 table_rows=zone_spec.table_rows,
                 table_style=zone_spec.table_style,
+                alignment=zone_spec.alignment,
+                style_class=zone_spec.style_class,
+                append=zone_spec.append,
+            )
+            layout_add_content(add_req)
+        elif zone_spec.content_type == "chart":
+            from layout.schemas import AddContentRequest
+
+            add_req = AddContentRequest(
+                layout_id=layout_id,
+                zone=zone_spec.zone,
+                content_type="chart",
+                chart_spec=zone_spec.chart_spec,
                 alignment=zone_spec.alignment,
                 style_class=zone_spec.style_class,
                 append=zone_spec.append,

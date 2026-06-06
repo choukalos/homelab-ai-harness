@@ -3,6 +3,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 
+from charts.schemas import ChartZoneSpec
+
 
 # ------ Layout Creation ------
 
@@ -83,9 +85,9 @@ class AddContentRequest(BaseModel):
 
     layout_id: str = Field(description="Layout ID from create endpoint.")
     zone: str = Field(description="Zone name to place content in.")
-    content_type: Literal["text", "image", "table"] = Field(
+    content_type: Literal["text", "image", "table", "chart"] = Field(
         default="text",
-        description="Type of content: text (markdown/html), image, or table.",
+        description="Type of content: text (markdown/html), image, table, or chart.",
     )
     content: Optional[str] = Field(
         default=None,
@@ -118,6 +120,10 @@ class AddContentRequest(BaseModel):
     table_style: Optional[TableStyle] = Field(
         default=None,
         description="Style options when content_type='table'.",
+    )
+    chart_spec: Optional[ChartZoneSpec] = Field(
+        default=None,
+        description="Chart specification when content_type='chart'. See ChartZoneSpec.",
     )
 
 
@@ -377,8 +383,8 @@ class ZoneContentSpec(BaseModel):
     """Specification for a single zone's content in a document build."""
 
     zone: str = Field(description="Zone name to populate.")
-    content_type: Literal["text", "image", "table", "gen_image"] = Field(
-        description="Content type. Use 'gen_image' to generate an image inline.",
+    content_type: Literal["text", "image", "table", "gen_image", "chart"] = Field(
+        description="Content type. Use 'gen_image' for inline image gen, 'chart' for charts.",
     )
     content: Optional[str] = Field(
         default=None,
@@ -424,6 +430,10 @@ class ZoneContentSpec(BaseModel):
     table_style: Optional[TableStyle] = Field(
         default=None,
         description="Style options when content_type='table'.",
+    )
+    chart_spec: Optional[ChartZoneSpec] = Field(
+        default=None,
+        description="Chart specification when content_type='chart'."
     )
 
 

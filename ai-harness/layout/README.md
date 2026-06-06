@@ -15,10 +15,10 @@ pattern all the way up to one-shot multi-zone document builds.
 | **Purpose** | Compose visually structured HTML pages, presentation slides, and PDFs programmatically |
 | **Orientation** | `portrait` (document) or `slide` (1920×1080, 16:9) |
 | **Templates** | 10 built-in: `minimal`, `hero`, `grid`, `split`, `gallery`, `cards`, `timeline`, `magazine`, `pitch`, `blank` |
-| **Content types** | `text` (markdown → HTML), `image` (URL-based), `gen_image` (AI-generated inline), `table` (styled HTML) |
+| **Content types** | `text`, `image`, `table`, `gen_image`, **`chart`** (Plotly line/bar/pie) |
 | **Output formats** | HTML (self-contained, offline-ready), **PDF** (via WeasyPrint) |
 | **Storage** | HTML saved to workspace (`/layout/save`); PDFs and images saved to `/data/media/` |
-| **Image pipeline** | Direct ComfyUI bridge — no intermediate URL tracking needed |
+| **Chart engine** | Plotly + Kaleido — line, bar, pie/donut charts as PNG, SVG, or interactive HTML |
 
 ---
 
@@ -34,6 +34,10 @@ pattern all the way up to one-shot multi-zone document builds.
 | `POST` | `/layout/save` | Render layout and save HTML to workspace |
 | `POST` | `/layout/export-pdf` | Render layout and export PDF to media directory |
 | `POST` | `/layout/table` | Render a standalone styled HTML table (no layout needed) |
+| `POST` | `/chart/line` | Generate a line chart (PNG, SVG, or interactive HTML) |
+| `POST` | `/chart/bar` | Generate a bar chart (grouped/stacked, PNG/SVG/HTML) |
+| `POST` | `/chart/pie` | Generate a pie or donut chart (PNG/SVG/HTML) |
+| `POST` | `/chart/any` | Unified chart endpoint — auto-routes by `chart_type` |
 | `GET` | `/layout/active` | List all active in-memory layouts |
 | `DELETE` | `/layout/{layout_id}` | Discard a layout |
 
@@ -216,15 +220,14 @@ Push content into a zone.
 |-------|------|--|-------|
 | `layout_id` | string | always | From `/layout/create` |
 | `zone` | string | always | Zone name for the chosen template |
-| `content_type` | `text | image | table` | always | |
+| `content_type` | `text | image | table | chart` | always | |
 | `content` | string | `content_type == "text"` | Markdown or raw HTML snippet |
 | `image_url` | string | `content_type == "image"` | **Absolute** URL (http/https) |
 | `table_columns` | array | `content_type == "table"` | Column definitions (see below) |
 | `table_rows` | array of dicts | `content_type == "table"` | Row data keyed by column `key` |
 | `table_style` | object | | Optional table style override |
+| `chart_spec` | `ChartZoneSpec` object | `content_type == "chart"` | Chart data + style (see Chart section) |
 | `alignment` | `left | center | right` | | Default `"center"` |
-| `style_class` | string | | Additional CSS class names |
-| `append` | bool | | Default `false` — set `true` to append |
 
 **Table column definition:**
 
@@ -321,7 +324,7 @@ create layout → populate zones (with inline image generation) → render → s
 | Field | Type | Required When | Notes |
 |-------|------|--|-------|
 | `zone` | string | always | Zone name |
-| `content_type` | `text | image | table | gen_image` | always | Use `gen_image` for inline AI image gen |
+| `content_type` | `text | image | table | gen_image | chart` | always | Use `gen_image` for inline AI image gen, `chart` for charts |
 | `content` | string | `content_type == "text"` | Markdown or HTML snippet |
 | `image_url` | string | `content_type == "image"` | Absolute URL |
 | `image_prompt` | string | `content_type == "gen_image"` | Prompt for ComfyUI |
@@ -334,9 +337,8 @@ create layout → populate zones (with inline image generation) → render → s
 | `table_columns` | array of column defs | `content_type == "table"` | Same as `/layout/add` table columns |
 | `table_rows` | array of dicts | `content_type == "table"` | Same as `/layout/add` table rows |
 | `table_style` | object | | Optional table style |
+| `chart_spec` | `ChartZoneSpec` object | `content_type == "chart"` | Chart data + style (see Chart section) |
 | `alignment` | `left | center | right` | | Default `"center"` |
-| `style_class` | string | | Default `""` |
-| `append` | bool | | Default `false` |
 
 **Response — `BuildDocumentResponse`:**
 
@@ -503,6 +505,7 @@ The service creates parent directories automatically.
 |------|-------|----------|
 | HTML (from `/layout/save`) | `/home/chuck/workspace/` | Workspace file system |
 | Images (generated) | `/data/media/images/` | `/media/files/images/` |
+| Charts (PNG/SVG) | `/data/media/charts/` | `/media/files/charts/` |
 | PDFs (from `/layout/export-pdf` or `/layout/build`) | `/data/media/<your-path>/` | `/media/files/<your-path>/` |
 
 ---
@@ -526,8 +529,11 @@ The service creates parent directories automatically.
 5. **PDF via WeasyPrint** — CSS `@page` rules control size and margins. Backgrounds
    are explicitly set on `@page` so WeasyPrint renders solid colors.
 
-6. **PDFs live in the media tree** — no separate `/pdfs/` directory. Served by the
-   same `/media/files/` static mount as images.
+7. **Charts via Plotly + Kaleido** — line, bar, and pie/donut charts rendered to
+   PNG (raster), SVG (vector), or interactive HTML fragments. Charts save to
+   `/data/media/charts/` and are served alongside images via `/media/files/charts/`.
+   For PDF output use `png` or `svg` — the layout engine embeds the image URL.
+   For browser viewing, `html_fragment` gives interactive zoom/tooltip support.
 
 ---
 
@@ -589,6 +595,191 @@ document (HTML + optional PDF) with AI-generated images placed automatically.
 
 ---
 
+## Charts (Plotly + Kaleido)
+
+The harness includes a first-class **charts** module backed by Plotly + Kaleido,
+supporting line, bar, and pie/donut graphs. Charts can be generated standalone via
+`</chart/>` endpoints **or** placed directly into layout zones via `content_type: "chart"`.
+
+### Chart endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/chart/line` | Line chart with one or more data series |
+| `POST` | `/chart/bar` | Bar chart (grouped, stacked, vertical/horizontal) |
+| `POST` | `/chart/pie` | Pie or donut chart |
+| `POST` | `/chart/any` | Unified endpoint — specify `chart_type` and matching data |
+
+All require `HARNESS_API_KEY` auth (same as layout endpoints).
+
+### Output formats
+
+Every chart endpoint accepts `output_format`:
+
+| Format | Description |
+|--------|-------------|
+| `png` | Static raster image saved to `/data/media/charts/`; response includes `url` |
+| `svg` | Vector image saved to `/data/media/charts/`; response includes `url` |
+| `html_fragment` | Interactive Plotly HTML embed (CDN-loaded Plotly.js); response includes `html_fragment` |
+
+Saved charts are served at `%INTERNAL_BASE_URL%/media/files/charts/<filename>` alongside
+images and PDFs.
+
+### Chart configuration (`ChartConfig`)
+
+All chart types accept an optional `config` object:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `title` | `""` | Chart title |
+| `title_x` | `0.5` | Horizontal position (0–1, 0.5 = center) |
+| `xaxis_title` | | X-axis label |
+| `yaxis_title` | | Y-axis label |
+| `template` | `"plotly_white"` | `plotly_white`, `plotly_dark`, `ggplot2`, `seaborn`, `simple_white` |
+| `font_family` | `"system-ui, ..."` | CSS font-family for chart text |
+| `font_size` | `12` | Base font size |
+| `title_font_size` | `18` | Title font size |
+| `width` | `800` | Chart width in px (200–1920) |
+| `height` | `500` | Chart height in px (200–1080) |
+| `show_legend` | `true` | Show legend |
+| `legend_position` | `"right"` | `top`, `bottom`, `left`, `right` |
+
+### Embedding charts in layouts
+
+Use `content_type: "chart"` with a `chart_spec` in `AddContentRequest` or
+`ZoneContentSpec` (inside `/layout/build`).
+
+**`/layout/build` example — line chart in a report:**
+
+```json
+POST /layout/build  {
+  "orientation": "portrait",
+  "template": "minimal",
+  "title": "Q3 Sales Report",
+  "zones": [
+    {"zone": "header", "content_type": "text",
+     "content": "# Q3 Sales Report"},
+    {"zone": "content", "content_type": "chart",
+     "chart_spec": {
+       "chart_type": "line",
+       "output_format": "png",
+       "config": {
+         "title": "Monthly Revenue",
+         "xaxis_title": "Month",
+         "yaxis_title": "$ (thousands)"
+       },
+       "line_traces": [
+         {
+           "name": "Revenue",
+           "x": ["Jan","Feb","Mar","Apr","May","Jun"],
+           "y": [120, 135, 128, 160, 175, 190],
+           "line_width": 3,
+           "mode": "lines+markers"
+         },
+         {
+           "name": "Costs",
+           "x": ["Jan","Feb","Mar","Apr","May","Jun"],
+           "y": [90, 95, 100, 105, 110, 120],
+           "line_width": 2,
+           "mode": "lines"
+         }
+       ]
+     }},
+    {"zone": "footer", "content_type": "text",
+     "content": "Generated by AI Harness"}
+  ],
+  "output_path": "reports/q3.html",
+  "export_pdf": true,
+  "pdf_path": "reports/q3.pdf"
+}
+```
+
+### Chart type request schemas
+
+#### Line chart — `POST /chart/line`
+
+**`LineChartRequest`**: `traces` (array of `LineTrace`), `config`, `output_format`.
+
+`LineTrace` fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `name` | *(required)* | Series name (legend label) |
+| `x` | *(required)* | X-axis values (numbers or strings) |
+| `y` | *(required)* | Y-axis values (numbers) |
+| `color` | | Override line color (hex) |
+| `line_width` | `3` | Line thickness (1–10) |
+| `mode` | `"lines+markers"` | `"lines"`, `"markers"`, `"lines+markers"` |
+| `fill` | | `"tozeroy"` or `"tonexty"` |
+
+#### Bar chart — `POST /chart/bar`
+
+**`BarChartRequest`**: `traces` (array of `BarTrace`), `barmode`, `orientation`, `config`, `output_format`.
+
+`BarTrace` fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `name` | *(required)* | Series name |
+| `x` | *(required)* | X-axis categories |
+| `y` | *(required)* | Y-axis values |
+| `color` | | Override bar color (hex) |
+| `text` | | Optional value labels on bars |
+
+`barmode`: `"group"`, `"stack"`, `"relative"`.  `orientation`: `"v"` (vertical), `"h"` (horizontal).
+
+#### Pie chart — `POST /chart/pie`
+
+**`PieChartRequest`**: `labels`, `values`, plus optional `colors`, `text_info`, `hole`, `pull`, `config`, `output_format`.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `labels` | *(required)* | Slice labels |
+| `values` | *(required)* | Slice values |
+| `colors` | | Per-slice color overrides (hex array) |
+| `text_info` | `"percent"` | `"label"`, `"value"`, `"percent"`, `"label+percent"`, `"label+value"`, `"none"` |
+| `hole` | `0.0` | 0 = pie, 0.4 = donut, up to 0.9 |
+| `pull` | `0.05` | Explore offset |
+
+### `ChartZoneSpec` (for layout integration)
+
+When using `content_type: "chart"` inside a layout zone spec, wrap the chart
+data in a `chart_spec` object. It uses a unified shape with the same fields
+as above plus a `chart_type` discriminator:
+
+```json
+{
+  "chart_type": "pie",
+  "output_format": "png",
+  "config": { "title": "Market Share", "width": 600, "height": 500 },
+  "pie_labels": ["Alpha", "Beta", "Gamma", "Others"],
+  "pie_values": [35, 25, 20, 20],
+  "pie_hole": 0.4,
+  "pie_text_info": "label+percent"
+}
+```
+
+For line charts inside zones, use `line_traces`; for bar charts, use `bar_traces`.
+
+### Chart response (`ChartResponse`)
+
+```json
+{
+  "chart_id": "a1b2c3d4e5f6",
+  "output_format": "png",
+  "url": "http://thor.local:8090/media/files/charts/chart-a1b2c3d4e5f6.png",
+  "filename": "chart-a1b2c3d4e5f6.png",
+  "bytes_written": 45678,
+  "width": 800,
+  "height": 500
+}
+```
+
+For `output_format: "html_fragment"`, the response includes `html_fragment` instead
+of `url`/`filename`/`bytes_written`.
+
+---
+
 ## Future Development
 
 | Feature | Status |
@@ -598,7 +789,7 @@ document (HTML + optional PDF) with AI-generated images placed automatically.
 | Base64 image embedding for fully portable HTML | Planned |
 | Auto-generated TOC / cover pages | Planned |
 | Theme presets (`theme: "dark"`, etc.) | Planned |
-| Inline SVG charts (bar, pie, line) | Planned |
+| `Inline SVG charts (bar, pie, line)` | ✅ Shipped |
 | Video embedding from media module | Planned |
 | Strict zone validation mode | Planned |
 | Content length guards for slide templates | Planned |

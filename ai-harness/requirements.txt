@@ -18,3 +18,7 @@ python-multipart
 
 
 weasyprint
+
+# Plotly + Kaleido for server-side chart rendering
+plotly
+kaleido
