@@ -662,6 +662,153 @@ class Tools:
         lines.append(f"[Open HTML]({html_url})")
 
         return "\n".join(lines)
+
+    # ── Demonstration workflow tools ──
+
+    def create_demo(
+        self,
+        title: str,
+        prompt: str,
+        model: str = "",
+    ) -> str:
+        """
+        Create a high-quality one-page clickable HTML demo using the full
+        research-and-build workflow pipeline (KB lookup, web research,
+        requirements design, iterative build with validation, polish).
+
+        Use this for demos that need research-backed quality: product pitches,
+        concept prototypes, competitive mockups, or any demo where you want
+        the system to research the domain first.
+
+        This triggers an async workflow — it will start building and return
+        immediately. The demo may take 2-5 minutes to complete.
+        """
+
+        payload = {
+            "title": title,
+            "prompt": prompt,
+        }
+
+        if model:
+            payload["model"] = model
+
+        data = self._post("/demos/create", payload, timeout=60)
+
+        run_id = data.get("run_id", "")
+        demo_title = data.get("title", title)
+        status = data.get("status", "unknown")
+        steps = data.get("steps_count", 0)
+
+        lines = [
+            f"Demo workflow started successfully.",
+            "",
+            f"Title: {demo_title}",
+            f"Run ID: {run_id}",
+            f"Status: {status}",
+            f"Pipeline steps: {steps}",
+            "",
+            "The demo is being built. This typically takes 2-5 minutes.",
+            "Once complete you can find it by asking 'list my demos' or",
+            "'find me a demo about [topic]'.",
+        ]
+
+        return "\n".join(lines)
+
+    def list_demos(
+        self,
+        tags: str = "",
+        limit: int = 20,
+    ) -> str:
+        """
+        List all created one-page clickable demos.
+
+        Tags is an optional comma-separated filter (e.g. 'pet,adoption').
+        Returns demos with titles, descriptions, and local URLs.
+        """
+        params = {}
+        if tags:
+            # Use first tag for filtering
+            params["tag"] = tags.split(",")[0].strip()
+        params["limit"] = limit
+
+        data = self._get_with_params("/demos/", params)
+
+        demos = data.get("demos", [])
+        if not demos:
+            return "No demos found."
+
+        lines = [f"Found {len(demos)} demo(s):", ""]
+
+        for d in demos:
+            lines.append(f"- **{d.get('title', 'Untitled')}**")
+            desc = d.get("description", "")
+            if desc:
+                lines.append(f"  Description: {desc[:200]}")
+            created = d.get("created_at", "")
+            if created:
+                lines.append(f"  Created: {created[:10]}")
+            local = d.get("local_url", "")
+            if local:
+                url = self._absolute_url(local)
+                lines.append(f"  Open: [{url}]({url})")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def find_demo(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> str:
+        """
+        Search for one-page clickable demos by title, description, or tags.
+
+        Use this to find a previously created demo when you remember
+        some detail about it but not its exact name.
+        """
+        params = {
+            "q": query,
+            "limit": limit,
+            "local_urls": True,
+        }
+
+        data = self._get_with_params("/demos/search", params)
+
+        matches = data.get("matches", [])
+        if not matches:
+            return (
+                f"No demos found matching '{query}'.\n\n"
+                f"Try asking 'list my demos' to see all available demos."
+            )
+
+        lines = [f"Found {len(matches)} demo(s) matching '{query}':", ""]
+
+        for d in matches:
+            lines.append(f"- **{d.get('title', 'Untitled')}**")
+            desc = d.get("description", "")
+            if desc:
+                lines.append(f"  Description: {desc[:200]}")
+            tags = d.get("tags", [])
+            if tags:
+                lines.append(f"  Tags: {', '.join(tags[:5])}")
+            local = d.get("local_url", "")
+            if local:
+                url = self._absolute_url(local)
+                lines.append(f"  Open: [{url}]({url})")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _get_with_params(self, path: str, params: dict) -> dict:
+        """Helper: GET request with query params."""
+        r = requests.get(
+            f"{self.valves.harness_url}{path}",
+            headers=self._headers(content_type=False),
+            params=params,
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
       
 
         
