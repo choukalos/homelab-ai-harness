@@ -7,7 +7,7 @@ COMPOSE_DIR="${BASE_DIR}/compose"
 CORE="${COMPOSE_DIR}/compose.core.yml"
 EDGE="${COMPOSE_DIR}/compose.edge.yml"
 GHOST="${COMPOSE_DIR}/compose.ghost.yml"
-AI="${COMPOSE_DIR}/compose.ai-core.yml"
+AI_CORE="${COMPOSE_DIR}/compose.ai-core.yml"
 HARNESS="${COMPOSE_DIR}/compose.ai-harness.yml"
 INVEST="${COMPOSE_DIR}/compose.invest-hub.yml"
 N8N="${COMPOSE_DIR}/compose.n8n.yml"
@@ -33,7 +33,7 @@ Stacks:
   core        Caddy only
   edge        Caddy + Cloudflare Tunnel
   ghost       Caddy + Cloudflare Tunnel + Ghost
-  ai          Caddy + AI stack + Harness
+  ai          AI core (litellm, open-webui, etc.) + Harness
   invest      Caddy + Cloudflare Tunnel + Invest Hub
   public      Caddy + Cloudflare Tunnel + Ghost + Invest Hub
   n8n         Caddy + n8n
@@ -43,91 +43,33 @@ Stacks:
   core-only
   edge-only
   ghost-only
-  harness-only
-  ai-only
+  ai-only          AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
+  harness-only     Harness only (FastAPI, workers, beat, kb-watcher)
   invest-only
   n8n-only
 
-Examples:
-  ./homelab.sh up ai
-  ./homelab.sh down ai
-  ./homelab.sh restart invest
-  ./homelab.sh logs ai -f
-  ./homelab.sh pull invest
-  ./homelab.sh up invest --pull always
-  ./homelab.sh config public
-  ./homelab.sh rebuild harness-only
+Notes:
+  ai and harness are separate Docker Compose projects sharing the ai-net
+  bridge network. Rebuilding harness-only will NOT restart litellm or
+  other ai-core services, so your LLM connection stays alive.
 EOF
 }
 
 compose_files() {
   local stack="$1"
-
   case "${stack}" in
-    core)
-      echo "-f ${CORE}"
-      ;;
-
-    edge)
-      echo "-f ${CORE} -f ${EDGE}"
-      ;;
-
-    ghost)
-      echo "-f ${CORE} -f ${EDGE} -f ${GHOST}"
-      ;;
-
-    ai)
-      echo "-f ${CORE} -f ${AI} -f ${HARNESS}"
-      ;;
-
-    invest)
-      echo "-f ${CORE} -f ${EDGE} -f ${INVEST}"
-      ;;
-
-    public)
-      echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST}"
-      ;;
-
-    n8n)
-      echo "-f ${CORE} -f ${N8N}"
-      ;;
-
-    all)
-      echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST} -f ${AI} -f ${HARNESS}"
-      ;;
-
-    all-n8n)
-      echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST} -f ${AI} -f ${HARNESS} -f ${N8N}"
-      ;;
-
-    core-only)
-      echo "-f ${CORE}"
-      ;;
-
-    edge-only)
-      echo "-f ${EDGE}"
-      ;;
-
-    ghost-only)
-      echo "-f ${GHOST}"
-      ;;
-
-    ai-only)
-      echo "-f ${AI}"
-      ;;
-
-    harness-only)
-      echo "-f ${HARNESS}"
-      ;;
-
-    invest-only)
-      echo "-f ${INVEST}"
-      ;;
-
-    n8n-only)
-      echo "-f ${N8N}"
-      ;;
-
+    core|core-only) echo "-f ${CORE}" ;;
+    edge)           echo "-f ${CORE} -f ${EDGE}" ;;
+    edge-only)      echo "-f ${EDGE}" ;;
+    ghost)          echo "-f ${CORE} -f ${EDGE} -f ${GHOST}" ;;
+    ghost-only)     echo "-f ${GHOST}" ;;
+    ai-only)        echo "-f ${AI_CORE}" ;;
+    harness-only)   echo "-f ${HARNESS}" ;;
+    invest)         echo "-f ${CORE} -f ${EDGE} -f ${INVEST}" ;;
+    invest-only)    echo "-f ${INVEST}" ;;
+    public)         echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST}" ;;
+    n8n)            echo "-f ${CORE} -f ${N8N}" ;;
+    n8n-only)       echo "-f ${N8N}" ;;
     *)
       echo "Unknown stack: ${stack}" >&2
       usage
@@ -136,18 +78,58 @@ compose_files() {
   esac
 }
 
-run_compose() {
+run_compose_single() {
   local command="$1"
-  local stack="$2"
+  local files="$2"
   shift 2
-
-  local files
-  files="$(compose_files "${stack}")"
-
-  echo "Running: docker compose ${files} ${command} $*"
-
   # shellcheck disable=SC2086
   docker compose --env-file "${BASE_DIR}/.env" ${files} ${command} "$@"
+}
+
+run_ai_stack() {
+  local command="$1"
+  shift
+
+  case "${command}" in
+    up)
+      run_compose_single up "-f ${AI_CORE}" -d "$@"
+      run_compose_single up "-f ${HARNESS}" -d "$@"
+      ;;
+    down)
+      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single down "-f ${AI_CORE}" "$@"
+      ;;
+    restart)
+      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single down "-f ${AI_CORE}" "$@"
+      run_compose_single up "-f ${AI_CORE}" -d
+      run_compose_single up "-f ${HARNESS}" -d
+      ;;
+    rebuild)
+      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
+      run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+      ;;
+    pull)
+      run_compose_single pull "-f ${AI_CORE}" "$@"
+      run_compose_single pull "-f ${HARNESS}" "$@"
+      ;;
+    logs)
+      run_compose_single logs "-f ${AI_CORE}" "$@"
+      run_compose_single logs "-f ${HARNESS}" "$@"
+      ;;
+    ps|config)
+      echo "=== ai-core project ==="
+      run_compose_single "${command}" "-f ${AI_CORE}" "$@"
+      echo -e "\n=== ai-harness project ==="
+      run_compose_single "${command}" "-f ${HARNESS}" "$@"
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      usage
+      exit 1
+      ;;
+  esac
 }
 
 if [[ $# -lt 2 ]]; then
@@ -159,48 +141,123 @@ COMMAND="$1"
 STACK="$2"
 shift 2
 
-case "${COMMAND}" in
-  up)
-    run_compose up "${STACK}" -d "$@"
-    ;;
+do_dispatch() {
+  local cmd="$COMMAND"
+  local stk="$STACK"
+  local files
 
-  down)
-    run_compose down "${STACK}" "$@"
-    ;;
+  case "${stk}" in
+    ai)
+      run_ai_stack "${cmd}" "$@"
+      ;;
+    all)
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${CORE}" -d "$@"
+          run_compose_single up "-f ${EDGE}" -d "$@"
+          run_compose_single up "-f ${GHOST}" -d "$@"
+          run_compose_single up "-f ${INVEST}" -d "$@"
+          run_compose_single up "-f ${AI_CORE}" -d "$@"
+          run_compose_single up "-f ${HARNESS}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${HARNESS}" "$@"
+          run_compose_single down "-f ${AI_CORE}" "$@"
+          run_compose_single down "-f ${INVEST}" "$@"
+          run_compose_single down "-f ${GHOST}" "$@"
+          run_compose_single down "-f ${EDGE}" "$@"
+          run_compose_single down "-f ${CORE}" "$@"
+          if [[ "${cmd}" == "restart" ]]; then
+            run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
+            run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
+            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
+          elif [[ "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          for f in "${AI_CORE}" "${HARNESS}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+            run_compose_single pull "-f $f" "$@"
+          done
+          ;;
+        logs|ps|config)
+          for f in core edge ghost invest ai-core harness; do
+            echo "=== $f ==="
+            var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+            run_compose_single "${cmd}" "-f ${!var_name}" "$@"
+          done
+          ;;
+      esac
+      ;;
+    all-n8n)
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${CORE}" -d "$@"
+          run_compose_single up "-f ${EDGE}" -d "$@"
+          run_compose_single up "-f ${GHOST}" -d "$@"
+          run_compose_single up "-f ${INVEST}" -d "$@"
+          run_compose_single up "-f ${AI_CORE}" -d "$@"
+          run_compose_single up "-f ${HARNESS}" -d "$@"
+          run_compose_single up "-f ${N8N}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${N8N}" "$@"
+          run_compose_single down "-f ${HARNESS}" "$@"
+          run_compose_single down "-f ${AI_CORE}" "$@"
+          run_compose_single down "-f ${INVEST}" "$@"
+          run_compose_single down "-f ${GHOST}" "$@"
+          run_compose_single down "-f ${EDGE}" "$@"
+          run_compose_single down "-f ${CORE}" "$@"
+          if [[ "${cmd}" == "restart" ]]; then
+            run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
+            run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
+            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
+            run_compose_single up "-f ${N8N}" -d
+          elif [[ "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${N8N}" -d --build --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          for f in "${N8N}" "${HARNESS}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+            run_compose_single pull "-f $f" "$@"
+          done
+          ;;
+        logs|ps|config)
+          for f in core edge ghost invest ai-core harness n8n; do
+            echo "=== $f ==="
+            var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+            run_compose_single "${cmd}" "-f ${!var_name}" "$@"
+          done
+          ;;
+      esac
+      ;;
+    *)
+      files="$(compose_files "${stk}")"
+      if [[ "${cmd}" == "up" ]]; then
+        # shellcheck disable=SC2086
+        docker compose --env-file "${BASE_DIR}/.env" ${files} up -d "$@"
+      elif [[ "${cmd}" == "rebuild" ]]; then
+        # shellcheck disable=SC2086
+        docker compose --env-file "${BASE_DIR}/.env" ${files} up -d --build --force-recreate --remove-orphans "$@"
+      else
+        # shellcheck disable=SC2086
+        docker compose --env-file "${BASE_DIR}/.env" ${files} ${cmd} "$@"
+      fi
+      ;;
+  esac
+}
 
-  restart)
-    run_compose down "${STACK}" "$@"
-    run_compose up "${STACK}" -d
-    ;;
-
-  rebuild)
-    # Stop existing containers first to avoid name-conflict race conditions
-    # when docker compose tries to recreate containers in parallel.
-    run_compose down "${STACK}" "$@"
-    run_compose up "${STACK}" -d --build --force-recreate --remove-orphans "$@"
-    ;;
-
-  pull)
-    run_compose pull "${STACK}" "$@"
-    ;;
-
-  logs)
-    run_compose logs "${STACK}" "$@"
-    ;;
-
-  ps)
-    run_compose ps "${STACK}" "$@"
-    ;;
-
-  config)
-    run_compose config "${STACK}" "$@"
-    ;;
-
-  *)
-    echo "Unknown command: ${COMMAND}" >&2
-    usage
-    exit 1
-    ;;
-esac
+do_dispatch "$@"
 
 

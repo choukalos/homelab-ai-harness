@@ -1,3 +1,5 @@
+name: ai-harness
+
 services:
   home-ai-harness:
     build:
@@ -44,13 +46,6 @@ services:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
 
-    depends_on:
-      - litellm
-      - searxng
-      - crawl4ai
-      - qdrant
-      - ai-redis
-
   home-ai-harness-worker-1:
     image: home-ai-harness:local
     container_name: ai-harness-worker-1
@@ -81,8 +76,6 @@ services:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
     command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
-    depends_on:
-      - ai-redis
 
   home-ai-harness-worker-2:
     image: home-ai-harness:local
@@ -114,8 +107,6 @@ services:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
     command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
-    depends_on:
-      - ai-redis
 
   home-ai-harness-beat:
     image: home-ai-harness:local
@@ -151,8 +142,6 @@ services:
       -S redbeat.RedBeatScheduler
       --loglevel=info
       --max-interval=5
-    depends_on:
-      - ai-redis
 
   home-ai-kb-watcher:
     image: home-ai-harness:local
@@ -173,15 +162,11 @@ services:
     volumes:
       - /home/chuck/data/ai-kb:/data/ai-kb
     command: python family_kb_watch.py
-    depends_on:
-      - qdrant
 
 networks:
   ai-net:
     external: true
   public-net:
     external: true
-
-
 
     

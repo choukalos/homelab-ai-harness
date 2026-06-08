@@ -126,7 +126,8 @@ NOT committed to GitHub.
     compose.core.yml
     compose.edge.yml
     compose.ghost.yml
-    compose.ai.yml
+    compose.ai-core.yml
+    compose.ai-harness.yml
     compose.invest-hub.yml
     compose.n8n.yml
 
@@ -451,18 +452,30 @@ Rarely changes.
 
 ---
 
-## compose.ai.yml
+## compose.ai-core.yml
 
-AI infrastructure:
+AI infrastructure (separate Docker Compose project `ai-core`):
 - LiteLLM
 - Open Web UI
 - Qdrant
 - Redis
 - SearXNG
 - Crawl4AI
-- AI Harness
+- MkDocs family wiki
 
-Frequently iterated.
+Rarely changes. Services communicate with the harness via the shared `ai-net` network.
+
+---
+
+## compose.ai-harness.yml
+
+AI harness (separate Docker Compose project `ai-harness`):
+- FastAPI harness
+- Celery workers
+- Celery beat scheduler
+- Knowledge base watcher
+
+Frequently iterated. Rebuilding this project does **not** restart litellm or other ai-core services, so LLM connections stay alive during development.
 
 ---
 
@@ -495,15 +508,26 @@ Primary control script:
 Examples:
 
 ```bash
+# Bring up the full AI stack (core + harness) or take it down
 ./homelab.sh up ai
 ./homelab.sh down ai
 
+# Rebuild only the harness — litellm and other core services stay alive
+./homelab.sh rebuild harness-only
+
+# Rebuild only core AI services (no harness rebuild)
+./homelab.sh rebuild ai-only
+
+# Manage other stacks
 ./homelab.sh restart invest
-
 ./homelab.sh up public
-
 ./homelab.sh logs ai -f
+./homelab.sh ps all
 ```
+
+**Important:** `ai-core` and `ai-harness` are separate Docker Compose projects.
+`rebuild harness-only` will **not** restart litellm, open-webui, qdrant, or redis —
+so your LLM connection stays intact during harness development.
 
 ---
 

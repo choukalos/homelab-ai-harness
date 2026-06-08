@@ -3,10 +3,8 @@ name: homelab
 networks:
   edge-net:
     name: edge-net
-
   public-net:
     name: public-net
-
   ai-net:
     name: ai-net
 
