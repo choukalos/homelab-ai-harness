@@ -1,3 +1,5 @@
+name: homelab
+
 services:
   ghost-blog:
     image: ghost:5-alpine
@@ -20,5 +22,9 @@ services:
       - database__connection__database=${GHOST_DB_NAME}
     volumes:
       - /home/chuck/data/ghost:/var/lib/ghost/content
+
+networks:
+  public-net:
+    external: true
 
 

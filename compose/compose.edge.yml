@@ -1,3 +1,5 @@
+name: homelab
+
 services:
   cloudflared:
     image: cloudflare/cloudflared:latest

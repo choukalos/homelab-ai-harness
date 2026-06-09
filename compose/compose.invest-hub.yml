@@ -1,3 +1,5 @@
+name: homelab
+
 services:
   github-runner:
     image: myoung34/github-runner:latest
@@ -30,7 +32,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${INVEST_DATABASE_URL}
-      - PUBLIC_BASE_URL=https://api.choukalos.com
+      - PUBLIC_BASE_URL=https://api.choukalos.com/api
       - JWT_SECRET=${INVEST_JWT_SECRET}
       - YF_REQUEST_DELAY_MS=750
       - YF_REQUEST_JITTER_MS=750
@@ -40,6 +42,7 @@ services:
       - YF_SYMBOL_DELAY_MS=2000
       - YF_SYMBOL_JITTER_MS=1000
       - YF_RATE_LIMIT_COOLOFF_MS=45000
+      - CORS_ORIGINS=https://api.choukalos.com
 
   invest-hub-client:
     image: invest-hub-client:latest
