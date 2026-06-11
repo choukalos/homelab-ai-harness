@@ -42,16 +42,19 @@ Stacks:
 
   core-only
   edge-only
-  ghost-only
-  ai-only          AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
-  harness-only     Harness only (FastAPI, workers, beat, kb-watcher)
-  invest-only
+  ghost-only     Ghost only (Caddy + cloudflared kept running)
+  ai-only        AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
+  harness-only   Harness only (FastAPI, workers, beat, kb-watcher)
+  invest-only    Invest only (Caddy + cloudflared kept running)
   n8n-only
 
 Notes:
   ai and harness are separate Docker Compose projects sharing the ai-net
   bridge network. Rebuilding harness-only will NOT restart litellm or
   other ai-core services, so your LLM connection stays alive.
+
+  ghost and invest are also separate projects. Rebuilding ghost-only or
+  invest-only will NOT restart Caddy or Cloudflare Tunnel.
 EOF
 }
 
@@ -132,6 +135,102 @@ run_ai_stack() {
   esac
 }
 
+run_ghost_stack() {
+  local command="$1"
+  shift
+
+  # Ghost runs as its own project (homelab-ghost).
+  # Caddy + cloudflared live in a separate project (homelab) and are NOT touched.
+  case "${command}" in
+    up)
+      run_compose_single up "-f ${GHOST}" -d "$@"
+      ;;
+    down|restart|rebuild)
+      run_compose_single down "-f ${GHOST}" "$@"
+      if [[ "${command}" == "restart" || "${command}" == "rebuild" ]]; then
+        run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+      fi
+      ;;
+    pull)
+      run_compose_single pull "-f ${GHOST}" "$@"
+      ;;
+    logs|ps|config)
+      run_compose_single "${command}" "-f ${GHOST}" "$@"
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+run_invest_stack() {
+  local command="$1"
+  shift
+
+  # Invest runs as its own project (homelab-invest).
+  # Caddy + cloudflared live in a separate project (homelab) and are NOT touched.
+  case "${command}" in
+    up)
+      run_compose_single up "-f ${INVEST}" -d "$@"
+      ;;
+    down|restart|rebuild)
+      run_compose_single down "-f ${INVEST}" "$@"
+      if [[ "${command}" == "restart" || "${command}" == "rebuild" ]]; then
+        run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
+      fi
+      ;;
+    pull)
+      run_compose_single pull "-f ${INVEST}" "$@"
+      ;;
+    logs|ps|config)
+      run_compose_single "${command}" "-f ${INVEST}" "$@"
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+run_public_stack() {
+  local command="$1"
+  shift
+
+  # Public = ghost + invest together. Both are separate projects.
+  case "${command}" in
+    up)
+      run_compose_single up "-f ${GHOST}" -d "$@"
+      run_compose_single up "-f ${INVEST}" -d "$@"
+      ;;
+    down|restart|rebuild)
+      run_compose_single down "-f ${INVEST}" "$@"
+      run_compose_single down "-f ${GHOST}" "$@"
+      if [[ "${command}" == "restart" || "${command}" == "rebuild" ]]; then
+        run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+        run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
+      fi
+      ;;
+    pull)
+      run_compose_single pull "-f ${GHOST}" "$@"
+      run_compose_single pull "-f ${INVEST}" "$@"
+      ;;
+    logs|ps|config)
+      echo "=== ghost project ==="
+      run_compose_single "${command}" "-f ${GHOST}" "$@"
+      echo -e "\n=== invest project ==="
+      run_compose_single "${command}" "-f ${INVEST}" "$@"
+      ;;
+    *)
+      echo "Unknown command: ${command}" >&2
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 if [[ $# -lt 2 ]]; then
   usage
   exit 1
@@ -149,6 +248,15 @@ do_dispatch() {
   case "${stk}" in
     ai)
       run_ai_stack "${cmd}" "$@"
+      ;;
+    ghost|ghost-only)
+      run_ghost_stack "${cmd}" "$@"
+      ;;
+    invest|invest-only)
+      run_invest_stack "${cmd}" "$@"
+      ;;
+    public)
+      run_public_stack "${cmd}" "$@"
       ;;
     all)
       case "${cmd}" in

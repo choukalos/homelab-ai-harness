@@ -1,4 +1,4 @@
-name: homelab
+name: homelab-ghost
 
 services:
   ghost-blog:
