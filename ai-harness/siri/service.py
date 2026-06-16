@@ -33,6 +33,9 @@ def _detect_intent(req: SiriChatRequest) -> str:
     if req.intent and req.intent != "chat":
         return req.intent
 
+    if text.startswith("deep research ") or "deep research" in text:
+        return "deep_research"
+
     if text.startswith("research ") or "research brief" in text:
         return "research"
 
@@ -70,6 +73,47 @@ async def _handle_chat(req: SiriChatRequest) -> SiriChatResponse:
         display=answer,
         session_id=req.session_id,
     )
+
+
+async def _handle_deep_research(req: SiriChatRequest) -> SiriChatResponse:
+    """Run the deep-research agent (Deep Agents with MySQL checkpointing)."""
+    from core.config import INTERNAL_BASE_URL
+
+    query = req.text.removeprefix("deep research ").strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            r = await client.post(
+                f"{INTERNAL_BASE_URL.rstrip('/')}/deep-research/run",
+                headers={"Content-Type": "application/json", "X-API-Key": req.session_id or ""},
+                json={"query": query},
+            )
+            r.raise_for_status()
+            data = r.json()
+
+        answer = data.get("answer", "Research completed.")
+        sources = data.get("sources", [])
+
+        links = []
+        for s in sources:
+            url = s.get("url", s.get("tool_result", ""))
+            if url:
+                title = s.get("title", s.get("source", "Source"))
+                links.append({"title": str(title)[:80], "url": url})
+
+        return SiriChatResponse(
+            speak=_shorten_for_voice(answer),
+            display=answer,
+            session_id=req.session_id,
+            links=links[:10],
+            data=data,
+        )
+    except Exception as exc:
+        return SiriChatResponse(
+            speak="I had trouble running the deep research. Please try again.",
+            display=f"Deep research error: {exc}",
+            session_id=req.session_id,
+        )
 
 
 async def _handle_research(req: SiriChatRequest) -> SiriChatResponse:
@@ -334,6 +378,9 @@ async def _handle_find_demo(req: SiriChatRequest) -> SiriChatResponse:
 
 async def handle_siri_chat(req: SiriChatRequest) -> SiriChatResponse:
     intent = _detect_intent(req)
+
+    if intent == "deep_research":
+        return await _handle_deep_research(req)
 
     if intent == "research":
         return await _handle_research(req)

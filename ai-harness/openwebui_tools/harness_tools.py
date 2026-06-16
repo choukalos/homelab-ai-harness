@@ -663,7 +663,50 @@ class Tools:
 
         return "\n".join(lines)
 
-    # ── Demonstration workflow tools ──
+    def deep_research(
+        self,
+        query: str,
+    ) -> str:
+        """
+        Run a deep research query using the Deep Agents framework.
+        The agent uses an LLM with web search capabilities to investigate
+        the topic, synthesize findings, and provide a comprehensive answer
+        with source references.
+
+        Use this for in-depth research questions, complex topics requiring
+        multi-step investigation, or when you want the AI to autonomously
+        search, analyze, and synthesize information.
+        """
+
+        data = self._post(
+            "/deep-research/run",
+            {
+                "query": query,
+            },
+            timeout=300,
+        )
+
+        answer = data.get("answer", "Research completed.")
+        sources = data.get("sources", [])
+        steps = data.get("steps", [])
+
+        lines = [answer, ""]
+
+        if steps:
+            lines.append("Research steps taken:")
+            for i, step in enumerate(steps, start=1):
+                action = step.get("action", step.get("result_preview", "Step"))
+                lines.append(f"  {i}. {action}")
+            lines.append("")
+
+        if sources:
+            lines.append("Sources:")
+            for i, s in enumerate(sources, start=1):
+                url = s.get("url", "")
+                title = s.get("title", s.get("tool_result", "Source"))
+                lines.append(f"  [{i}] {title} - {url}")
+
+        return "\n".join(lines)
 
     def create_demo(
         self,

@@ -29,3 +29,8 @@ kaleido
 
 # MySQL for workflow run state store
 pymysql
+
+# Deep Agents (LangChain agent harness with LangGraph runtime)
+deepagents
+langgraph-checkpoint-mysql[asyncmy]
+langchain-openai
