@@ -679,7 +679,7 @@ class Tools:
         """
 
         data = self._post(
-            "/deep-research/run",
+            "/workflows/deep-research/run",
             {
                 "query": query,
             },

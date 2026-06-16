@@ -44,7 +44,7 @@ app.include_router(scheduler_router, prefix="/schedules", tags=["schedules"])
 app.include_router(workflows_router)
 app.include_router(market_research_router, prefix="/markets", tags=["market-research"])
 app.include_router(demo_workflow_router, prefix="/demos", tags=["demo-workflow"])
-app.include_router(deep_research_router, prefix="/deep-research", tags=["deep-research"])
+app.include_router(deep_research_router, prefix="/workflows/deep-research", tags=["deep-research"])
 
 # Register Celery tasks for market research and demo workflow before first dispatch
 register_market_tasks()

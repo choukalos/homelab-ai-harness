@@ -79,8 +79,8 @@ Built via `create_deep_agent()` with:
 
 | Endpoint | Auth | Behavior |
 |----------|------|----------|
-| `POST /deep-research/run` | `require_auth` | Sync — invokes the agent, waits for completion, returns `DeepResearchResponse` |
-| `POST /deep-research/run/stream` | `require_auth` | SSE — streams `start → update... → done` events via `agent.astream(stream_mode="updates")` |
+| `POST /workflows/deep-research/run` | `require_auth` | Sync — invokes the agent, waits for completion, returns `DeepResearchResponse` |
+| `POST /workflows/deep-research/run/stream` | `require_auth` | SSE — streams `start → update... → done` events via `agent.astream(stream_mode="updates")` |
 
 ### 5. Integrations
 
@@ -190,17 +190,11 @@ langchain-openai                    # OpenAI-compatible model backend (via LiteL
 ## Testing
 
 ```bash
-# Sync endpoint
-curl -X POST http://thor.local:8090/deep-research/run \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <HARNESS_API_KEY>" \
-  -d '{"query": "What are the latest developments in quantum computing?"}'
+# Sync endpoint (single line to avoid shell line-continuation issues)
+curl -X POST http://thor.local:8090/workflows/deep-research/run -H "Content-Type: application/json" -H "X-API-Key: <HARNESS_API_KEY>" -d '{"query": "What are the latest developments in quantum computing?"}'
 
 # Streaming endpoint
-curl -N -X POST http://thor.local:8090/deep-research/run/stream \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <HARNESS_API_KEY>" \
-  -d '{"query": "latest quantum computing news"}'
+curl -N -X POST http://thor.local:8090/workflows/deep-research/run/stream -H "Content-Type: application/json" -H "X-API-Key: <HARNESS_API_KEY>" -d '{"query": "latest quantum computing news"}'
 
 # Siri voice
 # "deep research what are the latest AI regulations in Europe"

@@ -84,7 +84,7 @@ async def _handle_deep_research(req: SiriChatRequest) -> SiriChatResponse:
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
             r = await client.post(
-                f"{INTERNAL_BASE_URL.rstrip('/')}/deep-research/run",
+                f"{INTERNAL_BASE_URL.rstrip('/')}/workflows/deep-research/run",
                 headers={"Content-Type": "application/json", "X-API-Key": req.session_id or ""},
                 json={"query": query},
             )
