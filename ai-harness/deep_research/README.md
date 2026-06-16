@@ -1,201 +1,109 @@
-# Deep Research
+# Deep Research Module
 
-> **Status:** Skeleton proof-of-concept — single-search-node to validate the Deep Agents + MySQL checkpointing flow.
-
-LangChain [Deep Agents](https://docs.langchain.com/oss/python/deepagents) harness wired into the ai-harness with MySQL-backed state persistence, a SearXNG web-search tool, and endpoints for both OpenWebUI and the Siri interface.
+A LangChain Deep Agents proof-of-concept integrated into the `ai-harness` project.
+It uses `deepagents` with a `search_web` tool backed by SearXNG, and persists
+agent state in MySQL via `langgraph-checkpoint-mysql`.
 
 ---
 
-## Architecture
+## 1. Architecture & Data Flow
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        ai-harness (FastAPI)                         │
-│                                                                     │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
-│  │  router.py   │───>│  service.py  │───>│  Deep Agent Graph    │  │
-│  │              │    │              │    │  (create_deep_agent) │  │
-│  │  /run        │    │  get_deep_   │    │                      │  │
-│  │  /run/stream │    │  _agent()    │    │  ┌────────────────┐  │  │
-│  └──────────────┘    └──────────────┘    │  │ search_web     │  │  │
-│                                          │  │ (SearXNG)      │  │  │
-│                                          │  │ checkpointer   │  │  │
-│                                          │  │ (MySQL)        │  │  │
-│                                          │  └────────────────┘  │  │
-│                                          └──────────────────────┘  │
-│                                                                     │
-│  Integrations:                                                     │
-│  ┌──────────────────┐  ┌──────────────────┐                       │
-│  │ Siri (siri/     │  │ OpenWebUI        │                       │
-│  │  service.py)     │  │ (openwebui_tools/│                       │
-│  │                  │  │  harness_tools.py│                       │
-│  └──────────────────┘  └──────────────────┘                       │
-└─────────────────────────────────────────────────────────────────────┘
-         │                                    │
-         ▼                                    ▼
-   ┌────────────┐                   ┌────────────┐
-   │ MySQL (AI  │                   │ SearXNG    │
-   │ Harness)   │                   │ (web search)│
-   └────────────┘                   └────────────┘
+```mermaid
+graph LR
+    User((User)) -->|Siri / OpenWebUI / API| FastAPI[FastAPI Router]
+    FastAPI -->|Auth| Security[require_auth]
+    FastAPI -->|Service Layer| DeepAgent[Deep Agents Graph]
+    DeepAgent -->|LLM Calls| LiteLLM[LiteLLM Proxy]
+    DeepAgent -->|Tools| SearXNG[SearXNG]
+    DeepAgent -->|Checkpoints| MySQL[(MySQL DB)]
 ```
 
-### Key Components
-
-| File | Role |
-|------|------|
-| `__init__.py` | Package marker |
-| `schemas.py` | Pydantic request/response models |
-| `service.py` | MySQL checkpointer, `search_web` tool, agent factory, execution entrypoint, result extraction helpers |
-| `router.py` | FastAPI routes — sync `/run` and streaming `/run/stream` (SSE) |
+- **Agent Framework**: `deepagents` (`create_deep_agent`)
+- **LLM**: `ChatOpenAI` instantiated explicitly, routing through the existing LiteLLM proxy (`openai_api_base`)
+- **Checkpointer**: `AsyncMySaver` from `langgraph.checkpoint.mysql.asyncmy`
+- **State Storage**: Reuses the existing `ai_harness` MySQL database
+- **Web Search**: Sync `httpx` call to SearXNG wrapped in a LangChain `@tool`
 
 ---
 
-## Current Skeleton Functionality
+## 2. File Structure
 
-### 1. Agent
+All files for this module live in `ai-harness/deep_research/`:
 
-Built via `create_deep_agent()` with:
-- **Model:** `HARNESS_MODEL` env var, auto-prefixed with `openai:` if no colon present (routes through LiteLLM)
-- **Tools:** `search_web` (SearXNG)
-- **Checkpointer:** `AsyncMySaver` → MySQL using existing `AI_DB_*` env vars
-- **System prompt:** Deep research assistant instructions (search → synthesize → cite)
-- **Singleton:** Agent is built once on first call via `get_deep_agent()`
-
-### 2. MySQL Checkpointing
-
-- Uses `langgraph-checkpoint-mysql[asyncmy]` with `AsyncMySaver`
-- Reuses env vars: `MYSQL_DB_HOST`, `MYSQL_DB_PORT`, `AI_DB_USER`, `AI_DB_PASS`, `AI_DB_NAME`
-- Tables auto-created on app startup via `ensure_checkpointer_tables()` → `cp.asetup()`
-- **Thread ID:** Each run gets a `thread_id` (from request or auto-generated UUID). This is the LangGraph checkpoint key — resuming a prior run uses the same `thread_id`.
-- Checkpoint tables: `checkpoint_writes`, `checkpoints` (auto-created by `.setup()`)
-
-### 3. Tools (Current)
-
-| Tool | Source | Notes |
-|------|--------|-------|
-| `search_web` | SearXNG (`SEARXNG_BASE_URL`) | Returns title/url/content/engine. Sync httpx call inside the tool. |
-
-### 4. Endpoints
-
-| Endpoint | Auth | Behavior |
-|----------|------|----------|
-| `POST /workflows/deep-research/run` | `require_auth` | Sync — invokes the agent, waits for completion, returns `DeepResearchResponse` |
-| `POST /workflows/deep-research/run/stream` | `require_auth` | SSE — streams `start → update... → done` events via `agent.astream(stream_mode="updates")` |
-
-### 5. Integrations
-
-| Interface | How it connects |
-|-----------|----------------|
-| **Siri** | `_handle_deep_research()` in `siri/service.py` — intent `deep_research` triggered by "deep research [topic]" — POSTs to `/deep-research/run` |
-| **OpenWebUI** | `deep_research()` method in `openwebui_tools/harness_tools.py` — POSTs to `/deep-research/run`, formats answer + steps + sources |
+- `__init__.py`: Module docstring
+- `schemas.py`: Pydantic models (`DeepResearchRequest`, `DeepResearchResponse`)
+- `service.py`: Core logic (`ensure_checkpointer_tables`, `get_deep_agent`, `run_deep_research`, message extraction helpers)
+- `router.py`: FastAPI router exposing `/run` and `/run/stream`
 
 ---
 
-## Request / Response Schema
+## 3. Integration Points
 
-### `DeepResearchRequest`
+When expanding this module, you must update the following integration points if endpoints or schemas change:
 
-```json
-{
-  "query": "What are the latest developments in quantum computing?",
-  "thread_id": null,       // optional, auto-generated UUID if omitted
-  "model": null            // optional, overrides HARNESS_MODEL
-}
-```
+### A. FastAPI App Registration (`ai-harness/app.py`)
+- **Import**: `from deep_research.service import ensure_checkpointer_tables`
+- **Startup Event**: Uses `@app.on_event("startup")` to call `await ensure_checkpointer_tables()`. This creates the checkpoint tables on container boot.
+- **Router Mount**: `app.include_router(deep_research_router, prefix="/workflows/deep-research", tags=["deep-research"])`
 
-### `DeepResearchResponse`
+### B. Siri Integration (`ai-harness/siri/service.py`)
+- **Intent Detection**: Checks for `"deep research"` in the voice text inside `_detect_intent()`. Returns `"deep_research"` intent.
+- **Handler**: `_handle_deep_research(req)` POSTs to `{INTERNAL_BASE_URL}/workflows/deep-research/run` using `httpx.AsyncClient`.
+- **Response Mapping**: Extracts `answer` and `sources` from the JSON response and maps them to `SiriChatResponse` (`speak`, `display`, `links`).
 
-```json
-{
-  "thread_id": "abc-123-...",
-  "query": "What are the latest developments in quantum computing?",
-  "answer": "Research answer synthesized by the agent...",
-  "sources": [
-    {"tool_result": "..."}
-  ],
-  "steps": [
-    {"action": "search_web", "args": {"query": "..."}},
-    {"result_preview": "..."}
-  ],
-  "error": null
-}
-```
+### C. OpenWebUI Integration (`ai-harness/openwebui_tools/harness_tools.py`)
+- **Tool Function**: `deep_research(self, query)` POSTs to `/workflows/deep-research/run`.
+- **Response Formatting**: Parses `answer`, `steps`, and `sources` into a markdown string for the OpenWebUI chat interface.
 
 ---
 
-## Dependencies (requirements.txt)
+## 4. Critical Implementation Details & Gotchas
 
-```
-deepagents                          # LangChain Deep Agents SDK
-langgraph-checkpoint-mysql[asyncmy] # MySQL Async checkpointer
-langchain-openai                    # OpenAI-compatible model backend (via LiteLLM)
-```
+**DO NOT overlook these patterns when modifying `service.py`:**
 
----
+### A. AsyncMySaver Context Manager Quirk
+`AsyncMySaver.from_conn_string()` returns an `_AsyncGeneratorContextManager`, not the actual saver instance.
+- **Solution**: We manually enter it using `await _checkpointer_ctx.__aenter__()` and store the context globally to keep the DB connection pool alive.
+- **Setup Method**: The checkpointer uses `.setup()` (`async def setup(self)`), **NOT** `.asetup()`. Calling `.asetup()` will raise an `AttributeError`.
 
-## Environment Variables
+### B. Explicit LiteLLM Model Initialization
+`deepagents` `create_deep_agent(model=...)` works best when passed a pre-initialized `BaseChatModel` rather than a raw string.
+- **Solution**: We instantiate `ChatOpenAI` explicitly with `openai_api_base=f"{LITELLM_BASE_URL}/v1"` and `openai_api_key=LITELLM_API_KEY`. This guarantees it routes through the harness proxy regardless of environment state.
 
-| Var | Used By | Default |
-|-----|---------|---------|
-| `HARNESS_MODEL` | Agent model selection | `gemma-moe` |
-| `LITELLM_BASE_URL` | LiteLLM proxy (via `create_deep_agent` auto-config) | `http://litellm:4000` |
-| `SEARXNG_BASE_URL` | `search_web` tool | `http://searxng:8080` |
-| `MYSQL_DB_HOST` | Checkpointer | `host.docker.internal` |
-| `MYSQL_DB_PORT` | Checkpointer | `3306` |
-| `AI_DB_USER` | Checkpointer | `root` |
-| `AI_DB_PASS` | Checkpointer | `""` |
-| `AI_DB_NAME` | Checkpointer | `ai_harness` |
+### C. LangChain BaseMessage Handling
+LangGraph `ainvoke` returns actual LangChain `BaseMessage` objects (`AIMessage`, `ToolMessage`, `HumanMessage`), **NOT** plain dictionaries.
+- **Solution**: Never use `.get()` on messages. Always use the `_safe_get(obj, "key")` helper defined in `service.py`, which checks `isinstance(obj, dict)` vs `getattr(obj, "key")`.
+- **Role Types**: LangChain `AIMessage` uses `.type == "ai"` and `ToolMessage` uses `.type == "tool"`. The helpers account for both `"ai"`/`"tool"` and standard `"assistant"`/`"user"` roles.
 
 ---
 
-## Planned Expansion
+## 5. API Endpoints & Testing
 
-### Phase 1 — Multi-step Research Pipeline
+All endpoints are mounted under `/workflows/deep-research`.
 
-| Feature | Description |
-|---------|-------------|
-| **crawl_web** | Tool using Crawl4AI (`CRAWL4AI_BASE_URL`) for full-page content extraction |
-| **query generation** | LLM step to decompose the user's question into multiple focused search queries |
-| **synthesize** | Dedicated LLM step to merge all search/crawl results into a structured research report |
-| **subagents** | Declarative subagents (per Deep Agents docs) for parallel research tasks |
+### POST `/workflows/deep-research/run`
+Runs the deep research agent synchronously and returns the final answer, steps, and sources.
+*Requires `X-API-Key` header.*
 
-### Phase 2 — Context & Memory
+### POST `/workflows/deep-research/run/stream`
+Streams the agent's execution steps and updates via Server-Sent Events (SSE).
 
-| Feature | Description |
-|---------|-------------|
-| **memory files** | `memory=["./AGENTS.md"]` for domain-specific research instructions |
-| **skills** | `skills=["./skills/"]` for on-demand knowledge retrieval |
-| **state_schema** | Custom `DeepAgentState` with structured channels for sources, draft sections, etc. |
-| **long-term store** | LangGraph `BaseStore` (also via MySQL) for cross-thread knowledge accumulation |
-
-### Phase 3 — Async & Long-Running
-
-| Feature | Description |
-|---------|-------------|
-| **Celery dispatch** | Offload long research runs to Celery (matching the `demo_workflow` pattern) |
-| **progress polling** | `GET /deep-research/{thread_id}/status` endpoint |
-| **human-in-the-loop** | `interrupt_on` for source approval before synthesis |
-
-### Phase 4 — Quality & Observability
-
-| Feature | Description |
-|---------|-------------|
-| **structured output** | `response_format` with typed `DeepResearchResponse` schema |
-| **todo middleware** | Explicit todo list tracking for multi-step plans |
-| **summarization** | Automatic context compression for long runs |
-| **LangSmith tracing** | Opt-in via `LANGSMITH_API_KEY` when ready |
-
----
-
-## Testing
-
+### Testing
+Run the pure bash integration test script from the `ai-harness` directory:
 ```bash
-# Sync endpoint (single line to avoid shell line-continuation issues)
-curl -X POST http://thor.local:8090/workflows/deep-research/run -H "Content-Type: application/json" -H "X-API-Key: <HARNESS_API_KEY>" -d '{"query": "What are the latest developments in quantum computing?"}'
-
-# Streaming endpoint
-curl -N -X POST http://thor.local:8090/workflows/deep-research/run/stream -H "Content-Type: application/json" -H "X-API-Key: <HARNESS_API_KEY>" -d '{"query": "latest quantum computing news"}'
-
-# Siri voice
-# "deep research what are the latest AI regulations in Europe"
+cd ai-harness
+bash tests/test_deep_research.sh
 ```
+*Note: The test script automatically sources `../../.env` to get `INTERNAL_BASE_URL` and `HARNESS_API_KEY`.*
+
+---
+
+## 6. Phase 1 Expansion Roadmap
+
+Once the skeleton is validated, the following features are planned:
+
+1. **Multi-step Pipeline**: Chain multiple search -> read -> synthesize steps.
+2. **Crawl4AI Integration**: Add a `crawl_web` tool to fetch full page content from search result URLs.
+3. **Query Decomposition**: Let the LLM break complex questions into sub-queries before searching.
+4. **Subagents**: Use `deepagents` subagent middleware to delegate specific tasks (e.g., a dedicated "summarizer" subagent).
+5. **Structured Output**: Enforce a JSON schema for the final answer to easily parse sections (Executive Summary, Key Findings, Sources).

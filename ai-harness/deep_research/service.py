@@ -15,6 +15,7 @@ from typing import Any
 
 import httpx
 from langchain.tools import tool
+from langchain_core.messages import HumanMessage
 from deepagents import create_deep_agent
 from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
 
@@ -27,6 +28,7 @@ logger = logging.getLogger("deep_research")
 # MySQL checkpointer (lazy init so we don't hammer DB on import)
 # ---------------------------------------------------------------------------
 
+_checkpointer_ctx = None
 _checkpointer: AsyncMySaver | None = None
 
 
@@ -44,14 +46,20 @@ def get_checkpointer() -> AsyncMySaver:
     """Return a singleton AsyncMySaver for LangGraph checkpoints in MySQL."""
     global _checkpointer
     if _checkpointer is None:
-        _checkpointer = AsyncMySaver.from_conn_string(_build_mysql_uri())
+        raise RuntimeError("Checkpointer not initialized. Did you call ensure_checkpointer_tables()?")
     return _checkpointer
 
 
 async def ensure_checkpointer_tables():
     """Create the checkpoint tables in MySQL if they don't already exist."""
-    cp = get_checkpointer()
-    await cp.asetup()
+    global _checkpointer, _checkpointer_ctx
+    if _checkpointer is None:
+        # from_conn_string returns an async context manager; enter it manually
+        # to keep the connection pool alive for the app lifecycle.
+        _checkpointer_ctx = AsyncMySaver.from_conn_string(_build_mysql_uri())
+        _checkpointer = await _checkpointer_ctx.__aenter__()
+        # Note: AsyncMySaver uses .setup() (async def setup(self)), not .asetup()
+        await _checkpointer.setup()
     logger.info("Deep-research MySQL checkpoint tables ensured.")
 
 
@@ -111,19 +119,23 @@ def get_deep_agent() -> Any:
     if _agent is not None:
         return _agent
 
-    model = os.getenv("HARNESS_MODEL", "gemma-moe")
-    # For LiteLLM gateway, use the provider:model syntax that Deep Agents expects.
-    # If model string contains no colon, default to openai-style through LiteLLM.
-    if ":" not in model:
-        # LiteLLM proxy speaks OpenAI-compatible, so prefix with openai:
-        model_spec = f"openai:{model}"
-    else:
-        model_spec = model
+    from langchain_openai import ChatOpenAI
+
+    model_name = os.getenv("HARNESS_MODEL", "gemma-moe")
+    # Strip provider prefix if present (e.g., openai:gpt-4 -> gpt-4)
+    if ":" in model_name:
+        model_name = model_name.split(":")[-1]
+        
+    model_instance = ChatOpenAI(
+        model=model_name,
+        openai_api_base=f"{LITELLM_BASE_URL.rstrip('/')}/v1",
+        openai_api_key=LITELLM_API_KEY,
+    )
 
     cp = get_checkpointer()
 
     _agent = create_deep_agent(
-        model=model_spec,
+        model=model_instance,
         system_prompt=(
             "You are a deep research assistant. Your job is to use the search_web "
             "tool to find accurate, up-to-date information, then synthesize a "
@@ -132,7 +144,7 @@ def get_deep_agent() -> Any:
         tools=[search_web],
         checkpointer=cp,
     )
-    logger.info("Deep research agent initialized (model=%s, checkpointer=MySQL).", model_spec)
+    logger.info("Deep research agent initialized (model=%s, checkpointer=MySQL).", model_name)
     return _agent
 
 
@@ -140,10 +152,7 @@ def get_deep_agent() -> Any:
 # Public service entrypoint
 # ---------------------------------------------------------------------------
 
-async def run_deep_research(
-    req: DeepResearchRequest,
-    client: httpx.AsyncClient,
-) -> DeepResearchResponse:
+async def run_deep_research(req: DeepResearchRequest) -> DeepResearchResponse:
     """Execute a deep-research query via the Deep Agent and return results."""
 
     thread_id = req.thread_id or str(uuid.uuid4())
@@ -157,9 +166,9 @@ async def run_deep_research(
         }
     }
 
-    # Build the input message dict (LangGraph expects this structure)
+    # Build the input state (LangGraph expects a list of BaseMessages or compatible dicts)
     input_state = {
-        "messages": [{"role": "user", "content": req.query}],
+        "messages": [HumanMessage(content=req.query)],
     }
 
     try:
@@ -195,38 +204,77 @@ async def run_deep_research(
 # Helpers: extract structured data from the LangGraph message list
 # ---------------------------------------------------------------------------
 
-def _extract_answer(messages: list[dict]) -> str:
+def _safe_get(obj, key, default=None):
+    """Safely get an attribute from either a dict or a LangChain BaseMessage object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _extract_answer(messages: list) -> str:
     """Find the last assistant text message and return its content."""
     for msg in reversed(messages):
-        if msg.get("role") == "assistant" and msg.get("content"):
-            return msg["content"]
+        # LangChain messages use .type ("ai") or .role ("assistant")
+        role = _safe_get(msg, "role") or _safe_get(msg, "type")
+        if role in ("ai", "assistant"):
+            content = _safe_get(msg, "content")
+            if content:
+                return str(content)
     return "(No answer generated)"
 
 
-def _extract_sources(messages: list[dict]) -> list[dict[str, Any]]:
+def _extract_sources(messages: list) -> list[dict[str, Any]]:
     """Extract search results from tool_result messages."""
+    import json as _json
+
     sources: list[dict[str, Any]] = []
     for msg in messages:
-        if msg.get("role") == "tool" or msg.get("tool_call_id"):
-            content = msg.get("content", "")
-            if content and "error" not in content:
-                sources.append({"tool_result": content[:2000]})
+        role = _safe_get(msg, "role") or _safe_get(msg, "type")
+        tool_call_id = _safe_get(msg, "tool_call_id")
+        content = _safe_get(msg, "content", "")
+        
+        if (role == "tool" or tool_call_id) and content:
+            content_str = str(content)
+            if "error" in content_str.lower():
+                sources.append({"error": content_str[:2000]})
+                continue
+                
+            # Try to parse SearXNG results if it looks like JSON
+            try:
+                results = _json.loads(content_str)
+                if isinstance(results, list):
+                    for item in results:
+                        sources.append({
+                            "title": item.get("title", "Untitled"),
+                            "url": item.get("url", ""),
+                            "content": item.get("content", "")[:500],
+                            "engine": item.get("engine", ""),
+                        })
+                    continue
+            except (_json.JSONDecodeError, TypeError):
+                pass
+                
+            # Fallback for non-JSON or unparseable content
+            sources.append({"tool_result": content_str[:2000]})
     return sources
 
 
-def _extract_steps(messages: list[dict]) -> list[dict[str, Any]]:
+def _extract_steps(messages: list) -> list[dict[str, Any]]:
     """Build a high-level step log from tool/tool_result pairs."""
     steps: list[dict[str, Any]] = []
     for msg in messages:
-        role = msg.get("role", "")
-        if role == "assistant" and msg.get("tool_calls"):
-            for tc in msg["tool_calls"]:
+        role = _safe_get(msg, "role") or _safe_get(msg, "type")
+        tool_calls = _safe_get(msg, "tool_calls")
+        content = _safe_get(msg, "content")
+        
+        if role in ("ai", "assistant") and tool_calls:
+            for tc in tool_calls:
                 steps.append({
-                    "action": tc.get("name", "unknown"),
-                    "args": tc.get("args", {}),
+                    "action": tc.get("name", "unknown") if isinstance(tc, dict) else getattr(tc, "name", "unknown"),
+                    "args": tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {}),
                 })
-        elif role in ("tool", "function") and msg.get("content"):
+        elif role == "tool" and content:
             steps.append({
-                "result_preview": str(msg["content"])[:500],
+                "result_preview": str(content)[:500],
             })
     return steps

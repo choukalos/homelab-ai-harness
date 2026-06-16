@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
 import uuid
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -24,8 +23,7 @@ async def run_deep_research_endpoint(
     This is the skeleton proof-of-concept: a single search node to validate
     the end-to-end Deep Agents + MySQL checkpointing flow.
     """
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        return await run_deep_research(req, client)
+    return await run_deep_research(req)
 
 
 @router.post("/run/stream")
@@ -42,6 +40,7 @@ async def run_deep_research_stream(
 
     thread_id = req.thread_id or str(uuid.uuid4())
 
+    from langchain_core.messages import HumanMessage
     from deep_research.service import get_deep_agent
 
     agent = get_deep_agent()
@@ -53,7 +52,7 @@ async def run_deep_research_stream(
     }
 
     input_state = {
-        "messages": [{"role": "user", "content": req.query}],
+        "messages": [HumanMessage(content=req.query)],
     }
 
     async def _stream():
