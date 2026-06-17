@@ -56,7 +56,7 @@ Return one complete HTML file.
     html = _strip_code_fences(html)
 
     # Prompt-based filename with collision detection (same approach as images)
-    output_dir = Path(MEDIA_OUTPUT_DIR) / "pm-demos"
+    output_dir = Path(MEDIA_OUTPUT_DIR) / "demos"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = save_name or title
@@ -75,7 +75,7 @@ Return one complete HTML file.
     return {
         "title": title,
         "filename": filename,
-        "url": f"{INTERNAL_BASE_URL.rstrip('/')}/media/files/pm-demos/{filename}",
+        "url": f"{INTERNAL_BASE_URL.rstrip('/')}/media/files/demos/{filename}",
         "html": html,
     }
 

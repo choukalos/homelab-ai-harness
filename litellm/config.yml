@@ -29,13 +29,12 @@ model_list:
       api_base: http://matrix:11434/v1
       api_key: "not-needed"
 
-    model_name: matrix-coder
+  - model_name: matrix-coder
     litellm_params:
-      model:  openai/qwen3.6-27b
+      model: openai/qwen3.6-27b
       api_base: http://matrix:8000/v1
       api_key: "not-needed"
 
-   
 
 general_settings:
   master_key: "os.environ/LITELLM_MASTER_KEY"

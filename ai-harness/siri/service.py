@@ -1,4 +1,5 @@
 import httpx
+from datetime import datetime
 
 from core.config import PUBLIC_BASE_URL
 from core.llm import chat_completion
@@ -274,8 +275,8 @@ async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse
     )
 
 
-async def _handle_list_demos(req: SiriChatRequest) -> SiriChatResponse:
-    """Return list of all created demos with PUBLIC URLs."""
+def _scan_all_demos() -> list[dict]:
+    """Scan demos dir for both workflow subdirs (metadata.json) and flat .html files."""
     from pathlib import Path
     from core.config import MEDIA_OUTPUT_DIR
     import json as _j
@@ -283,17 +284,40 @@ async def _handle_list_demos(req: SiriChatRequest) -> SiriChatResponse:
     demos_root = Path(MEDIA_OUTPUT_DIR) / "demos"
     demos = []
 
-    if demos_root.exists():
-        for slug_dir in sorted(demos_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-            if not slug_dir.is_dir():
-                continue
-            meta_file = slug_dir / "metadata.json"
+    if not demos_root.exists():
+        return demos
+
+    for entry in sorted(demos_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if entry.is_dir():
+            # Workflow demo: subdirectory with metadata.json
+            meta_file = entry / "metadata.json"
             if meta_file.exists():
                 try:
-                    meta = _j.loads(meta_file.read_text())
-                    demos.append(meta)
+                    demos.append(_j.loads(meta_file.read_text()))
                 except Exception:
                     pass
+        elif entry.is_file() and entry.suffix == ".html":
+            # Simple one-click demo: flat HTML file — build lightweight metadata
+            filename = entry.name
+            name_base = filename.rsplit("-", 1)[0] if "-" in filename[:-5] else filename[:-5]
+            title = name_base.replace("-", " ").title()
+            demos.append({
+                "title": title,
+                "slug": name_base.replace(" ", "-").lower(),
+                "description": f"One-click demo: {title}",
+                "tags": ["simple"],
+                "filename": filename,
+                "local_url": f"{PUBLIC_BASE_URL.rstrip('/')}/media/files/demos/{filename}",
+                "public_url": f"{PUBLIC_BASE_URL.rstrip('/')}/media/files/demos/{filename}",
+                "created_at": datetime.fromtimestamp(entry.stat().st_mtime).isoformat(),
+            })
+
+    return demos
+
+
+async def _handle_list_demos(req: SiriChatRequest) -> SiriChatResponse:
+    """Return list of all created demos with PUBLIC URLs."""
+    demos = _scan_all_demos()
 
     if not demos:
         return SiriChatResponse(
@@ -324,10 +348,6 @@ async def _handle_list_demos(req: SiriChatRequest) -> SiriChatResponse:
 
 async def _handle_find_demo(req: SiriChatRequest) -> SiriChatResponse:
     """Search for demos by query and return matches with PUBLIC URLs."""
-    from pathlib import Path
-    from core.config import MEDIA_OUTPUT_DIR
-    import json as _j
-
     # Extract the search query from the request text
     text = req.text.lower()
     query = req.text
@@ -337,26 +357,17 @@ async def _handle_find_demo(req: SiriChatRequest) -> SiriChatResponse:
             query = req.text[len(prefix):].strip()
             break
 
-    demos_root = Path(MEDIA_OUTPUT_DIR) / "demos"
-    matches = []
+    all_demos = _scan_all_demos()
     query_lower = query.lower()
 
-    if demos_root.exists():
-        for slug_dir in sorted(demos_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-            if not slug_dir.is_dir():
-                continue
-            meta_file = slug_dir / "metadata.json"
-            if meta_file.exists():
-                try:
-                    meta = _j.loads(meta_file.read_text())
-                    title = meta.get("title", "").lower()
-                    desc = meta.get("description", "").lower()
-                    tags = " ".join(meta.get("tags", [])).lower()
-                    combined = f"{title} {desc} {tags}"
-                    if any(term in combined for term in query_lower.split()):
-                        matches.append(meta)
-                except Exception:
-                    pass
+    matches = []
+    for d in all_demos:
+        title = d.get("title", "").lower()
+        desc = d.get("description", "").lower()
+        tags = " ".join(d.get("tags", [])).lower()
+        combined = f"{title} {desc} {tags}"
+        if any(term in combined for term in query_lower.split()):
+            matches.append(d)
 
     if not matches:
         return SiriChatResponse(

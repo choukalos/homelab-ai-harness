@@ -20,7 +20,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from deepagents import create_deep_agent
 
-from core.config import HARNESS_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
+from core.config import DEMO_WORKFLOW_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
 from demo_workflow.prompts import DEMO_WORKFLOW_INSTRUCTIONS, RESEARCHER_INSTRUCTIONS
 from demo_workflow.schemas import DemoCreateRequest, DemoCreateResponse, DemoBuildError
 from demo_workflow.tools import generate_html, validate_html, fix_html, critique_demo, save_demo
@@ -121,7 +121,7 @@ def get_deep_agent() -> Any:
     from langchain_openai import ChatOpenAI
     from deep_research.tools import search_and_crawl, think_tool
 
-    model_name = os.getenv("HARNESS_MODEL", "gemma-moe")
+    model_name = os.getenv("DEMO_WORKFLOW_MODEL", DEMO_WORKFLOW_MODEL)
     if ":" in model_name:
         model_name = model_name.split(":")[-1]
 
@@ -199,6 +199,26 @@ async def run_demo(req: DemoCreateRequest) -> DemoCreateResponse:
         slug = _extract_slug(messages)
         html_path = _extract_html_path(messages)
         metadata = _extract_metadata(messages)
+
+        # Validate that the agent actually completed the workflow by calling save_demo.
+        # If html_path is empty the agent never reached Phase 8 (files were never written).
+        if not html_path:
+            logger.warning(
+                "Demo run completed without calling save_demo (agent may be overwhelmed "
+                "by prompt/tool complexity). Returning error for thread_id=%s",
+                thread_id,
+            )
+            return DemoBuildError(
+                thread_id=thread_id,
+                title=title if title else req.title or "Untitled Demo",
+                slug=slug,
+                status="error",
+                error=(
+                    "Agent completed without calling save_demo. "
+                    "This usually means the model couldn't handle the tool-calling workflow. "
+                    "Try a more capable model or simplify the prompt."
+                ),
+            )
 
         return DemoCreateResponse(
             thread_id=thread_id,

@@ -125,13 +125,17 @@ The sub-agent follows a focused research pattern:
 - **Intent Detection**: `"create demo"` / `"build demo"` → `"create_demo"` intent
 - **Handler**: `_handle_create_demo_workflow(req)` uses `asyncio.create_task()` fire-and-forget
   to POST `/demos/run` in the background. Siri responds immediately.
-- **Listing**: `list_demos` / `find_demo` handlers read `metadata.json` from disk
+- **Listing**: `list_demos` / `find_demo` handlers use `_scan_all_demos()` which scans
+  both workflow subdirectories (with `metadata.json`) and flat `.html` files for simple demos.
+  All demos appear in a unified list with public URLs.
 - **Response Mapping**: Returns immediately with "Demo build started" message
 
 ### C. OpenWebUI Integration (`ai-harness/openwebui_tools/harness_tools.py`)
 - **Tool Function**: `create_demo(self, title, prompt, model)` POSTs to `/demos/run`
   synchronously (timeout=600s). Returns demo URL on completion.
 - **Listing**: `list_demos(tags, limit)` and `find_demo(query, limit)` read from `/demos/` and `/demos/search`
+- **Simple one-click demos** route through `pm_demo.service` and save to the same
+  `demos/` directory for unified discovery across all channels
 
 ---
 
@@ -151,6 +155,12 @@ tight iterative cycle. The orchestrator stays in control.
 Intermediate artifacts (design spec, build plan, HTML) use `write_file`
 for persistence between phases. The orchestrator reads/writes files as it
 progresses. This mirrors deep_research's `/final_report.md` pattern.
+
+### D. Unified Demo Directory
+Both workflow demos (`/demos/{slug}/final_demo.html` + `metadata.json`) and
+simple one-click demos (`/demos/{name}-{hash}.html`) live in the same
+`MEDIA_OUTPUT_DIR/demos/` directory. The router and Siri handler scan for
+both formats to provide a unified listing and search experience.
 
 ### D. KB Lookup Timeout Handling
 The `kb_lookup` tool wraps `family_kb.search_kb()` with a try/except to
@@ -182,10 +192,15 @@ Streams agent execution via Server-Sent Events (SSE). Yields JSON events
 for each tool call, AI message, and completion.
 
 ### GET `/demos`
-List all completed demos from the metadata index. Optional `tag` filter.
+List all completed demos from the unified `demos/` directory. Supports both:
+- **Workflow demos**: subdirectories with `metadata.json` (rich metadata)
+- **Simple demos**: flat `.html` files (lightweight metadata generated on-the-fly)
+
+Optional `tag` filter (simple demos are tagged `simple`).
 
 ### GET `/demos/search?q=...`
-Search demos by natural language query (matches title, description, tags).
+Search demos by natural language query. Matches title, description, and tags
+across both workflow and simple demo types.
 
 ### GET `/demos/{slug}`
 Get a single demo's metadata from `metadata.json`.

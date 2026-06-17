@@ -62,12 +62,9 @@ print($2)
 # ── Test 1: Health Check ────────────────────────────────────
 echo
 echo "==== Test 1: Harness health check ==>"
-curl -s -o "${TMP_FILE}" -w "%{http_code}" --max-time 5 \
-    "${BASE_URL}/health" 2>/dev/null || true
-
-# Parse the HTTP code from file
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
-HTTP_BODY=$(head -c -3 "${TMP_FILE}")
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" --max-time 5 \
+    "${BASE_URL}/health" 2>/dev/null) || HTTP_CODE="000"
+HTTP_BODY=$(cat "${TMP_FILE}" 2>/dev/null)
 
 if [ "${HTTP_CODE}" = "200" ]; then
     echo "  ✅ Harness is healthy"
@@ -97,9 +94,19 @@ HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
 echo "  -> HTTP ${HTTP_CODE}"
 
 if [ "${HTTP_CODE}" != "201" ] && [ "${HTTP_CODE}" != "200" ]; then
+    HTTP_BODY_TEXT=$(cat "${TMP_FILE}" 2>/dev/null)
     echo "  ❌ Failed (HTTP ${HTTP_CODE})"
     echo "  Response:"
-    cat "${TMP_FILE}" 2>/dev/null | head -20
+    echo "${HTTP_BODY_TEXT}" | head -20
+    echo
+
+    # Check if it's an agent error (status=error in JSON)
+    ERROR_STATUS=$(echo "${HTTP_BODY_TEXT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || true)
+    ERROR_MSG=$(echo "${HTTP_BODY_TEXT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error','')[:200])" 2>/dev/null || true)
+    if [ "${ERROR_STATUS}" = "error" ]; then
+        echo "  ❌ Agent error: ${ERROR_MSG}"
+    fi
+
     echo
     echo "=========================================================="
     echo "  Result: FAILED"
@@ -111,10 +118,26 @@ fi
 echo
 echo "==== Test 3: Verify response schema ==>"
 
+# Check for agent error in response (status=error means the agent failed)
+RESP_STATUS=$(_json "${TMP_FILE}" "data.get('status','')")
+RESP_ERROR=$(_json "${TMP_FILE}" "data.get('error','')")
+
+if [ "${RESP_STATUS}" = "error" ]; then
+    echo "  ❌ Agent reported error: ${RESP_ERROR}"
+    echo
+    cat "${TMP_FILE}"
+    echo
+    echo "=========================================================="
+    echo "  Result: FAILED (agent could not complete workflow)"
+    echo "=========================================================="
+    exit 1
+fi
+
 THREAD_ID=$(_json "${TMP_FILE}" "data.get('thread_id','')")
 TITLE=$(_json "${TMP_FILE}" "data.get('title','')")
 SLUG_CAPTURED=$(_json "${TMP_FILE}" "data.get('slug','')")
 STATUS=$(_json "${TMP_FILE}" "data.get('status','')")
+HTML_PATH=$(_json "${TMP_FILE}" "data.get('html_path','')")
 
 echo "  thread_id = ${THREAD_ID}"
 echo "  title     = ${TITLE}"
@@ -151,6 +174,46 @@ if [ ${FAIL} -ne 0 ]; then
     echo
     cat "${TMP_FILE}"
     echo
+    echo "=========================================================="
+    echo "  Result: FAILED"
+    echo "=========================================================="
+    exit 1
+fi
+
+# ── Verify HTML file was actually created on disk ─────────────
+echo
+echo "==== Test 3b: Verify HTML file exists on disk ==>"
+
+# Check if the HTML path is non-empty
+if [ -z "${HTML_PATH}" ] || [ "${HTML_PATH}" = "null" ]; then
+    echo "  ❌ html_path is empty — agent never called save_demo"
+    echo "  The agent completed without writing files. This usually means"
+    echo "  the model was overwhelmed by the prompt/tool complexity."
+    echo
+    echo "=========================================================="
+    echo "  Result: FAILED (agent did not create output files)"
+    echo "=========================================================="
+    exit 1
+fi
+
+# Check if the actual file exists on the server via the HTML endpoint
+rm -f "${TMP_FILE}"
+TMP_FILE=$(mktemp)
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    "${BASE_URL}/demos/${SLUG_CAPTURED}/html" \
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
+
+if [ "${HTTP_CODE}" = "200" ]; then
+    HTML_SIZE=$(wc -c < "${TMP_FILE}")
+    echo "  ✅ HTML file exists: ${HTML_SIZE} bytes"
+else
+    echo "  ❌ HTML file not found on disk (HTTP ${HTTP_CODE})"
+    echo "  The agent returned success but didn't write any files."
+    echo "  This usually means the model couldn't handle the tool-calling workflow."
+    echo
+    echo "=========================================================="
+    echo "  Result: FAILED (agent returned success but no files written)"
+    echo "=========================================================="
     exit 1
 fi
 
@@ -161,11 +224,9 @@ echo "==== Test 4: List jobs (GET /demos/jobs) ==>"
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     "${BASE_URL}/demos/jobs?limit=10" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ]; then
     JOB_COUNT=$(_json "${TMP_FILE}" "len(data.get('jobs',[]))")
     echo "  ✅ Listed ${JOB_COUNT} recent jobs"
@@ -180,11 +241,9 @@ echo "==== Test 5: List demos (GET /demos/) ==>"
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     "${BASE_URL}/demos/?limit=10" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ]; then
     DEMO_COUNT=$(_json "${TMP_FILE}" "len(data.get('demos',[]))")
     echo "  ✅ Listed ${DEMO_COUNT} demos"
@@ -199,11 +258,9 @@ echo "==== Test 6: Search demos (GET /demos/search?q=calculator) ==>"
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     "${BASE_URL}/demos/search?q=calculator&limit=10" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ]; then
     MATCH_COUNT=$(_json "${TMP_FILE}" "len(data.get('matches',[]))")
     echo "  ✅ Found ${MATCH_COUNT} matches"
@@ -218,11 +275,9 @@ echo "==== Test 7: Get demo metadata (GET /demos/${SLUG_CAPTURED}) ==>"
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     "${BASE_URL}/demos/${SLUG_CAPTURED}" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ]; then
     META_TITLE=$(_json "${TMP_FILE}" "data.get('title','?')")
     echo "  ✅ Metadata returned — title: ${META_TITLE}"
@@ -237,11 +292,9 @@ echo "==== Test 8: Serve demo HTML (GET /demos/${SLUG_CAPTURED}/html) ==>"
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     "${BASE_URL}/demos/${SLUG_CAPTURED}/html" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ]; then
     HTML_SIZE=$(wc -c < "${TMP_FILE}")
     HAS_DOCTYPE=$(grep -c '<!DOCTYPE' "${TMP_FILE}" || true)
@@ -269,11 +322,9 @@ echo "==== Test 9: Cancel endpoint (POST /demos/jobs/${SLUG_CAPTURED}/cancel) ==
 rm -f "${TMP_FILE}"
 TMP_FILE=$(mktemp)
 
-curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
     -X POST "${BASE_URL}/demos/jobs/${SLUG_CAPTURED}/cancel" \
-    -H "X-API-Key: ${API_KEY}" 2>/dev/null || true
-
-HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+    -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
 if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "404" ]; then
     echo "  ✅ Cancel endpoint responds (HTTP ${HTTP_CODE})"
 else
@@ -290,14 +341,12 @@ TMP_FILE=$(mktemp)
 if [ -z "${SIRI_API_KEY}" ]; then
     echo "  ℹ SIRI_API_KEY not set — skipping Siri test"
 else
-    curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
         -X POST "${BASE_URL}/siri/chat" \
         -H "Content-Type: application/json" \
         -H "X-API-Key: ${SIRI_API_KEY}" \
         -d '{"text":"build a demo of a simple weather app with city search"}' \
-        --max-time 30 2>/dev/null || true
-
-    HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+        --max-time 30 2>/dev/null) || HTTP_CODE="000"
     if [ "${HTTP_CODE}" = "200" ]; then
         SIRI_SPEAK=$(_json "${TMP_FILE}" "data.get('speak','')")
         echo "  ✅ Siri responded (HTTP ${HTTP_CODE})"
@@ -323,14 +372,12 @@ TMP_FILE=$(mktemp)
 if [ -z "${SIRI_API_KEY}" ]; then
     echo "  ℹ SIRI_API_KEY not set — skipping Siri test"
 else
-    curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
         -X POST "${BASE_URL}/siri/chat" \
         -H "Content-Type: application/json" \
         -H "X-API-Key: ${SIRI_API_KEY}" \
         -d '{"text":"list my demos"}' \
-        --max-time 15 2>/dev/null || true
-
-    HTTP_CODE=$(tail -c 3 "${TMP_FILE}")
+        --max-time 15 2>/dev/null) || HTTP_CODE="000"
     if [ "${HTTP_CODE}" = "200" ]; then
         SIRI_DISPLAY=$(_json "${TMP_FILE}" "data.get('display','')")
         echo "  ✅ Siri responded (HTTP ${HTTP_CODE})"

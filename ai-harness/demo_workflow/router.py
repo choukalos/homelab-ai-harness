@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,22 +47,45 @@ def _find_demo_metadata(slug: str) -> dict:
 
 
 def _list_all_demos() -> list[dict]:
-    """Scan the demos directory for metadata.json files."""
+    """Scan the demos directory for both:
+    - Subdirectories with metadata.json (workflow/deep-agent demos)
+    - Flat .html files (simple one-click demos)
+    """
     demos_root = Path(MEDIA_OUTPUT_DIR) / "demos"
     if not demos_root.exists():
         return []
 
     demos = []
-    for slug_dir in sorted(demos_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not slug_dir.is_dir():
-            continue
-        meta_file = slug_dir / "metadata.json"
-        if meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text())
-                demos.append(meta)
-            except (json.JSONDecodeError, ValueError):
-                continue
+
+    # 1. Subdirectories with metadata.json (workflow demos)
+    for entry in sorted(demos_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if entry.is_dir():
+            meta_file = entry / "metadata.json"
+            if meta_file.exists():
+                try:
+                    meta = json.loads(meta_file.read_text())
+                    demos.append(meta)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+        elif entry.is_file() and entry.suffix == ".html":
+            # 2. Flat .html files (simple one-click demos)
+            # Build lightweight metadata on the fly
+            filename = entry.name
+            # Strip the hash suffix for the title if present (e.g. foo-96d09c.html -> foo)
+            name_base = filename.rsplit("-", 1)[0] if "-" in filename[:-5] else filename[:-5]
+            # Humanize: replace hyphens with spaces, title case
+            title = name_base.replace("-", " ").title()
+            slug = name_base.replace(" ", "-").lower()
+            demos.append({
+                "title": title,
+                "slug": slug,
+                "description": f"One-click demo: {title}",
+                "tags": ["simple"],
+                "filename": filename,
+                "local_url": f"{INTERNAL_BASE_URL.rstrip('/')}/media/files/demos/{filename}",
+                "public_url": f"{PUBLIC_BASE_URL.rstrip('/')}/media/files/demos/{filename}",
+                "created_at": datetime.fromtimestamp(entry.stat().st_mtime).isoformat(),
+            })
 
     return demos
 

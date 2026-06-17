@@ -9,6 +9,9 @@ CRAWL4AI_BASE_URL = os.getenv("CRAWL4AI_BASE_URL", "http://crawl4ai:11235")
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "http://litellm:4000")
 LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "")
 HARNESS_MODEL = os.getenv("HARNESS_MODEL", "gemma-moe")
+# Per-module model overrides (optional). If not set, falls back to HARNESS_MODEL.
+DEEP_RESEARCH_MODEL = os.getenv("DEEP_RESEARCH_MODEL", HARNESS_MODEL)
+DEMO_WORKFLOW_MODEL = os.getenv("DEMO_WORKFLOW_MODEL", HARNESS_MODEL)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 

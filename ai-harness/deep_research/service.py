@@ -19,7 +19,7 @@ from langchain_core.messages import HumanMessage
 from deepagents import create_deep_agent
 from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
 
-from core.config import HARNESS_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
+from core.config import DEEP_RESEARCH_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
 from deep_research.prompts import (
     RESEARCH_WORKFLOW_INSTRUCTIONS,
     RESEARCHER_INSTRUCTIONS,
@@ -105,7 +105,7 @@ def get_deep_agent() -> Any:
 
     from langchain_openai import ChatOpenAI
 
-    model_name = os.getenv("HARNESS_MODEL", "gemma-moe")
+    model_name = os.getenv("DEEP_RESEARCH_MODEL", DEEP_RESEARCH_MODEL)
     if ":" in model_name:
         model_name = model_name.split(":")[-1]
 
