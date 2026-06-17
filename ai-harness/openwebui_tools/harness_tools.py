@@ -731,15 +731,15 @@ class Tools:
     ) -> str:
         """
         Create a high-quality one-page clickable HTML demo using the full
-        research-and-build workflow pipeline (KB lookup, web research,
-        requirements design, iterative build with validation, polish).
+        research-and-build pipeline (KB lookup, web research, design spec,
+        iterative build with validation, polish, and save).
 
         Use this for demos that need research-backed quality: product pitches,
         concept prototypes, competitive mockups, or any demo where you want
         the system to research the domain first.
 
-        This triggers an async workflow — it will start building and return
-        immediately. The demo may take 2-5 minutes to complete.
+        This runs the deep-agents demo pipeline synchronously. It typically
+        takes 2-5 minutes to complete.
         """
 
         payload = {
@@ -750,25 +750,46 @@ class Tools:
         if model:
             payload["model"] = model
 
-        data = self._post("/demos/create", payload, timeout=60)
+        data = self._post("/demos/run", payload, timeout=600)
 
-        run_id = data.get("run_id", "")
         demo_title = data.get("title", title)
+        slug = data.get("slug", "")
         status = data.get("status", "unknown")
-        steps = data.get("steps_count", 0)
+        html_path = data.get("html_path", "")
+        thread_id = data.get("thread_id", "")
+        error = data.get("error")
+
+        if error or status == "error":
+            lines = [
+                f"Demo creation failed.",
+                "",
+                f"Title: {demo_title}",
+                f"Error: {error}",
+            ]
+            return "\n".join(lines)
+
+        # Build the local URL to the demo HTML
+        local_url = ""
+        if slug:
+            local_url = f"{self.valves.harness_url.rstrip('/')}/demos/{slug}/html"
 
         lines = [
-            f"Demo workflow started successfully.",
+            "Demo created successfully.",
             "",
             f"Title: {demo_title}",
-            f"Run ID: {run_id}",
-            f"Status: {status}",
-            f"Pipeline steps: {steps}",
-            "",
-            "The demo is being built. This typically takes 2-5 minutes.",
-            "Once complete you can find it by asking 'list my demos' or",
-            "'find me a demo about [topic]'.",
         ]
+
+        if slug:
+            lines.append(f"Slug: {slug}")
+
+        if thread_id:
+            lines.append(f"Thread ID: {thread_id}")
+
+        if local_url:
+            lines.append("")
+            lines.append(f"Open demo: {local_url}")
+            lines.append("")
+            lines.append(f"[Open clickable demo]({local_url})")
 
         return "\n".join(lines)
 

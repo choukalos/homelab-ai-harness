@@ -1,380 +1,238 @@
-# One-Page Clickable Demo Workflow
+# Demo Workflow Module
 
 An automated, LLM-driven pipeline that researches, designs, builds, validates,
-and saves high-quality single-file HTML demos. Built on the same workflow
-engine pattern as the market research pipeline.
+and saves high-quality single-file HTML demos. Built on the `deepagents`
+framework with a single orchestrator agent that follows the 8-phase demo
+creation pipeline. Agent state is persisted in MySQL via
+`langgraph-checkpoint-mysql`.
 
-## What It Does
+---
 
-Given a demo request (e.g. "Build a demo for a pet adoption app with cat
-profiles and an adoption flow"), the workflow:
+## 1. Architecture & Data Flow
 
-1. **Parses the request** — extracts a structured demo brief (title, audience,
-   features, screens, style hints, constraints)
-2. **Checks prior knowledge** — queries the Family Knowledge Base for any
-   previous research or notes relevant to the demo topic
-3. **Researches the web** — runs targeted searches via SearXNG to find
-   competitor patterns, UX conventions, and feature recommendations
-4. **Creates requirements + design spec** — synthesizes all research into a
-   detailed requirements list and visual design spec (colors, typography,
-   layout, interactions)
-5. **Generates a build plan** — produces a numbered step-by-step implementation
-   plan with acceptance criteria per step
-6. **Builders loop step-by-step** — for each build step, generates HTML,
-   validates it against acceptance criteria, retries fixes if needed (max 2),
-   and saves intermediate results
-7. **Polishes with self-critique** — runs the assembled HTML through a full-pass
-   LLM critique, then executes one fix pass for the highest-priority issues
-8. **Embeds notes & saves** — injects requirements/build notes as HTML comments,
-   saves the final HTML, writes metadata for discovery
-
-## Architecture
-
-```
-POST /demos/create
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Workflow                                        │
-│  (workflows/ — MySQL-backed DAG state machine)               │
-│                                                              │
-│  1. Parse Request            → structured demo brief         │
-│  2. KB Lookup               → prior knowledge                │
-│  3. Web Research             → competitive insights           │
-│  4. Requirements & Design   → specs + design guidance        │
-│  5. Build Plan               → numbered build steps           │
-│  6. Build Loop               → generate → validate → fix      │
-│  7. Polish                  → critique + fix pass             │
-│  8. Embed Notes & Save      → final HTML + metadata          │
-└────────┬───────────────────────────────┬───────────────────┘
-         │ dispatches Celery tasks
-         ▼
-┌────────────────────────────────────┐       │
-│ Celery Worker Pool                 │       │
-│                                    │       │
-│ demo_workflow/run_stage(stage=N)   │       │
-│                                    │       │
-│ Stage 1-5, 7-8: LLM + helpers      │       │
-│ Stage 6:      build loop            │       │
-│  (generate + validate per step)     │       │
-└───────┬─────────────────────┬───────┘       │
-        │                     │               │
-        ▼                     ▼               │
-  /demos/pet-app-20250606/     Qdiant (KB)     │
-    final_demo.html                 │           │
-    metadata.json                   │           │
-    build/step{N}.html              │           │
-    state/{stage}.json             SearXNG      │
+```mermaid
+graph TB
+    User((User)) -->|Siri / OpenWebUI / API| FastAPI[FastAPI Router]
+    FastAPI -->|Auth| Security[require_auth]
+    FastAPI -->|Service Layer| Orchestrator[Orchestrator Agent]
+    Orchestrator -->|LLM Calls| LiteLLM[LiteLLM Proxy]
+    Orchestrator -->|Delegate Research| SubAgent[Research Sub-Agent]
+    SubAgent -->|LLM Calls| LiteLLM
+    SubAgent -->|search_and_crawl| SearXNG[SearXNG]
+    SubAgent -->|think_tool| SubAgent
+    Orchestrator -->|kb_lookup| Qdrant[(Family KB)]
+    Orchestrator -->|Build Tools| Generate[generate_html]
+    Orchestrator -->|Build Tools| Validate[validate_html]
+    Orchestrator -->|Build Tools| Fix[fix_html]
+    Orchestrator -->|Build Tools| Critique[critique_demo]
+    Orchestrator -->|Build Tools| Save[save_demo]
+    Orchestrator -->|Checkpoints| MySQL[(MySQL DB)]
+    SubAgent -->|Checkpoints| MySQL
+    Save -->|final_demo.html| Disk[(Disk)]
+    Save -->|metadata.json| Disk
 ```
 
-## Pipeline Stages
+- **Agent Framework**: `deepagents` (`create_deep_agent` with `subagents=[...]`)
+- **Orchestrator**: Follows the 8-phase workflow, manages build tools, delegates research
+- **Research Sub-Agent**: Conducts web research with `search_and_crawl` + `think_tool`
+- **LLM**: `ChatOpenAI` routing through LiteLLM proxy
+- **Checkpointer**: `AsyncMySaver` from `langgraph.checkpoint.mysql.asyncmy`
+- **Build Tools**: `generate_html`, `validate_html`, `fix_html`, `critique_demo`, `save_demo`
+- **KB Lookup**: `kb_lookup` tool calls `family_kb.search_kb()` directly
 
-### Stage 1 — Parse Request
-Extracts a structured demo brief from the user's free-text request. The LLM
-identifies the target audience, key features, requested screens, style hints,
-and constraints. A filesystem-safe slug is auto-generated from the title.
+---
 
-**Output:** `DemoBrief` with title, description, target_audience,
-key_features, screens_requested, style_hints, constraints.
+## 2. 8-Phase Workflow
 
-### Stage 2 — KB Lookup
-Queries the Family Knowledge Base (Qdrant) for any prior material relevant to
-the demo topic. The LLM synthesizes findings into actionable insights. If
-nothing relevant is found, the stage passes through cleanly.
+The orchestrator follows these phases guided by its system prompt:
 
-**Output:** `KbInsights` with has_prior_data flag, insight summary, and
-key excerpts.
+1. **Parse Request** — Extract a structured demo brief (title, audience, features, screens, style)
+2. **KB Lookup** — Query the Family Knowledge Base for prior relevant material
+3. **Web Research** — Delegate to the research sub-agent for competitor patterns and UX conventions
+4. **Requirements & Design** — Synthesize all research into a design spec (colors, typography, layout)
+5. **Build Plan** — Produce a numbered step-by-step implementation plan with acceptance criteria
+6. **Build Loop** — Iteratively: `generate_html` → `validate_html` → `fix_html` (max 2 retries/step)
+7. **Polish** — `critique_demo` for full-pass quality review, then `fix_html` for top issues
+8. **Save** — `save_demo` embeds notes as HTML comments, writes `final_demo.html` + `metadata.json`
 
-### Stage 3 — Web Research
-Generates 3-4 focused web search queries targeting:
-- Similar products and competitors
-- Current design patterns for this product category
-- Features users expect
+---
 
-Each query is executed against SearXNG. The LLM then summarizes all findings
-into actionable insights: competitor patterns, UX conventions, feature
-recommendations.
+## 3. File Structure
 
-**Output:** `WebInsights` with queries used, source links, competitor patterns,
-UX patterns, feature recommendations, and a summary.
+All files for this module live in `ai-harness/demo_workflow/`:
 
-### Stage 4 — Requirements & Design Spec
-Synthesizes stages 1-3 into two deliverables:
+- `__init__.py`: Module docstring + re-export `ensure_checkpointer_tables`
+- `schemas.py`: Pydantic models (`DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`)
+- `service.py`: Agent factory, `run_demo()`, MySQL checkpointer, `kb_lookup` tool, extraction helpers
+- `prompts.py`: `DEMO_WORKFLOW_INSTRUCTIONS` (orchestrator), `RESEARCHER_INSTRUCTIONS` (sub-agent), build prompts
+- `tools.py`: Build tools (`generate_html`, `validate_html`, `fix_html`, `critique_demo`, `save_demo`)
+- `router.py`: FastAPI router exposing `/run`, `/run/stream`, `/jobs`, `/{slug}`, `/{slug}/html`
 
-**A. Requirements** — Detailed list including:
-- Specific screens needed (expanded from initial request)
-- Navigation flow between screens
-- What placeholder data to use
-- Specific interactions to implement
+---
 
-**B. Visual Design Spec** — Guidance for the HTML builder:
-- Color palette with hex values
-- Typography approach (system fonts only)
-- Layout approach (card-based, sidebar, bottom-tab, etc.)
-- Visual treatment (shadows, gradients, borders)
+## 4. Output Extraction
 
-**Output:** `RequirementsAndDesignSpec` with requirements, screens,
-navigation flow, interactions, color palette, typography, layout, visual
-treatment, and design notes.
+The module extracts the agent's output artifacts from the LangGraph message history:
 
-### Stage 5 — Build Plan
-The LLM reads the requirements + design spec and produces a numbered build
-plan. Each step is atomic with acceptance criteria:
+### HTML Extraction (`_extract_html_path`, `_extract_final_html`)
+Scans messages for the `write_file` tool call targeting `final_demo.html` and
+extracts the content from `args.content`. Falls back to `current_build.html`,
+then to any HTML-like content in tool results.
 
-Example progression:
-1. Base HTML with nav structure, CSS reset, design tokens
-2. Landing/hero screen
-3. Product listing screen
-4. Detail screen(s)
-5. Interaction wiring (click handlers, transitions)
-6. Polish (animations, responsive adjustments)
+### Metadata Extraction (`_extract_metadata`)
+Parses the `save_demo` tool output for `local_url`/`public_url` and other
+metadata. Falls back to basic metadata from `demo_brief.md`.
 
-Capped at 8 steps maximum.
+### Title Extraction (`_extract_title`)
+Extracts the demo title from `demo_brief.md` content, falling back to the
+request title.
 
-**Output:** `BuildPlan` with steps (numbered, titled, described, acceptance
-criteria) and overall notes.
+---
 
-### Stage 6 — Build Loop
-For each step in the build plan, the pipeline:
+## 5. Prompt Architecture
 
-1. **Generates** — Feeds current HTML + design spec + step description to
-   the LLM. LLM returns the complete updated HTML.
-2. **Validates** — Feeds the HTML + acceptance criteria to a separate LLM
-   validation call. Reports pass/fail with issues.
-3. **Fixes if needed** — If validation fails, feeds HTML + issues back for
-   a fix pass (max 2 retries).
-4. **Saves** — Writes current HTML to `build/step{N}.html`.
+### Orchestrator (`DEMO_WORKFLOW_INSTRUCTIONS`)
+The orchestrator follows an 8-phase workflow with explicit file conventions:
+- `demo_brief.md` — Phase 1 structured brief
+- `design_spec.md` — Phase 4 requirements and design
+- `build_plan.md` — Phase 5 numbered build steps
+- `current_build.html` — Phase 6 iterative build output
+- `final_demo.html` — Phase 8 final output
 
-Each build step is executed within a single Celery task (stage 6), tracked
-in the workflow engine as one step that internally iterates the sub-steps.
+### Researcher (`RESEARCHER_INSTRUCTIONS`)
+The sub-agent follows a focused research pattern:
+1. Start with broad searches
+2. After each search → `think_tool` reflection
+3. Execute narrower searches as gaps are identified
+4. Stop when confident (max iterations configurable)
 
-**Output:** Per-step results with status, validation summary, retries used,
-and any remaining issues.
+### Build Prompts
+- `BUILD_GENERATE_SYSTEM` — HTML generation prompt
+- `BUILD_VALIDATE_SYSTEM` — Validation prompt with pass/fail criteria
+- `BUILD_FIX_SYSTEM` — Fix prompt for corrective changes
 
-### Stage 7 — Polish & Self-Critique
-After all build steps complete, the assembled HTML runs through:
+---
 
-1. **Critique** — LLM evaluates the complete demo on: overall quality,
-   navigation flow, visual consistency, mobile responsiveness, interactions,
-   content quality, accessibility, and code quality. Returns an overall score
-   (1-10) and prioritized list of issues.
-2. **Fix pass** — One fix pass addressing the top 8 issues.
+## 6. Integration Points
 
-**Output:** `PolishResult` with critique text, issues found, overall score,
-issues fixed.
+### A. FastAPI App Registration (`ai-harness/app.py`)
+- **Import**: `from deep_research.service import ensure_checkpointer_tables`
+  (shared with demo_workflow via re-export)
+- **Startup Event**: `await ensure_checkpointer_tables()` creates checkpoint tables on boot
+- **Router Mount**: `app.include_router(demo_workflow_router, prefix="/demos", tags=["demo-workflow"])`
 
-### Stage 8 — Embed Notes & Save Final
-1. **Generates notes** — LLM creates a build summary note covering:
-   requirements, build approach, design decisions, open questions, demo tips
-2. **Embeds as HTML comments** — Notes injected at the top of the final HTML
-   file (invisible during presentation)
-3. **Saves final HTML** — to `/data/media/demos/{slug}/final_demo.html`
-4. **Writes metadata.json** — with title, description, tags, screens,
-   creation date, local URL, public URL
+### B. Siri Integration (`ai-harness/siri/service.py`)
+- **Intent Detection**: `"create demo"` / `"build demo"` → `"create_demo"` intent
+- **Handler**: `_handle_create_demo_workflow(req)` uses `asyncio.create_task()` fire-and-forget
+  to POST `/demos/run` in the background. Siri responds immediately.
+- **Listing**: `list_demos` / `find_demo` handlers read `metadata.json` from disk
+- **Response Mapping**: Returns immediately with "Demo build started" message
 
-**Output:** Final HTML file with embedded notes, metadata.json for discovery.
+### C. OpenWebUI Integration (`ai-harness/openwebui_tools/harness_tools.py`)
+- **Tool Function**: `create_demo(self, title, prompt, model)` POSTs to `/demos/run`
+  synchronously (timeout=600s). Returns demo URL on completion.
+- **Listing**: `list_demos(tags, limit)` and `find_demo(query, limit)` read from `/demos/` and `/demos/search`
 
-## How Pieces Fit Together
+---
 
-### Workflow Engine (`workflows/`)
-The workflow engine tracks the full DAG with 8 steps, dependency chains,
-and per-step status/output metadata. The demo pipeline registers its workflow
-definition at FastAPI startup (same pattern as market research).
+## 7. Critical Implementation Details & Gotchas
 
-### Celery Tasks (`demo_workflow/tasks.py`)
-A single dispatchable Celery task `demo_workflow.run_stage(stage=NAME, run_id)` handles
-all stages. For stages 1-5, 7-8 it delegates to the corresponding stage function.
-For stage 6 (build loop) it internally iterates all build steps with the
-generate-validate-fix cycle.
+### A. Shared MySQL Checkpointer
+Demo workflow shares the same MySQL checkpoint tables as deep_research.
+Both import from `deep_research.service`. The checkpointer is process-global
+and thread-safe — concurrent runs are isolated by `thread_id`.
 
-State is persisted to disk between stages (not passed through Celery) because
-HTML content can be large. Each stage reads accumulated state, mutates it,
-and writes it back.
+### B. Build Loop as Direct Tools (Not Sub-Agent)
+The build loop (generate → validate → fix) runs as direct tools on the
+orchestrator, NOT as a sub-agent. This avoids delegation overhead for the
+tight iterative cycle. The orchestrator stays in control.
 
-### LLM Integration (`core/llm.py`)
-All LLM calls go through LiteLLM. Each stage uses different temperatures:
+### C. File-Based Intermediate State
+Intermediate artifacts (design spec, build plan, HTML) use `write_file`
+for persistence between phases. The orchestrator reads/writes files as it
+progresses. This mirrors deep_research's `/final_report.md` pattern.
 
-| Stage | Temperature | Rationale |
+### D. KB Lookup Timeout Handling
+The `kb_lookup` tool wraps `family_kb.search_kb()` with a try/except to
+handle cold-start embedding model downloads gracefully. Returns a fallback
+message on failure, allowing the workflow to continue with web research.
+
+### E. Sub-Agent Tool Isolation
+The research sub-agent has its own tool scope (`search_and_crawl` + `think_tool`)
+and cannot call the orchestrator's build tools. The orchestrator delegates via
+`task()` calls and receives findings back as text.
+
+### F. LangChain BaseMessage Handling
+Always use `_safe_get(obj, "key")` helper — never `.get()` directly on
+message objects (they may be Pydantic models or dicts).
+
+---
+
+## 8. API Endpoints & Testing
+
+All endpoints mounted under `/demos`.
+
+### POST `/demos/run`
+Runs the demo creation agent synchronously. Returns final title, slug,
+HTML path, and metadata.
+*Requires `X-API-Key` header.*
+
+### POST `/demos/run/stream`
+Streams agent execution via Server-Sent Events (SSE). Yields JSON events
+for each tool call, AI message, and completion.
+
+### GET `/demos`
+List all completed demos from the metadata index. Optional `tag` filter.
+
+### GET `/demos/search?q=...`
+Search demos by natural language query (matches title, description, tags).
+
+### GET `/demos/{slug}`
+Get a single demo's metadata from `metadata.json`.
+
+### GET `/demos/{slug}/html`
+Serve the final HTML file as `text/html`.
+
+### GET `/demos/jobs`
+List recent demo jobs from completed demos on disk.
+
+### GET `/demos/jobs/{thread_id}`
+Get job status for a given thread ID.
+
+### POST `/demos/jobs/{thread_id}/cancel`
+Best-effort cancellation for running jobs.
+
+---
+
+## 9. Configuration
+
+| Env Var | Default | Purpose |
 |---|---|---|
-| 1 — Parse Request | 0.2 | Deterministic extraction |
-| 2 — KB synthesis | 0.2 | Deterministic summarization |
-| 3 — Web queries | 0.5 | Creative query generation |
-| 3 — Web insights | 0.2 | Deterministic summarization |
-| 4 — Requirements & Design | 0.4 | Creative but structured |
-| 5 — Build Plan | 0.3 | Structured planning |
-| 6 — Build Generate | 0.4 | Creative code generation |
-| 6 — Build Validate | 0.1 | Deterministic checking |
-| 6 — Build Fix | 0.3 | Corrective but guided |
-| 7 — Polish Critique | 0.2 | Deterministic evaluation |
-| 7 — Polish Fix | 0.3 | Creative fixes |
-| 8 — Notes | 0.2 | Deterministic generation |
+| `HARNESS_MODEL` | `gemma-moe` | LLM model (via LiteLLM) |
+| `LITELLM_BASE_URL` | `http://litellm:4000` | LiteLLM proxy URL |
+| `LITELLM_API_KEY` | — | LiteLLM API key |
+| `MEDIA_OUTPUT_DIR` | `/data/media` | Base for generated media |
+| `SEARXNG_BASE_URL` | `http://searxng:8080` | SearXNG instance |
+| `CRAWL4AI_BASE_URL` | `http://crawl4ai:11235` | Crawl4AI instance |
+| `MYSQL_DB_HOST` | `host.docker.internal` | MySQL host |
+| `AI_DB_NAME` | `ai_harness` | MySQL database name |
 
-### External Dependencies
-- **Family KB (Qdrant)** — Semantic search for prior knowledge (stage 2)
-- **SearXNG** — Web search for competitive research (stage 3)
-- **LiteLLM** — LLM proxy providing actual models (all stages)
-- **MySQL** — Workflow state persistence
+Configuration in `service.py`:
+- `MAX_RESEARCHER_ITERATIONS = 3` (sub-agent iteration limit)
 
-### Output Artifacts
-All outputs are written to `/data/media/demos/{slug}/`:
-- `build/step1.html`, `step2.html`, ... — Intermediate build results
-- `state/stage_{N}.json` — Per-stage output data
-- `state/state_snapshot.json` — Full accumulated state
-- `final_demo.html` — The finished demo with embedded notes
-- `metadata.json` — Discovery index entry
+---
 
-## APIs
+## 10. Migrated From Celery (Historical)
 
-### Start a Demo Job
-```
-POST /demos/create
-Content-Type: application/json
+This module was previously built on a Celery + workflow engine architecture
+with 8 hard-coded stages dispatched as Celery tasks. The migration to
+`deepagents` eliminated:
 
-{
-  "title": "Pet Adoption App",
-  "prompt": "Build a one-page clickable demo for a mobile pet adoption app...",
-  "model": ""                // optional, override default model
-}
-```
+- **Celery tasks** (`tasks.py` deleted) — no more `run_stage` task
+- **JSON file state** (`state/` directory) — agent manages state via message history
+- **Workflow engine dependency** — no more DAG step definitions
+- **Race conditions** — single-process agent eliminates cross-process state issues
+- **Timeout hacks** — the 60s threading timeout for KB lookup is gone
 
-Returns: `{ "run_id": "<uuid>", "workflow_id": "<uuid>",
-"title": "Pet Adoption App", "status": "pending", "steps_count": 8 }`
-
-### List Jobs
-```
-GET /demos/jobs?status=success&limit=20
-```
-
-Returns recent demo creation jobs with status, title, timestamps.
-
-### Get Job Status + Full Output
-```
-GET /demos/jobs/{run_id}
-```
-
-Returns complete `WorkflowRunResponse` with all 8 step outputs, timestamps,
-and status details.
-
-### Cancel a Job
-```
-POST /demos/jobs/{run_id}/cancel
-```
-
-### List All Demos (metadata index)
-```
-GET /demos?tag=pet&limit=50
-```
-
-Returns all completed demos from the metadata index, optionally filtered by tag.
-
-### Search Demos
-```
-GET /demos/search?q=pet+adoption&local_urls=true&limit=10
-```
-
-Returns matching demos with descriptions and URLs.
-- `local_urls=true` (default) — returns internal URLs (`thor.local:8090`)
-- `local_urls=false` — returns public URLs (`siri.choukalos.com`)
-
-### Get Single Demo Metadata
-```
-GET /demos/{slug}
-```
-
-### Serve Demo HTML
-```
-GET /demos/{slug}/html
-```
-
-Serves the complete final HTML file with embedded notes.
-
-## Configuration
-
-| Environment Variable | Purpose | Default |
-|---|---|---|
-| `HARNESS_MODEL` | LLM model for all LLM calls | `gemma-moe` |
-| `MEDIA_OUTPUT_DIR` | Base for generated media | `/data/media` |
-| `SEARXNG_BASE_URL` | Web search endpoint | `http://searxng:8080` |
-| `INTERNAL_BASE_URL` | Internal URL for artifact URLs | `http://thor.local:8090` |
-| `PUBLIC_BASE_URL` | Public URL for Siri responses | `https://siri.choukalos.com` |
-
-No new environment variables needed — all reuse existing configuration.
-
-## OpenWebUI Tools
-
-Three new tool functions are available in OpenWebUI:
-
-### `create_demo(title, prompt, model)`
-Starts the full workflow pipeline (research → build → polish → save).
-Returns the run ID immediately. The demo takes 2-5 minutes to complete.
-Follow up with `list_demos` to find the completed demo.
-
-### `list_demos(tags, limit)`
-Lists all created demos with titles, descriptions, tags, creation dates,
-and local URLs. Optional tag filter.
-
-### `find_demo(query, limit)`
-Searches demos by natural language query (matches title, description,
-tags). Returns matches with local URLs.
-
-## Siri Integration
-
-The Siri handler routes demo-related intents:
-
-| Siri Phrase | Handler | Behavior |
-|---|---|---|
-| "list demos" / "my demos" | `_handle_list_demos` | Lists demos with PUBLIC URLs |
-| "find demo about pets" | `_handle_find_demo` | Searches by query, returns PUBLIC URLs |
-| "create a demo of..." | `_handle_demo` | Starts the old simple pipeline (instant) |
-
-For the full research-backed workflow, Siri users should go through OpenWebUI
-tools or the API directly (the workflow takes 2-5 minutes which Siri cannot
-wait for).
-
-## Tweaking the Pipeline
-
-### Adding or Removing Build Steps
-The build plan (stage 5) is generated by the LLM and typically produces 6-8 steps.
-Cap is enforced at 8 in the build loop. Change the cap in `service.py`
-`stage6_build_loop()`.
-
-### Changing LLM Temperature per Stage
-Adjust temperatures in each stage's `_call_llm()` or `_call_json()` calls in
-`service.py`. See the temperature table above.
-
-### Changing the Default Model
-Set `HARNESS_MODEL` environment variable, or pass `model` in the
-`POST /demos/create` body.
-
-### Adjusting Retry Count
-Change `MAX_BUILD_RETRIES` in `service.py` (default: 2).
-
-### Adjusting Web Search Queries
-Stage 3 generates queries via LLM. Change the LLM max_tokens or the
-number of queries in `stage3_web_research()`.
-
-### Changing Output Directory
-Set `MEDIA_OUTPUT_DIR` — demos are saved under `{MEDIA_OUTPUT_DIR}/demos/`.
-
-### Changing the Polish Critique Depth
-Adjust the number of issues sent to the fix pass in `stage_polish()`
-(currently top 8 issues).
-
-## Error Handling
-- **Failed KB lookups**: Logged as warnings, stage passes through with empty insights
-- **Failed web searches**: Logged as warnings, stage continues with whatever results obtained
-- **Failed LLM calls**: Caught and re-raised, workflow engine marks step as FAILED
-- **Failed build steps**: Retried up to MAX_BUILD_RETRIES times, continues with issues noted
-- **Failed polish fixes**: Logged, stage passes through with critique preserved
-- **Failed final save**: Logged with error, intermediate files preserved in build/ and state/
-
-## Future Improvements
-1. **Test framework** — Add unit tests for stage functions and helpers
-2. **Scheduled runs** — Wire up the `schedule` field for periodic demo generation
-3. **More validation checks** — Add a browser-based HTML validator step
-4. **Demo versioning** — Allow multiple versions of the same demo with diffs
-5. **Shared component library** — Cache common UI patterns across demos
-6. **Parallel build steps** — Build independent sections concurrently
-7. **Mobile-specific testing** — Run through a mobile viewport validator
-8. **Demo analytics** — Track which demos get opened most often
-9. **Demo sharing** — Allow embedding demos in external pages
+The Celery worker is still used by other modules (`tasks/`, `scheduler/`,
+`market_research/`). Only the demo workflow has migrated to deep agents.

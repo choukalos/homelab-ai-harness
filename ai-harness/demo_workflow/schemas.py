@@ -1,38 +1,97 @@
-"""
-Pydantic models for the one-page clickable demo workflow pipeline.
+"""Pydantic models for the demo workflow (Deep Agents harness).
 
 Covers:
 - API request/response schemas
-- Pipeline state (carried across stages)
-- Stage-specific output models
+- Demo metadata for discovery/indexing
+
+Stage-specific models (DemoBrief, KbInsights, etc.) have been removed —
+the agent handles all structure internally via its message history and
+file-based artifacts (demo_brief.md, design_spec.md, build_plan.md).
 """
 
 from __future__ import annotations
 
-import datetime
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# API Schemas
+# Request Schema
 # ──────────────────────────────────────────────────────────────────────────
 
 class DemoCreateRequest(BaseModel):
-    title: str = Field(..., description="Demo title (auto-generated from prompt if not given)")
-    prompt: str = Field(..., description="What the demo should be — describe the app, features, style")
-    model: str | None = Field(default=None, description="Override default LLM model")
+    """Request to kick off a demo creation run via Deep Agents."""
 
+    prompt: str = Field(
+        ...,
+        description="What the demo should be — describe the app, features, style.",
+    )
+    title: str = Field(
+        default="",
+        description="Demo title (auto-generated from prompt if not given).",
+    )
+    thread_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional thread ID for checkpoint persistence / resumption. "
+            "If omitted a new UUID is generated."
+        ),
+    )
+    model: str | None = Field(
+        default=None,
+        description="Optional model override (defaults to HARNESS_MODEL).",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Response Schemas
+# ──────────────────────────────────────────────────────────────────────────
 
 class DemoCreateResponse(BaseModel):
-    run_id: str
-    workflow_id: str
-    title: str
-    status: str
-    steps_count: int
+    """Response after the demo creation agent finishes (or errors)."""
 
+    thread_id: str = Field(description="Thread ID used for the run (for resumption).")
+    title: str = Field(description="Demo title.")
+    slug: str = Field(description="Filesystem slug for the demo output directory.")
+    status: str = Field(
+        description="Run status: 'completed', 'error', or the current build step name."
+    )
+    build_step: str = Field(
+        default="",
+        description="The last completed build phase (e.g. 'build_step_3', 'final_save').",
+    )
+    html_path: str = Field(
+        default="",
+        description="Path to the generated HTML file relative to the media directory.",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extracted demo metadata (title, description, tags, URLs, etc.).",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if the run failed.",
+    )
+
+
+class DemoBuildError(BaseModel):
+    """Error response for demo creation failures."""
+
+    thread_id: str
+    title: str
+    slug: str
+    status: str = "error"
+    error: str
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Demo Metadata (for discovery / listing — persisted as metadata.json)
+# ──────────────────────────────────────────────────────────────────────────
 
 class DemoMetadata(BaseModel):
+    """Metadata for a completed demo, persisted as metadata.json per demo."""
+
     title: str
     slug: str
     description: str
@@ -44,137 +103,3 @@ class DemoMetadata(BaseModel):
     requirements_summary: str = ""
     design_decisions: str = ""
     open_questions: list[str] = []
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Stage Output Models
-# ──────────────────────────────────────────────────────────────────────────
-
-class DemoBrief(BaseModel):
-    """Stage 1 output — structured brief from user prompt."""
-    title: str
-    description: str
-    target_audience: str = ""
-    key_features: list[str] = []
-    screens_requested: list[str] = []
-    style_hints: list[str] = []
-    constraints: list[str] = []
-
-
-class KbInsightItem(BaseModel):
-    source: str = ""
-    text: str = ""
-
-
-class KbInsights(BaseModel):
-    """Stage 2 output — KB lookup results."""
-    query: str = ""
-    has_prior_data: bool = False
-    insights: str = ""
-    items: list[KbInsightItem] = []
-
-
-class WebSearchResult(BaseModel):
-    title: str = ""
-    url: str = ""
-    snippet: str = ""
-
-
-class WebInsights(BaseModel):
-    """Stage 3 output — web research findings."""
-    queries_used: list[str] = []
-    sources: list[WebSearchResult] = []
-    competitor_patterns: list[str] = []
-    ux_patterns: list[str] = []
-    feature_recommendations: list[str] = []
-    summary: str = ""
-
-
-class RequirementsAndDesignSpec(BaseModel):
-    """Stage 4 output — merged requirements + visual design spec."""
-    # Requirements
-    requirements: list[str] = []
-    screens: list[str] = []
-    navigation_flow: str = ""
-    placeholder_data_guidance: str = ""
-    interactions: list[str] = []
-    # Design spec
-    color_palette: str = ""
-    typography: str = ""
-    layout_approach: str = ""
-    visual_treatment: str = ""
-    design_notes: str = ""
-
-
-class BuildStep(BaseModel):
-    """Single step in the build plan (Stage 5)."""
-    step_number: int
-    title: str
-    description: str
-    acceptance_criteria: str
-    depends_on_step: int | None = None
-
-
-class BuildPlan(BaseModel):
-    """Stage 5 output — numbered implementation plan."""
-    steps: list[BuildStep] = []
-    notes: str = ""
-
-
-class BuildStepResult(BaseModel):
-    """Result of executing a single build step."""
-    step_number: int
-    step_title: str
-    status: str = "success"          # success | failed
-    validation_result: str = ""
-    retries_used: int = 0
-    issues: list[str] = []
-
-
-class PolishResult(BaseModel):
-    """Stage N+1 output — critique + fix results."""
-    critique: str = ""
-    issues_found: list[str] = []
-    issues_fixed: int = 0
-    fix_result: str = ""
-
-
-class FinalSaveResult(BaseModel):
-    """Stage N+2 output — final file paths and metadata."""
-    final_html_path: str = ""
-    metadata_path: str = ""
-    build_dir_path: str = ""
-    html_size_bytes: int = 0
-    embedded_notes_preview: str = ""
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Pipeline State (carried across all stages on disk)
-# ──────────────────────────────────────────────────────────────────────────
-
-class DemoPipelineState(BaseModel):
-    run_id: str = ""
-    title: str = ""
-    prompt: str = ""
-    slug: str = ""                      # generated in stage 1
-    model_override: str | None = None
-
-    # Stage outputs
-    demo_brief: DemoBrief | None = None
-    kb_insights: KbInsights | None = None
-    web_insights: WebInsights | None = None
-    requirements: RequirementsAndDesignSpec | None = None
-    build_plan: BuildPlan | None = None
-    build_step_results: list[dict] = []  # list of BuildStepResult dicts
-
-    # HTML accumulator
-    current_html: str = ""
-
-    # Polish
-    polish_result: dict | None = None   # PolishResult as dict
-
-    # Open questions for final notes
-    open_questions: list[str] = []
-
-    class Config:
-        arbitrary_types_allowed = True

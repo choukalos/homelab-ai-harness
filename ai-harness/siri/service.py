@@ -42,13 +42,18 @@ def _detect_intent(req: SiriChatRequest) -> str:
     if text.startswith("generate image") or text.startswith("make an image") or text.startswith("draw "):
         return "image"
 
-    # Demo listing/discovery (check BEFORE create demo)
+    # Demo creation (check BEFORE listing to avoid misrouting "build a demo")
+    if any(p in text for p in ["create a demo", "create demo", "build a demo",
+                               "build demo", "generate a demo", "make a demo"]):
+        return "create_demo"
+
+    # Demo listing/discovery
     if any(p in text for p in ["list demo", "show demo", "what demo", "my demos", "demo list", "demos we"]):
         return "list_demos"
     if any(p in text for p in ["find demo", "demo about", "demo for", "search demo"]):
         return "find_demo"
 
-    # Demo creation
+    # Simple one-page demo (instant, no research pipeline)
     if "html demo" in text or "one page demo" in text or "prototype" in text:
         return "demo"
 
@@ -199,16 +204,21 @@ async def _handle_demo(req: SiriChatRequest) -> SiriChatResponse:
 
 
 async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse:
-    """Kick off the full async demo workflow via POST /demos/create.
+    """Kick off the full demo pipeline via POST /demos/run using fire-and-forget.
 
     Siri cannot wait 2-5 minutes for the pipeline, so we dispatch
-    the job and return immediately with the run ID.  The user can
+    the request as a background task and return immediately. The user can
     follow up with 'list my demos' once it completes.
+
+    Same pattern as deep_research for Siri integration.
     """
+    import asyncio
+    import logging
     from core.config import INTERNAL_BASE_URL
 
-    # Pull title + prompt from the voice text; use LLM if needed
-    # For now we use the raw text as the prompt and derive a short title
+    logger = logging.getLogger("siri.service")
+
+    # Pull title + prompt from the voice text
     text = req.text.strip()
     # Strip common prefixes
     for prefix in ["create a demo", "create demo", "build a demo",
@@ -227,44 +237,41 @@ async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse
     if req.model:
         payload["model"] = req.model
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                f"{INTERNAL_BASE_URL.rstrip('/')}/demos/create",
-                headers={"Content-Type": "application/json",
-                         "X-API-Key": req.session_id or ""},
-                json=payload,
-            )
-            r.raise_for_status()
-            data = r.json()
+    async def _run_demo():
+        try:
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                r = await client.post(
+                    f"{INTERNAL_BASE_URL.rstrip('/')}/demos/run",
+                    headers={"Content-Type": "application/json",
+                             "X-API-Key": req.session_id or ""},
+                    json=payload,
+                )
+                r.raise_for_status()
+                data = r.json()
+                logger.info("Demo workflow completed: title=%s, slug=%s",
+                           data.get("title", title), data.get("slug", ""))
+        except Exception as exc:
+            logger.error("Demo workflow background task failed: %s", exc)
 
-        run_id = data.get("run_id", "")
-        steps = data.get("steps_count", 8)
+    # Fire-and-forget: dispatch the request as a background task
+    asyncio.create_task(_run_demo())
 
-        return SiriChatResponse(
-            speak=(
-                f"I've started building your demo. "
-                f"It will take a couple minutes. "
-                f"Ask me to list your demos when it's done."
-            ),
-            display=(
-                f"Demo workflow started!\n"
-                f"Title: {data.get('title', title)}\n"
-                f"Run ID: {run_id}\n"
-                f"Steps: {steps}\n\n"
-                f"This pipeline researches, designs, and builds your demo.\n"
-                f"Typical completion time: 2-5 minutes.\n"
-                f"Follow up with: 'list my demos'"
-            ),
-            session_id=req.session_id,
-            data={"run_id": run_id, "title": data.get("title", title)},
-        )
-    except Exception as exc:
-        return SiriChatResponse(
-            speak="I had trouble starting the demo build. Please try again.",
-            display=f"Error starting demo workflow: {exc}",
-            session_id=req.session_id,
-        )
+    return SiriChatResponse(
+        speak=(
+            "I've started building your demo. "
+            "It will take a couple minutes. "
+            "Ask me to list your demos when it's done."
+        ),
+        display=(
+            f"Demo build started!\n"
+            f"Title: {title}\n\n"
+            f"The pipeline will research, design, and build your demo.\n"
+            f"Typical completion time: 2-5 minutes.\n"
+            f"Follow up with: 'list my demos'"
+        ),
+        session_id=req.session_id,
+        data={"title": title},
+    )
 
 
 async def _handle_list_demos(req: SiriChatRequest) -> SiriChatResponse:
@@ -387,6 +394,9 @@ async def handle_siri_chat(req: SiriChatRequest) -> SiriChatResponse:
 
     if intent == "image":
         return await _handle_image(req)
+
+    if intent == "create_demo":
+        return await _handle_create_demo_workflow(req)
 
     if intent == "list_demos":
         return await _handle_list_demos(req)

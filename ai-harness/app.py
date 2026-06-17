@@ -19,14 +19,13 @@ from workflows.router import router as workflows_router
 from market_research.router import router as market_research_router
 from market_research.tasks import register as register_market_tasks
 from demo_workflow.router import router as demo_workflow_router
-from demo_workflow.tasks import register as register_demo_tasks
 
 app = FastAPI(title="AI Harness")
 
 # Ensure workflow DB tables exist on startup
 register_workflows(app)
 
-# Ensure Deep Agents MySQL checkpoint tables exist
+# Ensure Deep Agents MySQL checkpoint tables exist (shared by deep_research + demo_workflow)
 @app.on_event("startup")
 async def _init_deep_research():
     await ensure_checkpointer_tables()
@@ -48,7 +47,6 @@ app.include_router(deep_research_router, prefix="/workflows/deep-research", tags
 
 # Register Celery tasks for market research and demo workflow before first dispatch
 register_market_tasks()
-register_demo_tasks()
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 

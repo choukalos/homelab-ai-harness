@@ -1,357 +1,282 @@
-"""
-LLM prompt templates for the one-page clickable demo workflow.
+"""Prompt templates for the demo-workflow agent.
 
-Each stage has its own prompt template that takes structured data from prior
-stages and produces the output needed for the next stage.
-"""
-
-
-# ────────────── Stage 1: Parse Request ──
-PROMPT_PARSE_REQUEST = """
-You are a product designer analyzing a demo request.
-
-Extract a structured demo brief from the following user request.
-
-User Request Title: {title}
-User Request Details: {prompt}
-
-Return your response as a JSON object with these fields:
-- title: str (clean, short title for the demo)
-- description: str (1-2 sentence description of what the demo should show)
-- target_audience: str (who would use this product, e.g., "busy parents", "enterprise managers")
-- key_features: list[str] (4-8 key features the demo should include)
-- screens_requested: list[str] (list of distinct screens/views needed, e.g., ["landing", "dashboard", "profile"])
-- style_hints: list[str] (any style cues mentioned or implied, e.g., ["minimal", "colorful", "corporate"])
-- constraints: list[str] (any explicit constraints or requirements)
-
-Be thorough but concise. Focus on what will make a compelling clickable demo.
-Respond with ONLY a JSON object.
+Contains the orchestrator system prompt describing the full 8-phase demo
+creation pipeline, plus the research sub-agent's specialized instructions.
 """
 
+# ──────────────────────────────────────────────────────────────────────────
+# Orchestrator System Prompt — the full 8-phase workflow
+# ──────────────────────────────────────────────────────────────────────────
 
-# ────────────── Stage 2: KB Insights ──
-PROMPT_KB_INSIGHTS = """
-You are analyzing knowledge base results for relevance to a demo request.
+DEMO_WORKFLOW_INSTRUCTIONS = """# One-Page Clickable Demo Orchestrator
 
-Demo Request: {brief_summary}
+You are an expert front-end engineer and product designer. Your job is to
+take a user's description and produce a complete, self-contained, single-file
+HTML demo (final_demo.html) with embedded CSS and JavaScript, along with a
+comprehensive metadata file.
 
-Here are the knowledge base search results:
-{kb_results}
+Follow these phases in order. Use `write_todos` to track progress through
+the phases.
 
-Analyze these results and extract any insights that could inform the demo design.
-Look for:
-- Prior market research that's relevant
-- Information about the domain/industry
-- Any notes about similar products or approaches
-- User requirements or preferences from prior work
+## Phase 1 — Parse the Request
 
-Return a JSON object with:
-- has_prior_data: bool (whether there's useful prior data)
-- insights: str (2-3 sentence summary of relevant findings)
-- items: list[{{"source": str, "text": str}}] (key excerpts, max 5)
+Analyze the user's prompt and create a structured brief. Save it to
+`/demo_brief.md` using `write_file`. Include:
+- Title (if not provided, generate one)
+- Description
+- Target audience
+- Key features (numbered list)
+- Screens/views to build
+- Style/design hints
+- Constraints or limitations
 
-If nothing is relevant, set has_prior_data to false and return a brief "no relevant prior data" insight.
-Respond with ONLY a JSON object.
-"""
+## Phase 2 — Knowledge Base Lookup (Prior Knowledge)
 
+Before searching the web, check if there is prior knowledge about this
+demo type in your knowledge base. Use `kb_lookup(query: str)` to search
+for relevant past demos, user notes, or domain-specific information.
 
-# ────────────── Stage 3: Web Research ──
-PROMPT_WEB_RESEARCH_QUERIES = """
-You are researching for a demo project. Generate 3-4 focused search queries
-that will help gather competitive and design insights.
+If the KB lookup fails or returns nothing, that's fine — just note it and
+proceed to Phase 3.
 
-Demo Brief:
-{brief_summary}
+## Phase 3 — Web Research
 
-Generate search queries targeting:
-1. Similar products or competitors
-2. Current design patterns for this type of product
-3. Features users expect in this category
+Delegate to the `research-agent` sub-agent to research:
+- Competitor products with similar functionality
+- Modern UX patterns for this type of app
+- Feature recommendations based on industry standards
 
-Return ONLY a JSON array of 3-4 search query strings.
-"""
+Give the researcher a focused query like:
+"Research best practices, competitor patterns, and UX conventions for building a {description} web demo. Focus on what makes these experiences engaging and polished."
 
+Read the researcher's findings and note key insights.
 
-PROMPT_WEB_RESEARCH_SUMMARIZE = """
-You are analyzing web research results for a demo project.
+## Phase 4 — Requirements and Design Spec
 
-Demo Brief:
-{brief_summary}
+Synthesize the brief, KB findings, and web research into a complete
+requirements and visual design specification. Write it to `/design_spec.md`
+using `write_file`. Include:
 
-Web Search Results:
-{search_results}
-
-Analyze these results and extract actionable insights for building a better demo.
-
-Return a JSON object with:
-- queries_used: list[str] (the search queries that produced results)
-- sources: list[{{"title": str, "url": str, "snippet": str}}] (top 10 most relevant sources)
-- competitor_patterns: list[str] (5-8 patterns observed in competitors)
-- ux_patterns: list[str] (5-8 common UX patterns or conventions)
-- feature_recommendations: list[str] (5-8 features worth including)
-- summary: str (2-3 sentence synthesis of key findings)
-
-Focus on what will make the demo feel authentic and current.
-Respond with ONLY a JSON object.
-"""
-
-
-# ────────────── Stage 4: Requirements & Design Spec ──
-PROMPT_REQUIREMENTS_DESIGN = """
-You are a senior product designer creating requirements and a design spec.
-
-DEMO REQUEST:
-Title: {title}
-Description: {description}
-Target Audience: {target_audience}
-Key Features: {key_features}
-Screens Requested: {screens}
-Style Hints: {style_hints}
-Constraints: {constraints}
-
-PRIOR KNOWLEDGE (if any):
-{kb_insights}
-
-WEB RESEARCH INSIGHTS:
-{web_insights}
-
-Create TWO deliverables:
-
-A) REQUIREMENTS - a detailed list of what the demo must include:
-- Specific screens/views needed (expand on what was requested if needed)
+### Requirements Section
+- Functional requirements (numbered list)
+- Screens to build
 - Navigation flow between screens
-- What placeholder data to show on each screen
-- Specific interactions (clicks, hover states, transitions)
-- Any micro-interactions that add polish
+- Interactions and transitions
+- Placeholder data guidance
 
-B) VISUAL DESIGN SPEC - guidance for building the HTML:
-- Color palette (primary, secondary, accent, background colors as hex codes)
-- Typography approach (font families to use via system fonts)
-- Layout approach (card-based, sidebar, grid, etc.)
-- Visual treatment suggestions (shadows, gradients, borders, etc.)
+### Visual Design Section
+- Color palette (specific hex codes)
+- Typography (font families, sizes, weights)
+- Layout approach (grid, flex, etc.)
+- Visual treatment (shadows, borders, gradients, animations)
+- Design notes and rationale
 
-Return a JSON object with these fields:
-- requirements: list[str] (8-15 detailed requirements)
-- screens: list[str] (final list of screens, with brief description of each)
-- navigation_flow: str (description of how users navigate between screens)
-- placeholder_data_guidance: str (what realistic data to include)
-- interactions: list[str] (5-10 specific interactions to implement)
-- color_palette: str (color scheme description with hex values)
-- typography: str (font choices and sizing approach)
-- layout_approach: str (how to structure the page layout)
-- visual_treatment: str (styling details like shadows, borders, gradients)
-- design_notes: str (any additional design guidance, max 200 words)
+Be specific and actionable. This spec is the blueprint for building the demo.
 
-Be specific and actionable. The HTML builder will use this directly.
-Respond with ONLY a JSON object.
+## Phase 5 — Build Plan
+
+Create a numbered build plan from the design spec. Write it to `/build_plan.md`
+using `write_file`. Each step should be small enough to complete in one pass:
+
+1. Step title
+2. What to build in this step
+3. Acceptance criteria (how to verify it's correct)
+
+Limit to 5-8 build steps. Start with the HTML skeleton, then build each
+screen/section incrementally.
+
+## Phase 6 — Build Loop (Generate → Validate → Fix)
+
+Execute each build step from the plan. For each step:
+
+1. **Generate**: Use `generate_html(step_description, current_html)` to
+   produce the updated HTML. Read `/design_spec.md` first to have the
+   design context.
+
+2. **Validate**: Use `validate_html(acceptance_criteria, html)` to check
+   the output against the step's acceptance criteria.
+
+3. **Fix** (if validation fails): Use `fix_html(issues, html)` to correct
+   the problems, then re-validate. Cap at 2 fix attempts per step.
+
+After each step, save the current HTML using `write_file(path: "/current_build.html", content: "...")` so you can read it back for the next step.
+
+CRITICAL: Always read the current HTML before generating the next step.
+Use `read_file(path: "/current_build.html")` to get the current state,
+then pass it as `current_html` to `generate_html`.
+
+## Phase 7 — Polish & Self-Critique
+
+After the build loop, do a full-pass quality review:
+
+1. Use `critique_demo(design_spec, html)` to evaluate the complete demo.
+   Read `/design_spec.md` first, then pass it along with the current HTML.
+
+2. If issues are found, use `fix_html(issues, html)` to address them.
+
+The critique should evaluate:
+- Visual quality and polish
+- Functional correctness of all interactions
+- Completeness vs. requirements
+- Performance (no heavy libraries, pure HTML/CSS/JS)
+
+## Phase 8 — Save Final Demo
+
+Once you're satisfied with the quality:
+
+1. Use `save_demo(title, html, design_spec, notes)` to write the final
+   HTML with embedded notes and metadata to disk.
+
+2. The tool will create the final_demo.html file and metadata.json.
+
+## Important Guidelines
+
+- **Single file only**: The final HTML must be completely self-contained
+  with inline CSS and JavaScript. No external dependencies except Google
+  Fonts (CDN).
+- **Mobile responsive**: The demo must look good on both desktop and mobile.
+- **Modern aesthetics**: Use contemporary design — clean, polished, with
+  subtle animations and smooth transitions.
+- **Functional interactions**: All buttons, navigation, and forms must work
+  with real JavaScript, not just visual placeholders.
+- **No frameworks**: Use vanilla HTML5, CSS3, and JavaScript. No React,
+  Vue, jQuery, etc.
+- **File conventions**: Use the exact filenames specified (demo_brief.md,
+  design_spec.md, build_plan.md, current_build.html) so the extraction
+  helpers can find them.
+
+## Tool Usage Summary
+
+- `write_todos`: Track your progress through the 8 phases
+- `write_file`: Save intermediate artifacts (brief, spec, plan, HTML)
+- `read_file`: Read back saved artifacts between phases
+- `kb_lookup`: Search knowledge base for prior information (Phase 2)
+- `task`: Delegate to research-agent for web research (Phase 3)
+- `think`: Reflect and plan between major transitions
+- `generate_html`: Generate/advance the demo HTML (Phase 6)
+- `validate_html`: Check HTML against criteria (Phase 6)
+- `fix_html`: Fix validation or critique issues (Phase 6-7)
+- `critique_demo`: Full quality review (Phase 7)
+- `save_demo`: Write final output files (Phase 8)
 """
 
+# ──────────────────────────────────────────────────────────────────────────
+# Research Sub-Agent Prompt
+# ──────────────────────────────────────────────────────────────────────────
 
-# ────────────── Stage 5: Build Plan ──
-PROMPT_BUILD_PLAN = """
-You are a technical lead creating a build plan for a one-page HTML demo.
+RESEARCHER_INSTRUCTIONS = """You are a research assistant for a demo creation pipeline. Your job
+is to research competitor products, UX patterns, and best practices for
+building a specific type of web application demo.
 
-REQUIREMENTS AND DESIGN SPEC:
-{requirements_spec}
+For context, today's date is {date}.
 
-Create a numbered build plan. Each step should be an atomic, testable unit.
-Keep the plan to 6-8 steps maximum. Consolidate where possible.
+<Task>
+Research the user's topic thoroughly. Focus on:
+1. **Competitor analysis**: What similar products exist? What features do they have?
+2. **UX patterns**: What interaction patterns work best for this type of app?
+3. **Design trends**: What visual styles and layouts are modern and effective?
+4. **Feature recommendations**: What features would make this demo stand out?
+</Task>
 
-Each step must include:
-- step_number: int
-- title: str (short, descriptive)
-- description: str (what to build in this step, including HTML structure, CSS, and JS)
-- acceptance_criteria: str (what "done" looks like - specific, testable)
-- depends_on_step: int or null (which prior step it depends on, or null)
+<Available Research Tools>
+You have access to two specific research tools:
+1. **search_and_crawl**: For conducting web searches to gather information.
+   Searches via SearXNG and fetches full webpage content via Crawl4AI as markdown.
+2. **think_tool**: For reflection and strategic planning during research.
+</Available Research Tools>
 
-Example steps progression:
-1. Base HTML skeleton with nav structure, CSS reset, and design tokens
-2. First screen layout with content and styling
-3. Additional screens (group related screens)
-4. More screens or complex components
-5. Interaction wiring (click handlers, screen transitions)
-6. Polish (animations, hover states, responsive adjustments)
+<Instructions>
+1. Start with broad searches about the app type and its domain
+2. After each search, use think_tool to assess what you found
+3. Follow up with targeted searches based on gaps in your knowledge
+4. Look for concrete examples, screenshots descriptions, and feature lists
+5. Stop when you have enough to recommend a strong design direction
+</Instructions>
 
-Ensure the plan covers ALL requirements from the design spec.
-Each step builds incrementally on prior steps - the HTML must always be
-functional after each step, just with fewer features.
+<Hard Limits>
+- Use 2-3 search tool calls for simple topics
+- Use up to 5 search tool calls for complex topics
+- Stop after 5 searches regardless of completeness
+- Stop early if you have 3+ strong references
+</Hard Limits>
 
-Return ONLY a JSON object with:
-- steps: [{{step_number, title, description, acceptance_criteria, depends_on_step}}]
-- notes: str (any overall build guidance, max 100 words)
+<Final Response Format>
+Structure your findings for the orchestrator:
+
+## Key Findings
+
+### Competitor Products
+- [Product Name]: [Description of key features and approach] [1]
+
+### UX Patterns
+- [Pattern description with context] [2]
+
+### Design Recommendations
+- [Specific design guidance] [3]
+
+### Feature Suggestions
+- [Feature idea with rationale]
+
+### Sources
+[1] Source Title: https://url
+[2] Source Title: https://url
 """
 
+# ──────────────────────────────────────────────────────────────────────────
+# Build Tool Prompts (used by tools.py in Session 2)
+# ──────────────────────────────────────────────────────────────────────────
 
-# ────────────── Build Loop: Generate ──
-PROMPT_BUILD_GENERATE = """
-You are an expert front-end developer building a one-page HTML demo.
+BUILD_GENERATE_SYSTEM = """You are an expert front-end developer building a self-contained HTML demo.
 
-DESIGN SPECIFICATION:
-{design_spec}
+Given the design spec, a build step description, and the current HTML state,
+produce the COMPLETE updated HTML file (with all CSS and JS inline).
 
-BUILD STEP #{step_number}: {step_title}
-Description: {step_description}
-
-PREVIOUS HTML (what we have so far):
-{current_html}
-
-Build this step. Return the COMPLETE updated HTML file.
-
-CRITICAL RULES:
-- Return ONLY valid, complete HTML (from <!DOCTYPE html> to </html>)
-- Include ALL CSS inline in <style> tags
-- Include ALL JavaScript inline in <script> tags
-- NO external assets, CDNs, frameworks, or network calls
-- Keep everything in ONE file
-- Preserve all prior working functionality - only add/improve this step
-- Use system fonts only (no Google Fonts)
-- Use emoji or unicode for icons, never external icon fonts
-- Make it responsive (mobile-first)
-- Use CSS variables for the design tokens (colors, spacing)
-- Add realistic placeholder data
-- Add aria labels for accessibility
-- Make interactions feel smooth with CSS transitions
-
-The HTML must be complete and functional after this step.
+Rules:
+- Return ONLY the HTML, nothing else
+- Include <!DOCTYPE html> at the top
+- All CSS in <style> tags, all JS in <script> tags
+- Preserve existing structure from current_html; only add/modify what the step requires
+- Make it visually polished with modern design
+- Ensure mobile responsiveness
 """
 
+BUILD_VALIDATE_SYSTEM = """You are a QA validator for a demo build step.
 
-# ────────────── Build Loop: Validate ──
-PROMPT_BUILD_VALIDATE = """
-You are a QA engineer validating a build step for a one-page HTML demo.
+Given the acceptance criteria and current HTML, check if the step is complete.
+Return a JSON object:
+{
+  "passed": true/false,
+  "issues": ["issue 1", "issue 2"],
+  "summary": "Brief validation summary"
+}
 
-BUILD STEP #{step_number}: {step_title}
-Acceptance Criteria: {acceptance_criteria}
-
-CURRENT HTML:
-{current_html}
-
-Evaluate the HTML against the acceptance criteria. Check:
-1. Does the step complete what was described?
-2. Are there any broken elements, missing styles, or non-functional interactions?
-3. Does the HTML remain valid and complete?
-4. Are prior steps' functionality preserved?
-
-Return a JSON object with:
-- passed: bool
-- issues: list[str] (specific issues found, or empty list if passed)
-- summary: str (1-2 sentence evaluation)
-
-If there are issues, be specific about what needs fixing and where in the HTML.
-Respond with ONLY a JSON object.
+Only pass if ALL acceptance criteria are met. Be strict but fair.
 """
 
+BUILD_FIX_SYSTEM = """You are fixing issues in a demo HTML file.
 
-# ────────────── Build Loop: Fix ──
-PROMPT_BUILD_FIX = """
-You are fixing issues in a one-page HTML demo.
+Given the validation issues and current HTML, produce the CORRECTED complete
+HTML file. Return ONLY the HTML with all fixes applied.
 
-BUILD STEP #{step_number}: {step_title}
-
-ISSUES FOUND:
-{issues}
-
-CURRENT HTML:
-{current_html}
-
-Fix ALL the issues listed above. Return the COMPLETE updated HTML file.
-
-CRITICAL RULES:
-- Return ONLY valid, complete HTML (from <!DOCTYPE html> to </html>)
-- Preserve all working functionality
-- Fix each specific issue mentioned
-- Keep all CSS and JS inline
-- NO external dependencies
-
-The HTML must be complete and functional after these fixes.
+Focus on fixing only the reported issues without breaking existing functionality.
 """
 
+CRITIQUE_SYSTEM = """You are doing a full-pass quality review of a completed demo.
 
-# ────────────── Stage N+1: Polish & Self-Critique ──
-PROMPT_POLISH_CRITIQUE = """
-You are a senior front-end reviewer critiquing a one-page HTML demo.
+Given the design spec and the current HTML, evaluate:
+1. Visual polish and aesthetic quality
+2. Functional correctness of all interactions
+3. Completeness vs. requirements
+4. Mobile responsiveness
+5. Code quality (clean, no console errors)
 
-DESIGN SPECIFICATION:
-{design_spec}
+Return a JSON object:
+{
+  "overall_score": 1-10,
+  "critique": "Detailed overall assessment",
+  "issues_found": ["Issue 1: description", "Issue 2: description"],
+  "strengths": ["Strength 1", "Strength 2"]
+}
 
-CURRENT HTML:
-{current_html}
-
-Evaluate the COMPLETE demo. Provide specific feedback on:
-
-1. OVERALL QUALITY - Does it feel like a realistic, polished product?
-2. NAVIGATION FLOW - Can a user navigate between all screens smoothly?
-3. VISUAL CONSISTENCY - Does it follow the design spec (colors, typography, layout)?
-4. MOBILE RESPONSIVENESS - Will it work well on mobile devices?
-5. INTERACTIONS - Are all promised interactions implemented and working?
-6. CONTENT QUALITY - Is the placeholder data realistic and appropriate?
-7. ACCESSIBILITY - Basic aria labels, semantic HTML, contrast
-8. CODE QUALITY - Clean, well-structured, no obvious bugs
-
-Return a JSON object with:
-- critique: str (detailed critique, organized by the categories above)
-- issues_found: list[str] (specific fixable issues, ranked by priority)
-- overall_score: int (1-10, 10 being excellent)
-- strengths: list[str] (what's working well)
-
-Be constructive but honest. Focus on issues that can actually be fixed within
-the constraints (single HTML file, no external dependencies).
-Respond with ONLY a JSON object.
-"""
-
-
-PROMPT_POLISH_FIX = """
-You are polishing a one-page HTML demo based on critique feedback.
-
-DESIGN SPECIFICATION:
-{design_spec}
-
-CRITIQUE ISSUES TO FIX (prioritized):
-{issues}
-
-CURRENT HTML:
-{current_html}
-
-Fix the highest priority issues. Focus on improvements that will have the
-most impact on the overall quality and user experience.
-
-CRITICAL RULES:
-- Return ONLY valid, complete HTML (from <!DOCTYPE html> to </html>)
-- Preserve all working functionality
-- Keep everything in ONE file
-- NO external dependencies
-- Make the demo feel as polished as possible
-
-The HTML must be complete and functional.
-"""
-
-
-# ────────────── Stage N+2: Generate Notes ──
-PROMPT_GENERATE_NOTES = """
-You are generating build notes for a demo project.
-
-DEMO TITLE: {title}
-DESCRIPTION: {description}
-
-REQUIREMENTS AND DESIGN SPEC:
-{requirements_spec}
-
-BUILD PLAN AND RESULTS:
-{build_results}
-
-POLISH RESULTS:
-{polish_results}
-
-Generate embedded notes that will be placed as HTML comments at the top of
-the final file. Include:
-
-1. What the full requirements were
-2. What was done (build approach, design decisions)
-3. How it was built (brief technical summary)
-4. Any open questions or limitations
-5. Tips for presenting the demo
-
-Format the output as a nicely structured HTML comment block.
-Do NOT wrap it in any JSON - just return the comment block text that goes
-between <!-- and -->.
+Be thorough. If the demo is genuinely polished, give it a high score.
 """

@@ -1,131 +1,40 @@
 """
-FastAPI router for the one-page clickable demo workflow.
+FastAPI router for the demo-workflow module (Deep Agents with MySQL checkpointing).
 
 Endpoints:
-  POST   /demos/create                 — Start a new demo creation job
-  GET    /demos/jobs                   — List recent demo creation jobs
-  GET    /demos/jobs/{run_id}          — Get full run state + stage outputs
-  POST   /demos/jobs/{run_id}/cancel   — Cancel a running demo creation job
-  GET    /demos                        — List all completed demos (metadata index)
-  GET    /demos/search                 — Search demos by query
-  GET    /demos/{slug}                 — Get a single demo's metadata
-  GET    /demos/{slug}/html            — Serve the final HTML file
+  POST   /run                    — Sync demo creation
+  POST   /run/stream             — SSE streaming demo creation
+  GET    /jobs                   — List recent demo jobs (from metadata on disk)
+  GET    /jobs/{thread_id}       — Get job status + output
+  POST   /jobs/{thread_id}/cancel — Cancel a running job (best-effort)
+  GET    /                       — List all completed demos (metadata index)
+  GET    /search                 — Search demos by query
+  GET    /{slug}                 — Get a single demo's metadata
+  GET    /{slug}/html            — Serve the final HTML file
 """
 
 from __future__ import annotations
 
 import json
+import uuid
 import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.config import MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
 from core.security import require_harness_auth
 from demo_workflow.schemas import DemoCreateRequest, DemoCreateResponse
-from workflows.schemas import (
-    StepDefinition,
-    WorkflowCreateRequest,
-    WorkflowRunRequest,
-)
-from workflows.service import (
-    create_run,
-    create_workflow,
-    get_run,
-    list_runs,
-    list_workflows,
-)
-from workflows.schemas import RunUpdateRequest, WorkflowStatus, WorkflowListFilters
+from demo_workflow.service import run_demo, get_deep_agent
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("demo_workflow.router")
 
 router = APIRouter(tags=["demo-workflow"])
 
-# ────── static workflow steps ─────
-# The build loop (stage6) is a single step that iterates all build-sub-steps
-# internally.  This avoids needing dynamic step injection in the engine.
 
-_STATIC_STEPS: list[StepDefinition] = [
-    StepDefinition(
-        name="stage1_parse_request",
-        description="Parse user request into structured demo brief",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "parse_request"},
-    ),
-    StepDefinition(
-        name="stage2_kb_lookup",
-        description="Query Family KB for relevant prior knowledge",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "kb_lookup"},
-        depends_on=["stage1_parse_request"],
-    ),
-    StepDefinition(
-        name="stage3_web_research",
-        description="Search web for competitive and design insights",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "web_research"},
-        depends_on=["stage2_kb_lookup"],
-    ),
-    StepDefinition(
-        name="stage4_requirements_design",
-        description="Synthesize requirements and visual design spec",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "requirements_design"},
-        depends_on=["stage3_web_research"],
-    ),
-    StepDefinition(
-        name="stage5_build_plan",
-        description="Generate numbered build plan from requirements",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "build_plan"},
-        depends_on=["stage4_requirements_design"],
-    ),
-    StepDefinition(
-        name="stage6_build_loop",
-        description="Iteratively build the demo HTML step-by-step with validation",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "build_loop"},
-        depends_on=["stage5_build_plan"],
-    ),
-    StepDefinition(
-        name="stage7_polish",
-        description="Full-pass critique and one fix pass",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "polish"},
-        depends_on=["stage6_build_loop"],
-    ),
-    StepDefinition(
-        name="stage8_final_save",
-        description="Embed notes, save final HTML, write metadata",
-        task_name="demo_workflow.run_stage",
-        task_kwargs={"stage": "final_save"},
-        depends_on=["stage7_polish"],
-    ),
-]
-
-
-def _ensure_workflow() -> str:
-    """Create the demo workflow definition if it doesn't already exist."""
-    candidates = list_workflows(WorkflowListFilters(limit=50))
-    for wf in candidates:
-        if wf.get("name") == "demo_creation_pipeline":
-            return wf["workflow_id"]
-
-    wf = create_workflow(WorkflowCreateRequest(
-        name="demo_creation_pipeline",
-        description=(
-            "LLM-driven one-page clickable demo generator. "
-            "Parses request, checks KB, researches web, creates requirements & design spec, "
-            "generates build plan, iterates through build steps with validation, "
-            "polishes with self-critique, and saves final HTML with embedded notes."
-        ),
-        tags=["demo", "html", "automated"],
-        steps=_STATIC_STEPS,
-    ))
-    return wf.workflow_id
-
+# ──── Helpers ──────
 
 def _find_demo_metadata(slug: str) -> dict:
     """Find metadata.json for a given demo slug."""
@@ -157,108 +66,166 @@ def _list_all_demos() -> list[dict]:
     return demos
 
 
+def _serialize_update(update):
+    """Convert update dict to JSON-serializable form, handling non-serializable types."""
+    if isinstance(update, dict):
+        result = {}
+        for key, value in update.items():
+            if hasattr(value, "model_dump"):
+                result[key] = [v.model_dump() for v in value] if isinstance(value, list) else value.model_dump()
+            elif hasattr(value, "dict"):
+                result[key] = [v.dict() for v in value] if isinstance(value, list) else value.dict()
+            else:
+                result[key] = value
+        return result
+    return update
+
+
 # ──── Endpoints ──────
 
-@router.post("/create", response_model=DemoCreateResponse, status_code=201)
-def start_demo(
+
+@router.post("/run", response_model=DemoCreateResponse, status_code=201)
+async def run_demo_endpoint(
     req: DemoCreateRequest,
     _: None = Depends(require_harness_auth),
 ) -> DemoCreateResponse:
-    """
-    Start a new demo creation job.
+    """Run the demo creation agent synchronously.
 
     Body::
-        { "title": "Pet Adoption App", "prompt": "Build a ...", "model": "" }
+        { "prompt": "Build a ...", "title": "My Demo" }
 
     Returns::
-        { "run_id": "<uuid>", "workflow_id": "<uuid>",
-          "title": "Pet Adoption App", "status": "pending" }
+        { "thread_id": "...", "title": "...", "slug": "...",
+          "status": "completed", "html_path": "..." }
     """
-    workflow_id = _ensure_workflow()
+    return await run_demo(req)
 
-    run = create_run(
-        workflow_id,
-        WorkflowRunRequest(
-            metadata={
-                "title": req.title,
-                "prompt": req.prompt,
-                "model_override": req.model,
-            },
-        ),
-    )
 
-    # Dispatch the first step so the pipeline actually starts
-    from workflows.service import get_next_pending_step, start_step
-    first = get_next_pending_step(run.run_id)
-    if first is not None:
-        from demo_workflow.tasks import run_stage
-        celery_task = run_stage.apply_async(args=[first.input_payload.get("stage", ""), run.run_id])
-        start_step(run.run_id, first.name, celery_task_id=celery_task.id)
-        logger.info("dispatched first step %s → celery_task_id=%s", first.name, celery_task.id)
+@router.post("/run/stream")
+async def run_demo_stream(
+    req: DemoCreateRequest,
+    _: None = Depends(require_harness_auth),
+) -> StreamingResponse:
+    """Stream the demo creation output as the agent works.
 
-    return DemoCreateResponse(
-        run_id=run.run_id,
-        workflow_id=run.workflow_id,
-        title=req.title,
-        status=run.status.value,
-        steps_count=len(run.steps),
-    )
+    Yields SSE events as the agent processes tool calls and generates text.
+    Useful for live UI updates (e.g. OpenWebUI) while the agent is building.
+    """
+    thread_id = req.thread_id or str(uuid.uuid4())
+
+    from langchain_core.messages import HumanMessage
+
+    agent = get_deep_agent()
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+        }
+    }
+
+    input_state = {
+        "messages": [HumanMessage(content=req.prompt)],
+    }
+
+    async def _stream():
+        yield json.dumps({
+            "event": "start",
+            "thread_id": thread_id,
+            "prompt": req.prompt,
+            "title": req.title,
+        }) + "\n"
+
+        try:
+            async for event in agent.astream(input_state, config, stream_mode="updates"):
+                # event is a tuple of (namespace, update_dict)
+                if isinstance(event, tuple):
+                    ns, update = event
+                    yield json.dumps({
+                        "event": "update",
+                        "namespace": ns,
+                        "update": _serialize_update(update),
+                    }) + "\n"
+                else:
+                    yield json.dumps({
+                        "event": "update",
+                        "namespace": "default",
+                        "update": _serialize_update(event),
+                    }) + "\n"
+
+            yield json.dumps({
+                "event": "done",
+                "thread_id": thread_id,
+            }) + "\n"
+
+        except Exception as e:
+            logger.exception("Demo stream error: %s", e)
+            yield json.dumps({
+                "event": "error",
+                "message": str(e),
+            }) + "\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @router.get("/jobs")
 def list_jobs(
-    status: str | None = Query(default=None, description="Filter by run status"),
     limit: int = Query(default=20, ge=1, le=200),
     _: None = Depends(require_harness_auth),
 ) -> dict:
-    """List recent demo creation jobs."""
-    workflow_id = _ensure_workflow()
-    runs = list_runs(workflow_id=workflow_id, status=status, limit=limit)
+    """List recent demo creation jobs from the completed demos directory."""
+    demos = _list_all_demos()
 
     jobs = []
-    for r in runs:
-        md = r.get("metadata", {})
-        if isinstance(md, str):
-            try:
-                md = json.loads(md)
-            except (json.JSONDecodeError, ValueError):
-                md = {}
-
+    for d in demos[:limit]:
         jobs.append({
-            "run_id": r["run_id"],
-            "status": r["status"],
-            "title": md.get("title", "?"),
-            "started_at": r.get("started_at"),
-            "finished_at": r.get("finished_at"),
+            "thread_id": d.get("slug", ""),
+            "status": "completed",
+            "title": d.get("title", "?"),
+            "slug": d.get("slug", ""),
+            "created_at": d.get("created_at"),
         })
 
     return {"jobs": jobs, "total": len(jobs)}
 
 
-@router.get("/jobs/{run_id}")
+@router.get("/jobs/{thread_id}")
 def get_job(
-    run_id: str,
-    _: None = Depends(require_harness_auth),
-) -> Any:
-    """Get the full run state including all step outputs."""
-    try:
-        return get_run(run_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-
-
-@router.post("/jobs/{run_id}/cancel")
-def cancel_job(
-    run_id: str,
+    thread_id: str,
     _: None = Depends(require_harness_auth),
 ) -> dict:
-    """Cancel a running demo creation job."""
-    try:
-        from workflows.service import update_run
-        update_run(run_id, RunUpdateRequest(status=WorkflowStatus.CANCELLED))
-        return {"status": "cancelled", "run_id": run_id}
-    except ValueError:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    """Get job status and output for a given thread ID.
+
+    Looks up by slug in the demos directory.
+    """
+    meta = _find_demo_metadata(thread_id)
+    if meta:
+        return {
+            "thread_id": thread_id,
+            "status": "completed",
+            "title": meta.get("title", ""),
+            "slug": meta.get("slug", ""),
+            "metadata": meta,
+        }
+
+    raise HTTPException(status_code=404, detail=f"Job '{thread_id}' not found")
+
+
+@router.post("/jobs/{thread_id}/cancel")
+def cancel_job(
+    thread_id: str,
+    _: None = Depends(require_harness_auth),
+) -> dict:
+    """Cancel a running demo creation job.
+
+    With direct agent invocation, cancellation is best-effort.
+    """
+    # Check if it's already completed
+    meta = _find_demo_metadata(thread_id)
+    if meta:
+        return {"status": "already_completed", "thread_id": thread_id}
+
+    # Otherwise signal cancellation
+    return {"status": "cancelled", "thread_id": thread_id}
 
 
 @router.get("/")

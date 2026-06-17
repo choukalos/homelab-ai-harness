@@ -69,4 +69,3 @@ celery = make_celery()
 # because `celery` is now a complete object.
 import tasks.tasks   # noqa: F401  registers run_prompt, run_llm_chain, python_executor
 import scheduler.tasks  # noqa: F401  registers dispatch_task, condition_checker
-import demo_workflow.tasks  # noqa: F401  registers run_stage
