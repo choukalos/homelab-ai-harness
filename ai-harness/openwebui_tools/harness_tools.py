@@ -690,6 +690,21 @@ class Tools:
         sources = data.get("sources", [])
         steps = data.get("steps", [])
 
+        # Convert [N] citations in the answer into clickable links:
+        #   [1] → [1](url "Title") — so the user can click through to verify
+        if sources:
+            def _make_citation_link(m):
+                idx = int(m.group(1))
+                if 1 <= idx <= len(sources):
+                    src = sources[idx - 1]
+                    url = src.get("url", "")
+                    title = src.get("title", "Source")
+                    if url:
+                        return f'[{idx}]({url} "{title}")'
+                return m.group(0)
+
+            answer = re.sub(r'\[(\d+)\]', _make_citation_link, answer)
+
         lines = [answer, ""]
 
         if steps:
@@ -704,7 +719,7 @@ class Tools:
             for i, s in enumerate(sources, start=1):
                 url = s.get("url", "")
                 title = s.get("title", s.get("tool_result", "Source"))
-                lines.append(f"  [{i}] {title} - {url}")
+                lines.append(f"  [{i}] [{title}]({url})")
 
         return "\n".join(lines)
 

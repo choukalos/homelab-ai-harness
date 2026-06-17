@@ -1,26 +1,32 @@
 """
-Deep Research service: LangChain Deep Agent with MySQL checkpoint persistence
-and a SearXNG-based web-search tool.
+Deep Research service: multi-agent deep research with sub-agent delegation,
+MySQL checkpoint persistence, and SearXNG + Crawl4AI web research tools.
 
-This is the skeleton proof-of-concept — a single search node to validate the
-end-to-end flow before expanding into multi-step research workflows.
+Orchestrator agent plans research via TODOs, delegates to researcher sub-agents,
+synthesizes findings, and writes a final report.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 import os
+import re
 import uuid
 import logging
 from typing import Any
 
-import httpx
-from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 from deepagents import create_deep_agent
 from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
 
-from core.config import HARNESS_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL, SEARXNG_BASE_URL
+from core.config import HARNESS_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
+from deep_research.prompts import (
+    RESEARCH_WORKFLOW_INSTRUCTIONS,
+    RESEARCHER_INSTRUCTIONS,
+    SUBAGENT_DELEGATION_INSTRUCTIONS,
+)
 from deep_research.schemas import DeepResearchRequest, DeepResearchResponse
+from deep_research.tools import search_and_crawl, think_tool
 
 logger = logging.getLogger("deep_research")
 
@@ -33,7 +39,6 @@ _checkpointer: AsyncMySaver | None = None
 
 
 def _build_mysql_uri() -> str:
-    """Build a mysql:// URI from the existing env vars used by workflows/db.py."""
     host = os.getenv("MYSQL_DB_HOST", "host.docker.internal")
     port = os.getenv("MYSQL_DB_PORT", "3306")
     user = os.getenv("AI_DB_USER", "root")
@@ -43,78 +48,57 @@ def _build_mysql_uri() -> str:
 
 
 def get_checkpointer() -> AsyncMySaver:
-    """Return a singleton AsyncMySaver for LangGraph checkpoints in MySQL."""
     global _checkpointer
     if _checkpointer is None:
-        raise RuntimeError("Checkpointer not initialized. Did you call ensure_checkpointer_tables()?")
+        raise RuntimeError("Checkpointer not initialized. Call ensure_checkpointer_tables() first.")
     return _checkpointer
 
 
 async def ensure_checkpointer_tables():
-    """Create the checkpoint tables in MySQL if they don't already exist."""
     global _checkpointer, _checkpointer_ctx
     if _checkpointer is None:
-        # from_conn_string returns an async context manager; enter it manually
-        # to keep the connection pool alive for the app lifecycle.
         _checkpointer_ctx = AsyncMySaver.from_conn_string(_build_mysql_uri())
         _checkpointer = await _checkpointer_ctx.__aenter__()
-        # Note: AsyncMySaver uses .setup() (async def setup(self)), not .asetup()
         await _checkpointer.setup()
     logger.info("Deep-research MySQL checkpoint tables ensured.")
 
 
 # ---------------------------------------------------------------------------
-# Tool: web search via SearXNG
+# Agent factory: orchestrator + researcher sub-agent
 # ---------------------------------------------------------------------------
 
-@tool
-def search_web(
-    query: str,
-    max_results: int = 5,
-    category: str = "general",
-) -> list[dict[str, Any]]:
-    """
-    Search the web via SearXNG.
+MAX_CONCURRENT_RESEARCH_UNITS = 3
+MAX_RESEARCHER_ITERATIONS = 3
+_agent: Any | None = None
 
-    Returns a list of result dicts with title, url, and content snippet.
-    """
-    import httpx as _httpx
 
-    params = {
-        "q": query,
-        "format": "json",
-        "categories": category,
-        "language": "en",
-        "pageno": 1,
-        "safesearch": 1,
+def _build_instructions() -> str:
+    return (
+        RESEARCH_WORKFLOW_INSTRUCTIONS
+        + "\n\n"
+        + "=" * 80
+        + "\n\n"
+        + SUBAGENT_DELEGATION_INSTRUCTIONS.format(
+            max_concurrent_research_units=MAX_CONCURRENT_RESEARCH_UNITS,
+            max_researcher_iterations=MAX_RESEARCHER_ITERATIONS,
+        )
+    )
+
+
+def _build_research_subagent() -> dict:
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    return {
+        "name": "research-agent",
+        "description": (
+            "Delegate research to the sub-agent researcher. "
+            "Only give this researcher one topic at a time."
+        ),
+        "system_prompt": RESEARCHER_INSTRUCTIONS.format(date=current_date),
+        "tools": [search_and_crawl, think_tool],
     }
-
-    try:
-        r = _httpx.get(f"{SEARXNG_BASE_URL}/search", params=params, timeout=15.0)
-        r.raise_for_status()
-    except Exception as e:
-        return [{"error": str(e)}]
-
-    items = []
-    for item in r.json().get("results", [])[:max_results]:
-        items.append({
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "content": item.get("content", ""),
-            "engine": item.get("engine", ""),
-        })
-    return items
-
-
-# ---------------------------------------------------------------------------
-# Agent factory
-# ---------------------------------------------------------------------------
-
-_agent: Any | None = None  # CompiledStateGraph
 
 
 def get_deep_agent() -> Any:
-    """Build (once) the deep research agent with MySQL checkpointing."""
     global _agent
     if _agent is not None:
         return _agent
@@ -122,10 +106,9 @@ def get_deep_agent() -> Any:
     from langchain_openai import ChatOpenAI
 
     model_name = os.getenv("HARNESS_MODEL", "gemma-moe")
-    # Strip provider prefix if present (e.g., openai:gpt-4 -> gpt-4)
     if ":" in model_name:
         model_name = model_name.split(":")[-1]
-        
+
     model_instance = ChatOpenAI(
         model=model_name,
         openai_api_base=f"{LITELLM_BASE_URL.rstrip('/')}/v1",
@@ -133,18 +116,20 @@ def get_deep_agent() -> Any:
     )
 
     cp = get_checkpointer()
+    instructions = _build_instructions()
+    research_subagent = _build_research_subagent()
 
     _agent = create_deep_agent(
         model=model_instance,
-        system_prompt=(
-            "You are a deep research assistant. Your job is to use the search_web "
-            "tool to find accurate, up-to-date information, then synthesize a "
-            "clear, well-structured answer with source references."
-        ),
-        tools=[search_web],
+        tools=[search_and_crawl, think_tool],
+        system_prompt=instructions,
+        subagents=[research_subagent],
         checkpointer=cp,
     )
-    logger.info("Deep research agent initialized (model=%s, checkpointer=MySQL).", model_name)
+    logger.info(
+        "Deep research agent initialized (model=%s, checkpointer=MySQL, subagents=1).",
+        model_name,
+    )
     return _agent
 
 
@@ -153,32 +138,23 @@ def get_deep_agent() -> Any:
 # ---------------------------------------------------------------------------
 
 async def run_deep_research(req: DeepResearchRequest) -> DeepResearchResponse:
-    """Execute a deep-research query via the Deep Agent and return results."""
-
     thread_id = req.thread_id or str(uuid.uuid4())
-
     agent = get_deep_agent()
 
-    # Build the config that LangGraph uses for checkpointing / thread scoping
     config = {
         "configurable": {
             "thread_id": thread_id,
         }
     }
 
-    # Build the input state (LangGraph expects a list of BaseMessages or compatible dicts)
     input_state = {
         "messages": [HumanMessage(content=req.query)],
     }
 
     try:
         result = await agent.ainvoke(input_state, config)
-
-        # Extract the final assistant message from the graph output
         messages = result.get("messages", [])
         answer = _extract_answer(messages)
-
-        # Extract sources from tool results if present
         sources = _extract_sources(messages)
         steps = _extract_steps(messages)
 
@@ -205,16 +181,47 @@ async def run_deep_research(req: DeepResearchRequest) -> DeepResearchResponse:
 # ---------------------------------------------------------------------------
 
 def _safe_get(obj, key, default=None):
-    """Safely get an attribute from either a dict or a LangChain BaseMessage object."""
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
 
 
 def _extract_answer(messages: list) -> str:
-    """Find the last assistant text message and return its content."""
+    """Extract the final report with citations.
+
+    Priority 1: Find write_file tool call for /final_report.md and extract
+                the report content directly from args.content.
+                This is concurrency-safe — each run has its own isolated
+                message list scoped by thread_id, so no file collisions.
+    Priority 2: Fallback to last AI message.
+    """
+    import json as _json
+
+    # Scan for write_file targeting final_report.md, extract from args
+    for msg in messages:
+        role = _safe_get(msg, "role") or _safe_get(msg, "type")
+        if role in ("ai", "assistant"):
+            tool_calls = _safe_get(msg, "tool_calls") or []
+            for tc in tool_calls:
+                name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                if name == "write_file":
+                    args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                    if isinstance(args, str):
+                        try:
+                            args = _json.loads(args)
+                        except Exception:
+                            pass
+                    if not isinstance(args, dict):
+                        continue
+                    path = args.get("path", "")
+                    if "final_report.md" in str(path):
+                        # Extract the actual report content from the tool call args
+                        content = args.get("content", "") or args.get("text", "")
+                        if content:
+                            return str(content)
+
+    # Fallback: last AI message
     for msg in reversed(messages):
-        # LangChain messages use .type ("ai") or .role ("assistant")
         role = _safe_get(msg, "role") or _safe_get(msg, "type")
         if role in ("ai", "assistant"):
             content = _safe_get(msg, "content")
@@ -224,38 +231,38 @@ def _extract_answer(messages: list) -> str:
 
 
 def _extract_sources(messages: list) -> list[dict[str, Any]]:
-    """Extract search results from tool_result messages."""
-    import json as _json
+    """Extract source URLs from search_and_crawl tool results.
 
+    Parses markdown format: ## Title\n**URL:** url\n...
+    Deduplicates by URL. Returns [{title, url}] list.
+    """
+    seen_urls: set[str] = set()
     sources: list[dict[str, Any]] = []
+
     for msg in messages:
         role = _safe_get(msg, "role") or _safe_get(msg, "type")
-        tool_call_id = _safe_get(msg, "tool_call_id")
-        content = _safe_get(msg, "content", "")
-        
-        if (role == "tool" or tool_call_id) and content:
-            content_str = str(content)
+        if role != "tool":
+            continue
+        content_str = str(_safe_get(msg, "content", ""))
+
+        # Skip pure errors
+        if not content_str or ("error" in content_str.lower() and "## " not in content_str):
             if "error" in content_str.lower():
-                sources.append({"error": content_str[:2000]})
+                sources.append({"error": content_str[:500]})
+            continue
+
+        # Parse ## Title\n**URL:** url pattern
+        for match in re.finditer(r'## (.+?)\n\*\*URL:\*\*\s*(.+?)\n', content_str):
+            title = match.group(1).strip()
+            url = match.group(2).strip()
+            if url in seen_urls or not url.startswith("http"):
                 continue
-                
-            # Try to parse SearXNG results if it looks like JSON
-            try:
-                results = _json.loads(content_str)
-                if isinstance(results, list):
-                    for item in results:
-                        sources.append({
-                            "title": item.get("title", "Untitled"),
-                            "url": item.get("url", ""),
-                            "content": item.get("content", "")[:500],
-                            "engine": item.get("engine", ""),
-                        })
-                    continue
-            except (_json.JSONDecodeError, TypeError):
-                pass
-                
-            # Fallback for non-JSON or unparseable content
-            sources.append({"tool_result": content_str[:2000]})
+            seen_urls.add(url)
+            sources.append({
+                "title": title,
+                "url": url,
+            })
+
     return sources
 
 
@@ -266,7 +273,7 @@ def _extract_steps(messages: list) -> list[dict[str, Any]]:
         role = _safe_get(msg, "role") or _safe_get(msg, "type")
         tool_calls = _safe_get(msg, "tool_calls")
         content = _safe_get(msg, "content")
-        
+
         if role in ("ai", "assistant") and tool_calls:
             for tc in tool_calls:
                 steps.append({
