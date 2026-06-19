@@ -2,12 +2,12 @@
 FastAPI router for the demo-workflow module (Deep Agents with MySQL checkpointing).
 
 Endpoints:
-  POST   /run                    — Sync demo creation
-  POST   /run/stream             — SSE streaming demo creation
+  POST   /run                    — Sync demo creation (agent.ainvoke)
+  POST   /run/stream             — SSE streaming (agent.astream)
   GET    /jobs                   — List recent demo jobs (from metadata on disk)
   GET    /jobs/{thread_id}       — Get job status + output
-  GET    /jobs/{thread_id}/checkpoint — Get checkpoint status for a thread
-  POST   /jobs/{thread_id}/resume   — Resume a demo from checkpoint
+  GET    /jobs/{thread_id}/checkpoint — Get checkpoint status (MySQL)
+  POST   /jobs/{thread_id}/resume   — Resume from checkpoint (MySQL auto-resume)
   DELETE /jobs/{thread_id}/checkpoint — Remove a checkpoint
   POST   /jobs/{thread_id}/cancel — Cancel a running job (best-effort)
   GET    /                       — List all completed demos (metadata index)
@@ -31,7 +31,13 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from core.config import MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
 from core.security import require_harness_auth
 from demo_workflow.schemas import DemoCreateRequest, DemoCreateResponse
-from demo_workflow.service import run_demo, get_checkpoint_status, resume_demo, remove_checkpoint, _run_demo_with_events
+from demo_workflow.service import (
+    run_demo,
+    resume_demo,
+    get_checkpoint_status,
+    remove_checkpoint,
+    _run_demo_with_events,
+)
 
 logger = logging.getLogger("demo_workflow.router")
 
@@ -72,11 +78,8 @@ def _list_all_demos() -> list[dict]:
                     continue
         elif entry.is_file() and entry.suffix == ".html":
             # 2. Flat .html files (simple one-click demos)
-            # Build lightweight metadata on the fly
             filename = entry.name
-            # Strip the hash suffix for the title if present (e.g. foo-96d09c.html -> foo)
             name_base = filename.rsplit("-", 1)[0] if "-" in filename[:-5] else filename[:-5]
-            # Humanize: replace hyphens with spaces, title case
             title = name_base.replace("-", " ").title()
             slug = name_base.replace(" ", "-").lower()
             demos.append({
@@ -93,21 +96,6 @@ def _list_all_demos() -> list[dict]:
     return demos
 
 
-def _serialize_update(update):
-    """Convert update dict to JSON-serializable form, handling non-serializable types."""
-    if isinstance(update, dict):
-        result = {}
-        for key, value in update.items():
-            if hasattr(value, "model_dump"):
-                result[key] = [v.model_dump() for v in value] if isinstance(value, list) else value.model_dump()
-            elif hasattr(value, "dict"):
-                result[key] = [v.dict() for v in value] if isinstance(value, list) else value.dict()
-            else:
-                result[key] = value
-        return result
-    return update
-
-
 # ──── Endpoints ──────
 
 
@@ -117,6 +105,10 @@ async def run_demo_endpoint(
     _: None = Depends(require_harness_auth),
 ) -> DemoCreateResponse:
     """Run the demo creation agent synchronously.
+
+    Invokes the deep agent with the user's prompt. The agent follows
+    DEMO_WORKFLOW_INSTRUCTIONS to research, design, build, verify, and
+    save the demo. MySQL checkpointing auto-persists after each step.
 
     Body::
         { "prompt": "Build a ...", "title": "My Demo" }
@@ -133,17 +125,14 @@ async def run_demo_stream(
     req: DemoCreateRequest,
     _: None = Depends(require_harness_auth),
 ) -> StreamingResponse:
-    """Stream the demo creation output as the coordinator pipeline progresses.
+    """Stream the demo creation output via agent.astream().
 
-    Uses the coordinator-pattern streaming which emits phase-level SSE events:
-    - pipeline_start/pipeline_resume: Pipeline lifecycle
-    - phase_start/phase_complete: Each phase boundary
-    - phase_progress: Intermediate progress within build/verify phases
+    Uses the deep agent's astream() for true real-time agent events:
+    - pipeline_start: Agent begins the demo build
+    - phase_progress: Tool calls, intermediate progress
+    - phase_complete: AI responses, tool results
     - pipeline_complete: Final result with metadata
     - error: Unrecoverable errors
-
-    Unlike the legacy single-agent stream, this shows real-time phase progress
-    through the 11-phase coordinator pipeline.
     """
     thread_id = req.thread_id or str(uuid.uuid4())
 
@@ -210,8 +199,7 @@ def get_checkpoint(
 ) -> dict:
     """Get the checkpoint status for a given thread ID.
 
-    Returns whether a checkpoint exists, which phase was last completed,
-    and whether the pipeline can be resumed.
+    Queries the MySQL checkpointer to see if a thread has saved state.
     """
     status = get_checkpoint_status(thread_id)
     return status.model_dump(mode="json")
@@ -222,10 +210,10 @@ async def resume_job(
     thread_id: str,
     _: None = Depends(require_harness_auth),
 ) -> DemoCreateResponse:
-    """Resume a demo pipeline from a saved checkpoint.
+    """Resume a demo from a MySQL checkpoint.
 
-    Loads the checkpoint for the given thread_id and continues from the
-    phase after the last saved one.
+    Re-invokes the agent with the same thread_id. The MySQL checkpointer
+    auto-resumes from the last persisted state.
     """
     return await resume_demo(thread_id)
 
@@ -251,12 +239,10 @@ def cancel_job(
 
     With direct agent invocation, cancellation is best-effort.
     """
-    # Check if it's already completed
     meta = _find_demo_metadata(thread_id)
     if meta:
         return {"status": "already_completed", "thread_id": thread_id}
 
-    # Otherwise signal cancellation
     return {"status": "cancelled", "thread_id": thread_id}
 
 

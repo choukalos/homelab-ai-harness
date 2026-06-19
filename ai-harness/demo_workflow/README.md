@@ -1,51 +1,66 @@
 # Demo Workflow Module
 
-An automated, LLM-driven 11-phase pipeline that researches, designs, builds,
-functionally verifies, and saves high-quality single-file HTML demos. Built on
-the coordinator pattern with per-phase agent invocations to avoid context window
-limits on the vLLM backend.
+A deep agents-based pipeline that researches, designs, builds, and saves
+high-quality single-file HTML demos. Uses the same pattern as
+`deep_research`: `create_deep_agent()` + `agent.ainvoke()` / `agent.astream()`
+with MySQL checkpointing.
 
-Each phase runs as a separate short-lived LLM call, passing structured JSON
-state between phases. This keeps per-invocation context well under 30K tokens
-and avoids vLLM's 70K context limit that broke the old single-agent approach.
+The orchestrator agent follows `DEMO_WORKFLOW_INSTRUCTIONS` to research the
+domain, delegate to a research sub-agent, build the demo incrementally
+(generate → validate → fix), verify interactivity, critique quality, and
+save the final HTML + metadata to disk.
 
 ---
 
 ## Architecture
 
 ```
-User Prompt → Coordinator (run_demo)
-  → Phase 1:  Parse Request             (chat_completion_sync)
-  → Phase 2:  KB Lookup                 (family_kb search)
-  → Phase 3:  Web Research              (search_and_crawl + think_tool)
-  → Phase 4:  Requirements & Design     (chat_completion_sync)
-  → Phase 5:  Build Plan                (chat_completion_sync)
-  → Phase 6a: Core Structure & Nav      (generate_html → validate → fix)
-  → Phase 6b: Interactive Features      (generate_html → validate → fix)
-  → Phase 6c: Polish & Micro-interactions (generate_html → validate → fix)
-  → Phase 7:  Functional Verification   (verify_interactivity → fix, max 3 retries)
-  → Phase 8:  Polish & Critique         (critique_demo → fix)
-  → Phase 9:  Save Final                (save_demo → metadata.json + HTML)
+User Prompt → FastAPI (POST /demos/run or /demos/run/stream)
+    → run_demo(req) → get_deep_agent().ainvoke(input_state, config)
+        Orchestrator Agent (deep agents framework):
+          ↳  kb_lookup         → family_kb.search_kb (KB search)
+          ↳  search_and_crawl  → SearXNG + Crawl4AI (web research)
+          ↳  think_tool        → strategic reflection pauses
+          ↳  generate_html     → LLM call to produce/update HTML
+          ↳  validate_html     → LLM call to check acceptance criteria
+          ↳  fix_html          → LLM call to fix validation issues
+          ↳  verify_interactivity → LLM call for static JS analysis
+          ↳  critique_demo     → LLM call for quality review
+          ↳  save_demo         → write HTML + metadata.json to disk
+          ↳  task() sub-agent  → researcher (search_and_crawl + think_tool)
+        MySQL Checkpointing (AsyncMySaver) — auto-persists after each step
 ```
 
-### Key Design Decisions
+### Workflow the Agent Follows (via system prompt)
 
-- **Coordinator pattern** — each phase is a fresh LLM invocation, not a
-  single long-running agent. Structured `DemoState` is passed between phases.
-- **Progressive build** — Phase 6 is split into 6a/6b/6c so failures in
-  polish don't invalidate the working skeleton.
-- **Level 3 mock behavior** — demos simulate async behavior: loading
-  spinners, toast notifications, confirmation dialogs, localStorage
-  persistence, and simulated API delays (300–800ms).
-- **Functional verification** — Phase 7 does static analysis of JS event
-  handlers to ensure every button, form, and navigation element actually
-  works. Auto-retries up to 3 times if score < 7.
-- **Product insights metadata** — `metadata.json` includes `discovery_notes`,
-  `complexity_score`, `level3_patterns`, and `phase_timings` for every demo.
-- **Checkpoint/resume** — if the pipeline is interrupted, it can resume from
-  the last completed phase via file-based checkpoints (24h TTL).
-- **SSE streaming** — `/run/stream` emits real-time phase progress events
-  for OpenWebUI or any SSE consumer.
+```
+1. PLAN: Parse the prompt and create a demo brief (write_file → demo_brief.md)
+2. KB LOOKUP: Call kb_lookup() to check for prior demos, user preferences
+3. RESEARCH: Delegate to research sub-agent for domain/competitor analysis
+4. DESIGN: Synthesize KB + research into a design spec (write_file → design_spec.md)
+5. BUILD STEP 1 — Core Structure:
+   a. generate_html(system=BUILD_STRUCTURE_SYSTEM, current_html="")
+   b. validate_html(criteria="all views exist, nav switches correctly")
+   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
+6. BUILD STEP 2 — Interactive Features:
+   a. generate_html(system=BUILD_FEATURES_SYSTEM, current_html=from_step1)
+   b. validate_html(criteria="forms work, realistic data, handlers exist")
+   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
+7. BUILD STEP 3 — Polish:
+   a. generate_html(system=BUILD_POLISH_SYSTEM, current_html=from_step2)
+   b. validate_html(criteria="transitions, active states, feedback UI")
+   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
+8. VERIFY: Call verify_interactivity() → if score < 7, fix_html() → re-verify (max 2)
+9. CRITIQUE: Call critique_demo() → if score < 8, fix_html()
+10. SAVE: Call save_demo() to write final HTML + metadata.json to disk
+11. DONE: Confirm completion
+```
+
+The deep agents framework handles:
+- Context window management (compresses history, offloads large tool results)
+- MySQL checkpointing (resume after interruption via thread_id)
+- Sub-agent isolation (researcher has separate context)
+- Retry logic naturally through agent decision-making
 
 ---
 
@@ -55,12 +70,11 @@ All files for this module live in `ai-harness/demo_workflow/`:
 
 | File | Purpose |
 |---|---|
-| `__init__.py` | Module docstring + re-exports (`CheckpointManager`, etc.) |
-| `schemas.py` | Pydantic models: `DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`, `DemoCheckpointStatus`, `DemoStreamEvent`, `DemoResumeResponse` |
-| `service.py` | Coordinator: `run_demo()`, `resume_demo()`, `_run_demo_with_events()`, `CheckpointManager`, per-phase functions |
-| `state.py` | `DemoState` — structured inter-phase state with `to_dict()`/`from_dict()` |
-| `prompts.py` | All system prompts: phase prompts, build prompts (6a/6b/6c), verification, critique, Level 3 patterns |
-| `tools.py` | Build tools: `generate_html`, `validate_html`, `fix_html`, `verify_interactivity`, `critique_demo`, `save_demo` |
+| `__init__.py` | Module docstring + re-exports `ensure_checkpointer_tables` |
+| `schemas.py` | Pydantic models: `DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`, `DemoCheckpointStatus`, `DemoStreamEvent` |
+| `service.py` | Agent factory + entry points: `run_demo()`, `resume_demo()`, `_run_demo_with_events()`, extraction helpers |
+| `prompts.py` | `DEMO_WORKFLOW_INSTRUCTIONS`, `RESEARCHER_INSTRUCTIONS`, build prompts, verification/critique prompts, Level 3 patterns |
+| `tools.py` | Build tools: `kb_lookup`, `generate_html`, `validate_html`, `fix_html`, `verify_interactivity`, `critique_demo`, `save_demo` + shared research tools |
 | `router.py` | FastAPI router: `/run`, `/run/stream`, `/jobs`, `/jobs/{id}/checkpoint`, `/jobs/{id}/resume`, `/`, `/search`, `/{slug}`, `/{slug}/html` |
 
 ---
@@ -70,18 +84,18 @@ All files for this module live in `ai-harness/demo_workflow/`:
 All endpoints mounted under `/demos`.
 
 ### POST `/demos/run`
-Run the demo creation pipeline synchronously (all 11 phases). Returns
-`DemoCreateResponse` with `thread_id`, `title`, `slug`, `status`,
-`html_path`, and enriched `metadata`.
+Run the demo creation agent synchronously. Returns `DemoCreateResponse` with
+`thread_id`, `title`, `slug`, `status`, `build_step`, `html_path`, and
+enriched `metadata`.
 
 ### POST `/demos/run/stream`
-Stream the pipeline via Server-Sent Events. Emits `DemoStreamEvent` for
-each phase boundary and progress update:
+Stream the agent via Server-Sent Events using `agent.astream()`. Emits
+`DemoStreamEvent` for each state transition (tool calls, results, AI responses):
 
 ```
 data: {"event_type":"pipeline_start","elapsed":"0:00","data":{"thread_id":"...","title":"...","prompt":"..."}}
-data: {"event_type":"phase_start","phase":"Phase 1: Parse Request","phase_number":0,"elapsed":"0:00"}
-data: {"event_type":"phase_complete","phase":"Phase 6a: Core Structure","phase_number":5,"elapsed":"2:15","data":{"summary":"HTML: 8432 chars","phase_elapsed":47.2}}
+data: {"event_type":"phase_progress","elapsed":"0:15","data":{"message":"Calling kb_lookup…","tool":"kb_lookup"}}
+data: {"event_type":"phase_complete","elapsed":"2:15","data":{"summary":"HTML generated: 8432 chars"}}
 data: {"event_type":"pipeline_complete","elapsed":"12:34","data":{"status":"completed","slug":"...","html_path":"...","metadata":{...}}}
 ```
 
@@ -92,12 +106,12 @@ List recent demo creation jobs (from completed demos on disk).
 Get job status and output for a given thread ID.
 
 ### GET `/demos/jobs/{thread_id}/checkpoint`
-Get checkpoint status: whether a checkpoint exists, last completed phase,
-and whether the pipeline can be resumed. Returns `DemoCheckpointStatus`.
+Get checkpoint status from MySQL: whether a checkpoint exists and if the
+pipeline can be resumed. Returns `DemoCheckpointStatus`.
 
 ### POST `/demos/jobs/{thread_id}/resume`
-Resume a demo pipeline from a saved checkpoint. Continues from the phase
-after the last saved one. Returns `DemoCreateResponse` with `status="resumed"`.
+Resume a demo pipeline from a MySQL checkpoint. The checkpointer auto-resumes
+from the last persisted agent state. Returns `DemoCreateResponse`.
 
 ### DELETE `/demos/jobs/{thread_id}/checkpoint`
 Remove a checkpoint. Allows starting a fresh build with the same thread ID.
@@ -116,7 +130,7 @@ Search demos by natural language query (matches title, description, tags).
 ### GET `/demos/{slug}`
 Get a single demo's `metadata.json`. Includes enriched fields:
 `code_quality_score`, `level3_patterns`, `discovery_notes`,
-`complexity_score`, `phase_timings`, `total_build_time_seconds`.
+`complexity_score`, `functional_areas`, `mocked_features`.
 
 ### GET `/demos/{slug}/html`
 Serve the final HTML file as `text/html`.
@@ -129,7 +143,7 @@ Every completed demo writes `metadata.json` with the following enriched fields:
 
 | Field | Description |
 |---|---|
-| `code_quality_score` | 1–10 score from Phase 7 static analysis of JS event handlers |
+| `code_quality_score` | 1–10 score from verify_interactivity static analysis |
 | `verification_issues` | Remaining interactivity gaps (if score < 10) |
 | `functional_areas` | Verified working interactions (e.g. "Button X → fnY() → view Z") |
 | `mocked_features` | List of `{feature, description, mock_type}` objects |
@@ -138,8 +152,6 @@ Every completed demo writes `metadata.json` with the following enriched fields:
 | `discovery_notes` | Product insights: `mvp_features`, `nice_to_have`, `research_insights` |
 | `complexity_score` | 1–10 score (how complex is the demo to build) |
 | `complexity_breakdown` | `screen_count`, `interactive_elements`, `mocked_features`, `estimated_build_effort` |
-| `phase_timings` | Dict of phase name → elapsed seconds |
-| `total_build_time_seconds` | Total pipeline wall-clock time |
 
 ---
 
@@ -176,26 +188,27 @@ Every completed demo writes `metadata.json` with the following enriched fields:
 
 ## Checkpointing
 
-Checkpoints are stored at `~/.ai-harness/demo_checkpoints/{thread_id}.json`
-with a 24-hour TTL. Auto-cleanup runs on each save/load operation.
+Checkpoints are stored in MySQL via `AsyncMySaver` (shared tables with
+`deep_research`). Auto-persists after each agent step.
 
-- On success: checkpoint is removed automatically.
-- On failure: checkpoint is saved at the failed phase, allowing resume.
-- Resume via `POST /demos/jobs/{thread_id}/resume` or by calling `run_demo()` again
-  with the same `thread_id` (auto-resumes).
+- On success: checkpoint persists the final state for potential resume.
+- On failure: checkpoint preserves the interrupted state.
+- Resume via `POST /demos/jobs/{thread_id}/resume` — re-invokes the agent
+  with the same `thread_id`; MySQL checkpointer auto-resumes from last state.
 
 ---
 
 ## Prompt Architecture
 
-### Phase Prompts (per-phase agent invocations)
-- `PHASE_PARSE_SYSTEM` — extract structured demo brief
-- `PHASE_KB_LOOKUP_SYSTEM` — analyze KB results
-- `PHASE_DESIGN_SYSTEM` — comprehensive design spec + discovery notes
-- `PHASE_PLAN_SYSTEM` — numbered build plan + complexity scoring
-- `PHASE_SAVE_SYSTEM` — finalize metadata
+### Orchestrator Prompt
+- `DEMO_WORKFLOW_INSTRUCTIONS` — the step-by-step workflow the agent follows
+  (parse → KB → research → design → build → verify → critique → save)
 
-### Build Prompts (6a/6b/6c progressive enhancement)
+### Research Sub-Agent Prompt
+- `RESEARCHER_INSTRUCTIONS` — specialized prompt for the research sub-agent
+  (search_and_crawl + think_tool)
+
+### Build Prompts (progressive enhancement)
 - `BUILD_STRUCTURE_SYSTEM` — DOM skeleton, nav, CSS framework only
 - `BUILD_FEATURES_SYSTEM` — forms, data, state management on existing structure
 - `BUILD_POLISH_SYSTEM` — transitions, active states, edge cases

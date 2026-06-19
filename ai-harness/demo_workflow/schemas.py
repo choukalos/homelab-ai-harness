@@ -175,35 +175,7 @@ class DemoCheckpointStatus(BaseModel):
     )
 
 
-class DemoResumeResponse(BaseModel):
-    """Response after resuming a demo from a checkpoint."""
 
-    thread_id: str = Field(description="Thread ID for the resumed run.")
-    title: str = Field(description="Demo title.")
-    slug: str = Field(description="Filesystem slug for the demo output directory.")
-    status: str = Field(
-        description="Run status: 'resumed', 'completed', 'error', or 'not_found'.",
-    )
-    resumed_from_phase: int = Field(
-        default=0,
-        description="The phase number the run was resumed from (0 = no resume, started fresh).",
-    )
-    build_step: str = Field(
-        default="",
-        description="The last completed build phase.",
-    )
-    html_path: str = Field(
-        default="",
-        description="Path to the generated HTML file relative to the media directory.",
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Extracted demo metadata.",
-    )
-    error: str | None = Field(
-        default=None,
-        description="Error message if the run failed.",
-    )
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -1,23 +1,28 @@
-"""Build tools for the demo-workflow orchestrator agent.
+"""Build tools for the demo-workflow deep agent.
 
-Each tool has two forms:
-  - `_xxx_impl(...)`: The actual implementation, callable directly by the
-    coordinator pattern phases.
-  - `@tool xxx(...)`: A LangChain @tool wrapper that delegates to `_xxx_impl`,
-    used by the deep-agent when tools are dispatched via the agent framework.
+Each tool has a `@tool` wrapper dispatched by the deep agents framework.
+Tools that need the LLM (generate_html, validate_html, etc.) use
+chat_completion_async internally. The wrappers are async functions so
+LangChain's @tool creates a BaseTool with a working .arun() method,
+which LangGraph calls during agent.ainvoke().
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+import asyncio
 import json
 import logging
 from typing import Any
 
 from langchain_core.tools import tool
 
-from core.config import DEMO_WORKFLOW_MODEL
+from core.config import DEMO_WORKFLOW_MODEL, MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
 from core.llm import chat_completion_async
+
+# Import shared research tools from deep_research
+from deep_research.tools import search_and_crawl, think_tool
+
 from demo_workflow.prompts import (
     BUILD_GENERATE_SYSTEM,
     BUILD_VALIDATE_SYSTEM,
@@ -37,14 +42,74 @@ MAX_HTML_OUTPUT_TOKENS = 16_000  # generous ceiling for full HTML files
 
 
 # ---------------------------------------------------------------------------
-# 1. generate_html — produce updated HTML for a build step
+# 1. kb_lookup — search the family knowledge base
+# ---------------------------------------------------------------------------
+
+def _kb_lookup_impl(query: str) -> str:
+    """Sync implementation of KB lookup."""
+    try:
+        from family_kb.service import search_kb
+        from family_kb.schemas import SearchRequest
+
+        result = search_kb(SearchRequest(query=query, limit=10))
+
+        if not result.get("results"):
+            return json.dumps({
+                "relevant_findings": [],
+                "prior_demos": [],
+                "user_preferences": [],
+                "domain_insights": [],
+            })
+
+        findings = []
+        for hit in result["results"]:
+            source = hit.get("source", "unknown")
+            text = (hit.get("text", "") or "")[:600]
+            score = hit.get("score", 0)
+            findings.append(f"Source: {source} (score: {score:.3f}): {text}")
+
+        return json.dumps({
+            "relevant_findings": findings,
+            "prior_demos": [],
+            "user_preferences": [],
+            "domain_insights": [],
+        })
+
+    except Exception as e:
+        logger.warning("KB lookup failed (non-fatal): %s", e)
+        return json.dumps({
+            "relevant_findings": [f"KB unavailable: {e}"],
+            "prior_demos": [],
+            "user_preferences": [],
+            "domain_insights": [],
+        })
+
+
+@tool
+def kb_lookup(query: str) -> str:
+    """Search the family knowledge base for prior information relevant to
+    this demo. Use this before web research to check for existing demos,
+    user notes, or domain-specific knowledge.
+
+    Args:
+        query: Search query for the knowledge base
+
+    Returns:
+        A JSON string with keys: relevant_findings (list), prior_demos (list),
+        user_preferences (list), domain_insights (list).
+    """
+    return _kb_lookup_impl(query)
+
+
+# ---------------------------------------------------------------------------
+# 2. generate_html — produce updated HTML for a build step
 # ---------------------------------------------------------------------------
 
 async def _generate_html_impl(
     spec: str,
     step_description: str,
     current_html: str,
-    system_prompt: str = None,
+    system_prompt: str | None = None,
 ) -> str:
     """Generate or advance the demo HTML for one build step."""
     # Truncate current HTML if it's very large
@@ -83,11 +148,11 @@ async def _generate_html_impl(
 
 
 @tool
-def generate_html(
+async def generate_html(
     spec: str,
     step_description: str,
     current_html: str,
-    system_prompt: str = None,
+    system_prompt: str | None = None,
 ) -> str:
     """Generate or advance the demo HTML for one build step.
 
@@ -102,18 +167,17 @@ def generate_html(
         current_html: The current HTML file content (may be empty string
             for the initial step).
         system_prompt: Optional custom system prompt. Defaults to
-            BUILD_GENERATE_SYSTEM. Used by progressive enhancement sub-phases
-            (Session 6) to focus on specific aspects like structure, features,
-            or polish.
+            BUILD_GENERATE_SYSTEM. Used by progressive enhancement phases
+            to focus on specific aspects like structure, features, or polish.
 
     Returns:
         The complete updated HTML file as a string.
     """
-    return _generate_html_impl(spec, step_description, current_html, system_prompt)
+    return await _generate_html_impl(spec, step_description, current_html, system_prompt)
 
 
 # ---------------------------------------------------------------------------
-# 2. validate_html — check HTML against acceptance criteria
+# 3. validate_html — check HTML against acceptance criteria
 # ---------------------------------------------------------------------------
 
 async def _validate_html_impl(
@@ -158,7 +222,7 @@ async def _validate_html_impl(
 
 
 @tool
-def validate_html(
+async def validate_html(
     acceptance_criteria: str,
     html: str,
 ) -> str:
@@ -174,11 +238,11 @@ def validate_html(
     Returns:
         A JSON string with keys: passed (bool), issues (list), summary (str).
     """
-    return _validate_html_impl(acceptance_criteria, html)
+    return await _validate_html_impl(acceptance_criteria, html)
 
 
 # ---------------------------------------------------------------------------
-# 3. fix_html — correct issues found by validation or critique
+# 4. fix_html — correct issues found by validation or critique
 # ---------------------------------------------------------------------------
 
 async def _fix_html_impl(
@@ -219,7 +283,7 @@ async def _fix_html_impl(
 
 
 @tool
-def fix_html(
+async def fix_html(
     issues: str,
     html: str,
 ) -> str:
@@ -235,11 +299,11 @@ def fix_html(
     Returns:
         The corrected complete HTML as a string.
     """
-    return _fix_html_impl(issues, html)
+    return await _fix_html_impl(issues, html)
 
 
 # ---------------------------------------------------------------------------
-# 4. verify_interactivity — static analysis of JS interactivity (Phase 7)
+# 5. verify_interactivity — static analysis of JS interactivity
 # ---------------------------------------------------------------------------
 
 async def _verify_interactivity_impl(
@@ -306,7 +370,7 @@ async def _verify_interactivity_impl(
 
 
 @tool
-def verify_interactivity(
+async def verify_interactivity(
     html: str,
 ) -> str:
     """Static analysis of JavaScript interactivity in the demo HTML.
@@ -327,11 +391,11 @@ def verify_interactivity(
         verified_interactions (list), missing_handlers (list),
         issues (list), recommendations (list), mocked_features (list).
     """
-    return _verify_interactivity_impl(html)
+    return await _verify_interactivity_impl(html)
 
 
 # ---------------------------------------------------------------------------
-# 5. critique_demo — full-pass quality review (Phase 8)
+# 6. critique_demo — full-pass quality review
 # ---------------------------------------------------------------------------
 
 async def _critique_demo_impl(
@@ -375,7 +439,7 @@ async def _critique_demo_impl(
 
 
 @tool
-def critique_demo(
+async def critique_demo(
     design_spec: str,
     html: str,
 ) -> str:
@@ -393,11 +457,11 @@ def critique_demo(
         A JSON string with keys: overall_score (1-10), critique (str),
         issues_found (list), strengths (list).
     """
-    return _critique_demo_impl(design_spec, html)
+    return await _critique_demo_impl(design_spec, html)
 
 
 # ---------------------------------------------------------------------------
-# 6. save_demo — write final HTML + metadata (Phase 9)
+# 7. save_demo — write final HTML + metadata to disk
 # ---------------------------------------------------------------------------
 
 def _save_demo_impl(
@@ -413,17 +477,24 @@ def _save_demo_impl(
     import re as _re
     from pathlib import Path
 
-    from core.config import MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
-
     # Generate slug from title
     slug = _re.sub(r"[^a-zA-Z0-9]+", "-", title).lower().strip("-")
     if len(slug) > 60:
         slug = slug[:60]
     slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M')}"
 
-    # Create demo directory
-    demo_dir = Path(MEDIA_OUTPUT_DIR) / "demos" / slug
-    demo_dir.mkdir(parents=True, exist_ok=True)
+    # Create demo directory — ensure the full path exists, falling back to
+    # a local directory if the configured MEDIA_OUTPUT_DIR is inaccessible.
+    media_base = Path(MEDIA_OUTPUT_DIR)
+    demo_dir = media_base / "demos" / slug
+    try:
+        demo_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.error("Cannot create demo dir %s: %s. Falling back to local path.", demo_dir, e)
+        # Fallback: use a local directory inside the app's parent
+        local_base = Path(__file__).resolve().parent.parent.parent / "local_media"
+        demo_dir = local_base / "demos" / slug
+        demo_dir.mkdir(parents=True, exist_ok=True)
 
     # Embed notes as HTML comment at the end (before </body> or at the end)
     notes_comment = f"\n<!-- Demo Notes\n{notes}\n-->\n"
@@ -498,7 +569,7 @@ def _save_demo_impl(
         "verification_issues": ver_data.get("issues", []),
         "level3_patterns": ver_data.get("level3_patterns", {}),
         "level3_realism_score": ver_data.get("level3_realism_score", 0),
-        # Product insights metadata (Session 8)
+        # Product insights metadata
         "discovery_notes": disc_data.get("discovery_notes", {}),
         "complexity_score": disc_data.get("complexity_score", 0),
         "complexity_breakdown": disc_data.get("complexity_breakdown", {}),
@@ -507,7 +578,7 @@ def _save_demo_impl(
     meta_path = demo_dir / "metadata.json"
     meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
-    logger.info("Demo saved: %s (slug=%s)", title, slug)
+    logger.info("Demo saved: %s (slug=%s, dir=%s)", title, slug, demo_dir)
 
     return json.dumps({
         "title": title,
@@ -539,7 +610,7 @@ def save_demo(
             mocked_features, verified_interactions, score, and issues.
             Defaults to empty JSON if not provided.
         discovery_metadata: JSON string with discovery_notes, complexity_score,
-            and complexity_breakdown from Phases 4-5. Defaults to empty JSON.
+            and complexity_breakdown. Defaults to empty JSON.
 
     Returns:
         A JSON string with keys: title, slug, local_url, public_url, html_path.
