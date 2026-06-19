@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from deep_research.service import ensure_checkpointer_tables
+from deep_research.service import ensure_checkpointer_tables as ensure_deep_research_tables
+from demo_workflow.service import ensure_checkpointer_tables as ensure_demo_workflow_tables
 
 from core.config import MEDIA_OUTPUT_DIR
 from web_search.router import router as web_search_router
@@ -30,7 +31,12 @@ register_workflows(app)
 # Ensure Deep Agents MySQL checkpoint tables exist (shared by deep_research + demo_workflow)
 @app.on_event("startup")
 async def _init_deep_research():
-    await ensure_checkpointer_tables()
+    await ensure_deep_research_tables()
+
+# Ensure demo_workflow has its own checkpointer instance initialized
+@app.on_event("startup")
+async def _init_demo_workflow():
+    await ensure_demo_workflow_tables()
 
 app.include_router(web_search_router, prefix="/web", tags=["web"])
 app.include_router(family_kb_router, prefix="/kb", tags=["family-kb"])

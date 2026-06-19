@@ -33,11 +33,10 @@ User Prompt → FastAPI (POST /demos/run or /demos/run/stream)
           ↳  kb_lookup         → family_kb.search_kb (KB search)
           ↳  search_and_crawl  → SearXNG + Crawl4AI (web research)
           ↳  think_tool        → strategic reflection pauses
-          ↳  generate_html     → LLM call to produce/update HTML
-          ↳  validate_html     → LLM call to check acceptance criteria
-          ↳  fix_html          → LLM call to fix validation issues
+          ↳  write_file / read_file → deepagents built-in (artifact I/O)
           ↳  verify_interactivity → LLM call for static JS analysis
           ↳  critique_demo     → LLM call for quality review
+          ↳  fix_html          → LLM call to fix issues
           ↳  save_demo         → write HTML + metadata.json to disk
           ↳  task() sub-agent  → researcher (search_and_crawl + think_tool)
         MySQL Checkpointing (AsyncMySaver) — auto-persists after each step
@@ -46,45 +45,36 @@ User Prompt → FastAPI (POST /demos/run or /demos/run/stream)
 ### Workflow the Agent Follows (via system prompt)
 
 ```
-1. PLAN: Create TODO list via write_todos (parse prompt, set title)
+1. PLAN: Parse the prompt, create /demo_brief.md via write_file
 2. KB LOOKUP: Call kb_lookup() to check for prior demos, user preferences
 3. RESEARCH: Delegate to research sub-agent for domain/competitor analysis
-4. DESIGN: Synthesize KB + research into a design spec (mental, no file)
-5. BUILD STEP 1 — Core Structure:
-   a. generate_html(system=BUILD_STRUCTURE_SYSTEM, current_html="")
-   b. validate_html(criteria="all views exist, nav switches correctly")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-6. BUILD STEP 2 — Interactive Features:
-   a. generate_html(system=BUILD_FEATURES_SYSTEM, current_html=from_step1)
-   b. validate_html(criteria="forms work, realistic data, handlers exist")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-7. BUILD STEP 3 — Polish:
-   a. generate_html(system=BUILD_POLISH_SYSTEM, current_html=from_step2)
-   b. validate_html(criteria="transitions, active states, feedback UI")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-8. VERIFY: Call verify_interactivity() → if score < 7, fix_html() → re-verify (max 2)
-9. CRITIQUE: Call critique_demo() → if score < 8, fix_html()
-10. SAVE: Call save_demo() to write final HTML + metadata.json to disk
-11. DONE: Confirm completion
+4. BUILD: Synthesize brief + KB + research → write complete demo HTML
+   to /final_demo.html via write_file (single pass, all features included)
+5. VERIFY & SAVE:
+   a. read_file → verify_interactivity() → fix_html() if score < 7
+   b. critique_demo() → fix_html() if score < 8
+   c. read_file → save_demo(title, html, metadata) → final files on disk
 ```
+
+The agent uses `write_file` for large artifacts so the full HTML never
+accumulates in the conversation history, keeping the workflow within a
+70K context window.
 
 The deep agents framework handles:
 - Context window management (compresses history, offloads large tool results)
 - MySQL checkpointing (resume after interruption via thread_id)
 - Sub-agent isolation (researcher has separate context)
-- Retry logic naturally through agent decision-making
 
-### Tools Used (all from our existing harness)
+### Tools Used
 
 | Tool | Source | Purpose |
 |------|--------|---------|
-| `kb_lookup` | `demo_workflow/service.py` | Search family_kb for prior info |
+| `kb_lookup` | `demo_workflow/tools.py` | Search family_kb for prior info |
 | `search_and_crawl` | `deep_research/tools.py` | SearXNG + Crawl4AI web research |
 | `think_tool` | `deep_research/tools.py` | Strategic reflection between steps |
-| `generate_html` | `demo_workflow/tools.py` | LLM call to produce/update demo HTML |
-| `validate_html` | `demo_workflow/tools.py` | LLM call to check acceptance criteria |
-| `fix_html` | `demo_workflow/tools.py` | LLM call to fix issues in HTML |
+| `write_file` / `read_file` | deepagents framework (built-in) | Save/load artifacts to avoid HTML in args |
 | `verify_interactivity` | `demo_workflow/tools.py` | Static JS analysis, score 1-10 |
+| `fix_html` | `demo_workflow/tools.py` | LLM call to fix issues in HTML |
 | `critique_demo` | `demo_workflow/tools.py` | Quality review, score 1-10 |
 | `save_demo` | `demo_workflow/tools.py` | Write HTML + metadata.json to disk |
 
@@ -112,19 +102,15 @@ Sub-agent (researcher) gets: `search_and_crawl` + `think_tool` (same as deep_res
   as thin sync delegates that run the async via `asyncio.run()` or use
   `@tool` with `coroutine=True`)
 
-### Session 2: `prompts.py` — Rewrite for deep agent workflow
+### Session 2: `prompts.py` — Rewrite for single-pass workflow (COMPLETED)
 
 **Changes**:
-- Replace `DEMO_WORKFLOW_INSTRUCTIONS` (the old monolithic prompt) with a
-  structured workflow instruction matching the deep_research pattern
-- Keep `RESEARCHER_INSTRUCTIONS` (reused from current code, same as deep_research)
-- Keep `BUILD_STRUCTURE_SYSTEM`, `BUILD_FEATURES_SYSTEM`, `BUILD_POLISH_SYSTEM`
-  (used by `generate_html` — these are system prompts passed per-call)
-- Remove all phase-specific system prompts that are no longer needed:
-  `PHASE_PARSE_SYSTEM`, `PHASE_KB_LOOKUP_SYSTEM`, `PHASE_DESIGN_SYSTEM`,
-  `PHASE_PLAN_SYSTEM`, `PHASE_SAVE_SYSTEM`
-- The new `DEMO_WORKFLOW_INSTRUCTIONS` tells the agent the step-by-step
-  workflow (like `RESEARCH_WORKFLOW_INSTRUCTIONS` in deep_research)
+- `DEMO_WORKFLOW_INSTRUCTIONS` rewritten: 11 steps → 5 steps (~3K chars)
+- `RESEARCHER_INSTRUCTIONS` simplified
+- Single `BUILD_GENERATE_SYSTEM` replaces 3 progressive build prompts
+- Removed `BUILD_STRUCTURE_SYSTEM`, `BUILD_FEATURES_SYSTEM`, `BUILD_POLISH_SYSTEM`, `MOCK_BEHAVIOR_LEVEL3_SYSTEM`
+- `VERIFY_INTERACTIVITY_SYSTEM` and `CRITIQUE_SYSTEM` simplified
+- Total `prompts.py` reduced from ~35K chars to ~9K chars (~75% reduction)
 
 ### Session 3: `service.py` — Replace coordinator with deep agent invocation
 
@@ -200,6 +186,27 @@ Verify existing hooks still work:
 
 ---
 
+## Known Issues
+
+### 1. Checkpointer Not Initialized (FIXED)
+**Problem:** `demo_workflow` had its own separate checkpointer globals that were never initialized at startup (only `deep_research` was initialized in `app.py`).
+
+**Fix:** Modified `app.py` to import and call `ensure_checkpointer_tables` from `demo_workflow.service` at startup.
+
+**Status:** ✅ Fixed
+
+### 2. Context Window Overflow (FIXED)
+**Problem:** `matrix-coder` (qwen3.6-27b via vLLM) has a 70K context window limit. The multi-step HTML generation workflow (11 phases with system prompt + HTML tool results + research findings) accumulated ~70K+ tokens and triggered `ContextWindowExceededError`.
+
+**Fix applied:**
+1. **Trimmed system prompt** — `DEMO_WORKFLOW_INSTRUCTIONS` reduced from ~5K chars to ~3K chars (11 steps → 5 steps)
+2. **Single-pass build** — Instead of 3 `generate_html` passes each passing full HTML as a tool argument, the agent now writes HTML to `/final_demo.html` via `write_file` (tiny "saved" result) and reads it back via `read_file` for verification, avoiding HTML accumulation in the conversation history.
+3. **Simplified all prompts** — `prompts.py` reduced from ~35K chars to ~9K chars total (~75% reduction). Removed `BUILD_STRUCTURE_SYSTEM`, `BUILD_FEATURES_SYSTEM`, `BUILD_POLISH_SYSTEM`, `MOCK_BEHAVIOR_LEVEL3_SYSTEM`.
+
+**Status:** ✅ Fixed — workflow now fits comfortably within 70K context window.
+
+---
+
 ## Critical Implementation Details
 
 ### A. MySQL Checkpointer (shared with deep_research)
@@ -231,7 +238,7 @@ Verify existing hooks still work:
 
 ### E. Output File Guarantee
 - The agent MUST call `save_demo` as the last step
-- The system prompt workflow explicitly instructs this in step 10
+- The system prompt workflow explicitly instructs this in step 5
 - If the agent errors before save, MySQL checkpoint allows resume
 
 ---

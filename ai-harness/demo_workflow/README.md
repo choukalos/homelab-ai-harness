@@ -5,10 +5,10 @@ high-quality single-file HTML demos. Uses the same pattern as
 `deep_research`: `create_deep_agent()` + `agent.ainvoke()` / `agent.astream()`
 with MySQL checkpointing.
 
-The orchestrator agent follows `DEMO_WORKFLOW_INSTRUCTIONS` to research the
-domain, delegate to a research sub-agent, build the demo incrementally
-(generate → validate → fix), verify interactivity, critique quality, and
-save the final HTML + metadata to disk.
+The orchestrator agent follows `DEMO_WORKFLOW_INSTRUCTIONS` through a
+5-step workflow: parse → KB lookup → research → single-pass build →
+verify & save. Uses `write_file`/`read_file` for artifacts so full HTML
+never accumulates in the conversation history (fits 70K context window).
 
 ---
 
@@ -34,33 +34,25 @@ User Prompt → FastAPI (POST /demos/run or /demos/run/stream)
 ### Workflow the Agent Follows (via system prompt)
 
 ```
-1. PLAN: Parse the prompt and create a demo brief (write_file → demo_brief.md)
+1. PLAN: Parse the prompt, create /demo_brief.md via write_file
 2. KB LOOKUP: Call kb_lookup() to check for prior demos, user preferences
 3. RESEARCH: Delegate to research sub-agent for domain/competitor analysis
-4. DESIGN: Synthesize KB + research into a design spec (write_file → design_spec.md)
-5. BUILD STEP 1 — Core Structure:
-   a. generate_html(system=BUILD_STRUCTURE_SYSTEM, current_html="")
-   b. validate_html(criteria="all views exist, nav switches correctly")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-6. BUILD STEP 2 — Interactive Features:
-   a. generate_html(system=BUILD_FEATURES_SYSTEM, current_html=from_step1)
-   b. validate_html(criteria="forms work, realistic data, handlers exist")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-7. BUILD STEP 3 — Polish:
-   a. generate_html(system=BUILD_POLISH_SYSTEM, current_html=from_step2)
-   b. validate_html(criteria="transitions, active states, feedback UI")
-   c. If failed: fix_html(issues, html) → repeat validate (max 2 fix attempts)
-8. VERIFY: Call verify_interactivity() → if score < 7, fix_html() → re-verify (max 2)
-9. CRITIQUE: Call critique_demo() → if score < 8, fix_html()
-10. SAVE: Call save_demo() to write final HTML + metadata.json to disk
-11. DONE: Confirm completion
+4. BUILD: Synthesize brief + KB + research → write complete demo HTML
+   to /final_demo.html via write_file (single pass, all features included)
+5. VERIFY & SAVE:
+   a. read_file → verify_interactivity() → fix_html() if score < 7
+   b. critique_demo() → fix_html() if score < 8
+   c. read_file → save_demo(title, html, metadata) → final files on disk
 ```
+
+The agent uses `write_file` for large artifacts (brief, HTML) so the
+full HTML never accumulates in the conversation history, keeping the
+workflow within a 70K context window.
 
 The deep agents framework handles:
 - Context window management (compresses history, offloads large tool results)
 - MySQL checkpointing (resume after interruption via thread_id)
 - Sub-agent isolation (researcher has separate context)
-- Retry logic naturally through agent decision-making
 
 ---
 
@@ -73,7 +65,7 @@ All files for this module live in `ai-harness/demo_workflow/`:
 | `__init__.py` | Module docstring + re-exports `ensure_checkpointer_tables` |
 | `schemas.py` | Pydantic models: `DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`, `DemoCheckpointStatus`, `DemoStreamEvent` |
 | `service.py` | Agent factory + entry points: `run_demo()`, `resume_demo()`, `_run_demo_with_events()`, extraction helpers |
-| `prompts.py` | `DEMO_WORKFLOW_INSTRUCTIONS`, `RESEARCHER_INSTRUCTIONS`, build prompts, verification/critique prompts, Level 3 patterns |
+| `prompts.py` | `DEMO_WORKFLOW_INSTRUCTIONS` (5-step workflow), `RESEARCHER_INSTRUCTIONS`, `BUILD_GENERATE_SYSTEM`, `VERIFY_INTERACTIVITY_SYSTEM`, `CRITIQUE_SYSTEM` |
 | `tools.py` | Build tools: `kb_lookup`, `generate_html`, `validate_html`, `fix_html`, `verify_interactivity`, `critique_demo`, `save_demo` + shared research tools |
 | `router.py` | FastAPI router: `/run`, `/run/stream`, `/jobs`, `/jobs/{id}/checkpoint`, `/jobs/{id}/resume`, `/`, `/search`, `/{slug}`, `/{slug}/html` |
 
@@ -208,13 +200,11 @@ Checkpoints are stored in MySQL via `AsyncMySaver` (shared tables with
 - `RESEARCHER_INSTRUCTIONS` — specialized prompt for the research sub-agent
   (search_and_crawl + think_tool)
 
-### Build Prompts (progressive enhancement)
-- `BUILD_STRUCTURE_SYSTEM` — DOM skeleton, nav, CSS framework only
-- `BUILD_FEATURES_SYSTEM` — forms, data, state management on existing structure
-- `BUILD_POLISH_SYSTEM` — transitions, active states, edge cases
-
-All build prompts enforce senior-engineer coding standards:
-IIFE/modular JS, BEM CSS, semantic HTML, defensive coding, mobile-first.
+### Build Prompt
+- `BUILD_GENERATE_SYSTEM` — single-pass build: structure, CSS, JS,
+  interactivity, and Level 3 mock behavior all in one. Enforces senior-
+  engineer coding standards: IIFE/modular JS, BEM CSS, semantic HTML,
+  defensive coding, mobile-first.
 
 ### Verification & Critique Prompts
 - `VERIFY_INTERACTIVITY_SYSTEM` — static JS analysis, handler tracing,
@@ -222,10 +212,10 @@ IIFE/modular JS, BEM CSS, semantic HTML, defensive coding, mobile-first.
 - `CRITIQUE_SYSTEM` — visual, code quality, functional scores +
   `level3_realism_score` for natural feel of mock behavior
 
-### Level 3 Mock Behavior (`MOCK_BEHAVIOR_LEVEL3_SYSTEM`)
-Provides CSS/JS patterns for: `delay()` utility, loading overlays/spinners,
-toast notifications, confirmation modals, localStorage-backed state,
-optimistic updates with undo.
+### Level 3 Mock Behavior
+Embedded in the orchestrator's build instructions: `delay()` utility,
+loading overlays/spinners, toast notifications, confirmation modals,
+localStorage-backed state, optimistic updates with undo.
 
 ---
 
