@@ -483,8 +483,28 @@ Frequently iterated. Rebuilding this project does **not** restart litellm or oth
 
 Investment tooling stack.
 
-CI/CD driven.
+### Architecture
 
+```
+Browser (invest.choukalos.com)
+  -> Caddy (route /api/* -> invest-hub-server:4000)
+  -> Caddy (route /*    -> invest-hub-client:80)
+```
+
+All requests stay same-origin on `invest.choukalos.com` — no CORS issues.
+Caddy proxies `/api/*` directly to the backend; everything else goes to the
+React client.
+
+### Key notes
+
+- **Server** (`invest-hub-server`): Node/Express + Prisma + MySQL on Thor
+- **Client** (`invest-hub-client`): React/Vite served via nginx, `VITE_API_BASE_URL=/api` (relative)
+- **MySQL** accessed via `extra_hosts: "thor.local:192.168.4.54"` (see MySQL section)
+- **Prisma client** is regenerated in the entrypoint (`npx prisma generate`) before DB operations
+- **Cron job**: runs `updateAllActiveSymbols()` at 1 AM Mon–Sat
+- **Docker image** pins Prisma to v6 (not v7) to avoid `url` config deprecation
+
+CI/CD driven.  
 Frequently iterated.
 
 ---
@@ -565,14 +585,25 @@ MySQL runs bare metal on Thor.
 Containers access MySQL via:
 
 ```text
-host.docker.internal
+thor.local:3306
 ```
 
-Compose files use:
+Compose files that need MySQL add both host entries:
 
 ```yaml
 extra_hosts:
   - "host.docker.internal:host-gateway"
+  - "thor.local:192.168.4.54"
+```
+
+Using `thor.local` (resolved via `extra_hosts`) is preferred over
+`host.docker.internal` because it gives a stable hostname that works
+consistently across Alpine-based containers (e.g. invest-hub-server).
+
+The `DATABASE_URL` is set in `.env` with the resolved host:
+
+```bash
+DATABASE_URL=mysql://investor:***@thor.local:3306/investorhub
 ```
 
 ---

@@ -1,5 +1,10 @@
 FROM python:3.12-slim
 
+# Kaleido needs Chromium to render PNG/SVG images
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends chromium && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .
