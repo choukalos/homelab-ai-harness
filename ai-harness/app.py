@@ -18,7 +18,9 @@ from deep_research.router import router as deep_research_router
 from workflows.router import router as workflows_router
 from market_research.router import router as market_research_router
 from market_research.tasks import register as register_market_tasks
+from presentation.tasks import register as register_presentation_tasks
 from demo_workflow.router import router as demo_workflow_router
+from presentation.router import router as presentation_router
 
 app = FastAPI(title="AI Harness")
 
@@ -44,9 +46,11 @@ app.include_router(workflows_router)
 app.include_router(market_research_router, prefix="/markets", tags=["market-research"])
 app.include_router(demo_workflow_router, prefix="/demos", tags=["demo-workflow"])
 app.include_router(deep_research_router, prefix="/workflows/deep-research", tags=["deep-research"])
+app.include_router(presentation_router, prefix="/presentation", tags=["presentation"])
 
-# Register Celery tasks for market research and demo workflow before first dispatch
+# Register Celery tasks for market research, demo workflow, and presentation before first dispatch
 register_market_tasks()
+register_presentation_tasks()
 
 app.mount("/media/files", StaticFiles(directory=MEDIA_OUTPUT_DIR), name="media-files")
 

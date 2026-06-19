@@ -41,6 +41,10 @@ services:
       - SIRI_API_KEY=${SIRI_API_KEY}
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
 
+      - PRESENTON_BASE_URL=http://presenton:80
+      - PRESENTON_AUTH_USERNAME=presenton
+      - PRESENTON_AUTH_PASSWORD=changeme123
+
     volumes:
       - /home/chuck/data/ai-kb:/data/ai-kb
       - /home/chuck/data/media:/data/media
@@ -72,6 +76,9 @@ services:
       - HARNESS_API_KEY=${HARNESS_API_KEY}
       - SIRI_API_KEY=${SIRI_API_KEY}
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+      - PRESENTON_BASE_URL=http://presenton:80
+      - PRESENTON_AUTH_USERNAME=presenton
+      - PRESENTON_AUTH_PASSWORD=changeme123
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
@@ -103,6 +110,9 @@ services:
       - HARNESS_API_KEY=${HARNESS_API_KEY}
       - SIRI_API_KEY=${SIRI_API_KEY}
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+      - PRESENTON_BASE_URL=http://presenton:80
+      - PRESENTON_AUTH_USERNAME=presenton
+      - PRESENTON_AUTH_PASSWORD=changeme123
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
@@ -134,6 +144,9 @@ services:
       - HARNESS_API_KEY=${HARNESS_API_KEY}
       - SIRI_API_KEY=${SIRI_API_KEY}
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
+      - PRESENTON_BASE_URL=http://presenton:80
+      - PRESENTON_AUTH_USERNAME=presenton
+      - PRESENTON_AUTH_PASSWORD=changeme123
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw

@@ -89,3 +89,33 @@ def chat_completion_sync(
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
+
+async def chat_completion_async(
+    messages: list[dict[str, str]],
+    model: str | None = None,
+    max_tokens: int | None = None,
+    temperature: float = 0.2,
+    timeout: float = 300.0,
+) -> str:
+    """Async LiteLLM call — used inside async FastAPI endpoints.
+
+    Non-blocking version of chat_completion_sync. Uses httpx.AsyncClient
+    to avoid blocking the uvicorn event loop.
+    """
+    payload: dict[str, Any] = {
+        "model": model or HARNESS_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(
+            f"{LITELLM_BASE_URL}/chat/completions",
+            headers=litellm_headers(),
+            json=payload,
+        )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+

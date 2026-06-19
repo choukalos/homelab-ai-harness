@@ -11,7 +11,7 @@ LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "")
 HARNESS_MODEL = os.getenv("HARNESS_MODEL", "gemma-moe")
 # Per-module model overrides (optional). If not set, falls back to HARNESS_MODEL.
 DEEP_RESEARCH_MODEL = os.getenv("DEEP_RESEARCH_MODEL", HARNESS_MODEL)
-DEMO_WORKFLOW_MODEL = os.getenv("DEMO_WORKFLOW_MODEL", HARNESS_MODEL)
+DEMO_WORKFLOW_MODEL = os.getenv("DEMO_WORKFLOW_MODEL", "matrix-coder")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
@@ -28,6 +28,11 @@ WORKSPACE = os.environ.get("WORKSPACE", "/home/chuck/workspace")
 # Media storage base directory (container mount point). All generated media
 # (images, PDFs, etc.) live under this tree and are served via /media/files/.
 MEDIA_OUTPUT_DIR = os.getenv("MEDIA_OUTPUT_DIR", "/data/media")
+
+# Presenton (AI presentation generation engine)
+PRESENTON_BASE_URL = os.getenv("PRESENTON_BASE_URL", "http://presenton:80")
+PRESENTON_AUTH_USERNAME = os.getenv("PRESENTON_AUTH_USERNAME", "presenton")
+PRESENTON_AUTH_PASSWORD = os.getenv("PRESENTON_AUTH_PASSWORD", "changeme123")
 
 # Base URLs for serving generated media
 # INTERNAL_BASE_URL: used by internal API responses (e.g. thor.local:8090)

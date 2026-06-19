@@ -8,28 +8,13 @@ import httpx
 from langchain_core.tools import tool
 
 
-@tool
-def search_and_crawl(
+def _search_and_crawl_impl(
     query: str,
     max_results: int = 3,
     category: str = "general",
     crawl_top_n: int = 2,
 ) -> str:
-    """Search the web for information and fetch full page content.
-
-    Searches via SearXNG to discover relevant URLs, then fetches full webpage
-    content via Crawl4AI as clean markdown. Use this to gather detailed
-    information on any topic.
-
-    Args:
-        query: Search query to execute
-        max_results: Maximum number of search results to discover (default: 3)
-        category: Search category — 'general', 'news', 'images', 'video', 'music' (default: 'general')
-        crawl_top_n: Number of top results to crawl for full content (default: 2)
-
-    Returns:
-        Formatted search results with full webpage content for top results.
-    """
+    """Internal implementation of search_and_crawl, callable directly."""
     from core.config import SEARXNG_BASE_URL, CRAWL4AI_BASE_URL
 
     parts: list[str] = []
@@ -83,6 +68,31 @@ def search_and_crawl(
         f"Found {len(parts)} result(s) for '{query}':\n\n"
         + "\n".join(parts)
     )
+
+
+@tool
+def search_and_crawl(
+    query: str,
+    max_results: int = 3,
+    category: str = "general",
+    crawl_top_n: int = 2,
+) -> str:
+    """Search the web for information and fetch full page content.
+
+    Searches via SearXNG to discover relevant URLs, then fetches full webpage
+    content via Crawl4AI as clean markdown. Use this to gather detailed
+    information on any topic.
+
+    Args:
+        query: Search query to execute
+        max_results: Maximum number of search results to discover (default: 3)
+        category: Search category — 'general', 'news', 'images', 'video', 'music' (default: 'general')
+        crawl_top_n: Number of top results to crawl for full content (default: 2)
+
+    Returns:
+        Formatted search results with full webpage content for top results.
+    """
+    return _search_and_crawl_impl(query, max_results, category, crawl_top_n)
 
 
 def _crawl_url(url: str) -> str | None:

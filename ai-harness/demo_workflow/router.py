@@ -6,6 +6,9 @@ Endpoints:
   POST   /run/stream             — SSE streaming demo creation
   GET    /jobs                   — List recent demo jobs (from metadata on disk)
   GET    /jobs/{thread_id}       — Get job status + output
+  GET    /jobs/{thread_id}/checkpoint — Get checkpoint status for a thread
+  POST   /jobs/{thread_id}/resume   — Resume a demo from checkpoint
+  DELETE /jobs/{thread_id}/checkpoint — Remove a checkpoint
   POST   /jobs/{thread_id}/cancel — Cancel a running job (best-effort)
   GET    /                       — List all completed demos (metadata index)
   GET    /search                 — Search demos by query
@@ -28,7 +31,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from core.config import MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
 from core.security import require_harness_auth
 from demo_workflow.schemas import DemoCreateRequest, DemoCreateResponse
-from demo_workflow.service import run_demo, get_deep_agent
+from demo_workflow.service import run_demo, get_checkpoint_status, resume_demo, remove_checkpoint, _run_demo_with_events
 
 logger = logging.getLogger("demo_workflow.router")
 
@@ -130,63 +133,29 @@ async def run_demo_stream(
     req: DemoCreateRequest,
     _: None = Depends(require_harness_auth),
 ) -> StreamingResponse:
-    """Stream the demo creation output as the agent works.
+    """Stream the demo creation output as the coordinator pipeline progresses.
 
-    Yields SSE events as the agent processes tool calls and generates text.
-    Useful for live UI updates (e.g. OpenWebUI) while the agent is building.
+    Uses the coordinator-pattern streaming which emits phase-level SSE events:
+    - pipeline_start/pipeline_resume: Pipeline lifecycle
+    - phase_start/phase_complete: Each phase boundary
+    - phase_progress: Intermediate progress within build/verify phases
+    - pipeline_complete: Final result with metadata
+    - error: Unrecoverable errors
+
+    Unlike the legacy single-agent stream, this shows real-time phase progress
+    through the 11-phase coordinator pipeline.
     """
     thread_id = req.thread_id or str(uuid.uuid4())
 
-    from langchain_core.messages import HumanMessage
-
-    agent = get_deep_agent()
-
-    config = {
-        "configurable": {
-            "thread_id": thread_id,
-        }
-    }
-
-    input_state = {
-        "messages": [HumanMessage(content=req.prompt)],
-    }
-
     async def _stream():
-        yield json.dumps({
-            "event": "start",
-            "thread_id": thread_id,
-            "prompt": req.prompt,
-            "title": req.title,
-        }) + "\n"
-
         try:
-            async for event in agent.astream(input_state, config, stream_mode="updates"):
-                # event is a tuple of (namespace, update_dict)
-                if isinstance(event, tuple):
-                    ns, update = event
-                    yield json.dumps({
-                        "event": "update",
-                        "namespace": ns,
-                        "update": _serialize_update(update),
-                    }) + "\n"
-                else:
-                    yield json.dumps({
-                        "event": "update",
-                        "namespace": "default",
-                        "update": _serialize_update(event),
-                    }) + "\n"
-
-            yield json.dumps({
-                "event": "done",
-                "thread_id": thread_id,
-            }) + "\n"
-
+            async for event in _run_demo_with_events(req):
+                payload = event.model_dump(mode="json", exclude_none=True)
+                yield f"data: {json.dumps(payload)}\n\n"
         except Exception as e:
             logger.exception("Demo stream error: %s", e)
-            yield json.dumps({
-                "event": "error",
-                "message": str(e),
-            }) + "\n"
+            error_payload = {"event_type": "error", "data": {"error": str(e)}}
+            yield f"data: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
@@ -232,6 +201,45 @@ def get_job(
         }
 
     raise HTTPException(status_code=404, detail=f"Job '{thread_id}' not found")
+
+
+@router.get("/jobs/{thread_id}/checkpoint")
+def get_checkpoint(
+    thread_id: str,
+    _: None = Depends(require_harness_auth),
+) -> dict:
+    """Get the checkpoint status for a given thread ID.
+
+    Returns whether a checkpoint exists, which phase was last completed,
+    and whether the pipeline can be resumed.
+    """
+    status = get_checkpoint_status(thread_id)
+    return status.model_dump(mode="json")
+
+
+@router.post("/jobs/{thread_id}/resume", response_model=DemoCreateResponse)
+async def resume_job(
+    thread_id: str,
+    _: None = Depends(require_harness_auth),
+) -> DemoCreateResponse:
+    """Resume a demo pipeline from a saved checkpoint.
+
+    Loads the checkpoint for the given thread_id and continues from the
+    phase after the last saved one.
+    """
+    return await resume_demo(thread_id)
+
+
+@router.delete("/jobs/{thread_id}/checkpoint")
+def delete_checkpoint(
+    thread_id: str,
+    _: None = Depends(require_harness_auth),
+) -> dict:
+    """Remove a checkpoint for a given thread ID.
+
+    This allows the user to start a fresh build with the same thread_id.
+    """
+    return remove_checkpoint(thread_id)
 
 
 @router.post("/jobs/{thread_id}/cancel")

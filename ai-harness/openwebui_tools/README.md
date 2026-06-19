@@ -7,8 +7,17 @@ In Open WebUI:
 - Workspace
 - Tools
 - Add Tool
-- Paste `harness_tools.py`
+- Paste the `.py` file below
 - Save
+
+Two tool files are available:
+
+| File | Description |
+|---|---|
+| `harness_tools.py` | Full suite: web search, KB, media, demos, documents, deep research |
+| `presentation_tools.py` | Presentations only: create, outline, list, search, async + status |
+
+Use `harness_tools.py` for everything, or `presentation_tools.py` if you only want presentation tools.
 
 ## Environment Variables
 
@@ -34,6 +43,18 @@ through the same listing and search endpoints.
 Simple one-click demos created via Siri's `"html demo"` / `"prototype"` intent
 are tagged `simple` for filtering.
 
+## Presentation Tools
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `create_presentation(title, content, ...)` | `POST /presentation/generate` | Full pipeline: research → outline → Presenton → save |
+| `create_presentation_async(title, content, ...)` | `POST /presentation/generate/async` | Fire-and-forget via Celery, returns task_id |
+| `check_task_status(task_id)` | `GET /presentation/tasks/{task_id}` | Poll async task status |
+| `generate_outline(topic, ...)` | `POST /presentation/outline` | Brainstorm an outline before building |
+| `list_presentations(limit)` | `GET /presentation/list` | List all presentations |
+| `find_presentations(query)` | `GET /presentation/search?title=` | Search presentations by title |
+| `regenerate_presentation(presentation_id, ...)` | `PATCH /presentation/{id}` | Create a new version with modified params |
+
 ## Use during a chat
 - Enable the tool
 - Prompts like:
@@ -44,5 +65,12 @@ are tagged `simple` for filtering.
 -- Use create_demo to build a product demo for a mobile calculator app.
 -- Use list_demos to see all available demos.
 -- Use find_demo to search for demos about tic-tac-toe.
+-- Use create_presentation to build a slide deck about a topic.
+-- Use create_presentation_async to start a background generation job.
+-- Use check_task_status to poll for completion of async jobs.
+-- Use generate_outline to plan a presentation before building it.
+-- Use list_presentations to see all available presentations.
+-- Use find_presentations to search for presentations about a topic.
+-- Use regenerate_presentation to create a new version with different params.
 
 

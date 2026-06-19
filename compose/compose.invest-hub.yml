@@ -12,7 +12,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/chuck/homelab/compose:/home/github-runner/work/compose
-      - /home/chuck/homelab/.env:/home/docker-runner/work/.env
+      - /home/chuck/homelab/.env:/home/github-runner/work/.env
     networks:
       - public-net
 
@@ -30,6 +30,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      - PORT=4000
       - NODE_ENV=production
       - DATABASE_URL=${INVEST_DATABASE_URL}
       - PUBLIC_BASE_URL=https://api.choukalos.com/
@@ -49,12 +50,14 @@ services:
     build:
       context: ../../workspace/code/invest-hub/client
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://api.choukalos.com/api
     container_name: invest-hub-client
     restart: unless-stopped
     env_file:
       - ../.env
     environment:
-      - VITE_API_BASE_URL=https://api.choukalos.com/api
+      - BACKEND_HOST=invest-hub-server
     networks:
       - public-net
     depends_on:

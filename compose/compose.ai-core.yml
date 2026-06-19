@@ -117,6 +117,32 @@ services:
       - /home/chuck/data/ai-kb/mkdocs.yml:/docs/mkdocs.yml
       - /home/chuck/data/ai-kb/repo:/docs/docs
 
+  presenton:
+    image: ghcr.io/presenton/presenton:latest
+    container_name: presenton
+    restart: unless-stopped
+    networks:
+      - ai-net
+    ports:
+      - "5000:80"
+    volumes:
+      - /home/chuck/data/presenton:/app_data
+    environment:
+      - AUTH_USERNAME=presenton
+      - AUTH_PASSWORD=changeme123
+      - CAN_CHANGE_KEYS=false
+      - LLM=custom
+      - CUSTOM_LLM_URL=http://litellm-proxy:4000/v1
+      - CUSTOM_LLM_API_KEY=${LITELLM_API_KEY}
+      - CUSTOM_MODEL=${HARNESS_MODEL}
+      - IMAGE_PROVIDER=pexels
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - WEB_SEARCH_PROVIDER=searxng
+      - DISABLE_ANONYMOUS_TRACKING=true
+      - DISABLE_IMAGE_GENERATION=true
+    depends_on:
+      - litellm
+
 networks:
   ai-net:
     external: true

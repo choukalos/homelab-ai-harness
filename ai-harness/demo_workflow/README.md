@@ -1,253 +1,229 @@
 # Demo Workflow Module
 
-An automated, LLM-driven pipeline that researches, designs, builds, validates,
-and saves high-quality single-file HTML demos. Built on the `deepagents`
-framework with a single orchestrator agent that follows the 8-phase demo
-creation pipeline. Agent state is persisted in MySQL via
-`langgraph-checkpoint-mysql`.
+An automated, LLM-driven 11-phase pipeline that researches, designs, builds,
+functionally verifies, and saves high-quality single-file HTML demos. Built on
+the coordinator pattern with per-phase agent invocations to avoid context window
+limits on the vLLM backend.
+
+Each phase runs as a separate short-lived LLM call, passing structured JSON
+state between phases. This keeps per-invocation context well under 30K tokens
+and avoids vLLM's 70K context limit that broke the old single-agent approach.
 
 ---
 
-## 1. Architecture & Data Flow
+## Architecture
 
-```mermaid
-graph TB
-    User((User)) -->|Siri / OpenWebUI / API| FastAPI[FastAPI Router]
-    FastAPI -->|Auth| Security[require_auth]
-    FastAPI -->|Service Layer| Orchestrator[Orchestrator Agent]
-    Orchestrator -->|LLM Calls| LiteLLM[LiteLLM Proxy]
-    Orchestrator -->|Delegate Research| SubAgent[Research Sub-Agent]
-    SubAgent -->|LLM Calls| LiteLLM
-    SubAgent -->|search_and_crawl| SearXNG[SearXNG]
-    SubAgent -->|think_tool| SubAgent
-    Orchestrator -->|kb_lookup| Qdrant[(Family KB)]
-    Orchestrator -->|Build Tools| Generate[generate_html]
-    Orchestrator -->|Build Tools| Validate[validate_html]
-    Orchestrator -->|Build Tools| Fix[fix_html]
-    Orchestrator -->|Build Tools| Critique[critique_demo]
-    Orchestrator -->|Build Tools| Save[save_demo]
-    Orchestrator -->|Checkpoints| MySQL[(MySQL DB)]
-    SubAgent -->|Checkpoints| MySQL
-    Save -->|final_demo.html| Disk[(Disk)]
-    Save -->|metadata.json| Disk
+```
+User Prompt → Coordinator (run_demo)
+  → Phase 1:  Parse Request             (chat_completion_sync)
+  → Phase 2:  KB Lookup                 (family_kb search)
+  → Phase 3:  Web Research              (search_and_crawl + think_tool)
+  → Phase 4:  Requirements & Design     (chat_completion_sync)
+  → Phase 5:  Build Plan                (chat_completion_sync)
+  → Phase 6a: Core Structure & Nav      (generate_html → validate → fix)
+  → Phase 6b: Interactive Features      (generate_html → validate → fix)
+  → Phase 6c: Polish & Micro-interactions (generate_html → validate → fix)
+  → Phase 7:  Functional Verification   (verify_interactivity → fix, max 3 retries)
+  → Phase 8:  Polish & Critique         (critique_demo → fix)
+  → Phase 9:  Save Final                (save_demo → metadata.json + HTML)
 ```
 
-- **Agent Framework**: `deepagents` (`create_deep_agent` with `subagents=[...]`)
-- **Orchestrator**: Follows the 8-phase workflow, manages build tools, delegates research
-- **Research Sub-Agent**: Conducts web research with `search_and_crawl` + `think_tool`
-- **LLM**: `ChatOpenAI` routing through LiteLLM proxy
-- **Checkpointer**: `AsyncMySaver` from `langgraph.checkpoint.mysql.asyncmy`
-- **Build Tools**: `generate_html`, `validate_html`, `fix_html`, `critique_demo`, `save_demo`
-- **KB Lookup**: `kb_lookup` tool calls `family_kb.search_kb()` directly
+### Key Design Decisions
+
+- **Coordinator pattern** — each phase is a fresh LLM invocation, not a
+  single long-running agent. Structured `DemoState` is passed between phases.
+- **Progressive build** — Phase 6 is split into 6a/6b/6c so failures in
+  polish don't invalidate the working skeleton.
+- **Level 3 mock behavior** — demos simulate async behavior: loading
+  spinners, toast notifications, confirmation dialogs, localStorage
+  persistence, and simulated API delays (300–800ms).
+- **Functional verification** — Phase 7 does static analysis of JS event
+  handlers to ensure every button, form, and navigation element actually
+  works. Auto-retries up to 3 times if score < 7.
+- **Product insights metadata** — `metadata.json` includes `discovery_notes`,
+  `complexity_score`, `level3_patterns`, and `phase_timings` for every demo.
+- **Checkpoint/resume** — if the pipeline is interrupted, it can resume from
+  the last completed phase via file-based checkpoints (24h TTL).
+- **SSE streaming** — `/run/stream` emits real-time phase progress events
+  for OpenWebUI or any SSE consumer.
 
 ---
 
-## 2. 8-Phase Workflow
-
-The orchestrator follows these phases guided by its system prompt:
-
-1. **Parse Request** — Extract a structured demo brief (title, audience, features, screens, style)
-2. **KB Lookup** — Query the Family Knowledge Base for prior relevant material
-3. **Web Research** — Delegate to the research sub-agent for competitor patterns and UX conventions
-4. **Requirements & Design** — Synthesize all research into a design spec (colors, typography, layout)
-5. **Build Plan** — Produce a numbered step-by-step implementation plan with acceptance criteria
-6. **Build Loop** — Iteratively: `generate_html` → `validate_html` → `fix_html` (max 2 retries/step)
-7. **Polish** — `critique_demo` for full-pass quality review, then `fix_html` for top issues
-8. **Save** — `save_demo` embeds notes as HTML comments, writes `final_demo.html` + `metadata.json`
-
----
-
-## 3. File Structure
+## File Structure
 
 All files for this module live in `ai-harness/demo_workflow/`:
 
-- `__init__.py`: Module docstring + re-export `ensure_checkpointer_tables`
-- `schemas.py`: Pydantic models (`DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`)
-- `service.py`: Agent factory, `run_demo()`, MySQL checkpointer, `kb_lookup` tool, extraction helpers
-- `prompts.py`: `DEMO_WORKFLOW_INSTRUCTIONS` (orchestrator), `RESEARCHER_INSTRUCTIONS` (sub-agent), build prompts
-- `tools.py`: Build tools (`generate_html`, `validate_html`, `fix_html`, `critique_demo`, `save_demo`)
-- `router.py`: FastAPI router exposing `/run`, `/run/stream`, `/jobs`, `/{slug}`, `/{slug}/html`
+| File | Purpose |
+|---|---|
+| `__init__.py` | Module docstring + re-exports (`CheckpointManager`, etc.) |
+| `schemas.py` | Pydantic models: `DemoCreateRequest`, `DemoCreateResponse`, `DemoMetadata`, `DemoCheckpointStatus`, `DemoStreamEvent`, `DemoResumeResponse` |
+| `service.py` | Coordinator: `run_demo()`, `resume_demo()`, `_run_demo_with_events()`, `CheckpointManager`, per-phase functions |
+| `state.py` | `DemoState` — structured inter-phase state with `to_dict()`/`from_dict()` |
+| `prompts.py` | All system prompts: phase prompts, build prompts (6a/6b/6c), verification, critique, Level 3 patterns |
+| `tools.py` | Build tools: `generate_html`, `validate_html`, `fix_html`, `verify_interactivity`, `critique_demo`, `save_demo` |
+| `router.py` | FastAPI router: `/run`, `/run/stream`, `/jobs`, `/jobs/{id}/checkpoint`, `/jobs/{id}/resume`, `/`, `/search`, `/{slug}`, `/{slug}/html` |
 
 ---
 
-## 4. Output Extraction
-
-The module extracts the agent's output artifacts from the LangGraph message history:
-
-### HTML Extraction (`_extract_html_path`, `_extract_final_html`)
-Scans messages for the `write_file` tool call targeting `final_demo.html` and
-extracts the content from `args.content`. Falls back to `current_build.html`,
-then to any HTML-like content in tool results.
-
-### Metadata Extraction (`_extract_metadata`)
-Parses the `save_demo` tool output for `local_url`/`public_url` and other
-metadata. Falls back to basic metadata from `demo_brief.md`.
-
-### Title Extraction (`_extract_title`)
-Extracts the demo title from `demo_brief.md` content, falling back to the
-request title.
-
----
-
-## 5. Prompt Architecture
-
-### Orchestrator (`DEMO_WORKFLOW_INSTRUCTIONS`)
-The orchestrator follows an 8-phase workflow with explicit file conventions:
-- `demo_brief.md` — Phase 1 structured brief
-- `design_spec.md` — Phase 4 requirements and design
-- `build_plan.md` — Phase 5 numbered build steps
-- `current_build.html` — Phase 6 iterative build output
-- `final_demo.html` — Phase 8 final output
-
-### Researcher (`RESEARCHER_INSTRUCTIONS`)
-The sub-agent follows a focused research pattern:
-1. Start with broad searches
-2. After each search → `think_tool` reflection
-3. Execute narrower searches as gaps are identified
-4. Stop when confident (max iterations configurable)
-
-### Build Prompts
-- `BUILD_GENERATE_SYSTEM` — HTML generation prompt
-- `BUILD_VALIDATE_SYSTEM` — Validation prompt with pass/fail criteria
-- `BUILD_FIX_SYSTEM` — Fix prompt for corrective changes
-
----
-
-## 6. Integration Points
-
-### A. FastAPI App Registration (`ai-harness/app.py`)
-- **Import**: `from deep_research.service import ensure_checkpointer_tables`
-  (shared with demo_workflow via re-export)
-- **Startup Event**: `await ensure_checkpointer_tables()` creates checkpoint tables on boot
-- **Router Mount**: `app.include_router(demo_workflow_router, prefix="/demos", tags=["demo-workflow"])`
-
-### B. Siri Integration (`ai-harness/siri/service.py`)
-- **Intent Detection**: `"create demo"` / `"build demo"` → `"create_demo"` intent
-- **Handler**: `_handle_create_demo_workflow(req)` uses `asyncio.create_task()` fire-and-forget
-  to POST `/demos/run` in the background. Siri responds immediately.
-- **Listing**: `list_demos` / `find_demo` handlers use `_scan_all_demos()` which scans
-  both workflow subdirectories (with `metadata.json`) and flat `.html` files for simple demos.
-  All demos appear in a unified list with public URLs.
-- **Response Mapping**: Returns immediately with "Demo build started" message
-
-### C. OpenWebUI Integration (`ai-harness/openwebui_tools/harness_tools.py`)
-- **Tool Function**: `create_demo(self, title, prompt, model)` POSTs to `/demos/run`
-  synchronously (timeout=600s). Returns demo URL on completion.
-- **Listing**: `list_demos(tags, limit)` and `find_demo(query, limit)` read from `/demos/` and `/demos/search`
-- **Simple one-click demos** route through `pm_demo.service` and save to the same
-  `demos/` directory for unified discovery across all channels
-
----
-
-## 7. Critical Implementation Details & Gotchas
-
-### A. Shared MySQL Checkpointer
-Demo workflow shares the same MySQL checkpoint tables as deep_research.
-Both import from `deep_research.service`. The checkpointer is process-global
-and thread-safe — concurrent runs are isolated by `thread_id`.
-
-### B. Build Loop as Direct Tools (Not Sub-Agent)
-The build loop (generate → validate → fix) runs as direct tools on the
-orchestrator, NOT as a sub-agent. This avoids delegation overhead for the
-tight iterative cycle. The orchestrator stays in control.
-
-### C. File-Based Intermediate State
-Intermediate artifacts (design spec, build plan, HTML) use `write_file`
-for persistence between phases. The orchestrator reads/writes files as it
-progresses. This mirrors deep_research's `/final_report.md` pattern.
-
-### D. Unified Demo Directory
-Both workflow demos (`/demos/{slug}/final_demo.html` + `metadata.json`) and
-simple one-click demos (`/demos/{name}-{hash}.html`) live in the same
-`MEDIA_OUTPUT_DIR/demos/` directory. The router and Siri handler scan for
-both formats to provide a unified listing and search experience.
-
-### D. KB Lookup Timeout Handling
-The `kb_lookup` tool wraps `family_kb.search_kb()` with a try/except to
-handle cold-start embedding model downloads gracefully. Returns a fallback
-message on failure, allowing the workflow to continue with web research.
-
-### E. Sub-Agent Tool Isolation
-The research sub-agent has its own tool scope (`search_and_crawl` + `think_tool`)
-and cannot call the orchestrator's build tools. The orchestrator delegates via
-`task()` calls and receives findings back as text.
-
-### F. LangChain BaseMessage Handling
-Always use `_safe_get(obj, "key")` helper — never `.get()` directly on
-message objects (they may be Pydantic models or dicts).
-
----
-
-## 8. API Endpoints & Testing
+## API Endpoints
 
 All endpoints mounted under `/demos`.
 
 ### POST `/demos/run`
-Runs the demo creation agent synchronously. Returns final title, slug,
-HTML path, and metadata.
-*Requires `X-API-Key` header.*
+Run the demo creation pipeline synchronously (all 11 phases). Returns
+`DemoCreateResponse` with `thread_id`, `title`, `slug`, `status`,
+`html_path`, and enriched `metadata`.
 
 ### POST `/demos/run/stream`
-Streams agent execution via Server-Sent Events (SSE). Yields JSON events
-for each tool call, AI message, and completion.
+Stream the pipeline via Server-Sent Events. Emits `DemoStreamEvent` for
+each phase boundary and progress update:
 
-### GET `/demos`
-List all completed demos from the unified `demos/` directory. Supports both:
-- **Workflow demos**: subdirectories with `metadata.json` (rich metadata)
-- **Simple demos**: flat `.html` files (lightweight metadata generated on-the-fly)
-
-Optional `tag` filter (simple demos are tagged `simple`).
-
-### GET `/demos/search?q=...`
-Search demos by natural language query. Matches title, description, and tags
-across both workflow and simple demo types.
-
-### GET `/demos/{slug}`
-Get a single demo's metadata from `metadata.json`.
-
-### GET `/demos/{slug}/html`
-Serve the final HTML file as `text/html`.
+```
+data: {"event_type":"pipeline_start","elapsed":"0:00","data":{"thread_id":"...","title":"...","prompt":"..."}}
+data: {"event_type":"phase_start","phase":"Phase 1: Parse Request","phase_number":0,"elapsed":"0:00"}
+data: {"event_type":"phase_complete","phase":"Phase 6a: Core Structure","phase_number":5,"elapsed":"2:15","data":{"summary":"HTML: 8432 chars","phase_elapsed":47.2}}
+data: {"event_type":"pipeline_complete","elapsed":"12:34","data":{"status":"completed","slug":"...","html_path":"...","metadata":{...}}}
+```
 
 ### GET `/demos/jobs`
-List recent demo jobs from completed demos on disk.
+List recent demo creation jobs (from completed demos on disk).
 
 ### GET `/demos/jobs/{thread_id}`
-Get job status for a given thread ID.
+Get job status and output for a given thread ID.
+
+### GET `/demos/jobs/{thread_id}/checkpoint`
+Get checkpoint status: whether a checkpoint exists, last completed phase,
+and whether the pipeline can be resumed. Returns `DemoCheckpointStatus`.
+
+### POST `/demos/jobs/{thread_id}/resume`
+Resume a demo pipeline from a saved checkpoint. Continues from the phase
+after the last saved one. Returns `DemoCreateResponse` with `status="resumed"`.
+
+### DELETE `/demos/jobs/{thread_id}/checkpoint`
+Remove a checkpoint. Allows starting a fresh build with the same thread ID.
 
 ### POST `/demos/jobs/{thread_id}/cancel`
 Best-effort cancellation for running jobs.
 
+### GET `/demos/`
+List all completed demos from the unified `demos/` directory. Supports both
+workflow demos (subdirectories with `metadata.json`) and simple one-click
+demos (flat `.html` files).
+
+### GET `/demos/search?q=...`
+Search demos by natural language query (matches title, description, tags).
+
+### GET `/demos/{slug}`
+Get a single demo's `metadata.json`. Includes enriched fields:
+`code_quality_score`, `level3_patterns`, `discovery_notes`,
+`complexity_score`, `phase_timings`, `total_build_time_seconds`.
+
+### GET `/demos/{slug}/html`
+Serve the final HTML file as `text/html`.
+
 ---
 
-## 9. Configuration
+## Metadata Fields
+
+Every completed demo writes `metadata.json` with the following enriched fields:
+
+| Field | Description |
+|---|---|
+| `code_quality_score` | 1–10 score from Phase 7 static analysis of JS event handlers |
+| `verification_issues` | Remaining interactivity gaps (if score < 10) |
+| `functional_areas` | Verified working interactions (e.g. "Button X → fnY() → view Z") |
+| `mocked_features` | List of `{feature, description, mock_type}` objects |
+| `level3_patterns` | Dict of verified Level 3 patterns: `simulated_delays`, `loading_indicators`, `toast_notifications`, `confirmation_dialogs`, `data_persistence`, `key_flow_coverage` |
+| `level3_realism_score` | 1–10 score from critique on natural feel of mock behavior |
+| `discovery_notes` | Product insights: `mvp_features`, `nice_to_have`, `research_insights` |
+| `complexity_score` | 1–10 score (how complex is the demo to build) |
+| `complexity_breakdown` | `screen_count`, `interactive_elements`, `mocked_features`, `estimated_build_effort` |
+| `phase_timings` | Dict of phase name → elapsed seconds |
+| `total_build_time_seconds` | Total pipeline wall-clock time |
+
+---
+
+## Integration Points
+
+### Siri (`ai-harness/siri/service.py`)
+- **`create demo` / `build demo`** → fire-and-forget `POST /demos/run`
+- **`list demos` / `find demo`** → unified listing of workflow + simple demos
+- **`how well does X demo work?`** → reads quality metadata (`code_quality_score`, `level3_patterns`, etc.)
+- **`how complex is X demo?`** → reads complexity metadata (`complexity_score`, `discovery_notes`)
+
+### OpenWebUI (`ai-harness/openwebui_tools/harness_tools.py`)
+- **`create_demo`** tool → `POST /demos/run` (timeout 600s)
+- **`list_demos` / `find_demo`** → `/demos/` and `/demos/search`
+- **Streaming** → `/demos/run/stream` for real-time phase progress in the UI
+
+---
+
+## Configuration
 
 | Env Var | Default | Purpose |
 |---|---|---|
-| `HARNESS_MODEL` | `gemma-moe` | LLM model (via LiteLLM) |
+| `DEMO_WORKFLOW_MODEL` | `matrix-coder` | LLM model for all demo workflow agents |
+| `HARNESS_MODEL` | `gemma-moe` | Fallback model |
 | `LITELLM_BASE_URL` | `http://litellm:4000` | LiteLLM proxy URL |
 | `LITELLM_API_KEY` | — | LiteLLM API key |
 | `MEDIA_OUTPUT_DIR` | `/data/media` | Base for generated media |
 | `SEARXNG_BASE_URL` | `http://searxng:8080` | SearXNG instance |
 | `CRAWL4AI_BASE_URL` | `http://crawl4ai:11235` | Crawl4AI instance |
-| `MYSQL_DB_HOST` | `host.docker.internal` | MySQL host |
+| `MYSQL_DB_HOST` | `host.docker.internal` | MySQL host (shared with deep_research) |
 | `AI_DB_NAME` | `ai_harness` | MySQL database name |
-
-Configuration in `service.py`:
-- `MAX_RESEARCHER_ITERATIONS = 3` (sub-agent iteration limit)
 
 ---
 
-## 10. Migrated From Celery (Historical)
+## Checkpointing
 
-This module was previously built on a Celery + workflow engine architecture
-with 8 hard-coded stages dispatched as Celery tasks. The migration to
-`deepagents` eliminated:
+Checkpoints are stored at `~/.ai-harness/demo_checkpoints/{thread_id}.json`
+with a 24-hour TTL. Auto-cleanup runs on each save/load operation.
 
-- **Celery tasks** (`tasks.py` deleted) — no more `run_stage` task
-- **JSON file state** (`state/` directory) — agent manages state via message history
-- **Workflow engine dependency** — no more DAG step definitions
-- **Race conditions** — single-process agent eliminates cross-process state issues
-- **Timeout hacks** — the 60s threading timeout for KB lookup is gone
+- On success: checkpoint is removed automatically.
+- On failure: checkpoint is saved at the failed phase, allowing resume.
+- Resume via `POST /demos/jobs/{thread_id}/resume` or by calling `run_demo()` again
+  with the same `thread_id` (auto-resumes).
 
-The Celery worker is still used by other modules (`tasks/`, `scheduler/`,
-`market_research/`). Only the demo workflow has migrated to deep agents.
+---
+
+## Prompt Architecture
+
+### Phase Prompts (per-phase agent invocations)
+- `PHASE_PARSE_SYSTEM` — extract structured demo brief
+- `PHASE_KB_LOOKUP_SYSTEM` — analyze KB results
+- `PHASE_DESIGN_SYSTEM` — comprehensive design spec + discovery notes
+- `PHASE_PLAN_SYSTEM` — numbered build plan + complexity scoring
+- `PHASE_SAVE_SYSTEM` — finalize metadata
+
+### Build Prompts (6a/6b/6c progressive enhancement)
+- `BUILD_STRUCTURE_SYSTEM` — DOM skeleton, nav, CSS framework only
+- `BUILD_FEATURES_SYSTEM` — forms, data, state management on existing structure
+- `BUILD_POLISH_SYSTEM` — transitions, active states, edge cases
+
+All build prompts enforce senior-engineer coding standards:
+IIFE/modular JS, BEM CSS, semantic HTML, defensive coding, mobile-first.
+
+### Verification & Critique Prompts
+- `VERIFY_INTERACTIVITY_SYSTEM` — static JS analysis, handler tracing,
+  Level 3 pattern checks (deducts 1 pt per missing pattern)
+- `CRITIQUE_SYSTEM` — visual, code quality, functional scores +
+  `level3_realism_score` for natural feel of mock behavior
+
+### Level 3 Mock Behavior (`MOCK_BEHAVIOR_LEVEL3_SYSTEM`)
+Provides CSS/JS patterns for: `delay()` utility, loading overlays/spinners,
+toast notifications, confirmation modals, localStorage-backed state,
+optimistic updates with undo.
+
+---
+
+## Testing
+
+```bash
+# Run the end-to-end smoke test
+bash tests/test_demo_workflow.sh
+```
+
+The smoke test exercises all endpoints: health check, synchronous creation,
+response schema, HTML file verification, HTML structure, jobs listing,
+demo listing, search, metadata with enriched fields, checkpoint status,
+SSE streaming, and Siri integrations (create, list, quality, complexity).

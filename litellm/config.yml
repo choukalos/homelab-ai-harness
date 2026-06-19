@@ -23,12 +23,6 @@ model_list:
       api_base: http://matrix:11434/v1
       api_key: "not-needed"
 
-  - model_name: matrix-ollama-coder
-    litellm_params:
-      model: openai/qwen3.6:27b
-      api_base: http://matrix:11434/v1
-      api_key: "not-needed"
-
   - model_name: matrix-coder
     litellm_params:
       model: openai/qwen3.6-27b
