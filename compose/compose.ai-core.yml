@@ -5,9 +5,15 @@ services:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: litellm-proxy
     restart: unless-stopped
-    env_file:
-      - ../.env
     command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - LITELLM_PUBLIC_API_KEY=${LITELLM_PUBLIC_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_MASTER_KEY}
+      - MAC_STUDIO_IP=192.168.4.56
+      - MATRIX_IP=192.168.4.55
+      - THOR_IP=192.168.4.54
+      - TZ=America/Chicago
     networks:
       - ai-net
     ports:
@@ -19,13 +25,17 @@ services:
       - "macstudio:${MAC_STUDIO_IP:-127.0.0.1}"
       - "matrix:${MATRIX_IP:-127.0.0.1}"
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     restart: unless-stopped
-    env_file:
-      - ../.env
     networks:
       - ai-net
     ports:
@@ -141,7 +151,8 @@ services:
       - DISABLE_ANONYMOUS_TRACKING=true
       - DISABLE_IMAGE_GENERATION=true
     depends_on:
-      - litellm
+      litellm:
+        condition: service_healthy
 
 networks:
   ai-net:

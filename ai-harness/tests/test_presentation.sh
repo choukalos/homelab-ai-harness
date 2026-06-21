@@ -12,6 +12,12 @@
 #   8.  Siri create_presentation intent (fire-and-forget)
 #   9.  Siri list_presentations intent
 #  10.  Siri find_presentation intent
+#  11.  Poll async task for completion  (Tests 12–15 need this)
+#  12.  Download endpoint               (GET /presentation/download/{filename})
+#  13.  Public URL format validation
+#  14.  Public file download (no auth)
+#  15.  Metadata file verification
+#  16.  Sync generation                 (POST /presentation/generate)
 #
 # Usage:
 #   bash tests/test_presentation.sh
@@ -316,6 +322,222 @@ else
     else
         echo "  ❌ Siri find_presentation returned HTTP ${HTTP_CODE}"
     fi
+fi
+
+# ── Poll helper: wait for async task completion ─────────────
+# Tests 12–15 depend on the async task from Test 3 completing.
+# Poll up to 20 minutes (24 rounds × 50s) for the task to finish.
+echo
+echo "==== Polling for async task completion (Tests 12–15) ==>>"
+TASK_COMPLETED=false
+TASK_RESULT_FILE=""
+POLL_MAX=24          # 24 rounds
+POLL_DELAY=50        # seconds between checks
+POLL_COUNT=0
+
+while [ ${POLL_COUNT} -lt ${POLL_MAX} ]; do
+    POLL_COUNT=$((POLL_COUNT + 1))
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        "${BASE_URL}/presentation/tasks/${TASK_ID_CAPTURED}" \
+        -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        CHECK_STATUS=$(_json "${TMP_FILE}" "data.get('status','')")
+        echo "  Poll #${POLL_COUNT}: status=${CHECK_STATUS}"
+
+        if [ "${CHECK_STATUS}" = "completed" ]; then
+            TASK_RESULT_FILE="${TMP_FILE}"
+            TASK_COMPLETED=true
+            echo "  ✅ Task completed after ${POLL_COUNT} poll(s)"
+            break
+        elif [ "${CHECK_STATUS}" = "failed" ]; then
+            ERROR_MSG=$(_json "${TMP_FILE}" "data.get('error','')")
+            echo "  ❌ Task failed: ${ERROR_MSG}"
+            break
+        fi
+    else
+        echo "  Poll #${POLL_COUNT}: HTTP ${HTTP_CODE} (endpoint unreachable)"
+    fi
+
+    sleep ${POLL_DELAY}
+done
+
+if [ "${POLL_COUNT}" -ge "${POLL_MAX}" ] && [ "${TASK_COMPLETED}" = "false" ]; then
+    echo "  ⚠ Polling timeout (${POLL_MAX} rounds). Skipping tests 12–15."
+fi
+
+# ── Test 12: Download Endpoint (Phase 4a) ───────────────────
+# Verify GET /presentation/download/{filename} with auth returns 200
+echo
+echo "==== Test 12: Download endpoint (GET /presentation/download/{filename}) ==>>"
+
+if [ "${TASK_COMPLETED}" = "true" ] && [ -n "${TASK_RESULT_FILE}" ]; then
+    DOWNLOAD_URL=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('download_url', '')")
+    LOCAL_PATH=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('local_path', '')")
+
+    # Extract filename from local_path (/data/media/presentations/foo-v1.pptx → foo-v1.pptx)
+    FILENAME=$(basename "${LOCAL_PATH}")
+
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        "${BASE_URL}/presentation/download/${FILENAME}" \
+        -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        echo "  ✅ Download endpoint returned HTTP 200"
+    else
+        echo "  ❌ Download endpoint returned HTTP ${HTTP_CODE}"
+    fi
+else
+    echo "  ℹ Skipping — async task did not complete"
+fi
+
+# ── Test 13: Public URL Format Validation (Phase 4b) ────────
+# Verify download_url starts with https://siri.choukalos.com/media/files/presentations/
+echo
+echo "==== Test 13: Public URL format validation ==>>"
+
+if [ "${TASK_COMPLETED}" = "true" ] && [ -n "${TASK_RESULT_FILE}" ]; then
+    DOWNLOAD_URL=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('download_url', '')")
+    echo "  download_url = ${DOWNLOAD_URL}"
+
+    if echo "${DOWNLOAD_URL}" | grep -q "^https://siri\.choukalos\.com/media/files/presentations/"; then
+        echo "  ✅ download_url uses correct public URL format"
+    else
+        echo "  ❌ download_url does not match expected public URL pattern"
+        echo "     Expected: https://siri.choukalos.com/media/files/presentations/..."
+    fi
+
+    # Also check internal_download_url
+    INTERNAL_DL=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('internal_download_url', '')")
+    echo "  internal_download_url = ${INTERNAL_DL}"
+
+    if echo "${INTERNAL_DL}" | grep -q "^http://"; then
+        echo "  ✅ internal_download_url is present and uses http://"
+    else
+        echo "  ⚠ internal_download_url unexpected: ${INTERNAL_DL}"
+    fi
+else
+    echo "  ℹ Skipping — async task did not complete"
+fi
+
+# ── Test 14: Public File Download (Phase 4c) ────────────────
+# curl the public URL without auth and verify 200
+echo
+echo "==== Test 14: Public file download (no auth required) ==>>"
+
+if [ "${TASK_COMPLETED}" = "true" ] && [ -n "${TASK_RESULT_FILE}" ]; then
+    DOWNLOAD_URL=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('download_url', '')")
+
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        "${DOWNLOAD_URL}" \
+        --max-time 30 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        echo "  ✅ Public download returned HTTP 200"
+    else
+        echo "  ❌ Public download returned HTTP ${HTTP_CODE}"
+    fi
+else
+    echo "  ℹ Skipping — async task did not complete"
+fi
+
+# ── Test 15: Metadata File Verification (Phase 4d) ──────────
+# Check metadata.json exists and has correct download_url
+echo
+echo "==== Test 15: Metadata file verification ==>>"
+
+if [ "${TASK_COMPLETED}" = "true" ] && [ -n "${TASK_RESULT_FILE}" ]; then
+    LOCAL_PATH=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('local_path', '')")
+    METADATA_PATH=$(_json "${TASK_RESULT_FILE}" "data.get('result', {}).get('metadata_path', '')")
+
+    # Derive metadata path from local_path if metadata_path is empty
+    if [ -z "${METADATA_PATH}" ] || [ "${METADATA_PATH}" = "null" ]; then
+        METADATA_PATH=$(echo "${LOCAL_PATH}" | sed 's/\.[^.]*$/.metadata.json/')
+    fi
+
+    # Map container internal path to host mount path
+    METADATA_HOST_PATH=$(echo "${METADATA_PATH}" | sed 's|^/data/media/|/home/chuck/data/media/|')
+
+    echo "  Metadata path: ${METADATA_HOST_PATH}"
+
+    if [ -f "${METADATA_HOST_PATH}" ]; then
+        echo "  ✅ Metadata file exists"
+
+        # Check download_url in metadata.json
+        META_DL=$(python3 -c "
+import json
+with open('${METADATA_HOST_PATH}') as f: data = json.load(f)
+print(data.get('download_url', ''))
+" 2>/dev/null)
+
+        if echo "${META_DL}" | grep -q "^https://siri\.choukalos\.com/media/files/presentations/"; then
+            echo "  ✅ Metadata download_url uses correct public URL format"
+        else
+            echo "  ❌ Metadata download_url unexpected: ${META_DL}"
+        fi
+
+        META_INTERNAL_DL=$(python3 -c "
+import json
+with open('${METADATA_HOST_PATH}') as f: data = json.load(f)
+print(data.get('internal_download_url', ''))
+" 2>/dev/null)
+
+        if echo "${META_INTERNAL_DL}" | grep -q "^http://"; then
+            echo "  ✅ Metadata internal_download_url is present"
+        else
+            echo "  ⚠ Metadata internal_download_url unexpected: ${META_INTERNAL_DL}"
+        fi
+    else
+        echo "  ❌ Metadata file not found at ${METADATA_PATH}"
+    fi
+else
+    echo "  ℹ Skipping — async task did not complete"
+fi
+
+# ── Test 16: Sync Generation (Phase 4e) ─────────────────────
+# POST /presentation/generate with inline outline, 2 slides, concise
+echo
+echo "==== Test 16: Sync generation (POST /presentation/generate) ==>>"
+
+rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    -X POST "${BASE_URL}/presentation/generate" \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: ${API_KEY}" \
+    -d '{
+        "title": "Smoke Test Sync Presentation",
+        "content": "A quick sync test presentation.",
+        "outline": "# Quick Sync Test\n\n## 1. Intro\n\nBrief introduction.\n\n## 2. Summary\n\nBrief summary.",
+        "n_slides": 3,
+        "template": "general",
+        "tone": "professional",
+        "verbosity": "concise"
+    }' \
+    --max-time 900 2>/dev/null) || HTTP_CODE="000"
+
+echo "  -> HTTP ${HTTP_CODE}"
+
+if [ "${HTTP_CODE}" = "200" ]; then
+    SYNC_TITLE=$(_json "${TMP_FILE}" "data.get('title','')")
+    SYNC_SLIDES=$(_json "${TMP_FILE}" "data.get('slide_count',0)")
+    SYNC_DL=$(_json "${TMP_FILE}" "data.get('download_url','')")
+    SYNC_ID=$(_json "${TMP_FILE}" "data.get('presentation_id','')")
+    echo "  ✅ Sync generation returned HTTP 200"
+    echo "  Title: ${SYNC_TITLE}"
+    echo "  Slides: ${SYNC_SLIDES}"
+    echo "  ID: ${SYNC_ID}"
+
+    if echo "${SYNC_DL}" | grep -q "^https://siri\.choukalos\.com/media/files/presentations/"; then
+        echo "  ✅ Sync download_url uses correct public URL format"
+    else
+        echo "  ❌ Sync download_url unexpected: ${SYNC_DL}"
+    fi
+else
+    echo "  ❌ Sync generation failed (HTTP ${HTTP_CODE})"
+    echo "  Response:"
+    cat "${TMP_FILE}" | head -20
 fi
 
 # ── Done ─────────────────────────────────────────────────────

@@ -1,0 +1,59 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Local node exporter (this host)
+  - job_name: 'node-exporter-local'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          instance: 'homelab'
+
+  # Local cadvisor (Docker container metrics on this host)
+  - job_name: 'cadvisor-local'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          instance: 'homelab'
+
+  # LiteLLM proxy metrics (on ai-net, accessed via host gateway)
+  - job_name: 'litellm'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          instance: 'litellm'
+
+  # Matrix node exporter (this host's system metrics)
+  - job_name: 'node-exporter-matrix'
+    static_configs:
+      - targets: ['matrix:9100']
+        labels:
+          instance: 'matrix'
+
+  # Matrix DCGM exporter (GPU metrics)
+  - job_name: 'dcgm-matrix'
+    static_configs:
+      - targets: ['matrix:9400']
+        labels:
+          instance: 'matrix'
+
+  # Athena NAS node exporter
+  - job_name: 'node-exporter-athena'
+    static_configs:
+      - targets: ['athena:9100']
+        labels:
+          instance: 'athena'
+
+  # Athena NAS cadvisor (Docker container metrics on the NAS)
+  - job_name: 'cadvisor-athena'
+    static_configs:
+      - targets: ['athena:8080']
+        labels:
+          instance: 'athena'

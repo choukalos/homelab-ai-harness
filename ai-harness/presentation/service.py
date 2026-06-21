@@ -23,6 +23,7 @@ import httpx
 
 from core.config import (
     INTERNAL_BASE_URL,
+    PUBLIC_BASE_URL,
     PRESENTON_AUTH_PASSWORD,
     PRESENTON_AUTH_USERNAME,
     PRESENTON_BASE_URL,
@@ -49,7 +50,13 @@ _PRESENTATIONS_DIR.mkdir(parents=True, exist_ok=True)
 # ---------- Presenton API client -------------------------------------------
 
 class PresentonClient:
-    """HTTP client for the Presenton API."""
+    """HTTP client for the Presenton API.
+
+    Presenton's /api/v1/ routes use HTTP Basic auth (username:password).
+    The /generate endpoint blocks until the full generation + export is done
+    and returns {presentation_id, path, edit_path} where `path` is the
+    relative path to the exported file.
+    """
 
     def __init__(
         self,
@@ -62,59 +69,56 @@ class PresentonClient:
         self._username = username or PRESENTON_AUTH_USERNAME
         self._password = password or PRESENTON_AUTH_PASSWORD
         self._timeout = timeout
-        self._generation_timeout = 900.0  # Presenton generation can take 5-15 min
-        self._token: Optional[str] = None
+        self._generation_timeout = 900.0  # Presenton generation+export can take 5-15 min
         self._session: Optional[httpx.Client] = None
 
     # -- session management --------------------------------------------------
 
     def _get_session(self) -> httpx.Client:
+        """Return an httpx client configured with HTTP Basic auth."""
         if self._session is None:
             self._session = httpx.Client(
                 base_url=self._base_url,
                 timeout=self._timeout,
+                auth=httpx.BasicAuth(self._username, self._password),
                 follow_redirects=True,
             )
         return self._session
 
-    def _login(self) -> str:
-        """Authenticate with Presenton and return a session token.
-
-        Presenton may return {"access_token": "..."}, {"token": "..."},
-        or {"configured": True, "authenticated": True, "username": "..."}.
-        For the last form we rely on session cookies carried by httpx.Client
-        instead of a bearer token.
-        """
-        session = self._get_session()
-        resp = session.post(
-            "/api/v1/auth/login",
-            json={"username": self._username, "password": self._password},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        self._token = data.get("access_token") or data.get("token")
-        if not self._token:
-            # Session-based auth: check for the new response format
-            if data.get("authenticated"):
-                self._token = "__session__"  # sentinel — cookies handle auth
-                logger.info("Logged into Presenton (session-based auth)")
-                return self._token
-            raise RuntimeError(
-                f"Presenton login returned unexpected response: {data!r}"
-            )
-        logger.info("Logged into Presenton successfully")
-        return self._token
-
-    def _headers(self) -> dict[str, str]:
-        if not self._token:
-            self._login()
-        if self._token == "__session__":
-            # Session-based auth — no Authorization header needed,
-            # httpx.Client carries the cookies automatically
-            return {}
-        return {"Authorization": f"Bearer {self._token}"}
-
     # -- presentation generation ---------------------------------------------
+
+    def _build_payload(
+        self,
+        content: str,
+        *,
+        n_slides: int = 8,
+        template: str = "general",
+        tone: str = "default",
+        verbosity: str = "standard",
+        language: str = "English",
+        export_as: str = "pptx",
+        parent_id: Optional[str] = None,
+        instructions: Optional[str] = None,
+        include_table_of_contents: bool = False,
+        include_title_slide: bool = True,
+    ) -> dict[str, Any]:
+        """Build the standard Presenton generation payload."""
+        payload: dict[str, Any] = {
+            "content": content,
+            "n_slides": n_slides,
+            "template": template,
+            "tone": tone,
+            "verbosity": verbosity,
+            "language": language,
+            "export_as": export_as,
+            "include_table_of_contents": include_table_of_contents,
+            "include_title_slide": include_title_slide,
+        }
+        if instructions:
+            payload["instructions"] = instructions
+        if parent_id:
+            payload["parent_id"] = parent_id
+        return payload
 
     def generate_presentation(
         self,
@@ -133,57 +137,179 @@ class PresentonClient:
         include_title_slide: bool = True,
     ) -> dict[str, Any]:
         """
-        Call Presenton's generation endpoint.
+        Blocking call to Presenton's /generate endpoint.
 
-        Returns the raw JSON response from Presenton, which includes
-        the presentation_id and other metadata.
+        Presenton holds the connection open until the full generation +
+        export is done (can take 5-15 min), then returns
+        {presentation_id, path, edit_path}.
+
+        Used by the sync /generate endpoint and OpenWebUI integration.
         """
-        payload: dict[str, Any] = {
-            "content": content,
-            "n_slides": n_slides,
-            "template": template,
-            "tone": tone,
-            "verbosity": verbosity,
-            "language": language,
-            "export_as": export_as,
-            "include_table_of_contents": include_table_of_contents,
-            "include_title_slide": include_title_slide,
-        }
-        if instructions:
-            payload["instructions"] = instructions
-        if parent_id:
-            payload["parent_id"] = parent_id
+        payload = self._build_payload(
+            content=content,
+            n_slides=n_slides,
+            template=template,
+            tone=tone,
+            verbosity=verbosity,
+            language=language,
+            export_as=export_as,
+            parent_id=parent_id,
+            instructions=instructions,
+            include_table_of_contents=include_table_of_contents,
+            include_title_slide=include_title_slide,
+        )
 
         session = self._get_session()
-        # Use a longer timeout for generation (Presenton does LLM + slide creation inline)
         resp = session.post(
             "/api/v1/ppt/presentation/generate",
             json=payload,
-            headers=self._headers(),
             timeout=self._generation_timeout,
         )
         resp.raise_for_status()
         return resp.json()
+
+    def generate_presentation_async(
+        self,
+        content: str,
+        *,
+        n_slides: int = 8,
+        template: str = "general",
+        tone: str = "default",
+        verbosity: str = "standard",
+        language: str = "English",
+        export_as: str = "pptx",
+        parent_id: Optional[str] = None,
+        instructions: Optional[str] = None,
+        include_table_of_contents: bool = False,
+        include_title_slide: bool = True,
+    ) -> dict[str, Any]:
+        """
+        Non-blocking: submit via /generate-async then poll until done.
+
+        Returns the same dict shape as generate_presentation()
+        ({presentation_id, path, edit_path, slide_count, …}).
+
+        Used by Celery workers so we never hold a single HTTP connection
+        open for 10-20 minutes (which would kill the worker under Docker).
+        """
+        payload = self._build_payload(
+            content=content,
+            n_slides=n_slides,
+            template=template,
+            tone=tone,
+            verbosity=verbosity,
+            language=language,
+            export_as=export_as,
+            parent_id=parent_id,
+            instructions=instructions,
+            include_table_of_contents=include_table_of_contents,
+            include_title_slide=include_title_slide,
+        )
+
+        task_resp = self.submit_presentation_async(payload)
+        task_id = task_resp.get("id") or task_resp.get("task_id")
+        if not task_id:
+            raise RuntimeError(
+                f"Presenton async submit returned no id: {task_resp!r}"
+            )
+        logger.info("Presenton async task submitted: task_id=%s", task_id)
+        return self.wait_for_presentation_task(task_id)
+
+    def submit_presentation_async(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Submit a generation job asynchronously.
+
+        Calls Presenton's /generate/async which queues the job and returns
+        {\"id\": \"task-...\", \"status\": \"pending\", \"message\": \"Queued...\"}.
+        """
+        session = self._get_session()
+        resp = session.post(
+            "/api/v1/ppt/presentation/generate/async",
+            json=payload,
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_task_status(self, task_id: str) -> dict[str, Any]:
+        """Poll the status of an async generation task.
+
+        Returns {\"id\", \"status\", \"message\", \"data\"}.
+        When status is \"completed\", \"data\" contains
+        {presentation_id, path, edit_path}.
+        """
+        session = self._get_session()
+        resp = session.get(
+            f"/api/v1/ppt/presentation/status/{task_id}",
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def wait_for_presentation_task(
+        self, task_id: str, *, poll_interval: float = 5.0
+    ) -> dict[str, Any]:
+        """Poll an async task until it completes, returning the final result.
+
+        Returns the same dict shape as /generate:
+        {presentation_id, path, edit_path}.
+        """
+        import time as _time
+
+        for _attempt in range(int(self._generation_timeout / poll_interval) + 1):
+            status_resp = self.get_task_status(task_id)
+            status = status_resp.get("status", "").lower()
+
+            if status == "completed":
+                result = status_resp.get("data")
+                if not result:
+                    raise RuntimeError(
+                        f"Presenton task {task_id} completed but data is empty"
+                    )
+                logger.info(
+                    "Presenton async task %s completed", task_id
+                )
+                return result
+
+            if status == "error":
+                error = (
+                    status_resp.get("error")
+                    or status_resp.get("message")
+                    or "Unknown error"
+                )
+                raise RuntimeError(
+                    f"Presenton task {task_id} failed: {error}"
+                )
+
+            logger.info(
+                "Presenton task %s in progress (%s), polling in %.0fs…",
+                task_id, status_resp.get("message", status), poll_interval,
+            )
+            _time.sleep(poll_interval)
+
+        raise RuntimeError(
+            f"Presenton task {task_id} timed out after {self._generation_timeout:.0f}s"
+        )
 
     def get_presentation(self, presentation_id: str) -> dict[str, Any]:
         """Fetch presentation details from Presenton by ID."""
         session = self._get_session()
         resp = session.get(
             f"/api/v1/ppt/presentation/{presentation_id}",
-            headers=self._headers(),
         )
         resp.raise_for_status()
         return resp.json()
 
-    def download_presentation(
-        self, presentation_id: str, export_format: str = "pptx"
-    ) -> bytes:
-        """Download the presentation file as bytes from Presenton."""
+    def download_presentation(self, export_path: str) -> bytes:
+        """Download the presentation file using the path from the generate response.
+
+        `export_path` is the `path` field from the /generate response,
+        e.g. '/app_data/exports/foo.pptx'.
+        """
         session = self._get_session()
         resp = session.get(
-            f"/api/v1/ppt/presentation/{presentation_id}/download",
-            params={"format": export_format},
-            headers=self._headers(),
+            export_path,  # already starts with /
         )
         resp.raise_for_status()
         return resp.content
@@ -194,7 +320,6 @@ class PresentonClient:
         if self._session is not None:
             self._session.close()
             self._session = None
-            self._token = None
 
 
 # ---------- filename / path helpers ----------------------------------------
@@ -457,17 +582,18 @@ def generate_outline(
     )
 
 
-def generate_presentation_sync(
+def _run_generation_pipeline(
     client: PresentonClient,
     req: PresentationRequest,
+    *,
+    use_async: bool = False,
 ) -> PresentationResponse:
     """
-    Full synchronous presentation generation pipeline:
-    1. Optional deep research
-    2. Optional KB search
-    3. AI outline generation (if no outline provided)
-    4. Presenton API call to generate slides
-    5. Download + save to disk + persist metadata
+    Full presentation generation pipeline (internal workhorse).
+
+    When `use_async=True` (Celery workers), calls Presenton's /generate-async
+    + polls so we never hold a single HTTP connection open for 10-20 min.
+    When `use_async=False` (sync/OpenWebUI), calls blocking /generate.
     """
     # Phase 1: Gather context (research + KB)
     sources: list[dict] = []
@@ -501,8 +627,6 @@ def generate_presentation_sync(
     if req.parent_id is not None and req.version is None:
         parent_meta = _resolve_parent(req.parent_id)
         if parent_meta is not None:
-            # Use parent's title (unless user explicitly provided a different one)
-            # If title was user-provided, keep it; otherwise inherit from parent
             if req.title == parent_meta.title or not req.title:
                 req.title = parent_meta.title
             version = parent_meta.version + 1
@@ -519,8 +643,12 @@ def generate_presentation_sync(
     else:
         version = req.version if req.version is not None else _next_version(req.title)
 
-    # Phase 4: Call Presenton with the outline as content
-    result = client.generate_presentation(
+    # Phase 4: Call Presenton
+    presenton_fn = (
+        client.generate_presentation_async if use_async
+        else client.generate_presentation
+    )
+    result = presenton_fn(
         content=outline,
         n_slides=req.n_slides,
         template=req.template,
@@ -534,10 +662,15 @@ def generate_presentation_sync(
         include_title_slide=req.include_title_slide,
     )
 
-    presentation_id = result.get("id") or result.get("presentation_id") or uuid.uuid4().hex[:12]
+    presentation_id = result.get("presentation_id") or result.get("id") or uuid.uuid4().hex[:12]
 
-    # Phase 5: Download the file from Presenton
-    file_bytes = client.download_presentation(presentation_id, req.export_as)
+    # Phase 5: Download the file from Presenton using the path from the response
+    export_path = result.get("path")
+    if not export_path:
+        raise RuntimeError(
+            f"Presenton generate response missing 'path' field: {result!r}"
+        )
+    file_bytes = client.download_presentation(export_path)
 
     # Phase 6: Save to local storage
     filename = _generate_filename(req.title, version, req.export_as)
@@ -545,7 +678,8 @@ def generate_presentation_sync(
     local_path.write_bytes(file_bytes)
 
     # Build URLs
-    download_url = f"{INTERNAL_BASE_URL.rstrip('/')}/presentation/download/{filename}"
+    download_url = f"{PUBLIC_BASE_URL.rstrip('/')}/media/files/presentations/{filename}"
+    internal_download_url = f"{INTERNAL_BASE_URL.rstrip('/')}/presentation/download/{filename}"
     edit_url = f"{PRESENTON_BASE_URL.rstrip('/')}/presentation?id={presentation_id}"
 
     # Phase 7: Build and persist metadata
@@ -558,6 +692,7 @@ def generate_presentation_sync(
         filename=filename,
         local_path=str(local_path),
         download_url=download_url,
+        internal_download_url=internal_download_url,
         edit_url=edit_url,
         metadata_path=str(_PRESENTATIONS_DIR / _metadata_filename(filename)),
         created_at=datetime.now(timezone.utc).isoformat(),
@@ -565,7 +700,6 @@ def generate_presentation_sync(
         sources=sources,
     )
 
-    # Persist metadata
     metadata.metadata_path = _save_metadata(metadata)
 
     return PresentationResponse(
@@ -576,9 +710,26 @@ def generate_presentation_sync(
         slide_count=metadata.slide_count,
         local_path=str(local_path),
         download_url=download_url,
+        internal_download_url=internal_download_url,
         edit_url=edit_url,
         metadata_path=metadata.metadata_path,
     )
+
+
+def generate_presentation_sync(
+    client: PresentonClient,
+    req: PresentationRequest,
+) -> PresentationResponse:
+    """Synchronous generation — uses blocking /generate (for OpenWebUI / direct API)."""
+    return _run_generation_pipeline(client, req, use_async=False)
+
+
+def generate_presentation_for_worker(
+    client: PresentonClient,
+    req: PresentationRequest,
+) -> PresentationResponse:
+    """Async generation — uses /generate-async + polling (for Celery workers)."""
+    return _run_generation_pipeline(client, req, use_async=True)
 
 
 def list_presentations() -> list[PresentationMetadata]:

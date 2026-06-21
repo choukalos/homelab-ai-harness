@@ -11,6 +11,7 @@ AI_CORE="${COMPOSE_DIR}/compose.ai-core.yml"
 HARNESS="${COMPOSE_DIR}/compose.ai-harness.yml"
 INVEST="${COMPOSE_DIR}/compose.invest-hub.yml"
 N8N="${COMPOSE_DIR}/compose.n8n.yml"
+MONITORING="${COMPOSE_DIR}/compose.monitoring.yml"
 
 cd "${BASE_DIR}"
 
@@ -37,6 +38,7 @@ Stacks:
   invest      Caddy + Cloudflare Tunnel + Invest Hub
   public      Caddy + Cloudflare Tunnel + Ghost + Invest Hub
   n8n         Caddy + n8n
+  monitoring  Monitoring (node-exporter, cadvisor, prometheus, grafana)
   all         Everything except n8n
   all-n8n     Everything including n8n
 
@@ -47,6 +49,7 @@ Stacks:
   harness-only   Harness only (FastAPI, workers, beat, kb-watcher)
   invest-only    Invest only (Caddy + cloudflared kept running)
   n8n-only
+  monitoring-only
 
 Notes:
   ai and harness are separate Docker Compose projects sharing the ai-net
@@ -55,6 +58,9 @@ Notes:
 
   ghost and invest are also separate projects. Rebuilding ghost-only or
   invest-only will NOT restart Caddy or Cloudflare Tunnel.
+
+  monitoring is a standalone stack. Prometheus scrapes local services,
+  matrix (node-exporter + dcgm), and athena (node-exporter + cadvisor).
 EOF
 }
 
@@ -73,6 +79,7 @@ compose_files() {
     public)         echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST}" ;;
     n8n)            echo "-f ${CORE} -f ${N8N}" ;;
     n8n-only)       echo "-f ${N8N}" ;;
+    monitoring|monitoring-only) echo "-f ${MONITORING}" ;;
     *)
       echo "Unknown stack: ${stack}" >&2
       usage
@@ -258,6 +265,31 @@ do_dispatch() {
     public)
       run_public_stack "${cmd}" "$@"
       ;;
+    monitoring|monitoring-only)
+      # Monitoring is a standalone single-file project.
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${MONITORING}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${MONITORING}" "$@"
+          if [[ "${cmd}" == "restart" || "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          run_compose_single pull "-f ${MONITORING}" "$@"
+          ;;
+        logs|ps|config)
+          run_compose_single "${cmd}" "-f ${MONITORING}" "$@"
+          ;;
+        *)
+          echo "Unknown command: ${cmd}" >&2
+          usage
+          exit 1
+          ;;
+      esac
+      ;;
     all)
       case "${cmd}" in
         up)
@@ -267,8 +299,10 @@ do_dispatch() {
           run_compose_single up "-f ${INVEST}" -d "$@"
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${HARNESS}" -d "$@"
+          run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
         down|restart|rebuild)
+          run_compose_single down "-f ${MONITORING}" "$@"
           run_compose_single down "-f ${HARNESS}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
@@ -279,6 +313,7 @@ do_dispatch() {
             run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
             run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
+            run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
@@ -286,15 +321,16 @@ do_dispatch() {
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${AI_CORE}" "${HARNESS}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${AI_CORE}" "${HARNESS}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core harness; do
+          for f in core edge ghost invest ai-core harness monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
@@ -312,8 +348,10 @@ do_dispatch() {
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${HARNESS}" -d "$@"
           run_compose_single up "-f ${N8N}" -d "$@"
+          run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
         down|restart|rebuild)
+          run_compose_single down "-f ${MONITORING}" "$@"
           run_compose_single down "-f ${N8N}" "$@"
           run_compose_single down "-f ${HARNESS}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
@@ -326,6 +364,7 @@ do_dispatch() {
             run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
             run_compose_single up "-f ${N8N}" -d
+            run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
@@ -334,15 +373,16 @@ do_dispatch() {
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${N8N}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${N8N}" "${HARNESS}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${N8N}" "${HARNESS}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core harness n8n; do
+          for f in core edge ghost invest ai-core harness n8n monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
@@ -367,5 +407,3 @@ do_dispatch() {
 }
 
 do_dispatch "$@"
-
-

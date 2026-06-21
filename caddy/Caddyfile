@@ -71,13 +71,13 @@
 #            }
 #	}
 
+	@siri_media host siri.choukalos.com path /media/files/*
+	handle @siri_media {
+		reverse_proxy http://ai-harness:8090
+	}
+
 	@siri host siri.choukalos.com
 	handle @siri {
-		# Public generated files: images + one-page HTML demos
-		handle_path /media/files/* {
-			reverse_proxy http://ai-harness:8090
-		}
-
 		# Optional health check
 		handle /health {
 			reverse_proxy http://ai-harness:8090

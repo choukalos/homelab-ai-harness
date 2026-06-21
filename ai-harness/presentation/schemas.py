@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------- Request models -------------------------------------------------
@@ -120,10 +120,15 @@ class PresentationResponse(BaseModel):
     )
     slide_count: int = Field(description="Number of slides generated.")
     local_path: str = Field(description="Path under /data/media/presentations/.")
-    download_url: str = Field(description="Internal URL for downloading the file.")
+    download_url: str = Field(
+        description="Public URL for downloading the file (siri.choukalos.com, no auth needed).",
+    )
+    internal_download_url: str = Field(
+        description="Internal API URL for downloading the file (thor.local, auth required).",
+    )
     edit_url: Optional[str] = Field(
         default=None,
-        description="Presenton web UI edit URL (internal only).",
+        description="Presenton web UI edit URL (internal only, home lab network).",
     )
     metadata_path: str = Field(description="Path to the metadata.json file.")
 
@@ -138,13 +143,42 @@ class PresentationMetadata(BaseModel):
     slide_count: int = 0
     filename: str
     local_path: str
-    download_url: str
+    download_url: str = Field(
+        default="",
+        description="Public URL for downloading the file (siri.choukalos.com, no auth needed).",
+    )
+    internal_download_url: str = Field(
+        default="",
+        description="Internal API URL for downloading the file (thor.local, auth required).",
+    )
     edit_url: Optional[str] = None
     metadata_path: str
     created_at: str
     outline: Optional[str] = None
     sources: list[dict] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_urls(self) -> "PresentationMetadata":
+        """Backfill URLs for old metadata files that lack internal_download_url.
+
+        Old metadata.json files have download_url pointing to the internal API.
+        We detect this and rewrite to the public StaticFiles URL while keeping
+        the internal one for API clients.
+        """
+        # Detect old-format download_url (internal API path)
+        if self.download_url and "/presentation/download/" in self.download_url:
+            # This is an old file — the download_url was actually the internal one
+            self.internal_download_url = self.download_url
+            # Reconstruct the public URL from the filename
+            if self.filename:
+                from core.config import PUBLIC_BASE_URL as _pb
+                self.download_url = f"{_pb.rstrip('/')}/media/files/presentations/{self.filename}"
+        elif self.internal_download_url == "" and self.filename:
+            # New format: download_url is public, but internal_download_url wasn't saved
+            from core.config import INTERNAL_BASE_URL as _ib
+            self.internal_download_url = f"{_ib.rstrip('/')}/presentation/download/{self.filename}"
+        return self
 
 
 class PresentationUpdateRequest(BaseModel):

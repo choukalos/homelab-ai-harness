@@ -60,8 +60,8 @@ def generate_presentation_task(
 ) -> dict[str, Any]:
     """Run the full presentation generation pipeline in a Celery worker.
 
-    Same logic as ``generate_presentation_sync`` in service.py, but runs
-    in the background so Siri / async callers get immediate task_id.
+    Uses Presenton's /generate-async endpoint + polling so the HTTP
+    connection is never held open for 10-20 minutes.
     """
     task_id = self.request.id
     logger.info("presentation.generate_presentation[%s] — title=%s", task_id, title)
@@ -87,21 +87,24 @@ def generate_presentation_task(
             include_title_slide=include_title_slide,
         )
 
-        # Run the sync pipeline (imports here to avoid circular deps at import time)
+        # Run the pipeline using async Presenton endpoint (so we don't hold
+        # a single HTTP connection open for 10-20 min and kill the worker)
         from presentation.service import (
             PresentonClient,
-            generate_presentation_sync,
+            generate_presentation_for_worker,
         )
 
         client = PresentonClient()
         try:
-            resp = generate_presentation_sync(client, req)
+            self.update_state(state="started", meta={"title": title})
+            resp = generate_presentation_for_worker(client, req)
         finally:
             client.close()
 
         result = resp.model_dump()
         result["task_id"] = task_id
         result["status"] = "completed"
+        self.update_state(state="success", meta=result)
         logger.info(
             "presentation.generate_presentation[%s] — completed: id=%s",
             task_id,
@@ -118,6 +121,7 @@ def generate_presentation_task(
             exc,
             tb,
         )
+        self.update_state(state="failure", meta={"error": str(exc)})
         return {
             "task_id": task_id,
             "status": "failed",
