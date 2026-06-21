@@ -15,6 +15,9 @@ MONITORING="${COMPOSE_DIR}/compose.monitoring.yml"
 
 cd "${BASE_DIR}"
 
+# Source LiteLLM key management helpers
+source "${BASE_DIR}/lib/litellm-keys.sh"
+
 usage() {
   cat <<EOF
 Usage:
@@ -29,6 +32,16 @@ Commands:
   logs        Show logs for stack
   ps          Show containers for stack
   config      Render merged compose config
+
+  key add     Create a new LiteLLM user key
+               (no --budget = unlimited; see: ./homelab.sh key help)
+  key list    List all LiteLLM keys
+  key info    Show details for a key
+  key update  Update key settings (models, budget, limits, etc.)
+  key delete  Delete a key
+  key block   Block a key (soft disable)
+  key unblock Unblock a key
+  key help    Show key management help
 
 Stacks:
   core        Caddy only
@@ -237,6 +250,12 @@ run_public_stack() {
       ;;
   esac
 }
+
+# Handle key management subcommand (doesn't follow the <command> <stack> pattern)
+if [[ "${1:-}" == "key" ]]; then
+  _litellm "${@:2}"
+  exit $?
+fi
 
 if [[ $# -lt 2 ]]; then
   usage

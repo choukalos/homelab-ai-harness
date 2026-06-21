@@ -37,33 +37,29 @@ services:
     devices:
       - /dev/kmsg
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: victoria-metrics
     restart: unless-stopped
     networks:
       - monitoring-net
     ports:
-      - "9090:9090"
+      - "9090:8428"
+      - "9091:8429"
     volumes:
-      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - /home/chuck/data/prometheus:/prometheus
+      - ../prometheus/prometheus.yml:/etc/victoria-metrics/prometheus.yml:ro
+      - /home/chuck/data/victoria-metrics:/victoria-metrics/data
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
+      - '--promscrape.config=/etc/victoria-metrics/prometheus.yml'
+      - '--storageDataPath=/victoria-metrics/data'
+      - '--retentionPeriod=1y'
+      - '--dedup.minScrapeInterval=15s'
+      - '--selfScrapeInterval=15s'
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "matrix:${MATRIX_IP:-192.168.4.55}"
       - "athena:${ATHENA_IP:-192.168.5.110}"
     user: "0:0"
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   grafana:
     image: grafana/grafana:latest
@@ -84,8 +80,7 @@ services:
       - GF_SERVER_ROOT_URL=http://localhost:3001
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     depends_on:
-      prometheus:
-        condition: service_healthy
+      - victoria-metrics
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 15s

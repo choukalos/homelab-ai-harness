@@ -1,5 +1,9 @@
 # Demo Workflow — Deep Agents Rewrite Plan
 
+> **Status**: ✅ ALL SESSIONS COMPLETE (2026-06-20)
+> The deep agents rewrite has been fully implemented. See `audit-fix-plan.md`
+> for a post-presentation audit identifying remaining gaps in URL handling.
+
 ## Problem
 
 The current demo_workflow module uses a custom 11-phase coordinator loop

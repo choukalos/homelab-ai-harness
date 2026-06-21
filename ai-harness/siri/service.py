@@ -232,15 +232,14 @@ async def _handle_demo(req: SiriChatRequest) -> SiriChatResponse:
 
 
 async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse:
-    """Kick off the full demo pipeline via POST /demos/run using fire-and-forget.
+    """Kick off the full demo pipeline via POST /demos/run/async (Celery).
 
     Siri cannot wait 2-5 minutes for the pipeline, so we dispatch
-    the request as a background task and return immediately. The user can
-    follow up with 'list my demos' once it completes.
+    the request to a Celery worker via the async endpoint and return
+    immediately. The user can follow up with 'list my demos' once it completes.
 
-    Same pattern as deep_research for Siri integration.
+    Same pattern as presentation's _handle_create_presentation.
     """
-    import asyncio
     import logging
     from core.config import HARNESS_API_KEY, INTERNAL_BASE_URL
 
@@ -265,24 +264,29 @@ async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse
     if req.model:
         payload["model"] = req.model
 
-    async def _run_demo():
-        try:
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                r = await client.post(
-                    f"{INTERNAL_BASE_URL.rstrip('/')}/demos/run",
-                    headers={"Content-Type": "application/json",
-                             "X-API-Key": HARNESS_API_KEY},
-                    json=payload,
-                )
-                r.raise_for_status()
-                data = r.json()
-                logger.info("Demo workflow completed: title=%s, slug=%s",
-                           data.get("title", title), data.get("slug", ""))
-        except Exception as exc:
-            logger.error("Demo workflow background task failed: %s", exc)
-
-    # Fire-and-forget: dispatch the request as a background task
-    asyncio.create_task(_run_demo())
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{INTERNAL_BASE_URL.rstrip('/')}/demos/run/async",
+                headers={"Content-Type": "application/json",
+                         "X-API-Key": HARNESS_API_KEY},
+                json=payload,
+            )
+            r.raise_for_status()
+            data = r.json()
+            task_id = data.get("task_id", "")
+            logger.info("Demo workflow dispatched to Celery: title=%s, task_id=%s",
+                       title, task_id)
+    except Exception as exc:
+        logger.error("Demo workflow dispatch failed: %s", exc)
+        return SiriChatResponse(
+            speak=(
+                "I had trouble starting your demo. "
+                "Please try again in a moment."
+            ),
+            display=f"Demo dispatch error: {exc}",
+            session_id=req.session_id,
+        )
 
     return SiriChatResponse(
         speak=(
@@ -292,13 +296,17 @@ async def _handle_create_demo_workflow(req: SiriChatRequest) -> SiriChatResponse
         ),
         display=(
             f"Demo build started!\n"
-            f"Title: {title}\n\n"
+            f"Title: {title}\n"
+            f"Task ID: {data.get('task_id', '')}\n\n"
             f"The pipeline will research, design, and build your demo.\n"
             f"Typical completion time: 2-5 minutes.\n"
             f"Follow up with: 'list my demos'"
         ),
         session_id=req.session_id,
-        data={"title": title},
+        data={
+            "title": title,
+            "task_id": data.get("task_id", ""),
+        },
     )
 
 

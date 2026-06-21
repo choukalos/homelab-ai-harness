@@ -1,6 +1,25 @@
 name: ai-core
 
 services:
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: litellm-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${LITELLM_DB_USER:-litellm}
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASS:-litellm}
+      - POSTGRES_DB=${LITELLM_DB_NAME:-litellm}
+      - TZ=America/Chicago
+    networks:
+      - ai-net
+    volumes:
+      - /home/chuck/data/litellm-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LITELLM_DB_USER:-litellm}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: litellm-proxy
@@ -10,6 +29,7 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_PUBLIC_API_KEY=${LITELLM_PUBLIC_API_KEY}
       - LITELLM_API_KEY=${LITELLM_MASTER_KEY}
+      - DATABASE_URL=${LITELLM_DATABASE_URL}
       - MAC_STUDIO_IP=192.168.4.56
       - MATRIX_IP=192.168.4.55
       - THOR_IP=192.168.4.54
@@ -25,12 +45,15 @@ services:
       - "macstudio:${MAC_STUDIO_IP:-127.0.0.1}"
       - "matrix:${MATRIX_IP:-127.0.0.1}"
       - "host.docker.internal:host-gateway"
+    depends_on:
+      litellm-db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/metrics/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main

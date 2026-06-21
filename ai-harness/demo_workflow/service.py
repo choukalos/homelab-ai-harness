@@ -30,7 +30,14 @@ from langchain_core.messages import HumanMessage
 from deepagents import create_deep_agent
 from langgraph.checkpoint.mysql.asyncmy import AsyncMySaver
 
-from core.config import DEMO_WORKFLOW_MODEL, LITELLM_API_KEY, LITELLM_BASE_URL
+from core.config import (
+    DEMO_WORKFLOW_MODEL,
+    INTERNAL_BASE_URL,
+    LITELLM_API_KEY,
+    LITELLM_BASE_URL,
+    MEDIA_OUTPUT_DIR,
+    PUBLIC_BASE_URL,
+)
 from demo_workflow.prompts import (
     DEMO_WORKFLOW_INSTRUCTIONS,
     RESEARCHER_INSTRUCTIONS,
@@ -54,6 +61,9 @@ from demo_workflow.tools import (
 )
 
 logger = logging.getLogger("demo_workflow")
+
+# Demos output directory — created at startup alongside checkpoint tables
+_DEMOS_DIR = Path(MEDIA_OUTPUT_DIR) / "demos"
 
 # ---------------------------------------------------------------------------
 # MySQL checkpointer (matches deep_research pattern)
@@ -86,7 +96,8 @@ async def ensure_checkpointer_tables():
         _checkpointer_ctx = AsyncMySaver.from_conn_string(_build_mysql_uri())
         _checkpointer = await _checkpointer_ctx.__aenter__()
         await _checkpointer.setup()
-    logger.info("Demo-workflow MySQL checkpoint tables ensured.")
+    _DEMOS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("Demo-workflow MySQL checkpoint tables ensured, demos dir: %s", _DEMOS_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +212,7 @@ async def run_demo(req: DemoCreateRequest) -> DemoCreateResponse:
         slug = _extract_slug(messages) or _make_slug(title)
         metadata = _extract_metadata(messages)
         build_step = _extract_build_step(messages)
+        public_url, local_url = _resolve_demo_urls(metadata, slug)
 
         return DemoCreateResponse(
             thread_id=thread_id,
@@ -209,18 +221,24 @@ async def run_demo(req: DemoCreateRequest) -> DemoCreateResponse:
             status="completed",
             build_step=build_step,
             html_path=metadata.get("html_path", ""),
+            public_url=public_url,
+            local_url=local_url,
             metadata=metadata,
         )
 
     except Exception as e:
         logger.exception("Demo creation failed: %s", e)
+        slug = _make_slug(req.title or "Untitled Demo")
+        public_url, local_url = _build_demo_urls(slug)
         return DemoCreateResponse(
             thread_id=thread_id,
             title=req.title or "Untitled Demo",
-            slug=_make_slug(req.title or "Untitled Demo"),
+            slug=slug,
             status="error",
             build_step="",
             html_path="",
+            public_url=public_url,
+            local_url=local_url,
             metadata={},
             error=str(e),
         )
@@ -268,11 +286,14 @@ async def resume_demo(thread_id: str) -> DemoCreateResponse:
             status="completed",
             build_step=_extract_build_step(messages),
             html_path=metadata.get("html_path", ""),
+            public_url=metadata.get("public_url", ""),
+            local_url=metadata.get("local_url", ""),
             metadata=metadata,
         )
 
     except Exception as e:
         logger.exception("Demo resume failed for thread=%s: %s", thread_id, e)
+        public_url, local_url = _build_demo_urls(thread_id)
         return DemoCreateResponse(
             thread_id=thread_id,
             title="",
@@ -280,6 +301,8 @@ async def resume_demo(thread_id: str) -> DemoCreateResponse:
             status="error",
             build_step="",
             html_path="",
+            public_url=public_url,
+            local_url=local_url,
             metadata={},
             error=f"Resume failed: {e}",
         )
@@ -479,6 +502,8 @@ async def _run_demo_with_events(
                 "title": title,
                 "slug": slug,
                 "html_path": metadata.get("html_path", ""),
+                "public_url": metadata.get("public_url", ""),
+                "local_url": metadata.get("local_url", ""),
                 "metadata": metadata,
                 "total_build_time_seconds": round(_time.time() - pipeline_start, 1),
             },
@@ -688,3 +713,27 @@ def _make_slug(title: str) -> str:
     if len(slug) > 60:
         slug = slug[:60]
     return f"{slug}-{datetime.now().strftime('%Y%m%d%H%M')}"
+
+
+# ---------------------------------------------------------------------------
+# URL helpers (matching presentation module pattern)
+# ---------------------------------------------------------------------------
+
+def _build_demo_urls(slug: str) -> tuple[str, str]:
+    """Build public/local URLs for a demo by slug.
+
+    Used as fallback when save_demo didn't run or didn't capture URLs.
+    """
+    base = f"/media/files/demos/{slug}/final_demo.html"
+    local_url = f"{INTERNAL_BASE_URL.rstrip('/')}{base}"
+    public_url = f"{PUBLIC_BASE_URL.rstrip('/')}{base}"
+    return public_url, local_url
+
+
+def _resolve_demo_urls(metadata: dict[str, Any], slug: str) -> tuple[str, str]:
+    """Resolve public/local URLs from metadata, falling back to slug-based generation."""
+    public_url = metadata.get("public_url", "")
+    local_url = metadata.get("local_url", "")
+    if not public_url or not local_url:
+        public_url, local_url = _build_demo_urls(slug)
+    return public_url, local_url

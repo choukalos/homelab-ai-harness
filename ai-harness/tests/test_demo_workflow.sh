@@ -4,16 +4,18 @@
 # This end-to-end test exercises the full coordinator-pattern demo workflow:
 #   1.  Health check
 #   2.  Create demo synchronously  (POST /demos/run)
-#   3.  Verify response schema      (thread_id, title, slug, status, html_path, metadata)
+#   3.  Verify response schema      (thread_id, title, slug, status, html_path, metadata, public_url, local_url)
 #   4.  Verify HTML file exists      (GET /demos/{slug}/html)
 #   5.  Verify HTML structure        (DOCTYPE, </html>, <style>, <script>)
+#   5b. Public URL download test     (CURL public_url via Caddy)
 #   6.  List jobs                   (GET /demos/jobs)
 #   7.  List demos                  (GET /demos/)
 #   8.  Search demos                (GET /demos/search)
 #   9.  Get demo metadata           (GET /demos/{slug}) + enriched fields
 #  10.  Checkpoint status           (GET /demos/jobs/{thread_id}/checkpoint)
 #  11.  Streaming endpoint          (POST /demos/run/stream)
-#  12.  Siri create_demo intent     (fire-and-forget, POST /siri/chat)
+#  11b. Async endpoint              (POST /demos/run/async via Celery)
+#  12.  Siri create_demo intent     (fire-and-forget via Celery, POST /siri/chat)
 #  13.  Siri list_demos intent
 #  14.  Siri demo_quality intent    (new — asks how well a demo works)
 #  15.  Siri demo_complexity intent (new — asks how complex a demo is)
@@ -190,6 +192,22 @@ else
     echo "  ✅ build_step: ${BUILD_STEP}"
 fi
 
+# ── URL fields from Phase 1 schema update ──
+PUBLIC_URL=$(_json "${TMP_FILE}" "data.get('public_url','')")
+LOCAL_URL=$(_json "${TMP_FILE}" "data.get('local_url','')")
+
+if [ -z "${PUBLIC_URL}" ]; then
+    echo "  ❌ Missing public_url"; FAIL=1
+else
+    echo "  ✅ Has public_url: ${PUBLIC_URL}"
+fi
+
+if [ -z "${LOCAL_URL}" ]; then
+    echo "  ❌ Missing local_url"; FAIL=1
+else
+    echo "  ✅ Has local_url: ${LOCAL_URL}"
+fi
+
 if [ ${FAIL} -ne 0 ]; then
     echo; cat "${TMP_FILE}"; echo
     echo "=========================================================="
@@ -242,6 +260,24 @@ if [ "${HAS_DOCTYPE}" -ge 1 ] && [ "${HAS_END_HTML}" -ge 1 ] && [ "${HAS_STYLE}"
     echo "  ✅ HTML structure looks valid"
 else
     echo "  ⚠ HTML structure may be incomplete"
+fi
+
+# ── Test 5b: Public URL download test ──
+echo
+echo "==== Test 5b: Public URL download test ==>"
+
+if [ -n "${PUBLIC_URL}" ] && [ "${PUBLIC_URL}" != "null" ]; then
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        "${PUBLIC_URL}" 2>/dev/null) || HTTP_CODE="000"
+    if [ "${HTTP_CODE}" = "200" ]; then
+        DOWNLOAD_SIZE=$(wc -c < "${TMP_FILE}")
+        echo "  ✅ Public URL returns 200 (${DOWNLOAD_SIZE} bytes) — Caddy → StaticFiles pipeline working"
+    else
+        echo "  ⚠ Public URL returned HTTP ${HTTP_CODE}"
+    fi
+else
+    echo "  ℹ No public_url available — skipping download test"
 fi
 
 # ── Test 6: List Jobs (GET /demos/jobs) ─────────────────────
@@ -395,9 +431,55 @@ else
     echo "  ⚠ No SSE events captured in 5s (stream may be slow)"
 fi
 
+# ── Test 11b: Async endpoint (POST /demos/run/async) ─────────
+echo
+echo "==== Test 11b: Async demo creation (POST /demos/run/async) ==>"
+
+rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    -X POST "${BASE_URL}/demos/run/async" \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: ${API_KEY}" \
+    -d '{
+        "title": "Async Celery Test",
+        "prompt": "Build a one-page demo for a todo list app with add/delete functionality."
+    }' \
+    --max-time 30 2>/dev/null) || HTTP_CODE="000"
+
+if [ "${HTTP_CODE}" = "202" ]; then
+    TASK_ID=$(_json "${TMP_FILE}" "data.get('task_id','')")
+    TASK_TITLE=$(_json "${TMP_FILE}" "data.get('title','')")
+    echo "  ✅ Async endpoint returned 202 — task dispatched"
+    echo "  Title: ${TASK_TITLE}"
+
+    if [ -n "${TASK_ID}" ] && [ "${TASK_ID}" != "null" ]; then
+        echo "  ✅ Task ID: ${TASK_ID}"
+
+        # Check task status via /jobs/async/{task_id}/status
+        rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+        STATUS_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+            "${BASE_URL}/demos/jobs/async/${TASK_ID}/status" \
+            -H "X-API-Key: ${API_KEY}" 2>/dev/null) || STATUS_CODE="000"
+
+        if [ "${STATUS_CODE}" = "200" ]; then
+            TASK_STATE=$(_json "${TMP_FILE}" "data.get('status','')")
+            echo "  ✅ Task status endpoint works — state: ${TASK_STATE}"
+        else
+            echo "  ⚠ Task status endpoint returned HTTP ${STATUS_CODE}"
+        fi
+    else
+        echo "  ⚠ No task_id in async response"
+    fi
+else
+    echo "  ❌ Async endpoint returned HTTP ${HTTP_CODE}"
+    HTTP_BODY_TEXT=$(cat "${TMP_FILE}" 2>/dev/null)
+    echo "  Response: ${HTTP_BODY_TEXT:0:200}"
+fi
+
 # ── Test 12: Siri create_demo Intent ────────────────────────
 echo
-echo "==== Test 12: Siri create_demo intent (fire-and-forget) ==>"
+echo "==== Test 12: Siri create_demo intent (fire-and-forget via Celery) ==>"
 
 rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
 
@@ -420,6 +502,14 @@ else
             echo "  ✅ Siri confirms demo build started"
         else
             echo "  ⚠ Siri response doesn't mention demo build"
+        fi
+
+        # Verify task_id is in the response (Celery dispatch)
+        SIRI_TASK_ID=$(_json "${TMP_FILE}" "data.get('task_id','')")
+        if [ -n "${SIRI_TASK_ID}" ] && [ "${SIRI_TASK_ID}" != "null" ]; then
+            echo "  ✅ Celery task dispatched: task_id=${SIRI_TASK_ID}"
+        else
+            echo "  ⚠ No task_id in response (Celery dispatch may have failed)"
         fi
     else
         echo "  ❌ Siri returned HTTP ${HTTP_CODE}"

@@ -3,9 +3,11 @@ FastAPI router for the demo-workflow module (Deep Agents with MySQL checkpointin
 
 Endpoints:
   POST   /run                    — Sync demo creation (agent.ainvoke)
+  POST   /run/async              — Async demo creation via Celery (fire-and-forget)
   POST   /run/stream             — SSE streaming (agent.astream)
   GET    /jobs                   — List recent demo jobs (from metadata on disk)
   GET    /jobs/{thread_id}       — Get job status + output
+  GET    /jobs/async/{task_id}/status — Get Celery task status
   GET    /jobs/{thread_id}/checkpoint — Get checkpoint status (MySQL)
   POST   /jobs/{thread_id}/resume   — Resume from checkpoint (MySQL auto-resume)
   DELETE /jobs/{thread_id}/checkpoint — Remove a checkpoint
@@ -30,7 +32,12 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from core.config import MEDIA_OUTPUT_DIR, INTERNAL_BASE_URL, PUBLIC_BASE_URL
 from core.security import require_harness_auth
-from demo_workflow.schemas import DemoCreateRequest, DemoCreateResponse
+from demo_workflow.schemas import (
+    AsyncTaskResponse,
+    AsyncTaskStatus,
+    DemoCreateRequest,
+    DemoCreateResponse,
+)
 from demo_workflow.service import (
     run_demo,
     resume_demo,
@@ -147,6 +154,65 @@ async def run_demo_stream(
             yield f"data: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@router.post("/run/async", response_model=AsyncTaskResponse, status_code=202)
+def run_demo_async(
+    req: DemoCreateRequest,
+    _: None = Depends(require_harness_auth),
+) -> AsyncTaskResponse:
+    """
+    Async demo generation via Celery (fire-and-forget).
+
+    Dispatches the full generation pipeline to a Celery worker and returns
+    immediately with a task_id. Check status via GET /jobs/async/{task_id}/status.
+    Designed for Siri's voice flow where the user can't wait 2-5 minutes.
+    """
+    # Import lazily to avoid circular deps at import time
+    from demo_workflow.tasks import generate_demo_task
+
+    # Dispatch to Celery
+    async_result = generate_demo_task.apply_async(
+        kwargs={
+            "title": req.title or "",
+            "prompt": req.prompt,
+            "model": req.model,
+            "thread_id": req.thread_id,
+        },
+    )
+
+    logger.info("Async demo task dispatched: task_id=%s, title=%s",
+                async_result.id, req.title)
+
+    return AsyncTaskResponse(
+        task_id=async_result.id,
+        title=req.title or "Demo",
+        status="pending",
+        message=f"Demo generation started. Check /jobs/async/{async_result.id}/status for status.",
+    )
+
+
+@router.get("/jobs/async/{task_id}/status", response_model=AsyncTaskStatus)
+def get_async_task_status(
+    task_id: str,
+    _: None = Depends(require_harness_auth),
+) -> AsyncTaskStatus:
+    """
+    Get the status of an async demo generation task.
+
+    Returns the Celery task status and result (if completed).
+    """
+    # Import lazily to avoid circular deps at import time
+    from celery.result import AsyncResult
+    from core.celery_app import celery
+
+    result = AsyncResult(task_id, app=celery)
+
+    return AsyncTaskStatus(
+        task_id=task_id,
+        status=result.state,
+        result=result.result if result.ready() else {},
+    )
 
 
 @router.get("/jobs")

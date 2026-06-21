@@ -65,6 +65,20 @@ class DemoCreateResponse(BaseModel):
         default="",
         description="Path to the generated HTML file relative to the media directory.",
     )
+    public_url: str = Field(
+        default="",
+        description=(
+            "Public URL for the demo HTML (e.g. "
+            "https://siri.choukalos.com/media/files/demos/slug/final_demo.html)."
+        ),
+    )
+    local_url: str = Field(
+        default="",
+        description=(
+            "Internal URL for the demo HTML (e.g. "
+            "http://thor.local:8090/media/files/demos/slug/final_demo.html)."
+        ),
+    )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Extracted demo metadata (title, description, tags, URLs, etc.).",
@@ -181,6 +195,37 @@ class DemoCheckpointStatus(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────
 # SSE Streaming Event Schema
 # ──────────────────────────────────────────────────────────────────────────
+
+class AsyncTaskResponse(BaseModel):
+    """Response when dispatching demo generation to Celery (fire-and-forget).
+
+    Returns immediately with a task_id for status tracking.
+    """
+
+    task_id: str = Field(description="Celery task ID for status tracking.")
+    title: str = Field(description="Demo title.")
+    status: str = Field(
+        default="pending",
+        description="Task status: 'pending', 'running', 'completed', 'failed'.",
+    )
+    message: str = Field(
+        default="Demo generation started. Check /jobs/async/{task_id} for status.",
+        description="Human-readable status message.",
+    )
+
+
+class AsyncTaskStatus(BaseModel):
+    """Response for checking the status of an async demo generation task."""
+
+    task_id: str = Field(description="Celery task ID.")
+    status: str = Field(
+        description="Task status: 'PENDING', 'STARTED', 'SUCCESS', 'FAILURE', 'RETRY', or 'UNKNOWN'.",
+    )
+    result: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Task result (if completed) or error info (if failed).",
+    )
+
 
 class DemoStreamEvent(BaseModel):
     """A single SSE event emitted by the coordinator during demo creation.

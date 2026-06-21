@@ -760,18 +760,27 @@ class Tools:
         error = data.get("error")
 
         if error or status == "error":
+            # Even on error, show any URL that was generated for inspection
+            public_url = self._absolute_url(data.get("public_url", ""))
             lines = [
                 f"Demo creation failed.",
                 "",
                 f"Title: {demo_title}",
                 f"Error: {error}",
             ]
+            if public_url:
+                lines.extend([
+                    "",
+                    f"Partial result (if any): {public_url}",
+                    f"[Inspect partial result]({public_url})",
+                ])
             return "\n".join(lines)
 
-        # Build the local URL to the demo HTML
-        local_url = ""
-        if slug:
-            local_url = f"{self.valves.harness_url.rstrip('/')}/demos/{slug}/html"
+        # Use public_url from the response (Phase 1 schema update),
+        # falling back to local_url, then to slug-based construction.
+        public_url = self._absolute_url(data.get("public_url", ""))
+        local_url = self._absolute_url(data.get("local_url", ""))
+        display_url = public_url or local_url or ""
 
         lines = [
             "Demo created successfully.",
@@ -785,11 +794,11 @@ class Tools:
         if thread_id:
             lines.append(f"Thread ID: {thread_id}")
 
-        if local_url:
+        if display_url:
             lines.append("")
-            lines.append(f"Open demo: {local_url}")
+            lines.append(f"Open demo: {display_url}")
             lines.append("")
-            lines.append(f"[Open clickable demo]({local_url})")
+            lines.append(f"[Open clickable demo]({display_url})")
 
         return "\n".join(lines)
 
