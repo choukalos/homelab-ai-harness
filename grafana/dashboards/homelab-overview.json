@@ -1011,8 +1011,8 @@
       },
       "targets": [
         {
-          "expr": "topk(1, sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d])))",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace(topk(1, sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d]))), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -1063,20 +1063,44 @@
       },
       "targets": [
         {
-          "expr": "topk(3, sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d])))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "Spend"
+          "refId": "Spend",
+          "instant": true
         },
         {
-          "expr": "topk(3, sum by (api_key_alias) (increase(litellm_total_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d])))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_total_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[30d])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "Tokens"
+          "refId": "Tokens",
+          "instant": true
         }
       ],
       "transformations": [
         {
+          "id": "reduce",
+          "options": {
+            "mode": "reduceRows",
+            "reducers": [
+              "lastNotNull"
+            ]
+          }
+        },
+        {
           "id": "merge",
           "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "addFieldName": null
+          }
+        },
+        {
+          "id": "limit",
+          "options": {
+            "limit": 3
+          }
         },
         {
           "id": "organize",
@@ -1085,7 +1109,7 @@
               "Time": true
             },
             "renameByName": {
-              "api_key_alias": "User",
+              "Fields": "User",
               "Value #Spend": "Spend (30d)",
               "Value #Tokens": "Tokens (30d)"
             },

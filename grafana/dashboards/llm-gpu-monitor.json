@@ -777,7 +777,7 @@
       "targets": [
         {
           "expr": "rate(litellm_request_total_latency_metric_sum{api_key_alias!=\"litellm-internal-health-check\"}[$__rate_interval]) / rate(litellm_request_total_latency_metric_count{api_key_alias!=\"litellm-internal-health-check\"}[$__rate_interval])",
-          "legendFormat": "label_replace(__name__, \"user\", \"{{api_key_alias}}\", \"api_key_alias\", \"\")",
+          "legendFormat": "avg latency",
           "refId": "A"
         }
       ],
@@ -836,8 +836,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -886,13 +886,13 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_input_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}} in\", \"alias\", \"master in\", \"alias\", \"in\")",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_input_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}} in",
           "refId": "A"
         },
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_output_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}} out\", \"alias\", \"master out\", \"alias\", \"out\")",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_output_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}} out",
           "refId": "B"
         }
       ],
@@ -930,8 +930,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -970,7 +970,7 @@
       "type": "bargauge",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 29
       },
@@ -980,8 +980,8 @@
       },
       "targets": [
         {
-          "expr": "(1 - litellm_remaining_api_key_budget_metric{api_key_alias!=\"litellm-internal-health-check\"} / litellm_api_key_max_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}) * 100",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace((1 - litellm_remaining_api_key_budget_metric{api_key_alias!=\"litellm-internal-health-check\"} / litellm_api_key_max_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}) * 100, \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -1028,165 +1028,6 @@
       }
     },
     {
-      "id": 36,
-      "title": "Budget Status",
-      "type": "table",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 29
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "litellm_api_key_max_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}",
-          "legendFormat": "{{api_key_alias}}",
-          "refId": "BudgetCap"
-        },
-        {
-          "expr": "litellm_remaining_api_key_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}",
-          "legendFormat": "{{api_key_alias}}",
-          "refId": "Remaining"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Spent",
-            "binary": {
-              "left": "Value #BudgetCap",
-              "operator": "-",
-              "right": "Value #Remaining"
-            },
-            "mode": "reduceRow"
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Utilization %",
-            "binary": {
-              "left": "Value #BudgetCap",
-              "operator": "/",
-              "rightMode": "divider",
-              "right": "Value #Remaining"
-            },
-            "mode": "reduceRow"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Utilization %"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 100
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 80
-                    },
-                    {
-                      "color": "red",
-                      "value": 95
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "gradient-gauge"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Spent"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "USD"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Value #BudgetCap"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "USD"
-              },
-              {
-                "id": "custom.width",
-                "value": 100
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Value #Remaining"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "USD"
-              },
-              {
-                "id": "custom.width",
-                "value": 100
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true
-      }
-    },
-    {
       "id": 37,
       "title": "Spend Over Time by User",
       "type": "timeseries",
@@ -1202,8 +1043,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (rate(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[5m]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace(sum by (api_key_alias) (rate(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[5m])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -1243,8 +1084,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (rate(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[5m]))",
-          "legendFormat": "label_replace(\"{{api_key_alias}}\", \"alias\", \"master\", \"alias\", \"\")",
+          "expr": "label_replace(sum by (api_key_alias) (rate(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[5m])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
+          "legendFormat": "{{api_key_alias}}",
           "refId": "A"
         }
       ],
@@ -1284,76 +1125,64 @@
       },
       "targets": [
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_proxy_total_requests_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "Requests"
+          "refId": "Requests",
+          "instant": true
         },
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_spend_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "Spend"
+          "refId": "Spend",
+          "instant": true
         },
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_input_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_input_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "InTokens"
+          "refId": "InTokens",
+          "instant": true
         },
         {
-          "expr": "sum by (api_key_alias) (increase(litellm_output_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range]))",
+          "expr": "label_replace(sum by (api_key_alias) (increase(litellm_output_tokens_metric_total{api_key_alias!=\"litellm-internal-health-check\"}[$__range])), \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "OutTokens"
+          "refId": "OutTokens",
+          "instant": true
         },
         {
-          "expr": "litellm_api_key_max_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}",
+          "expr": "label_replace(litellm_api_key_max_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}, \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "BudgetCap"
+          "refId": "BudgetCap",
+          "instant": true
         },
         {
-          "expr": "litellm_remaining_api_key_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}",
+          "expr": "label_replace(litellm_remaining_api_key_budget_metric{api_key_alias!=\"litellm-internal-health-check\"}, \"api_key_alias\", \"master\", \"api_key_alias\", \"\")",
           "legendFormat": "{{api_key_alias}}",
-          "refId": "Remaining"
+          "refId": "Remaining",
+          "instant": true
         }
       ],
       "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "mode": "reduceRows",
+            "reducers": [
+              "lastNotNull"
+            ]
+          }
+        },
         {
           "id": "merge",
           "options": {}
         },
         {
-          "id": "calculateField",
-          "options": {
-            "alias": "Utilization %",
-            "binary": {
-              "left": "Value #BudgetCap",
-              "operator": "-",
-              "right": "Value #Remaining"
-            },
-            "mode": "reduceRow"
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Util %",
-            "binary": {
-              "left": "Value #BudgetCap",
-              "operator": "/",
-              "rightMode": "divider",
-              "right": "Value #Remaining"
-            },
-            "mode": "reduceRow"
-          }
-        },
-        {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "Value #Utilization %": true,
-              "Value #Util %": true
+              "Time": true
             },
             "renameByName": {
-              "api_key_alias": "User",
+              "Fields": "User",
               "Value #Requests": "Requests",
               "Value #Spend": "Spend ($)",
               "Value #InTokens": "Input Tokens",

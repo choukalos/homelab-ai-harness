@@ -129,7 +129,13 @@ All "GPU Metrics" row and below shift **+12 rows**:
 
 ---
 
-## Implementation Status: ✅ COMPLETE
+## Implementation Status: ✅ COMPLETE (v2)
+
+### Fixes applied (v2)
+- **User names**: Moved `label_replace()` from `legendFormat` (which Grafana renders literally) into the PromQL `expr` itself. All `legendFormat` now use `{{api_key_alias}}` — Grafana interpolates the label value after PromQL runs, so "" → "master" correctly.
+- **Budget Status table**: Removed (panel 36). Budget Utilization % bargauge (panel 35) expanded to full width (w=24).
+- **Key Detail Table**: Rewrote transformations to `reduce` (reduceRows) → `merge` → `organize`. All queries use `instant: true`. Columns properly renamed (User, Requests, Spend ($), Input Tokens, Output Tokens, Budget Cap, Remaining).
+- **Top 3 Spend table**: Rewrote to query ALL keys for spend + tokens, then `reduce` → `merge` → `sortBy` (desc by spend) → `limit` (3) → `organize`. This correctly shows the top 3 spenders with their corresponding token counts.
 
 ### Dashboard 1: LLM & GPU Monitor — Final Layout
 
@@ -141,7 +147,7 @@ All "GPU Metrics" row and below shift **+12 rows**:
   [26] Key Usage                                y=15 h=1
   [27-31] Key stats                             y=16 h=5
   [32-34] Key bar charts                        y=21 h=8
-  [35-36] Budget utilization + status           y=29 h=8
+  [35] Budget Utilization % (full width)        y=29 h=8
   [37-38] Spend/requests over time              y=37 h=6
   [39] Key Detail Table                         y=43 h=8
   [12] GPU Metrics (Matrix)                     y=51 h=1
@@ -171,5 +177,3 @@ All "GPU Metrics" row and below shift **+12 rows**:
 ```
 
 Both JSON files validated as well-formed JSON. Grafana will pick up the changes on next dashboard refresh.
-
----

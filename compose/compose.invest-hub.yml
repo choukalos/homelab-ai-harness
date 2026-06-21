@@ -47,6 +47,7 @@ services:
       - CORS_ORIGINS=https://invest.choukalos.com,https://api.choukalos.com
       - ADMIN_EMAIL=${INVEST_ADMIN_EMAIL}
       - ADMIN_PASSWORD=${INVEST_ADMIN_PASSWORD}
+      - TZ=${TZ}
 
   invest-hub-client:
     image: invest-hub-client:latest
