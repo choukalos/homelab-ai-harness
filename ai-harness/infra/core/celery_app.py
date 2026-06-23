@@ -67,7 +67,7 @@ celery = make_celery()
 # Now that the singleton is fully constructed, import all task modules so that
 # @celery.task decorators register against the live app.  These imports are safe
 # because `celery` is now a complete object.
-import tasks.tasks   # noqa: F401  registers run_prompt, run_llm_chain, python_executor
-import scheduler.tasks  # noqa: F401  registers dispatch_task, condition_checker
-import presentation.tasks  # noqa: F401  registers generate_presentation
-import demo_workflow.tasks  # noqa: F401  registers generate_demo
+import infra.tasks.tasks   # noqa: F401  registers run_prompt, run_llm_chain, python_executor
+import infra.scheduler.tasks  # noqa: F401  registers dispatch_task, condition_checker
+import creative.presentation.tasks  # noqa: F401  registers generate_presentation
+import apps.demo_workflow.tasks  # noqa: F401  registers generate_demo

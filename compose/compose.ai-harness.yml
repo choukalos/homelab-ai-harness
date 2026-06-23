@@ -45,6 +45,11 @@ services:
       - PRESENTON_AUTH_USERNAME=presenton
       - PRESENTON_AUTH_PASSWORD=changeme123
 
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST}
+      - AI_DB_USER=${AI_DB_USER}
+      - AI_DB_PASS=${AI_DB_PASS}
+      - AI_DB_NAME=${AI_DB_NAME}
+
     volumes:
       - /home/chuck/data/ai-kb:/data/ai-kb
       - /home/chuck/data/media:/data/media
@@ -79,6 +84,10 @@ services:
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
       - PRESENTON_AUTH_PASSWORD=changeme123
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST}
+      - AI_DB_USER=${AI_DB_USER}
+      - AI_DB_PASS=${AI_DB_PASS}
+      - AI_DB_NAME=${AI_DB_NAME}
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
@@ -113,6 +122,10 @@ services:
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
       - PRESENTON_AUTH_PASSWORD=changeme123
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST}
+      - AI_DB_USER=${AI_DB_USER}
+      - AI_DB_PASS=${AI_DB_PASS}
+      - AI_DB_NAME=${AI_DB_NAME}
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
@@ -147,6 +160,10 @@ services:
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
       - PRESENTON_AUTH_PASSWORD=changeme123
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST}
+      - AI_DB_USER=${AI_DB_USER}
+      - AI_DB_PASS=${AI_DB_PASS}
+      - AI_DB_NAME=${AI_DB_NAME}
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw

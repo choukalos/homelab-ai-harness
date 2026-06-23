@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 from infra.core.config import INTERNAL_BASE_URL
-import charts.service as _charts
+import creative.charts.service as _charts
 
 # ------------------------------------------------------------------
 # In-memory layout store
