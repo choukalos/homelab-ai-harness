@@ -7,10 +7,18 @@ services:
     restart: unless-stopped
     environment:
       - REPO_URL=https://github.com/choukalos/invest-hub
-      - RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
+      - ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - RUNNER_NAME=invest-hub-runner
+      - RUNNER_SCOPE=repo
+      - RUNNER_WORKDIR=/tmp/runner/work
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner/data
+      - DISABLE_AUTO_UPDATE=true
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - LABELS=self-hosted,linux,docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /home/chuck/data/invest-hub-runner:/runner/data
+      - /tmp/runner:/tmp/runner
       - /home/chuck/homelab/compose:/home/github-runner/work/compose
       - /home/chuck/homelab/.env:/home/github-runner/work/.env
     networks:
@@ -34,7 +42,6 @@ services:
       - PORT=4000
       - NODE_ENV=production
       - PUBLIC_BASE_URL=https://api.choukalos.com/
-      - JWT_SECRET=${INVEST_JWT_SECRET}
       - JWT_SECRET=${INVEST_JWT_SECRET}
       - YF_REQUEST_DELAY_MS=750
       - YF_REQUEST_JITTER_MS=750

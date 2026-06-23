@@ -44,6 +44,22 @@ def _detect_intent(req: SiriChatRequest) -> str:
     if text.startswith("generate image") or text.startswith("make an image") or text.startswith("draw "):
         return "image"
 
+    # Presentation update (check BEFORE creation to avoid misrouting)
+    if any(p in text for p in ["update a presentation", "update presentation",
+                               "update the presentation", "update my presentation",
+                               "change the presentation", "change presentation",
+                               "change the slide", "change the slides",
+                               "revise the presentation", "revise presentation",
+                               "revise my presentation",
+                               "modify the presentation", "modify presentation",
+                               "improve the presentation", "improve presentation",
+                               "fix the presentation", "fix presentation"]):
+        return "update_presentation"
+    # Broader patterns: "update <title>..." or "change the <title>..."
+    if any(text.startswith(p) for p in ["update ", "change the ", "revise the ",
+                                         "modify the ", "improve the ", "fix the "]):
+        return "update_presentation"
+
     # Presentation creation (check BEFORE listing to avoid misrouting)
     if any(p in text for p in ["create a presentation", "create presentation",
                                "make a presentation", "build a presentation",
@@ -590,6 +606,258 @@ async def _handle_demo_quality(req: SiriChatRequest) -> SiriChatResponse:
     )
 
 
+async def _handle_update_presentation(req: SiriChatRequest) -> SiriChatResponse:
+    """Handle presentation update requests from Siri.
+
+    1. Find the presentation by title via /presentation/search.
+    2. Parse the update instructions via LLM into structured parameters.
+    3. Dispatch async update via POST /presentation/{id}/update/async.
+    """
+    import json
+    import logging
+    from core.config import HARNESS_API_KEY, INTERNAL_BASE_URL
+    from presentation.prompts import UPDATE_INSTRUCTION_PROMPT
+
+    logger = logging.getLogger("siri.service")
+
+    # --- Step 1: Extract the presentation title from the voice text ---
+    text = req.text.strip()
+    title = text
+    for prefix in ["update a presentation", "update presentation",
+                   "update the presentation", "update my presentation",
+                   "change the presentation", "change presentation",
+                   "change the slide", "change the slides",
+                   "revise the presentation", "revise presentation",
+                   "revise my presentation",
+                   "modify the presentation", "modify presentation",
+                   "improve the presentation", "improve presentation",
+                   "fix the presentation", "fix presentation"]:
+        if text.lower().startswith(prefix):
+            title = text[len(prefix):].strip()
+            break
+    else:
+        # Broader patterns: "update <title>", "change the <title>", etc.
+        for prefix in ["update ", "change the ", "revise the ",
+                       "modify the ", "improve the ", "fix the "]:
+            if text.lower().startswith(prefix):
+                title = text[len(prefix):].strip()
+                break
+
+    # Strip leading "the", "my", "a", "an" to get a clean title
+    title = re.sub(r"^(the|my|a|an)\s+", "", title, flags=re.IGNORECASE).strip()
+    # If comma follows title, split: title, instructions
+    instructions_text = ""
+    if "," in title:
+        title, instructions_text = title.split(",", 1)
+        title = title.strip()
+        instructions_text = instructions_text.strip()
+    elif " to " in title and not instructions_text:
+        # "change the presentation to be more casual"
+        parts = title.split(" to ", 1)
+        title = parts[0].strip()
+        instructions_text = "to " + parts[1]
+    elif " and " in title and not instructions_text:
+        # Might be title + instructions, heuristic: check if first part is short
+        parts = title.split(" and ", 1)
+        if len(parts[0].split()) <= 5:
+            title = parts[0].strip()
+            instructions_text = "and " + parts[1]
+
+    # Strip common trailing non-title words AFTER splitting (e.g. "presentation" in
+    # "change the Q4 Review presentation to be casual")
+    title = re.sub(r"\s+(presentation|presentations|slide|slides|deck|decks)\s*$", "", title, flags=re.IGNORECASE).strip()
+
+    if not title:
+        return SiriChatResponse(
+            speak=(
+                "I'm not sure which presentation you want to update. "
+                "Try: 'update the Q4 review to be more casual'"
+            ),
+            display="Could not determine presentation title from request.",
+            session_id=req.session_id,
+        )
+
+    # --- Step 2: Find the presentation ---
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"{INTERNAL_BASE_URL.rstrip('/')}/presentation/search",
+                params={"title": title},
+                headers={"X-API-Key": HARNESS_API_KEY},
+            )
+            r.raise_for_status()
+            data = r.json()
+    except Exception as exc:
+        return SiriChatResponse(
+            speak=f"I had trouble searching presentations. Please try again.",
+            display=f"Presentation search error: {exc}",
+            session_id=req.session_id,
+        )
+
+    presentations = data.get("presentations", [])
+    if not presentations:
+        return SiriChatResponse(
+            speak=(
+                f"I couldn't find a presentation matching '{title}'. "
+                "Try 'list my presentations' to see what's available."
+            ),
+            display=f"No presentations found matching '{title}'.",
+            session_id=req.session_id,
+        )
+
+    # Pick the most recent version (highest version number, or last in list)
+    pres = max(presentations, key=lambda p: (p.get("version", 0), p.get("created_at", "")))
+    presentation_id = pres.get("presentation_id", "")
+    pres_title = pres.get("title", title)
+    pres_version = pres.get("version", 1)
+    pres_slide_count = pres.get("slide_count", 0)
+    pres_template = pres.get("template", "general")
+    pres_tone = pres.get("tone", "default")
+    pres_verbosity = pres.get("verbosity", "standard")
+    pres_language = pres.get("language", "English")
+
+    # --- Step 3: Parse update instructions via LLM ---
+    has_explicit_instructions = bool(instructions_text.strip())
+
+    update_payload = {}
+    if has_explicit_instructions:
+        prompt = UPDATE_INSTRUCTION_PROMPT.format(
+            title=pres_title,
+            version=pres_version,
+            slide_count=pres_slide_count,
+            template=pres_template,
+            tone=pres_tone,
+            verbosity=pres_verbosity,
+            language=pres_language,
+            instructions=instructions_text,
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                llm_result = await chat_completion(
+                    client=client,
+                    prompt=prompt,
+                    temperature=0.2,
+                    response_format={"type": "json_object"},
+                )
+
+            # Parse the JSON response
+            llm_json_str = llm_result.strip()
+            # Strip code fences if present
+            if llm_json_str.startswith("```"):
+                llm_json_str = llm_json_str.split("\n", 1)[-1]
+                if llm_json_str.endswith("```"):
+                    llm_json_str = llm_json_str[:-3]
+                llm_json_str = llm_json_str.strip()
+
+            update_payload = json.loads(llm_json_str)
+            logger.info("LLM parsed update instructions for '%s': %s", pres_title, update_payload)
+        except Exception as exc:
+            logger.warning(
+                "LLM instruction parsing failed for '%s', falling back to raw instructions: %s",
+                pres_title, exc,
+            )
+            # Fallback: put everything in the instructions field
+            update_payload = {"instructions": instructions_text}
+
+    # If no explicit instructions were given, we can't update without direction
+    if not has_explicit_instructions or not update_payload:
+        return SiriChatResponse(
+            speak=(
+                f"I found your '{pres_title}' presentation (v{pres_version}). "
+                "What changes would you like to make? For example: "
+                "'make it more casual' or 'add more slides'"
+            ),
+            display=(
+                f"Found presentation: {pres_title} (v{pres_version}, {pres_slide_count} slides)\n\n"
+                f"To update it, specify what you'd like to change.\n"
+                f"Examples:\n"
+                f"- 'Make it more casual'\n"
+                f"- 'Use the dark template and have 12 slides'\n"
+                f"- 'Add a slide about budget'\n"
+                f"- 'Make it more concise'"
+            ),
+            session_id=req.session_id,
+            data={
+                "presentation_id": presentation_id,
+                "title": pres_title,
+                "version": pres_version,
+            },
+        )
+
+    # --- Step 4: Dispatch async update ---
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{INTERNAL_BASE_URL.rstrip('/')}/presentation/{presentation_id}/update/async",
+                headers={"Content-Type": "application/json", "X-API-Key": HARNESS_API_KEY},
+                json=update_payload,
+            )
+            r.raise_for_status()
+            result = r.json()
+            task_id = result.get("task_id", "")
+            new_title = result.get("title", pres_title)
+            logger.info(
+                "Presentation update dispatched: task_id=%s, presentation_id=%s, title=%s, payload=%s",
+                task_id, presentation_id, new_title, update_payload,
+            )
+    except Exception as exc:
+        logger.error("Presentation update dispatch failed: %s", exc)
+        return SiriChatResponse(
+            speak=(
+                f"I had trouble starting the update for '{pres_title}'. "
+                "Please try again in a moment."
+            ),
+            display=f"Update dispatch error: {exc}",
+            session_id=req.session_id,
+        )
+
+    # Build a human-readable summary of what's changing
+    changes = []
+    if update_payload.get("tone"):
+        changes.append(f"tone to {update_payload['tone']}")
+    if update_payload.get("template"):
+        changes.append(f"template to {update_payload['template']}")
+    if update_payload.get("n_slides"):
+        changes.append(f"{update_payload['n_slides']} slides")
+    if update_payload.get("verbosity"):
+        changes.append(f"verbosity to {update_payload['verbosity']}")
+    if update_payload.get("language"):
+        changes.append(f"language to {update_payload['language']}")
+    if update_payload.get("export_as"):
+        changes.append(f"format to {update_payload['export_as']}")
+    if update_payload.get("title") and update_payload["title"] != pres_title:
+        changes.append(f"title to {update_payload['title']}")
+    if update_payload.get("instructions"):
+        changes.append(f"custom: {update_payload['instructions'][:60]}")
+
+    change_summary = ", ".join(changes) if changes else "as requested"
+
+    return SiriChatResponse(
+        speak=(
+            f"I've started updating your '{new_title}' presentation. "
+            f"Changing: {change_summary}. "
+            "It will take a couple minutes. "
+            "Ask me to list your presentations when it's done."
+        ),
+        display=(
+            f"Presentation update started!\n"
+            f"Title: {new_title} (v{pres_version} → v{pres_version + 1})\n"
+            f"Task ID: {task_id}\n\n"
+            f"Changes: {change_summary}\n\n"
+            f"Typical completion time: 3-5 minutes.\n"
+            f"Follow up with: 'list my presentations'"
+        ),
+        session_id=req.session_id,
+        data={
+            "presentation_id": presentation_id,
+            "title": new_title,
+            "task_id": task_id,
+            "changes": update_payload,
+        },
+    )
+
+
 async def _handle_create_presentation(req: SiriChatRequest) -> SiriChatResponse:
     """Kick off presentation generation via POST /presentation/generate/async.
 
@@ -867,6 +1135,9 @@ async def _handle_find_demo(req: SiriChatRequest) -> SiriChatResponse:
 
 async def handle_siri_chat(req: SiriChatRequest) -> SiriChatResponse:
     intent = _detect_intent(req)
+
+    if intent == "update_presentation":
+        return await _handle_update_presentation(req)
 
     if intent == "create_presentation":
         return await _handle_create_presentation(req)

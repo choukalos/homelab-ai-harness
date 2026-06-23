@@ -18,6 +18,13 @@
 #  14.  Public file download (no auth)
 #  15.  Metadata file verification
 #  16.  Sync generation                 (POST /presentation/generate)
+#  17.  Find presentation by title      (GET /presentation/search)
+#  18.  Dispatch update task            (POST /{id}/update/async)
+#  19.  Poll update task completion     (GET /presentation/tasks/{task_id})
+#  20.  Verify new version (v2) with parent_id
+#  21.  Verify updated params (tone, slides, template)
+#  22.  Siri update intent detection
+#  23.  Siri update handler end-to-end
 #
 # Usage:
 #   bash tests/test_presentation.sh
@@ -538,6 +545,296 @@ else
     echo "  ❌ Sync generation failed (HTTP ${HTTP_CODE})"
     echo "  Response:"
     cat "${TMP_FILE}" | head -20
+fi
+
+# ── Update flow: Create baseline presentation ──────────────
+# Tests 17-23 exercise the update/regenerate flow.
+# First we create a baseline presentation to update.
+echo
+echo "==== Update flow: Creating baseline presentation ==>>"
+
+rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+
+HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+    -X POST "${BASE_URL}/presentation/generate" \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: ${API_KEY}" \
+    -d '{
+        "title": "Smoke Update Baseline",
+        "content": "A baseline presentation for smoke testing the update flow. Cover three simple topics.",
+        "outline": "# Update Baseline\n\n## 1. Introduction\n\nSimple intro.\n\n## 2. Main Point\n\nOne main point.\n\n## 3. Conclusion\n\nBrief conclusion.",
+        "n_slides": 3,
+        "template": "general",
+        "tone": "professional",
+        "verbosity": "concise"
+    }' \
+    --max-time 900 2>/dev/null) || HTTP_CODE="000"
+
+echo "  -> HTTP ${HTTP_CODE}"
+
+if [ "${HTTP_CODE}" = "200" ]; then
+    UPDATE_BASELINE_ID=$(_json "${TMP_FILE}" "data.get('presentation_id','')")
+    UPDATE_BASELINE_VER=$(_json "${TMP_FILE}" "data.get('version', 0)")
+    echo "  OK Baseline presentation created: id=${UPDATE_BASELINE_ID}, v=${UPDATE_BASELINE_VER}"
+else
+    echo "  WARN Baseline creation failed (HTTP ${HTTP_CODE}) - skipping tests 17-23"
+    UPDATE_BASELINE_ID=""
+fi
+
+# ── Test 17: Find baseline by title via /search ─────────────
+echo
+echo "==== Test 17: Find presentation by title (GET /presentation/search) ==>>"
+
+if [ -n "${UPDATE_BASELINE_ID}" ]; then
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        "${BASE_URL}/presentation/search?title=Smoke%20Update%20Baseline" \
+        -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        SEARCH_TOTAL=$(_json "${TMP_FILE}" "data.get('total', 0)")
+        echo "  OK Search returned ${SEARCH_TOTAL} result(s)"
+
+        FIRST_ID=$(_json "${TMP_FILE}" "data.get('presentations', [{}])[0].get('presentation_id', '')")
+        if [ "${FIRST_ID}" = "${UPDATE_BASELINE_ID}" ]; then
+            echo "  OK Baseline presentation ID found in search results"
+        else
+            echo "  WARN Baseline ID not in first search result (first=${FIRST_ID})"
+        fi
+    else
+        echo "  FAIL Search failed (HTTP ${HTTP_CODE})"
+    fi
+else
+    echo "  SKIP - baseline presentation not created"
+fi
+
+# ── Test 18: POST /{id}/update/async ────────────────────────
+echo
+echo "==== Test 18: Dispatch update task (POST /{id}/update/async) ==>>"
+
+UPDATE_TASK_ID=""
+UPDATE_TASK_COMPLETED=false
+UPDATE_TASK_RESULT_FILE=""
+
+if [ -n "${UPDATE_BASELINE_ID}" ]; then
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        -X POST "${BASE_URL}/presentation/${UPDATE_BASELINE_ID}/update/async" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: ${API_KEY}" \
+        -d '{
+            "tone": "casual",
+            "n_slides": 5,
+            "template": "dark"
+        }' \
+        --max-time 30 2>/dev/null) || HTTP_CODE="000"
+
+    echo "  -> HTTP ${HTTP_CODE}"
+
+    if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "201" ]; then
+        UPDATE_TASK_ID=$(_json "${TMP_FILE}" "data.get('task_id','')")
+        UPDATE_RESP_TITLE=$(_json "${TMP_FILE}" "data.get('title','')")
+        UPDATE_RESP_STATUS=$(_json "${TMP_FILE}" "data.get('status','')")
+        echo "  task_id  = ${UPDATE_TASK_ID}"
+        echo "  title    = ${UPDATE_RESP_TITLE}"
+        echo "  status   = ${UPDATE_RESP_STATUS}"
+
+        if [ -n "${UPDATE_TASK_ID}" ]; then
+            echo "  OK Update task dispatched, task_id=${UPDATE_TASK_ID}"
+        else
+            echo "  FAIL Missing task_id in update response"
+        fi
+    else
+        echo "  FAIL Update dispatch failed (HTTP ${HTTP_CODE})"
+        echo "  Response:"
+        cat "${TMP_FILE}" | head -10
+    fi
+else
+    echo "  SKIP - baseline presentation not created"
+fi
+
+# ── Test 19: Poll update task until complete ────────────────
+echo
+echo "==== Test 19: Poll update task for completion (GET /tasks/{task_id}) ==>>"
+
+if [ -n "${UPDATE_TASK_ID}" ]; then
+    POLL_MAX=24
+    POLL_DELAY=50
+    POLL_COUNT=0
+
+    while [ ${POLL_COUNT} -lt ${POLL_MAX} ]; do
+        POLL_COUNT=$((POLL_COUNT + 1))
+        rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+        HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+            "${BASE_URL}/presentation/tasks/${UPDATE_TASK_ID}" \
+            -H "X-API-Key: ${API_KEY}" 2>/dev/null) || HTTP_CODE="000"
+
+        if [ "${HTTP_CODE}" = "200" ]; then
+            CHECK_STATUS=$(_json "${TMP_FILE}" "data.get('status','')")
+            echo "  Poll #${POLL_COUNT}: status=${CHECK_STATUS}"
+
+            if [ "${CHECK_STATUS}" = "completed" ]; then
+                UPDATE_TASK_RESULT_FILE="${TMP_FILE}"
+                UPDATE_TASK_COMPLETED=true
+                echo "  OK Update task completed after ${POLL_COUNT} poll(s)"
+                break
+            elif [ "${CHECK_STATUS}" = "failed" ]; then
+                ERROR_MSG=$(_json "${TMP_FILE}" "data.get('error','')")
+                echo "  FAIL Update task failed: ${ERROR_MSG}"
+                break
+            fi
+        else
+            echo "  Poll #${POLL_COUNT}: HTTP ${HTTP_CODE}"
+        fi
+
+        sleep ${POLL_DELAY}
+    done
+
+    if [ "${POLL_COUNT}" -ge "${POLL_MAX}" ] && [ "${UPDATE_TASK_COMPLETED}" = "false" ]; then
+        echo "  WARN Polling timeout (${POLL_MAX} rounds). Skipping tests 20-21."
+    fi
+else
+    echo "  SKIP - no update task to poll"
+fi
+
+# ── Test 20: Verify v2 exists with correct parent_id ────────
+echo
+echo "==== Test 20: Verify new version (v2) with correct parent_id ==>>"
+
+if [ "${UPDATE_TASK_COMPLETED}" = "true" ] && [ -n "${UPDATE_TASK_RESULT_FILE}" ]; then
+    NEW_VER=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('version', 0)")
+    NEW_PARENT=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('parent_id', '')")
+    NEW_PID=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('presentation_id', '')")
+    NEW_TITLE=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('title', '')")
+    NEW_SLIDES=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('slide_count', 0)")
+
+    echo "  New version: ${NEW_VER}"
+    echo "  New ID:      ${NEW_PID}"
+    echo "  Parent ID:   ${NEW_PARENT}"
+    echo "  Title:       ${NEW_TITLE}"
+    echo "  Slides:      ${NEW_SLIDES}"
+
+    if [ "${NEW_VER}" -ge 2 ] 2>/dev/null; then
+        echo "  OK Version incremented (>= v2)"
+    else
+        echo "  WARN Version number unexpected: ${NEW_VER}"
+    fi
+
+    if [ "${NEW_PARENT}" = "${UPDATE_BASELINE_ID}" ]; then
+        echo "  OK parent_id points to baseline presentation"
+    elif [ -n "${NEW_PARENT}" ]; then
+        echo "  INFO parent_id set but differs from baseline (may be expected if re-versioned)"
+    else
+        echo "  WARN parent_id not set"
+    fi
+else
+    echo "  SKIP - update task did not complete"
+fi
+
+# ── Test 21: Verify updated params (tone, slides, template) ─
+echo
+echo "==== Test 21: Verify updated params (tone=casual, n_slides=5, template=dark) ==>>"
+
+if [ "${UPDATE_TASK_COMPLETED}" = "true" ] && [ -n "${UPDATE_TASK_RESULT_FILE}" ]; then
+    NEW_TONE=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('tone', '')")
+    NEW_SLIDES=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('slide_count', 0)")
+    NEW_TEMPLATE=$(_json "${UPDATE_TASK_RESULT_FILE}" "data.get('result', {}).get('template', '')")
+
+    echo "  Tone:     ${NEW_TONE}"
+    echo "  Slides:   ${NEW_SLIDES}"
+    echo "  Template: ${NEW_TEMPLATE}"
+
+    if [ "${NEW_TONE}" = "casual" ]; then
+        echo "  OK Tone updated to casual"
+    else
+        echo "  WARN Tone unexpected: ${NEW_TONE} (expected casual)"
+    fi
+
+    if [ "${NEW_SLIDES}" -ge 5 ] 2>/dev/null; then
+        echo "  OK Slide count >= 5 as requested"
+    else
+        echo "  WARN Slide count unexpected: ${NEW_SLIDES} (expected >=5)"
+    fi
+
+    if [ "${NEW_TEMPLATE}" = "dark" ]; then
+        echo "  OK Template updated to dark"
+    else
+        echo "  WARN Template unexpected: ${NEW_TEMPLATE} (expected dark)"
+    fi
+else
+    echo "  SKIP - update task did not complete"
+fi
+
+# ── Test 22: Siri update intent detection ───────────────────
+echo
+echo "==== Test 22: Siri update_presentation intent detection ==>>"
+
+if [ -z "${SIRI_API_KEY}" ]; then
+    echo "  INFO SIRI_API_KEY not set - skipping Siri update tests"
+else
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        -X POST "${BASE_URL}/siri/chat" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: ${SIRI_API_KEY}" \
+        -d '{"text":"update Smoke Update Baseline to be more casual"}' \
+        --max-time 60 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        SIRI_SPEAK=$(_json "${TMP_FILE}" "data.get('speak','')")
+        SIRI_DISPLAY=$(_json "${TMP_FILE}" "data.get('display','')")
+        echo "  OK Siri responded (HTTP ${HTTP_CODE})"
+        echo "  Speak:   ${SIRI_SPEAK}"
+        echo "  Display: ${SIRI_DISPLAY:0:200}"
+
+        if echo "${SIRI_SPEAK}" | grep -qi "update\|started\|changing\|presentation\|casual\|find\|could.*not.*find"; then
+            echo "  OK Siri response references presentation update"
+        else
+            echo "  WARN Siri response may not reference update correctly"
+        fi
+    else
+        echo "  FAIL Siri update intent returned HTTP ${HTTP_CODE}"
+    fi
+fi
+
+# ── Test 23: Siri update handler end-to-end ─────────────────
+echo
+echo "==== Test 23: Siri update handler end-to-end (title match + async dispatch) ==>>"
+
+if [ -z "${SIRI_API_KEY}" ]; then
+    echo "  INFO SIRI_API_KEY not set - skipping"
+else
+    rm -f "${TMP_FILE}"; TMP_FILE=$(mktemp)
+    HTTP_CODE=$(curl -s -o "${TMP_FILE}" -w "%{http_code}" \
+        -X POST "${BASE_URL}/siri/chat" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: ${SIRI_API_KEY}" \
+        -d '{"text":"change the Smoke Update Baseline presentation to have 6 slides and use the dark template"}' \
+        --max-time 60 2>/dev/null) || HTTP_CODE="000"
+
+    if [ "${HTTP_CODE}" = "200" ]; then
+        SIRI_SPEAK=$(_json "${TMP_FILE}" "data.get('speak','')")
+        SIRI_DISPLAY=$(_json "${TMP_FILE}" "data.get('display','')")
+        echo "  OK Siri responded (HTTP ${HTTP_CODE})"
+        echo "  Speak:   ${SIRI_SPEAK}"
+        echo "  Display: ${SIRI_DISPLAY:0:200}"
+
+        if echo "${SIRI_SPEAK}" | grep -qi "update\|started\|changing\|task\|presentation"; then
+            echo "  OK Siri confirms update dispatch"
+        elif echo "${SIRI_SPEAK}" | grep -qi "what changes\|specify\|found.*presentation"; then
+            echo "  INFO Siri found presentation but asked for more instructions (acceptable)"
+        else
+            echo "  WARN Siri response unclear"
+        fi
+
+        SIRI_TASK_ID=$(_json "${TMP_FILE}" "data.get('data', {}).get('task_id', '')")
+        if [ -n "${SIRI_TASK_ID}" ]; then
+            echo "  OK Siri response includes task_id: ${SIRI_TASK_ID}"
+        fi
+    else
+        echo "  FAIL Siri update handler returned HTTP ${HTTP_CODE}"
+    fi
 fi
 
 # ── Done ─────────────────────────────────────────────────────

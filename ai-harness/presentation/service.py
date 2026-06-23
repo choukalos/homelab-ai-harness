@@ -200,7 +200,7 @@ class PresentonClient:
             verbosity=verbosity,
             language=language,
             export_as=export_as,
-            parent_id=parent_id,
+            parent_id=None,  # Presenton's /generate/async doesn't support parent_id
             instructions=instructions,
             include_table_of_contents=include_table_of_contents,
             include_title_slide=include_title_slide,
@@ -774,6 +774,8 @@ def regenerate_presentation(
     client: PresentonClient,
     presentation_id: str,
     update: "PresentationUpdateRequest",
+    *,
+    use_async: bool = False,
 ) -> PresentationResponse:
     """Regenerate a presentation with modified parameters, creating a new version.
 
@@ -782,6 +784,9 @@ def regenerate_presentation(
 
     All fields in `update` are optional — only the provided fields override
     the parent's values.
+
+    When `use_async=True`, uses Presenton's async API + polling (for Celery
+    workers). When `use_async=False`, uses blocking /generate (for sync API).
     """
     # Find the parent presentation
     parent_meta = get_presentation(presentation_id)
@@ -823,9 +828,12 @@ def regenerate_presentation(
     )
 
     logger.info(
-        "Regenerating presentation %s → new version of %s",
+        "Regenerating presentation %s → new version of %s (use_async=%s)",
         presentation_id,
         parent_meta.title,
+        use_async,
     )
 
+    if use_async:
+        return generate_presentation_for_worker(client, req)
     return generate_presentation_sync(client, req)

@@ -403,6 +403,79 @@ class Tools:
 
         return "\n".join(lines)
 
+    def update_presentation_async(
+        self,
+        presentation_id: str,
+        title: str = "",
+        content: str = "",
+        n_slides: int = 0,
+        template: str = "",
+        tone: str = "",
+        verbosity: str = "",
+        language: str = "",
+        export_as: str = "",
+        instructions: str = "",
+        research: bool = False,
+        kb_search: bool = False,
+    ) -> str:
+        """
+        Start an async update to an existing presentation (fire-and-forget).
+
+        Returns immediately with a task_id. Use check_task_status to poll.
+        Creates a new version with the specified changes.
+
+        All fields are optional. Only the provided fields override the parent
+        presentation's values.
+
+        Typical runtime: 2-5 minutes (background).
+        """
+
+        payload: dict = {}
+
+        if title:
+            payload["title"] = title
+        if content:
+            payload["content"] = content
+        if n_slides > 0:
+            payload["n_slides"] = n_slides
+        if template:
+            payload["template"] = template
+        if tone:
+            payload["tone"] = tone
+        if verbosity:
+            payload["verbosity"] = verbosity
+        if language:
+            payload["language"] = language
+        if export_as:
+            payload["export_as"] = export_as
+        if instructions:
+            payload["instructions"] = instructions
+        if research:
+            payload["research"] = research
+        if kb_search:
+            payload["kb_search"] = kb_search
+
+        data = self._post(
+            f"/presentation/{presentation_id}/update/async", payload, timeout=30,
+        )
+
+        task_id = data.get("task_id", "")
+        title_resp = data.get("title", "")
+        message = data.get("message", "")
+
+        lines = [
+            "Presentation update started (background).",
+            "",
+            f"Title: {title_resp}",
+            f"Task ID: {task_id}",
+            "",
+            f"{message}",
+            "",
+            f"Use check_task_status(task_id='{task_id}') to check progress.",
+        ]
+
+        return "\n".join(lines)
+
     def find_presentations(
         self,
         query: str,

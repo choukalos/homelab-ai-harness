@@ -185,10 +185,19 @@ def get_task_status(
             status="started",
         )
     elif result.state == "SUCCESS":
+        inner = result.result
+        # When tasks catch exceptions and return a dict with status="failed",
+        # Celery still marks the task as SUCCESS. Check the inner status.
+        if isinstance(inner, dict) and inner.get("status") == "failed":
+            return TaskStatusResponse(
+                task_id=task_id,
+                status="failed",
+                error=inner.get("error"),
+            )
         return TaskStatusResponse(
             task_id=task_id,
             status="completed",
-            result=result.result,
+            result=inner,
         )
     elif result.state == "FAILURE":
         return TaskStatusResponse(
@@ -294,6 +303,61 @@ def regenerate(
         )
     finally:
         client.close()
+
+
+# -- async update (Phase 1) -------------------------------------------------
+
+@router.post("/{presentation_id}/update/async", response_model=AsyncTaskResponse)
+def update_async(
+    presentation_id: str,
+    update: PresentationUpdateRequest,
+    _: None = Depends(require_harness_auth),
+):
+    """
+    Async presentation update via Celery (fire-and-forget).
+
+    Creates a new version of the specified presentation with the requested
+    changes, dispatched as a background Celery task. Check status via
+    GET /tasks/{task_id}.
+
+    All fields in the request are optional. Only the provided fields override
+    the parent presentation's values.
+
+    Designed for Siri's voice flow where the user can't wait 3-5 minutes.
+    """
+    from presentation.tasks import update_presentation_task
+
+    # Resolve the title from the parent for the response
+    parent_meta = get_presentation(presentation_id)
+    if parent_meta is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Presentation {presentation_id} not found",
+        )
+
+    title = update.title if update.title is not None else parent_meta.title
+
+    # Convert update to flat kwargs for the Celery task
+    update_kwargs = {k: v for k, v in update.model_dump().items() if v is not None}
+
+    async_result = update_presentation_task.apply_async(
+        kwargs={
+            "presentation_id": presentation_id,
+            **update_kwargs,
+        },
+    )
+
+    logger.info("Async presentation update dispatched: task_id=%s, presentation_id=%s, title=%s",
+                async_result.id, presentation_id, title)
+
+    return AsyncTaskResponse(
+        task_id=async_result.id,
+        title=title,
+        status="submitted",
+        message=f"Presentation '{title}' update started. "
+                "This typically takes 2-5 minutes. "
+                "Check /tasks/{async_result.id} for status.",
+    )
 
 
 # -- delete -----------------------------------------------------------------
