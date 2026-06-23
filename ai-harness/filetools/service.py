@@ -9,7 +9,7 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 
-from core.config import WORKSPACE
+from infra.core.config import WORKSPACE
 from filetools.schemas import (
     FileEntry,
     ListDirRequest,

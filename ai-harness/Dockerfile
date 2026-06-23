@@ -14,7 +14,7 @@ COPY . .
 
 # Default: run the FastAPI web app
 # Override with:
-#   -- `celery -A core.celery_app.celery worker --loglevel=info`
+#   -- `celery -A infra.core.celery_app.celery worker --loglevel=info`
 #      to start a Celery worker instead
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8090"]
 

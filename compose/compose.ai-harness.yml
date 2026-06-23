@@ -82,7 +82,7 @@ services:
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
-    command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
+    command: celery -A infra.core.celery_app.celery worker --loglevel=info --concurrency=4
 
   home-ai-harness-worker-2:
     image: home-ai-harness:local
@@ -116,7 +116,7 @@ services:
     volumes:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
-    command: celery -A core.celery_app.celery worker --loglevel=info --concurrency=4
+    command: celery -A infra.core.celery_app.celery worker --loglevel=info --concurrency=4
 
   home-ai-harness-beat:
     image: home-ai-harness:local
@@ -151,7 +151,7 @@ services:
       - /home/chuck/data/media:/data/media
       - /home/chuck/workspace:/home/chuck/workspace:rw
     command: >
-      celery -A core.celery_app.celery beat
+      celery -A infra.core.celery_app.celery beat
       -S redbeat.RedBeatScheduler
       --loglevel=info
       --max-interval=5

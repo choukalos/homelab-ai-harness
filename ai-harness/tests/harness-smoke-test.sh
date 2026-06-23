@@ -1,307 +1,104 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────
+# AI Harness — Master Smoke Test Orchestrator
+#
+# Runs all smoke test suites in order:
+#   1. Infra     (workflows, tasks, scheduler)
+#   2. Research  (web search, deep research, brief)
+#   3. Knowledge (family KB ingest, search, ask)
+#   4. Creative  (charts, presentations)
+#   5. Media     (image gen, clips)
+#   6. Apps      (PM demo, demo workflow)
+#   7. Filetools (stub for now)
+#   8. Channels  (Siri)
+# ─────────────────────────────────────────────────────────────
 
-set -euo pipefail
+set -uo pipefail
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 set -a
-source ../../.env
+source "${SCRIPT_DIR}/../../.env"
 set +a
 
-#BASE_URL="${HARNESS_URL:-http://thor.local:8090}"
-BASE_URL="${BASE_LOCAL:-http://${THOR_IP}:8090}"
-AUTH_HEADER="X-API-Key: ${HARNESS_API_KEY}"
-
 RUN_MEDIA_TESTS="${RUN_MEDIA_TESTS:-0}"
-MEDIA_TEST_IMAGE="${MEDIA_TEST_IMAGE:-test.jpg}"
-CLEANUP_TEST_OUTPUTS="${CLEANUP_TEST_OUTPUTS:-1}"
-
-GENERATED_URLS=()
+RUN_CHANNEL_TESTS="${RUN_CHANNEL_TESTS:-0}"
 
 echo
-echo "AI Harness Smoke Test"
-echo "Base URL: ${BASE_URL}"
-echo "Run media tests: ${RUN_MEDIA_TESTS}"
-echo "Cleanup outputs: ${CLEANUP_TEST_OUTPUTS}"
+echo "========================================"
+echo "  AI Harness — Master Smoke Test"
+echo "  Base URL: ${BASE_LOCAL:-http://${THOR_IP:-192.168.4.54}:8090}"
+echo "  Media tests:  ${RUN_MEDIA_TESTS}"
+echo "  Channel tests: ${RUN_CHANNEL_TESTS}"
+echo "========================================"
 echo
 
-cleanup_generated_files() {
-  if [[ "${CLEANUP_TEST_OUTPUTS}" != "1" ]]; then
+TOTAL=0
+PASSED=0
+FAILED=0
+SKIPPED=0
+
+run_test() {
+  local label="$1"
+  local script="$2"
+  local condition="${3:-}"  # optional: bash condition to skip
+
+  TOTAL=$((TOTAL + 1))
+
+  # Check skip condition
+  if [[ -n "${condition}" ]] && ! eval "${condition}"; then
+    SKIPPED=$((SKIPPED + 1))
+    echo "[SKIP] ${label}"
     return
   fi
 
-  if [[ ${#GENERATED_URLS[@]} -eq 0 ]]; then
-    return
-  fi
+  echo "========================================"
+  echo "[RUN]  ${label}"
+  echo "========================================"
 
-  if [[ -z "${MEDIA_OUTPUT_DIR:-}" ]]; then
-    echo "Cleanup skipped: MEDIA_OUTPUT_DIR is not set."
-    return
-  fi
-
-  if [[ ! -d "${MEDIA_OUTPUT_DIR}" ]]; then
-    echo "Cleanup skipped: MEDIA_OUTPUT_DIR is not available from this machine: ${MEDIA_OUTPUT_DIR}"
-    return
-  fi
-
-  echo
-  echo "============================================================"
-  echo "Cleaning up generated test files"
-  echo "============================================================"
-
-  for url in "${GENERATED_URLS[@]}"; do
-    relative="${url#*/media/files/}"
-    file_path="${MEDIA_OUTPUT_DIR}/${relative}"
-
-    if [[ -f "${file_path}" ]]; then
-      rm -f "${file_path}"
-      echo "Deleted: ${file_path}"
-    else
-      echo "Not found, skipping: ${file_path}"
-    fi
-  done
-
-  echo
-}
-
-trap cleanup_generated_files EXIT
-
-remember_generated_urls_from_json() {
-  local json_file="$1"
-
-  python3 - <<PY
-import json
-
-with open("${json_file}", "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-urls = []
-
-if isinstance(data, dict):
-    if isinstance(data.get("url"), str):
-        urls.append(data["url"])
-
-    for item in data.get("files", []):
-        if isinstance(item, dict) and isinstance(item.get("url"), str):
-            urls.append(item["url"])
-
-for url in urls:
-    print(url)
-PY
-}
-
-call_post() {
-  local name="$1"
-  local path="$2"
-  local payload="$3"
-  local capture="${4:-0}"
-  local response_file
-
-  response_file="$(mktemp)"
-
-  echo "============================================================"
-  echo "$name"
-  echo "POST $path"
-  echo "============================================================"
-
-  curl -sS -f \
-    -X POST "${BASE_URL}${path}" \
-    -H "Content-Type: application/json" \
-    -H "${AUTH_HEADER}" \
-    -d "${payload}" | tee "${response_file}" | python3 -m json.tool
-
-  echo
-
-  if [[ "${capture}" == "1" ]]; then
-    while IFS= read -r url; do
-      [[ -n "${url}" ]] && GENERATED_URLS+=("${url}")
-    done < <(remember_generated_urls_from_json "${response_file}")
-  fi
-
-  rm -f "${response_file}"
-}
-
-call_post_form() {
-  local name="$1"
-  local path="$2"
-  shift 2
-
-  local response_file
-  response_file="$(mktemp)"
-
-  echo "============================================================"
-  echo "$name"
-  echo "POST $path"
-  echo "============================================================"
-
-  curl -sS -f \
-    -X POST "${BASE_URL}${path}" \
-    -H "${AUTH_HEADER}" \
-    "$@" | tee "${response_file}" | python3 -m json.tool
-
-  echo
-
-  while IFS= read -r url; do
-    [[ -n "${url}" ]] && GENERATED_URLS+=("${url}")
-  done < <(remember_generated_urls_from_json "${response_file}")
-
-  rm -f "${response_file}"
-}
-
-call_get() {
-  local name="$1"
-  local path="$2"
-
-  echo "============================================================"
-  echo "$name"
-  echo "GET $path"
-  echo "============================================================"
-
-  curl -sS -f \
-    "${BASE_URL}${path}" \
-    -H "${AUTH_HEADER}" | python3 -m json.tool
-
-  echo
-}
-
-call_get "Harness Health" "/health"
-
-call_post "Web Search" "/web/search" '{
-  "query": "FastAPI health check best practices",
-  "max_results": 5,
-  "crawl_results": 0,
-  "summarize": false,
-  "mode": "sources"
-}'
-
-call_post "Summarized Web Search" "/web/search" '{
-  "query": "FastAPI health check best practices",
-  "max_results": 5,
-  "crawl_results": 3,
-  "summarize": true,
-  "mode": "answer"
-}'
-
-call_post "Research Brief" "/web/research" '{
-  "topic": "local first AI knowledge base architecture for a homelab",
-  "max_queries": 3,
-  "results_per_query": 4
-}'
-
-call_get "Family KB Health" "/kb/health"
-
-call_post "Family KB Raw Ingest" "/kb/ingest/raw" '{}'
-
-call_post "Family KB Index Markdown Repo" "/kb/ingest" '{}'
-
-call_post "Family KB Search" "/kb/search" '{
-  "query": "family knowledge base",
-  "limit": 5
-}'
-
-call_post "Family KB Ask" "/kb/ask" '{
-  "query": "What information is saved in the family knowledge base?",
-  "limit": 5
-}'
-
-call_post "PM Demo Generation" "/pm/demo" '{
-  "title": "Smoke Test Mobile PM Demo",
-  "prompt": "Create a simple 3-screen clickable mobile product demo for a family task tracker. Include home, task detail, and add task screens. Make it single-file HTML with inline CSS and JavaScript.",
-  "save_name": "smoke-test-pm-demo"
-}' "1"
-
-if [[ "${RUN_MEDIA_TESTS}" == "1" ]]; then
-  IMAGE_RESPONSE_FILE="$(mktemp)"
-
-  echo "============================================================"
-  echo "Media Image Generation"
-  echo "POST /media/image"
-  echo "============================================================"
-
-  curl -sS -f \
-    -X POST "${BASE_URL}/media/image" \
-    -H "Content-Type: application/json" \
-    -H "${AUTH_HEADER}" \
-    -d '{
-      "prompt": "cinematic photo of a silver 1980s sports car at sunset, ultra detailed",
-      "negative_prompt": "blurry, distorted, low quality",
-      "width": 1024,
-      "height": 576,
-      "seed": -1,
-      "steps": 20,
-      "cfg": 7,
-      "upscale": true
-    }' | tee "${IMAGE_RESPONSE_FILE}" | python3 -m json.tool
-
-  echo
-
-  while IFS= read -r url; do
-    [[ -n "${url}" ]] && GENERATED_URLS+=("${url}")
-  done < <(remember_generated_urls_from_json "${IMAGE_RESPONSE_FILE}")
-
-  GENERATED_IMAGE_URL="$(python3 - <<PY
-import json
-with open("${IMAGE_RESPONSE_FILE}", "r", encoding="utf-8") as f:
-    data = json.load(f)
-files = data.get("files", [])
-print(files[0].get("url", "") if files else "")
-PY
-)"
-
-  rm -f "${IMAGE_RESPONSE_FILE}"
-
-  if [[ -n "${GENERATED_IMAGE_URL}" ]]; then
-    echo "Generated image URL:"
-    echo "${GENERATED_IMAGE_URL}"
-    echo
-
-    call_post "Media Image Edit From URL" "/media/image/edit/url" "{
-      \"image_url\": \"${GENERATED_IMAGE_URL}\",
-      \"prompt\": \"turn this into a rainy cyberpunk night scene with neon reflections\",
-      \"negative_prompt\": \"blurry, distorted, low quality\",
-      \"denoise\": 0.55,
-      \"seed\": -1,
-      \"steps\": 20,
-      \"cfg\": 7
-    }" "1"
+  if bash "${script}"; then
+    PASSED=$((PASSED + 1))
+    echo "[OK]   ${label}"
   else
-    echo "Skipping Media Image Edit From URL: no generated image URL returned."
-    echo
+    FAILED=$((FAILED + 1))
+    echo "[FAIL] ${label}"
   fi
+  echo
+}
 
-  if [[ -n "${MEDIA_TEST_IMAGE}" && -f "${MEDIA_TEST_IMAGE}" ]]; then
-    call_post_form "Media Image Edit From Upload" "/media/image/edit" \
-      -F "image=@${MEDIA_TEST_IMAGE}" \
-      -F "prompt=retro cyberpunk style, cinematic neon lighting" \
-      -F "negative_prompt=blurry, distorted, low quality" \
-      -F "denoise=0.55" \
-      -F "seed=-1" \
-      -F "steps=20" \
-      -F "cfg=7"
-  else
-    echo "Skipping Media Image Edit From Upload: missing ${MEDIA_TEST_IMAGE}"
-    echo
-  fi
+# ── Smoke tests ──────────────────────────────────────────────
 
-  call_post "Media Clip Generation" "/media/clip" '{
-    "prompt": "cinematic drone shot of a serene mountain lake at golden hour",
-    "negative_prompt": "text, watermark",
-    "width": 1024,
-    "height": 576,
-    "seed": -1,
-    "steps": 15,
-    "cfg": 8.0,
-    "video_frames": 25,
-    "fps": 6,
-    "motion_bucket_id": 127
-  }' "1"
+run_test "Infra (workflows)"     "${SCRIPT_DIR}/smoke/test_infra.sh"
+run_test "Research"              "${SCRIPT_DIR}/smoke/test_research.sh"
+run_test "Knowledge"             "${SCRIPT_DIR}/smoke/test_knowledge.sh"
+run_test "Creative (charts+pres)" "${SCRIPT_DIR}/smoke/test_creative.sh"
+run_test "Media (image+clip)"    "${SCRIPT_DIR}/smoke/test_media.sh"          "[[ '${RUN_MEDIA_TESTS}' == '1' ]]"
+run_test "Apps (demo workflow)"  "${SCRIPT_DIR}/smoke/test_apps.sh"
+run_test "Filetools (stub)"      "${SCRIPT_DIR}/smoke/test_filetools.sh"
+
+# ── Channel tests ────────────────────────────────────────────
+
+if [[ "${RUN_CHANNEL_TESTS}" == "1" ]]; then
+  run_test "Channels (Siri)"       "${SCRIPT_DIR}/channels/test_siri.sh"
+  run_test "Channels (OpenWebUI)"  "${SCRIPT_DIR}/channels/test_openwebui.sh"
 else
-  echo "Skipping media tests. Run with RUN_MEDIA_TESTS=1 to enable."
+  TOTAL=$((TOTAL + 2))
+  SKIPPED=$((SKIPPED + 1))
+  echo "[SKIP] Channels (Siri) — set RUN_CHANNEL_TESTS=1 to enable"
+  SKIPPED=$((SKIPPED + 1))
+  echo "[SKIP] Channels (OpenWebUI) — set RUN_CHANNEL_TESTS=1 to enable"
   echo
 fi
 
-echo "============================================================"
-echo "Smoke test complete."
-echo "============================================================"
+# ── Summary ──────────────────────────────────────────────────
 
+echo "========================================"
+echo "  Results: ${PASSED} passed, ${FAILED} failed, ${SKIPPED} skipped (total: ${TOTAL})"
+if [ "${FAILED}" -eq 0 ]; then
+  echo "  ✅ All smoke tests passed"
+else
+  echo "  ❌ Some tests failed"
+fi
+echo "========================================"
 
+exit "${FAILED}"

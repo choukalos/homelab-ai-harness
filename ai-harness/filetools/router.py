@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from core.security import require_auth
+from infra.core.security import require_auth
 from filetools.schemas import (
     DeleteFileRequest,
     DeleteFileResponse,
