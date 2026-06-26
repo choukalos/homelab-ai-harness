@@ -2,15 +2,22 @@
 # ─────────────────────────────────────────────────────────────
 # AI Harness — Master Smoke Test Orchestrator
 #
+# Runs all smoke test suites in order. For granular control, use:
+#   bash tests/run-tests.sh                # selective test runner
+#   bash tests/run-tests.sh apps,creative  # specific groups
+#   bash tests/run-tests.sh --all          # including slow media
+#   bash tests/run-tests.sh --list         # show available groups
+#
 # Runs all smoke test suites in order:
 #   1. Infra     (workflows, tasks, scheduler)
 #   2. Research  (web search, deep research, brief)
 #   3. Knowledge (family KB ingest, search, ask)
 #   4. Creative  (charts, presentations)
 #   5. Media     (image gen, clips)
-#   6. Apps      (PM demo, demo workflow)
+#   6. Apps      (quick demo + workflow demo)
 #   7. Filetools (stub for now)
-#   8. Channels  (Siri)
+#   8. URL Rewriting (cross-module URL verification)
+#   9. Channels  (Siri, OpenWebUI)
 # ─────────────────────────────────────────────────────────────
 
 set -uo pipefail
@@ -73,8 +80,9 @@ run_test "Research"              "${SCRIPT_DIR}/smoke/test_research.sh"
 run_test "Knowledge"             "${SCRIPT_DIR}/smoke/test_knowledge.sh"
 run_test "Creative (charts+pres)" "${SCRIPT_DIR}/smoke/test_creative.sh"
 run_test "Media (image+clip)"    "${SCRIPT_DIR}/smoke/test_media.sh"          "[[ '${RUN_MEDIA_TESTS}' == '1' ]]"
-run_test "Apps (demo workflow)"  "${SCRIPT_DIR}/smoke/test_apps.sh"
+run_test "Apps (quick demo + workflow demo)"  "${SCRIPT_DIR}/smoke/test_apps.sh"
 run_test "Filetools (stub)"      "${SCRIPT_DIR}/smoke/test_filetools.sh"
+run_test "URL Rewriting"         "${SCRIPT_DIR}/smoke/test_url_rewriting.sh"
 
 # ── Channel tests ────────────────────────────────────────────
 

@@ -26,7 +26,7 @@ if [[ ! -f "$SCRIPT_DIR/../../.env" ]]; then
 fi
 set -a; source "$SCRIPT_DIR/../../.env"; set +a
 
-BASE_URL="${BASE_URL:-http://192.168.4.54:8090}"
+BASE_URL="${BASE_LOCAL:-http://192.168.4.54:8090}"
 API_KEY="${HARNESS_API_KEY}"
 
 # On the host, presenton:80 won't resolve — use port 5000

@@ -42,11 +42,35 @@ call_post() {
 
   if [ "${HTTP_CODE}" = "200" ]; then
     echo "  ✅ ${name} (HTTP 200)"
+    verify_urls "${resp}"
   else
     echo "  ❌ ${name} (HTTP ${HTTP_CODE})"
     head -10 "${resp}"
   fi
   rm -f "${resp}"
+}
+
+# Verify response URLs don't contain internal hostname (thor.local)
+verify_urls() {
+  local resp="$1"
+  local has_internal
+  has_internal=$(jq -r '[
+    (.url // empty), (.local_url // empty), (.public_url // empty),
+    (.download_url // empty), (.pdf_url // empty), (.html_url // empty),
+    (.image_url // empty)
+  ] | map(select(type == "string")) | map(select(contains("thor.local"))) | if length > 0 then "yes" else "no" end' "${resp}" 2>/dev/null)
+  if [ "${has_internal}" = "yes" ]; then
+    echo "  ⚠️  URL rewrite check FAILED — response contains thor.local URLs:"
+    jq -r '[
+      (.url // empty), (.local_url // empty), (.public_url // empty),
+      (.download_url // empty), (.pdf_url // empty), (.html_url // empty),
+      (.image_url // empty)
+    ] | map(select(type == "string")) | .[] | select(contains("thor.local"))' "${resp}" 2>/dev/null | while read -r url; do
+      echo "    ⚠️  ${url}"
+    done
+  else
+    echo "  ✅ URL rewrite check passed (no thor.local in response)"
+  fi
 }
 
 # ── Health check ─────────────────────────────────────────────

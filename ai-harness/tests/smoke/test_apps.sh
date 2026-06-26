@@ -83,7 +83,7 @@ fi
 
 # ── PM Demo ──────────────────────────────────────────────────
 
-call_post "PM Demo Generation" "/pm/demo" '{
+call_post "Quick Demo (PM Demo)" "/pm/demo" '{
   "title": "Smoke Test Mobile PM Demo",
   "prompt": "Create a simple 3-screen clickable mobile product demo for a family task tracker. Include home, task detail, and add task screens.",
   "save_name": "smoke-test-pm-demo"
@@ -91,12 +91,12 @@ call_post "PM Demo Generation" "/pm/demo" '{
 
 # ── Demo Workflow ────────────────────────────────────────────
 
-call_post "Demo Workflow (sync)" "/demos/run" '{
+call_post "Workflow Demo (sync)" "/demos/run" '{
   "title": "Smoke Test Calculator",
   "prompt": "Build a one-page clickable demo for a mobile calculator app with a clean modern UI."
 }' 600
 
-call_post "Demo Workflow (async)" "/demos/run/async" '{
+call_post "Workflow Demo (async)" "/demos/run/async" '{
   "title": "Smoke Test Async Demo",
   "prompt": "Build a one-page demo for a todo list app with add/delete functionality."
 }' 30

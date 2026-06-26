@@ -14,11 +14,15 @@ class HarnessBase:
     class Valves(BaseModel):
         harness_url: str = Field(
             default=os.getenv("HARNESS_URL", "http://ai-harness:8090"),
-            description="Base URL for the AI Harness",
+            description="Internal API URL for the AI Harness (Docker DNS name, e.g. http://ai-harness:8090)",
         )
         harness_api_key: str = Field(
             default=os.getenv("HARNESS_API_KEY", ""),
             description="AI Harness API key",
+        )
+        harness_display_url: str = Field(
+            default=os.getenv("HARNESS_DISPLAY_URL", "http://192.168.4.54:8090"),
+            description="Browser-accessible URL for media files (LAN IP, e.g. http://192.168.4.54:8090)",
         )
 
     def __init__(self):
@@ -42,9 +46,24 @@ class HarnessBase:
             return ""
 
         if url.startswith(("http://", "https://")):
-            return url
+            # Internal harness URL — rewrite to browser-accessible display URL.
+            harness = self.valves.harness_url.rstrip("/")
+            display = self.valves.harness_display_url.rstrip("/")
+            if url.startswith(harness):
+                return f"{display}/{url[len(harness):].lstrip('/')}"
+            # Rewrite any http:// internal URL that isn't already the display URL
+            # This covers thor.local, localhost, and other LAN hostnames
+            if url.startswith("http://") and not url.startswith(display):
+                # Extract path portion after hostname[:port]
+                rest = url[len("http://"):]
+                slash_idx = rest.find("/")
+                if slash_idx >= 0:
+                    path = rest[slash_idx:]
+                    return f"{display}{path}"
+            return url  # external URL, return as-is
 
-        return f"{self.valves.harness_url.rstrip('/')}/{url.lstrip('/')}"
+        # Relative path — prepend display URL
+        return f"{display}/{url.lstrip('/')}"
 
     def _post(self, path: str, payload: dict, timeout: int = 180) -> dict:
         r = requests.post(

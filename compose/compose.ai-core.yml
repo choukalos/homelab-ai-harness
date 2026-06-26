@@ -74,6 +74,7 @@ services:
       - IMAGE_GENERATION_API_URL=http://${MATRIX_IP}:8188
       - HARNESS_URL=http://ai-harness:8090
       - HARNESS_API_KEY=${HARNESS_API_KEY}
+      - HARNESS_DISPLAY_URL=http://${THOR_IP:-192.168.4.54}:8090
     volumes:
       - /home/chuck/data/open-webui:/app/backend/data
     depends_on:
