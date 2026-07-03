@@ -1,0 +1,19 @@
+name: siri_ask
+version: "1.0"
+description: "Quick Q&A for Siri/iOS Shortcuts. Short answers, no heavy research."
+inputs:
+  - name: query
+    type: string
+    required: true
+    description: "The question or request to answer."
+  - name: context
+    type: string
+    required: false
+    description: "Optional previous conversation context for continuity."
+tools:
+  - model_chat
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/siri_outputs/
+approval_gates: []
+channels: [siri]
+max_runtime: 30  # seconds

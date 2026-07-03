@@ -1,0 +1,19 @@
+{
+  "iteration": 1,
+  "status": "todo_generated",
+  "startedAt": "2026-07-03T03:27:06.808Z",
+  "updatedAt": "2026-07-03T03:30:45.750Z",
+  "deadlineAt": "2026-07-03T06:27:06.808Z",
+  "generatedTodo": {
+    "todoPath": "/home/chuck/homelab/tmp/pi-goal-task/goal-2026-07-03T03-27-06-767Z-4509a92c/iterations/01/TODO.md",
+    "summary": "Generated TODO with 11 task(s).",
+    "contentHash": "6dd2b1341ae68066e189201bce64d874de50258f47b5cc61517c2f6286f4fb78",
+    "payloadPath": "/home/chuck/homelab/tmp/pi-goal-task/goal-2026-07-03T03-27-06-767Z-4509a92c/iterations/01/TODO_GENERATION_TASK.md",
+    "rawTodoPath": "/home/chuck/homelab/tmp/pi-goal-task/goal-2026-07-03T03-27-06-767Z-4509a92c/iterations/01/GENERATED_TODO_RAW.md",
+    "generatorRunId": "goal-2026-07-03T03-27-06-767Z-4509a92c-todo-generation-01",
+    "generatorRunDir": "/home/chuck/homelab/tmp/pi-long-task/goal-2026-07-03T03-27-06-767Z-4509a92c-todo-generation-01",
+    "generatorResultPath": "/home/chuck/homelab/tmp/pi-long-task/goal-2026-07-03T03-27-06-767Z-4509a92c-todo-generation-01/TASK_RESULT.md",
+    "generatorTaskResultPath": "/home/chuck/homelab/tmp/pi-long-task/goal-2026-07-03T03-27-06-767Z-4509a92c-todo-generation-01/TASK_RESULT.md",
+    "generatedAt": "2026-07-03T03:30:45.750Z"
+  }
+}

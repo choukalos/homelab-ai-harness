@@ -1,0 +1,187 @@
+# LiteLLM MCP Tool Configuration — DRAFT
+#
+# Phase 10 — Do NOT copy into the live LiteLLM config.
+# This registers MCP servers so LiteLLM can proxy tool calls to them.
+# Manual review and Chuck's approval required before applying.
+#
+# Reference: docs/thor_mcp_architecture.md
+#
+# How LiteLLM uses this:
+#   - Each model definition can reference a `dynamic_parameters` block with
+#     `tool_choice` and `tools` that map to MCP server tool names.
+#   - The MCP servers run as separate processes (stdio or SSE) on Thor.
+#   - LiteLLM discovers the tools and routes calls through the MCP protocol.
+#
+# ─── MCP Server Definitions ─────────────────────────────────────────────
+#
+# Each MCP server is defined with its command, transport, and tools.
+# LiteLLM 1.54+ supports MCP natively via the `mcp_servers` top-level key.
+
+mcp_servers:
+
+  # ── Search (SearXNG) ─────────────────────────────────────────────
+  # Read-only web search. Lowest risk, broadly useful.
+  - name: mcp_search
+    command:
+      - python3
+      - /home/chuck/homelab/mcp/servers/search/server.py
+    transport: stdio
+    env:
+      SEARXNG_URL: "http://searxng:8080"
+      SEARXNG_TIMEOUT: "10"
+    tools:
+      - search_web
+      - search_recent
+      - search_news
+
+  # ── Knowledge (Qdrant) ───────────────────────────────────────────
+  # Read-only KB retrieval with curated collection allowlist.
+  - name: mcp_knowledge
+    command:
+      - python3
+      - /home/chuck/homelab/mcp/servers/knowledge/server.py
+    transport: stdio
+    env:
+      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_TIMEOUT: "15"
+    tools:
+      - kb_search
+      - kb_get_document
+      - kb_list_collections
+      - kb_recent_changes
+
+  # ── Crawl (Crawl4AI) ─────────────────────────────────────────────
+  # Page fetching and content extraction. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder for Phase 6+.
+  # - name: mcp_crawl
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/crawl/server.py
+  #   transport: stdio
+  #   env:
+  #     CRAWL4AI_URL: "http://crawl4ai:11235"
+  #   tools:
+  #     - crawl
+
+  # ── Filesystem (Read-only) ───────────────────────────────────────
+  # Read-only file access to workspace and media. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder.
+  # - name: mcp_filesystem_readonly
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/filesystem_readonly/server.py
+  #   transport: stdio
+  #   tools:
+  #     - read_file
+  #     - list_directory
+  #     - search_files
+
+  # ── Stocks ───────────────────────────────────────────────────────
+  # Stock market data. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder.
+  # - name: mcp_stocks
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/stocks/server.py
+  #   transport: stdio
+  #   tools:
+  #     - get_price
+  #     - get_historical
+  #     - get_news
+  #     - get_financials
+
+  # ── Homelab Status ───────────────────────────────────────────────
+  # Docker state, metrics, service health. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder.
+  # - name: mcp_homelab_status
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/homelab_status/server.py
+  #   transport: stdio
+  #   tools:
+  #     - docker_ps
+  #     - service_status
+  #     - get_metrics
+  #     - get_logs
+
+  # ── Media ────────────────────────────────────────────────────────
+  # Image generation via ComfyUI, media file ops. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder.
+  # - name: mcp_media
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/media/server.py
+  #   transport: stdio
+  #   env:
+  #     COMFYUI_URL: "http://matrix:8188"
+  #   tools:
+  #     - generate_image
+  #     - get_media_file
+  #     - list_media
+
+  # ── Home ─────────────────────────────────────────────────────────
+  # Home automation status. Defined for future use.
+  # NOT YET IMPLEMENTED — placeholder.
+  # - name: mcp_home
+  #   command:
+  #     - python3
+  #     - /home/chuck/homelab/mcp/servers/home/server.py
+  #   transport: stdio
+  #   tools:
+  #     - get_device_status
+  #     - get_all_devices
+  #     - get_scene_status
+
+# ─── Model → MCP Tool Bindings ───────────────────────────────────────
+#
+# Each model definition declares which MCP tools are available.
+# The tool bundles (see tool-bundles.example.yaml) group these for
+# per-key restrictions.
+#
+# When you apply this config, uncomment the `tools` blocks for each
+# model and map them to the tool bundles you want active.
+#
+# Example for a model that should have search + knowledge:
+#
+#   - model_name: local/qwen-long
+#     model_info:
+#       input_cost_per_token: 0.000001
+#       output_cost_per_token: 0.000001
+#     litellm_params:
+#       model: openai/qwen36-27b
+#       api_base: http://matrix:8000/v1
+#       api_key: "unused"
+#     dynamic_parameters:
+#       tool_choice: auto
+#       tools:
+#         - mcp_server: mcp_search
+#           tools:
+#             - search_web
+#             - search_recent
+#             - search_news
+#         - mcp_server: mcp_knowledge
+#           tools:
+#             - kb_search
+#             - kb_get_document
+#             - kb_list_collections
+
+# ─── Key → Tool Bundle Mappings ────────────────────────────────────
+#
+# Per-key tool restrictions are enforced by LiteLLM's user/team system.
+# Since we keep it simple (no teams), use model aliases + key policies.
+#
+# Key        | Tool Bundle        | MCP Servers
+# ───────────|────────────────────|────────────────────────────
+# chuck      | bundle_admin       | All MCP servers
+# son        | bundle_coding      | search, filesystem, knowledge (read)
+# openwebui  | bundle_family      | search, knowledge (read)
+# siri       | bundle_siri        | search, knowledge (read)
+# automation | bundle_research    | search, knowledge (read), homelab_status
+
+# ─── Rules ──────────────────────────────────────────────────────────
+#
+# 1. Do NOT copy this into the live LiteLLM config without review.
+# 2. Test with a throwaway key first.
+# 3. Verify MCP servers start and respond before binding to models.
+# 4. Start with mcp_search only (lowest risk) and add more incrementally.
+# 5. Monitor tool call latency and error rates after activation.

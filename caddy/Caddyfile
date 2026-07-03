@@ -103,6 +103,32 @@
 		reverse_proxy http://litellm-proxy:4000
 	}
 
+	@plausible host plausible.choukalos.com
+	handle @plausible {
+		# Allow analytics script loading
+		handle /js/* {
+			reverse_proxy http://plausible:8000 {
+				header_up Host {host}
+				header_up X-Real-IP {remote_host}
+				header_up X-Forwarded-Proto https
+				header_up X-Forwarded-Port 443
+			}
+		}
+
+		# Allow event tracking
+		handle /api/event {
+			reverse_proxy http://plausible:8000 {
+				header_up Host {host}
+				header_up X-Real-IP {remote_host}
+				header_up X-Forwarded-Proto https
+				header_up X-Forwarded-Port 443
+			}
+		}
+
+		# Block everything else (admin UI, login, register) from internet
+		respond "404 Not Found" 404
+	}
+
 	respond "Not Found" 404
 }
 

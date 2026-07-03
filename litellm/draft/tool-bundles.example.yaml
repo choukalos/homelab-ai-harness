@@ -1,0 +1,265 @@
+# LiteLLM Tool Bundles — DRAFT
+#
+# Phase 10 — Do NOT copy into the live LiteLLM config.
+# Each bundle groups MCP tools for a specific use case and channel.
+# Manual review and Chuck's approval required before applying.
+#
+# Reference: docs/thor_mcp_architecture.md, docs/thor_channels_architecture.md
+#
+# How it works:
+#   - A tool bundle is a named set of MCP tools.
+#   - Each LiteLLM API key is mapped to one or more bundles.
+#   - The skill runner declares which bundle it needs for a given skill.
+#   - LiteLLM enforces that only bundled tools are available for that key.
+
+# ─── Bundle: family ────────────────────────────────────────────────
+#
+# Safe for family use. Chat + basic knowledge lookup only.
+# No admin tools, no filesystem, no crawling.
+#
+bundle_family:
+  description: "Family-safe chat and knowledge lookup"
+  allowed_users:
+    - chuck
+    - wife
+    - daughter
+  allowed_channels:
+    - openwebui
+    - portal
+  model_aliases:
+    - local/gemma-family
+    - local/qwen-long
+  tools:
+    - name: kb_search
+      mcp_server: mcp_knowledge
+      description: "Search curated knowledge base"
+    - name: kb_list_collections
+      mcp_server: mcp_knowledge
+      description: "List available knowledge collections"
+    - name: kb_get_document
+      mcp_server: mcp_knowledge
+      description: "Retrieve a full document by ID"
+  disallowed_tools:
+    - "*"  # Explicitly block everything not listed above
+
+# ─── Bundle: coding ────────────────────────────────────────────────
+#
+# For Chuck and son coding workflows.
+# Includes search, filesystem read, and knowledge.
+#
+bundle_coding:
+  description: "Coding tools — search, filesystem, knowledge"
+  allowed_users:
+    - chuck
+    - son
+  allowed_channels:
+    - cli
+    - pi
+    - ide
+    - openwebui
+  model_aliases:
+    - local/qwen-coder
+    - local/qwen-long
+  tools:
+    - name: search_web
+      mcp_server: mcp_search
+      description: "General web search"
+    - name: search_recent
+      mcp_server: mcp_search
+      description: "Recent web search"
+    - name: search_news
+      mcp_server: mcp_search
+      description: "News search"
+    - name: kb_search
+      mcp_server: mcp_knowledge
+      description: "Search curated knowledge base"
+    - name: kb_get_document
+      mcp_server: mcp_knowledge
+      description: "Retrieve a full document by ID"
+    - name: kb_list_collections
+      mcp_server: mcp_knowledge
+      description: "List available knowledge collections"
+    - name: read_file
+      mcp_server: mcp_filesystem_readonly
+      description: "Read a file (workspace and media only)"
+    - name: list_directory
+      mcp_server: mcp_filesystem_readonly
+      description: "List directory contents"
+    - name: search_files
+      mcp_server: mcp_filesystem_readonly
+      description: "Search files by pattern"
+  disallowed_tools:
+    - generate_image     # Not for coding
+    - crawl              # Not needed for coding
+
+# ─── Bundle: research ──────────────────────────────────────────────
+#
+# For deep research workflows. Search, crawl, and knowledge.
+# Used by automation and deep_research skill.
+#
+bundle_research:
+  description: "Research tools — search, crawl, knowledge, homelab status"
+  allowed_users:
+    - chuck
+  allowed_channels:
+    - cli
+    - pi
+    - n8n
+  model_aliases:
+    - local/qwen-coder
+    - local/qwen-long
+  tools:
+    - name: search_web
+      mcp_server: mcp_search
+      description: "General web search"
+    - name: search_recent
+      mcp_server: mcp_search
+      description: "Recent web search"
+    - name: search_news
+      mcp_server: mcp_search
+      description: "News search"
+    - name: crawl
+      mcp_server: mcp_crawl
+      description: "Fetch and extract web page content"
+    - name: kb_search
+      mcp_server: mcp_knowledge
+      description: "Search curated knowledge base"
+    - name: kb_get_document
+      mcp_server: mcp_knowledge
+      description: "Retrieve a full document by ID"
+    - name: kb_list_collections
+      mcp_server: mcp_knowledge
+      description: "List available knowledge collections"
+    - name: kb_recent_changes
+      mcp_server: mcp_knowledge
+      description: "Show recent changes in collections"
+    - name: docker_ps
+      mcp_server: mcp_homelab_status
+      description: "List running containers"
+    - name: service_status
+      mcp_server: mcp_homelab_status
+      description: "Check service health"
+    - name: get_metrics
+      mcp_server: mcp_homelab_status
+      description: "Query Victoria Metrics"
+    - name: get_logs
+      mcp_server: mcp_homelab_status
+      description: "Get container logs"
+  disallowed_tools:
+    - generate_image     # Not for research
+
+# ─── Bundle: investing ─────────────────────────────────────────────
+#
+# For investment analysis. Stocks, search, and knowledge.
+#
+bundle_investing:
+  description: "Investment tools — stocks, search, knowledge"
+  allowed_users:
+    - chuck
+  allowed_channels:
+    - cli
+    - n8n
+  model_aliases:
+    - local/qwen-coder
+    - local/qwen-long
+  tools:
+    - name: get_price
+      mcp_server: mcp_stocks
+      description: "Get current stock price"
+    - name: get_historical
+      mcp_server: mcp_stocks
+      description: "Get historical price data"
+    - name: get_news
+      mcp_server: mcp_stocks
+      description: "Get stock-related news"
+    - name: get_financials
+      mcp_server: mcp_stocks
+      description: "Get financial statements"
+    - name: search_web
+      mcp_server: mcp_search
+      description: "General web search"
+    - name: search_news
+      mcp_server: mcp_search
+      description: "News search"
+    - name: kb_search
+      mcp_server: mcp_knowledge
+      description: "Search curated knowledge base"
+    - name: kb_get_document
+      mcp_server: mcp_knowledge
+      description: "Retrieve a full document by ID"
+  disallowed_tools:
+    - generate_image
+    - crawl
+
+# ─── Bundle: admin ─────────────────────────────────────────────────
+#
+# Chuck-only. Full access to all tools.
+#
+bundle_admin:
+  description: "Full admin access to all MCP tools"
+  allowed_users:
+    - chuck
+  allowed_channels:
+    - cli
+    - pi
+    - openwebui
+    - ide
+    - n8n
+  model_aliases:
+    - local/qwen-coder
+    - local/qwen-long
+    - local/gemma-family
+    - local/experiment
+    - local/embed
+  tools:
+    - "*"  # All tools from all MCP servers
+  disallowed_tools:
+    - []    # Nothing disallowed
+
+# ─── Bundle: siri ──────────────────────────────────────────────────
+#
+# Narrow facade for Siri / iOS Shortcuts.
+# Search + knowledge read only. Short responses.
+#
+bundle_siri:
+  description: "Siri skill facade — search and knowledge only"
+  allowed_users:
+    - chuck
+    - wife
+    - daughter
+  allowed_channels:
+    - siri
+  model_aliases:
+    - local/qwen-coder
+    - local/gemma-family
+  tools:
+    - name: search_web
+      mcp_server: mcp_search
+      description: "General web search"
+    - name: kb_search
+      mcp_server: mcp_knowledge
+      description: "Search curated knowledge base"
+    - name: kb_get_document
+      mcp_server: mcp_knowledge
+      description: "Retrieve a full document by ID"
+  disallowed_tools:
+    - "*"  # Block everything else
+
+# ─── Per-Key → Bundle Mappings ────────────────────────────────────
+#
+# Key        | Primary Bundle | Secondary Bundles
+# ───────────|────────────────|────────────────────────
+# chuck      | bundle_admin   | (all access)
+# son        | bundle_coding  | bundle_family
+# openwebui  | bundle_family  | bundle_coding (for Chuck/son sessions)
+# siri       | bundle_siri    | bundle_family
+# automation | bundle_research| bundle_investing
+# experiment | bundle_admin   | (Chuck only)
+
+# ─── Rules ──────────────────────────────────────────────────────────
+#
+# 1. Do NOT copy this into the live LiteLLM config without review.
+# 2. Start with bundle_siri and bundle_family (lowest risk).
+# 3. Validate each bundle with a test key before exposing to users.
+# 4. Monitor tool call logs for unexpected tool usage.
+# 5. New bundles require manual approval and testing.

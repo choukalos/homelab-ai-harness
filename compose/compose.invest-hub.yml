@@ -63,6 +63,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
+        VITE_PLAUSIBLE_URL: https://plausible.choukalos.com
+        VITE_PLAUSIBLE_DOMAIN: invest.choukalos.com
     container_name: invest-hub-client
     restart: unless-stopped
     env_file:

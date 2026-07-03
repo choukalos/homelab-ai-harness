@@ -1,0 +1,28 @@
+name: deep_research
+version: "1.0"
+description: "Multi-source deep research with citation and artifact generation"
+inputs:
+  - name: query
+    type: string
+    required: true
+    description: "The research topic or question to investigate."
+  - name: depth
+    type: string
+    required: false
+    enum: [quick, comprehensive, exhaustive]
+    default: comprehensive
+    description: "Research depth — quick (few sources), comprehensive (default), or exhaustive (max depth)."
+  - name: max_sources
+    type: integer
+    required: false
+    default: 10
+    description: "Maximum number of sources to consult."
+tools:
+  - mcp_search
+  - mcp_crawl
+  - mcp_knowledge
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/research_reports/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 900  # seconds
