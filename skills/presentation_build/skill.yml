@@ -1,0 +1,30 @@
+name: presentation_build
+version: "1.0"
+description: "Generate presentations from a topic or existing content using Presenton"
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: "The presentation topic or title."
+  - name: slide_count
+    type: integer
+    required: true
+    description: "Number of slides to generate (1-20)."
+  - name: style
+    type: string
+    required: false
+    default: modern
+    description: "Presentation style/theme (modern, minimal, bold, elegant)."
+  - name: content_source
+    type: string
+    required: false
+    description: "Path to an existing artifact file or raw text to use as content source for the presentation."
+tools:
+  - presenton_api
+  - model_chat
+  - mcp_knowledge
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/presentations/
+approval_gates: []
+channels: [cli, siri, n8n]
+max_runtime: 300  # seconds (5 minutes)

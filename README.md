@@ -45,9 +45,14 @@ Runs:
 - Crawl4AI
 - SearXNG
 - MkDocs family wiki
+- Presenton (presentation generation)
+- Victoria Metrics (Prometheus-compatible metrics collection)
+- Grafana (dashboards)
+- Plausible (web analytics)
 
 Also runs:
 - Bare metal MySQL
+- Node Exporter + cAdvisor (host/container metrics)
 
 ---
 
@@ -129,6 +134,7 @@ NOT committed to GitHub.
     compose.ai-core.yml
     compose.ai-harness.yml
     compose.invest-hub.yml
+    compose.monitoring.yml
     compose.n8n.yml
 
   caddy/
@@ -141,6 +147,15 @@ NOT committed to GitHub.
 
   mkdocs/
     mkdocs.yml
+
+  plausible/
+    clickhouse/
+
+  prometheus/
+    prometheus.yml          # Victoria Metrics scrape config (Prometheus-compatible)
+
+  mysql-exporter/
+    .my.cnf
 
   scripts/
 
@@ -172,13 +187,21 @@ NOT committed to GitHub.
 
   ghost/
 
+  grafana/
+
   litellm/
+  litellm-postgres/
 
   n8n/
 
   open-webui/
 
   postgres/
+
+  plausible-db/
+  plausible-events-db/
+
+  presenton/
 
   qdrant/
 
@@ -187,6 +210,8 @@ NOT committed to GitHub.
   searxng/
 
   searxng-valkey/
+
+  victoria-metrics/
 ```
 
 ---
@@ -218,13 +243,14 @@ Purpose:
 
 ## Networks
 
-Three Docker networks are used:
+Four Docker networks are used:
 
 | Network | Purpose |
 |---|---|
 | edge-net | Public ingress |
 | public-net | Public apps |
 | ai-net | AI/private services |
+| monitoring-net | Monitoring infra (bridges to public-net for scraping) |
 
 ---
 
@@ -265,9 +291,22 @@ Caddy acts as:
 
 Config:
 
-```text
+```
 /home/chuck/homelab/caddy/Caddyfile
 ```
+
+### Routed Hostnames
+
+| Hostname | Service | Auth |
+|---|---|---|
+| `choukalos.com` | Ghost blog | None |
+| `invest.choukalos.com` | Invest Hub (client + API) | None |
+| `api.choukalos.com` | Invest Hub backend API | None |
+| `siri.choukalos.com` | AI Harness Siri API | `X-API-Key` |
+| `llm.choukalos.com` | LiteLLM proxy | `X-API-Key` |
+| `plausible.choukalos.com` | Plausible script + API only (admin blocked from internet) | None (script/API); admin via LAN only at `192.168.4.54:8082` |
+
+Grafana is LAN-only (port 3001, SSH tunnel only).
 
 ---
 
@@ -400,6 +439,8 @@ Docs: `ai-harness/layout/README.md`
 | Redis | Queues/cache |
 | MkDocs | Family wiki |
 | Harness API | Agent orchestration |
+| Presenton | Presentation generation (connected to LiteLLM + SearXNG) |
+| Plausible | Privacy-first web analytics |
 
 ---
 
@@ -509,6 +550,21 @@ Frequently iterated.
 
 ---
 
+## compose.monitoring.yml
+
+Monitoring infrastructure:
+- Node Exporter (host-level metrics)
+- cAdvisor (container-level metrics)
+- Victoria Metrics (Prometheus-compatible metrics collection, scrapes local + remote hosts)
+- Grafana (dashboard visualization, LAN-only via port 3001)
+- Plausible + Postgres + ClickHouse (web analytics)
+- MySQL Exporter (bare-metal MySQL monitoring)
+
+Shares `public-net` with apps so Victoria Metrics can scrape `/metrics` endpoints.
+Admin UI for Plausible is LAN-only at `192.168.4.54:8082`.
+
+---
+
 ## compose.n8n.yml
 
 Optional workflow experimentation.
@@ -538,11 +594,24 @@ Examples:
 # Rebuild only core AI services (no harness rebuild)
 ./homelab.sh rebuild ai-only
 
+# Manage monitoring stack
+./homelab.sh up monitoring
+./homelab.sh restart monitoring
+
 # Manage other stacks
 ./homelab.sh restart invest
 ./homelab.sh up public
 ./homelab.sh logs ai -f
 ./homelab.sh ps all
+
+# Manage all stacks at once
+./homelab.sh up all         # everything except n8n
+./homelab.sh up all-n8n     # everything including n8n
+
+# LiteLLM key management
+./homelab.sh key list
+./homelab.sh key info <user>
+./homelab.sh key add <user> [--budget 10]
 ```
 
 **Important:** `ai-core` and `ai-harness` are separate Docker Compose projects.
@@ -647,6 +716,10 @@ Critical backups:
 - Ghost content
 - Open Web UI DB
 - Qdrant data
+- LiteLLM Postgres
+- Plausible DB + ClickHouse
+- Victoria Metrics data
+- Grafana dashboards + configs
 
 Long-term backups stored on NAS.
 

@@ -1,0 +1,204 @@
+# LiteLLM Model Aliases — DRAFT
+#
+# Phase 10 — Do NOT copy into the live LiteLLM config.
+# These are the alias definitions matching the registry in docs/thor_model_alias_registry.md.
+# Manual review and Chuck's approval required before applying.
+#
+# Naming convention: local/<alias-name>
+# All routing goes through LiteLLM. Clients never reference Matrix ports directly.
+#
+# ─── Current Live Models (for reference) ──────────────────────────
+#
+#   model_name: matrix-coder           → vLLM port 8000 (Qwen3.6-27B INT4)
+#   model_name: matrix-gemma4-moe      → Ollama port 11434 (Gemma4-26B)
+#   model_name: studio-gemma4-4b       → LMStudio on Mac Studio (Gemma4-4B)
+#   model_name: embeddings             → Ollama port 11434 (nomic-embed-text)
+#
+# ─── Proposed Alias Definitions ───────────────────────────────────
+
+model_list:
+
+  # ─── Qwen Coder ──────────────────────────────────────────────────
+  # Main coding model. INT4 quantized Qwen3.6-27B via vLLM.
+  # 128K context, coding system prompt.
+  # Users: chuck, son
+  - model_name: local/qwen-coder
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+    litellm_params:
+      model: openai/qwen36-27b
+      api_base: http://matrix:8000/v1
+      api_key: "unused"
+      num_retries: 2
+    # Per-key restrictions (applied via LiteLLM user policy):
+    #   chuck: ✅   son: ✅   openwebui: ✅   siri: ✅   automation: ✅   experiment: ❌
+    metadata:
+      category: coding
+      max_context: "128000"
+      quantization: "q4"
+      vllm_profile: "qwen36"
+      system_prompt_ref: "coding-default"
+      tool_bundle: "bundle_coding"
+      allowed_channels: "cli, pi, ide, openwebui"
+      public_access: "false"
+
+  # ─── Qwen Long ───────────────────────────────────────────────────
+  # General-purpose with extended context. Same model, more KV headroom.
+  # 200K context for research, long conversations, document processing.
+  # Users: chuck, son
+  # Public: true (via llm.choukalos.com with scoped key)
+  - model_name: local/qwen-long
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+    litellm_params:
+      model: openai/qwen36-27b
+      api_base: http://matrix:8000/v1
+      api_key: "unused"
+      num_retries: 2
+    # Per-key restrictions:
+    #   chuck: ✅   son: ✅   openwebui: ✅   siri: ❌   automation: ✅   experiment: ❌
+    metadata:
+      category: general
+      max_context: "200000"
+      quantization: "q4"
+      vllm_profile: "qwen36-long"
+      system_prompt_ref: "general-default"
+      tool_bundle: "bundle_research"
+      allowed_channels: "cli, openwebui, llm.ch, pi"
+      public_access: "true"
+
+  # ─── Gemma Family ────────────────────────────────────────────────
+  # Family chat, copywriting, translations. Gemma4-26B via Ollama.
+  # 80K context, family-safe system prompt.
+  # Users: chuck, wife, daughter
+  - model_name: local/gemma-family
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+    litellm_params:
+      model: ollama/gemma4:26b
+      api_base: http://matrix:11434
+      api_key: "unused"
+      num_retries: 2
+      extra_body:
+        options:
+          think: false
+    # Per-key restrictions:
+    #   chuck: ✅   son: ❌   openwebui: ✅   siri: ✅   automation: ❌   experiment: ❌
+    metadata:
+      category: family
+      max_context: "80000"
+      quantization: "q4"
+      vllm_profile: "gemma4moe"
+      system_prompt_ref: "family-default"
+      tool_bundle: "bundle_family"
+      allowed_channels: "openwebui, siri, portal"
+      public_access: "false"
+
+  # ─── Experiment ──────────────────────────────────────────────────
+  # Chuck-only sandbox. Qwen3-72B INT4 when loaded, or swap to other models.
+  # 80K context. No system prompt constraints.
+  # Users: chuck only
+  - model_name: local/experiment
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+    litellm_params:
+      model: openai/qwen3-72b
+      api_base: http://matrix:8000/v1
+      api_key: "unused"
+      num_retries: 2
+    # Per-key restrictions:
+    #   chuck: ✅   son: ❌   openwebui: ❌   siri: ❌   automation: ❌   experiment: ✅
+    metadata:
+      category: experiment
+      max_context: "80000"
+      quantization: "q4"
+      vllm_profile: "experiment"
+      system_prompt_ref: "none"
+      tool_bundle: "bundle_admin"
+      allowed_channels: "cli"
+      public_access: "false"
+      note: "Requires manual vLLM profile swap. Load Qwen3-72B INT4 on a separate profile, point this alias to it."
+
+  # ─── Embeddings ──────────────────────────────────────────────────
+  # nomic-embed-text via Ollama. Used by Open WebUI and KB ingestion.
+  # System-only, not user-facing.
+  - model_name: local/embed
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000001
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://matrix:11434
+      api_key: "unused"
+      num_retries: 2
+    # Per-key restrictions:
+    #   chuck: ✅   son: ❌   openwebui: ✅   siri: ❌   automation: ✅   experiment: ❌
+    metadata:
+      category: embed
+      max_context: "8192"
+      quantization: "q4"
+      vllm_profile: "n/a"
+      system_prompt_ref: "none"
+      tool_bundle: "n/a"
+      allowed_channels: "openwebui, cli, automation"
+      public_access: "false"
+
+  # ─── Studio Gemma (Backup/Development) ───────────────────────────
+  # Gemma4-4B on Mac Studio via LMStudio. For development testing only.
+  # Not part of the production alias set.
+  - model_name: studio/gemma4-4b
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+    litellm_params:
+      model: openai/gemma-4b
+      api_base: http://macstudio:1234/v1
+      api_key: "not-needed"
+    metadata:
+      category: development
+      max_context: "8192"
+      quantization: "n/a"
+      vllm_profile: "n/a"
+      system_prompt_ref: "none"
+      tool_bundle: "n/a"
+      allowed_channels: "cli"
+      public_access: "false"
+
+# ─── Per-Key Model Allowlists ──────────────────────────────────────
+#
+# In LiteLLM, enforce per-key model restrictions. Since we're not using
+# teams, use the `allowed_model` setting per API key or user policy.
+#
+# Key        | Allowed Models
+# ───────────|─────────────────────────────────────────────────────────
+# chuck      | local/qwen-coder, local/qwen-long, local/gemma-family, local/experiment, local/embed, studio/gemma4-4b
+# son        | local/qwen-coder, local/qwen-long, local/experiment
+# openwebui  | local/qwen-coder, local/qwen-long, local/gemma-family, local/embed
+# siri       | local/qwen-coder, local/gemma-family
+# automation | local/qwen-coder, local/qwen-long
+# experiment | local/experiment
+
+# ─── System Prompts (Reference Only — Not in LiteLLM Config) ───────
+#
+# These are referenced by the system_prompt_ref field above.
+# Actual system prompts are managed in the skill runner or model profiles,
+# not in the LiteLLM config itself.
+#
+#   coding-default:  "You are an expert coding assistant. Be concise, provide working code, and explain when necessary."
+#   general-default: "You are a helpful AI assistant."
+#   family-default:  "You are a friendly family assistant. Keep responses safe, age-appropriate, and helpful."
+#   none:            No system prompt. Raw model behavior.
+
+# ─── Rules ──────────────────────────────────────────────────────────
+#
+# 1. Do NOT copy this into the live LiteLLM config without review.
+# 2. The current live config uses different model names (matrix-coder, etc.).
+#    A migration plan is needed to introduce local/* aliases while keeping
+#    the old names working during transition.
+# 3. Test each alias with a curl request before binding to keys.
+# 4. The `experiment` alias requires manual vLLM profile loading on Matrix.
+# 5. Add per-key model restrictions in LiteLLM to enforce the allowlists above.

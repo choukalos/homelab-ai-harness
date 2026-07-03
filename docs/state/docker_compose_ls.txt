@@ -1,0 +1,7 @@
+NAME                STATUS              CONFIG FILES
+ai-core             running(10)         /home/chuck/homelab/compose/compose.ai-core.yml
+ai-harness          running(5)          /home/chuck/homelab/compose/compose.ai-harness.yml
+homelab             running(2)          /home/chuck/homelab/compose/compose.core.yml,/home/chuck/homelab/compose/compose.edge.yml
+homelab-ghost       running(1)          /home/chuck/homelab/compose/compose.ghost.yml
+homelab-invest      running(3)          /home/github-runner/work/compose/compose.invest-hub.yml,/home/chuck/homelab/compose/compose.invest-hub.yml
+monitoring          running(7)          /home/chuck/homelab/compose/compose.monitoring.yml

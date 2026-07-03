@@ -1,0 +1,273 @@
+# Thor Skill Architecture
+
+> Phase 4.6 — Define the skill architecture, API shape, and initial skill inventory.
+> Date: 2026-07-03
+> Status: Documentation only. No service restarts. No config edits. No file moves.
+
+---
+
+## Principle
+
+Skills are controlled, multi-step agentic workflows. They are used when a task has multiple steps, runs longer than a quick chat response, produces artifacts, needs repeatability, needs logging, needs approval gates, or should be exposed through Siri or automation.
+
+```
+Channel → Skill Runner → Workflow (MCP tools + model calls) → Artifact
+```
+
+---
+
+## Skill API
+
+```
+POST /skills/{skill_name}       — Launch a skill
+GET  /skills/jobs/{job_id}      — Get job status
+GET  /skills/jobs/{job_id}/artifact  — Retrieve artifact
+```
+
+### Launch Request
+
+```json
+{
+  "skill": "deep_research",
+  "params": {
+    "query": "Latest developments in quantum computing 2026",
+    "depth": "comprehensive",
+    "max_sources": 10
+  },
+  "requester": "chuck",
+  "channel": "cli"
+}
+```
+
+### Status Response
+
+```json
+{
+  "job_id": "job-abc123",
+  "skill": "deep_research",
+  "status": "completed",
+  "created_at": "2026-07-03T10:00:00Z",
+  "completed_at": "2026-07-03T10:05:00Z",
+  "summary": "Research on quantum computing developments completed. Found 8 key sources.",
+  "artifact": "/home/chuck/data/media/research_reports/deep_research_2026-07-03T10-05-00_quantum-computing.md",
+  "requester": "chuck",
+  "channel": "cli"
+}
+```
+
+### Status Values
+
+| Status | Meaning |
+|---|---|
+| `pending` | Queued, waiting for worker |
+| `running` | Actively executing |
+| `completed` | Finished successfully |
+| `failed` | Error during execution |
+| `awaiting_approval` | Waiting for manual approval gate |
+| `cancelled` | Cancelled by user |
+
+---
+
+## Skill Inventory
+
+### 1. `siri_ask`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Quick Q&A for Siri/iOS Shortcuts. Short answers, no heavy research. |
+| **Inputs** | `query` (string), optional `context` (previous conversation) |
+| **Outputs** | Short text answer (<500 tokens) |
+| **Required tools** | Model chat (`local/qwen-coder`) |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | <30 seconds |
+| **Approval gates** | None |
+| **Artifact path** | `/home/chuck/data/media/siri_outputs/` (optional, for logging) |
+| **Logging** | Query, model used, response summary, timestamp |
+| **Rollback** | None needed — stateless |
+| **Channel entry points** | Siri |
+
+---
+
+### 2. `deep_research`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Multi-source deep research with citation and artifact generation. |
+| **Inputs** | `query` (string), `depth` (quick/comprehensive/exhaustive), `max_sources` (int) |
+| **Outputs** | Research report (Markdown) with citations, saved as artifact |
+| **Required tools** | `mcp_search`, `mcp_crawl`, `mcp_knowledge`, model chat |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | 2-15 minutes |
+| **Approval gates** | None (read-only research) |
+| **Artifact path** | `/home/chuck/data/media/research_reports/` |
+| **Logging** | Query, sources consulted, model used, artifact path, runtime |
+| **Rollback** | Delete artifact on failure |
+| **Channel entry points** | CLI, PI, n8n |
+
+---
+
+### 3. `investment_brief`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Generate investment analysis briefs for specific tickers or sectors. |
+| **Inputs** | `ticker` or `sector` (string), `analysis_type` (fundamental/technical/news) |
+| **Outputs** | Investment brief (Markdown) with findings, risks, summary |
+| **Required tools** | `mcp_stocks`, `mcp_search`, `mcp_crawl`, model chat |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | 3-10 minutes |
+| **Approval gates** | None (read-only analysis) |
+| **Artifact path** | `/home/chuck/data/media/investment_briefs/` |
+| **Logging** | Ticker/sector, analysis type, data sources, artifact path |
+| **Rollback** | Delete artifact on failure |
+| **Channel entry points** | CLI, n8n |
+
+---
+
+### 4. `presentation_build`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Generate presentations from a topic or existing content using Presenton. |
+| **Inputs** | `topic` (string), `slide_count` (int), `style` (optional), `content_source` (existing artifact or text) |
+| **Outputs** | Presentation file, artifact link |
+| **Required tools** | Presenton API, model chat, optional `mcp_knowledge` for content |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | 1-5 minutes |
+| **Approval gates** | None (generative, no sensitive data unless provided) |
+| **Artifact path** | `/home/chuck/data/media/presentations/` |
+| **Logging** | Topic, slide count, model used, artifact path |
+| **Rollback** | Delete presentation on failure |
+| **Channel entry points** | CLI, Siri, n8n |
+
+---
+
+### 5. `code_review`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Review code from a file, PR, or repository. |
+| **Inputs** | `repo_path` or `file_path` (string), `scope` (file/branch/repo), `focus` (security/performance/style) |
+| **Outputs** | Code review report (Markdown) with findings, ratings, recommendations |
+| **Required tools** | `mcp_filesystem_readonly`, model chat |
+| **Required model alias** | `local/qwen-coder` |
+| **Expected runtime** | 1-10 minutes (depends on scope) |
+| **Approval gates** | None (read-only review) |
+| **Artifact path** | `/home/chuck/data/media/code_reviews/` |
+| **Logging** | Repo/file path, scope, model used, artifact path |
+| **Rollback** | Delete artifact on failure |
+| **Channel entry points** | CLI, PI |
+
+---
+
+### 6. `repo_maintenance`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Repository hygiene: dependency updates, cleanup suggestions, documentation gaps. |
+| **Inputs** | `repo_path` (string), `task_type` (deps/cleanup/docs/all) |
+| **Outputs** | Maintenance report (Markdown) with actionable items |
+| **Required tools** | `mcp_filesystem_readonly`, model chat |
+| **Required model alias** | `local/qwen-coder` |
+| **Expected runtime** | 2-10 minutes |
+| **Approval gates** | Approval required before any write operations (currently read-only) |
+| **Artifact path** | `/home/chuck/data/media/code_reviews/` |
+| **Logging** | Repo path, task type, findings, artifact path |
+| **Rollback** | Read-only — no rollback needed. Future write mode needs explicit approval. |
+| **Channel entry points** | CLI, PI |
+
+---
+
+### 7. `family_kb_ingest`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Ingest curated files into the knowledge base. |
+| **Inputs** | `file_paths` (list of strings), `collection` (family_curated/homelab_curated/etc.) |
+| **Outputs** | Ingestion summary: files processed, chunks created, collection updated |
+| **Required tools** | `mcp_knowledge` (ingest), embedding model |
+| **Required model alias** | `local/embed` |
+| **Expected runtime** | 1-5 minutes |
+| **Approval gates** | Manual approval required before ingestion |
+| **Artifact path** | None (ingests into Qdrant, not media) |
+| **Logging** | Files ingested, collection, chunk count, model used |
+| **Rollback** | Delete chunks from collection on failure |
+| **Channel entry points** | CLI, n8n |
+
+---
+
+### 8. `morning_brief`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Generate a daily morning briefing: weather, news, calendar, homelab status, investments. |
+| **Inputs** | `sections` (weather/news/calendar/homelab/investments — optional, default all) |
+| **Outputs** | Morning brief (Markdown) saved as artifact |
+| **Required tools** | `mcp_search`, `mcp_homelab_status`, `mcp_stocks`, model chat |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | 2-5 minutes |
+| **Approval gates** | None |
+| **Artifact path** | `/home/chuck/data/media/homelab_reports/` |
+| **Logging** | Sections included, data sources, artifact path |
+| **Rollback** | Delete artifact on failure |
+| **Channel entry points** | n8n (scheduled), CLI |
+
+---
+
+### 9. `homelab_report`
+
+| Field | Value |
+|---|---|
+| **Purpose** | Generate a homelab health and usage report. |
+| **Inputs** | `period` (daily/weekly/monthly), `include` (containers/metrics/storage/network — optional) |
+| **Outputs** | Homelab report (Markdown) with status, metrics, recommendations |
+| **Required tools** | `mcp_homelab_status`, model chat |
+| **Required model alias** | `local/qwen-coder` (main model) |
+| **Expected runtime** | 1-3 minutes |
+| **Approval gates** | None (read-only) |
+| **Artifact path** | `/home/chuck/data/media/homelab_reports/` |
+| **Logging** | Period, sections included, artifact path |
+| **Rollback** | Delete artifact on failure |
+| **Channel entry points** | CLI, n8n |
+
+---
+
+## Skill Manifest Format
+
+Each skill is declared in a manifest:
+
+```yaml
+name: deep_research
+version: "1.0"
+description: "Multi-source deep research with citation and artifact generation"
+inputs:
+  - name: query
+    type: string
+    required: true
+  - name: depth
+    type: string
+    enum: [quick, comprehensive, exhaustive]
+    default: comprehensive
+  - name: max_sources
+    type: integer
+    default: 10
+tools:
+  - mcp_search
+  - mcp_crawl
+  - mcp_knowledge
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/research_reports/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 900  # seconds
+```
+
+---
+
+## Rules
+
+- **Documentation only.** Do not implement yet.
+- Skills are independent modules with their own manifests.
+- Skills compose MCP tools and model calls — they do not directly access backends.
+- The skill runner handles job lifecycle, artifact storage, and channel routing.
+- New skills require Chuck's approval before being added to the manifest.
