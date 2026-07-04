@@ -1,170 +1,154 @@
 # Thor Skill Runner
 
-Lightweight skill orchestration API that runs locally alongside the current AI Harness.
-Replaces the monolithic Harness with a modular, manifest-driven skill runner.
+Lightweight skill orchestration API — the foundation of the new AI Harness (Phase 8).
 
-## Design
+Runs on dev port **8091** alongside the current AI Harness (8090). The current Harness is not touched until manual cutover (Phase 14).
+
+## Architecture
 
 ```
-Channel → Skill Runner → Workflow (MCP tools + model calls) → Artifact
+Skill Runner (container :8091 on Thor)   →  litellm-proxy:4000    (on ai-net)
+Skill Runner (laptop :8091 on LAN)       →  http://192.168.4.54:4000  (LAN)
 ```
 
-- **Port**: 8091 (development only; never 8090 which is the current Harness)
-- **Storage**: In-memory job store for dev (no database)
-- **Artifacts**: Written to `/home/chuck/data/media/<skill_dir>/`
-- **Logging**: Structured logs to stdout + `/home/chuck/homelab/logs/skill_runner/skill_runner.log`
+The skill runner talks to LiteLLM for:
+- **LLM generation** via `/v1/chat/completions`
+- **MCP tool calls** via SSE transport to MCP servers on `ai-net`
 
-## Endpoints
+Skills never touch MCP servers directly — the runner is the single gateway.
 
-### POST /skills/{skill_name}
+## API Endpoints
 
-Launch a skill job.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/skills/{skill_name}` | Launch a skill job |
+| `GET` | `/skills/jobs/{job_id}` | Get job status |
+| `GET` | `/skills/jobs/{job_id}/artifact` | Retrieve artifact file |
+| `POST` | `/skills/jobs/{job_id}/approve` | Approve a job at an approval gate |
+| `POST` | `/skills/jobs/{job_id}/cancel` | Cancel a job |
 
-```json
-{
-  "params": {"query": "Topic to research", "depth": "comprehensive"},
-  "requester": "chuck",
-  "channel": "cli",
-  "dry_run": false,
-  "tool_bundle": "bundle_research",
-  "model_alias": "local/qwen-coder"
-}
-```
+## Job Model
 
-### GET /skills/jobs/{job_id}
+A job tracks the complete lifecycle of a skill invocation:
 
-Get job status. Returns the full job record.
+| Field | Type | Description |
+|-------|------|-------------|
+| `job_id` | string | Unique hex ID (12 chars) |
+| `skill` | string | Skill name (e.g. `deep_research`) |
+| `status` | enum | `pending`, `running`, `completed`, `failed`, `awaiting_approval`, `cancelled` |
+| `created_at` | ISO 8601 | Creation timestamp |
+| `completed_at` | ISO 8601 | Completion timestamp (nullable) |
+| `summary` | string | Short text summary (nullable) |
+| `artifact_path` | string | Path to output artifact (nullable) |
+| `requester` | string | Who requested the job |
+| `channel` | string | Channel that launched the job |
+| `params` | dict | Skill-specific input parameters |
+| `dry_run` | bool | Skip actual execution |
+| `tool_bundle` | string | Tool bundle name (nullable) |
+| `model_alias` | string | Model alias to use (nullable) |
+| `error` | string | Error message on failure (nullable) |
+| `logs` | list | Timestamped execution log |
 
-```json
-{
-  "job_id": "abc123def456",
-  "skill": "deep_research",
-  "status": "completed",
-  "created_at": "2026-07-03T10:00:00Z",
-  "completed_at": "2026-07-03T10:05:00Z",
-  "summary": "Research completed. Found 8 key sources.",
-  "artifact_path": "/home/chuck/data/media/research_reports/deep_research_2026-07-03T10-05-00_topic.md",
-  "requester": "chuck",
-  "channel": "cli",
-  "dry_run": false,
-  "tool_bundle": "bundle_research",
-  "model_alias": "local/qwen-coder"
-}
-```
+## Known Skills
 
-### GET /skills/jobs/{job_id}/artifact
+The runner recognizes these skill names (defined in Phase 4.6):
 
-Retrieve the skill's output artifact file. Returns the raw file content with appropriate Content-Type.
+- `siri_ask` — Quick Q&A for Siri/iOS Shortcuts
+- `deep_research` — Multi-source research with citations
+- `investment_brief` — Investment analysis reports
+- `presentation_build` — Generate presentations via Presenton
+- `code_review` — Code quality review
+- `repo_maintenance` — Repository hygiene (approval gate)
+- `family_kb_ingest` — KB ingestion (approval gate)
+- `morning_brief` — Daily morning briefing
+- `homelab_report` — Homelab health report
 
-### POST /skills/jobs/{job_id}/approve
+Skills with approval gates: `family_kb_ingest`, `repo_maintenance`
 
-Approve a job waiting at an approval gate and resume execution.
+## Running Modes
 
-### POST /skills/jobs/{job_id}/cancel
+### Container Mode (Thor)
 
-Cancel a pending or running job.
+Run the skill runner as a standalone container on Thor:
 
-### GET /health
-
-Health check. Returns status and total job count.
-
-## Job Status Values
-
-| Status | Meaning |
-|---|---|
-| `pending` | Queued, waiting for worker |
-| `running` | Actively executing |
-| `completed` | Finished successfully |
-| `failed` | Error during execution |
-| `awaiting_approval` | Waiting for manual approval gate |
-| `cancelled` | Cancelled by user |
-
-## Features
-
-### Dry-Run Mode
-
-Set `dry_run: true` in the launch request. The job is logged and completed without executing any real work. Useful for testing the API shape.
-
-Global dry-run mode can be enabled via environment variable:
 ```bash
-export SKILL_RUNNER_DRY_RUN=true
+cd /home/chuck/homelab
+docker compose -f compose/compose.skill-runner.yml up --build -d
 ```
 
-### Approval Gates
+The container runs on port 8091 and connects to LiteLLM on the `ai-net` network.
 
-Certain skills (e.g. `family_kb_ingest`, `repo_maintenance`) automatically enter `awaiting_approval` status. Use `POST /skills/jobs/{job_id}/approve` to resume them.
+Environment variables (set in compose file):
+- `LITELLM_BASE_URL=http://litellm-proxy:4000`
+- `LITELLM_API_KEY` — from `.env`
+- `SKILL_RUNNER_PORT=8091`
+- `ARTIFACT_ROOT=/home/chuck/data/media`
 
-### Tool Bundle Declaration
+The `skills/` directory is mounted read-only at `/app/skills/` so new skills are picked up without rebuilding.
 
-Jobs can declare which tool bundle they need via the `tool_bundle` field. In Phase 10, this maps to LiteLLM tool bundles.
+### Laptop Dev Mode (LAN)
 
-### Model Alias Declaration
+Run on your laptop without Docker. Points at LiteLLM on Thor over the LAN:
 
-Jobs declare which model alias to use via the `model_alias` field (e.g. `local/qwen-coder`, `local/qwen-long`).
+```bash
+cd /home/chuck/homelab/skills/runner
+./dev.sh
+```
+
+This activates a virtual environment (uses `uv` if available), installs dependencies, and starts uvicorn on port 8091.
+
+Prerequisites on laptop:
+- Python 3.10+
+- `uv` (preferred) or pip + venv
+
+Override defaults via environment:
+```bash
+LITELLM_API_KEY=sk-xxx ./dev.sh
+```
+
+## Development Workflow
+
+1. Edit a skill's `skill.py` in `skills/<name>/`
+2. Start the runner (`./dev.sh` or docker compose)
+3. Launch a skill:
+   ```bash
+   curl -X POST http://localhost:8091/skills/deep_research \
+     -H "Content-Type: application/json" \
+     -d '{"params":{"query":"test"}}'
+   ```
+4. Check status:
+   ```bash
+   curl http://localhost:8091/skills/jobs/<job_id>
+   ```
+5. Iterate — no Docker, no LiteLLM restarts, no production impact
+
+## Dry Run
+
+Set `dry_run: true` in the request body or set `SKILL_RUNNER_DRY_RUN=true` globally to skip actual execution and log what would happen.
 
 ## Configuration
 
 | Environment Variable | Default | Description |
-|---|---|---|
-| `SKILL_RUNNER_PORT` | `8091` | HTTP listen port |
-| `SKILL_RUNNER_HOST` | `0.0.0.0` | HTTP bind address |
-| `ARTIFACT_ROOT` | `/home/chuck/data/media` | Root for artifact storage |
+|---------------------|---------|-------------|
+| `LITELLM_BASE_URL` | `http://litellm-proxy:4000` (container) / `http://192.168.4.54:4000` (dev) | LiteLLM proxy URL |
+| `LITELLM_API_KEY` | `""` | LiteLLM API key |
+| `SKILL_RUNNER_PORT` | `8091` | Listen port |
+| `SKILL_RUNNER_HOST` | `0.0.0.0` | Bind address |
+| `ARTIFACT_ROOT` | `/home/chuck/data/media` | Base directory for artifacts |
 | `SKILL_RUNNER_LOG_DIR` | `/home/chuck/homelab/logs/skill_runner` | Log file directory |
-| `SKILL_RUNNER_DRY_RUN` | `false` | Global dry-run mode |
-
-## Running
-
-```bash
-cd skills/runner
-
-# With uv + venv
-uv venv
-source .venv/bin/activate
-uv pip install -e .
-
-# Run directly with uvicorn
-uvicorn main:app --host 0.0.0.0 --port 8091
-
-# Or use the project entry point
-python -m main
-```
-
-## Known Skills
-
-Skills live in sibling directories under `skills/`. Each skill has a manifest and implementation module.
-
-| Skill | Purpose | Artifact Directory |
-|---|---|---|
-| `siri_ask` | Quick Q&A for Siri | `siri_outputs/` |
-| `deep_research` | Multi-source research | `research_reports/` |
-| `investment_brief` | Investment analysis | `investment_briefs/` |
-| `presentation_build` | Presentation generation | `presentations/` |
-| `code_review` | Code review reports | `code_reviews/` |
-| `repo_maintenance` | Repository hygiene | `code_reviews/` |
-| `family_kb_ingest` | KB ingestion (requires approval) | None (Qdrant) |
-| `morning_brief` | Daily briefing | `homelab_reports/` |
-| `homelab_report` | Homelab health report | `homelab_reports/` |
-
-## Testing
-
-```bash
-# Quick smoke test
-curl http://localhost:8091/health
-
-# Launch a dry-run job
-curl -X POST http://localhost:8091/skills/deep_research \
-  -H 'Content-Type: application/json' \
-  -d '{"params":{"query":"test"},"dry_run":true}'
-
-# Check job status
-curl http://localhost:8091/skills/jobs/<job_id>
-```
+| `SKILL_RUNNER_DRY_RUN` | `""` | Global dry-run toggle (`true`/`1`/`yes`) |
+| `MCP_SERVER_SEARCH_URL` | `http://mcp_search:8000` | MCP search server URL |
+| `MCP_SERVER_KNOWLEDGE_URL` | `http://mcp_knowledge:8000` | MCP knowledge server URL |
+| `MCP_SERVER_CRAWL_URL` | `http://mcp_crawl:8000` | MCP crawl server URL |
+| `MCP_SERVER_FILESYSTEM_READONLY_URL` | `http://mcp_filesystem_readonly:8000` | MCP filesystem server URL |
 
 ## Rules
 
-- **Do not** bind to production port 8090.
-- **Do not** replace the current AI Harness.
-- **Do not** update Caddy or Cloudflare configuration.
-- **Do not** touch production services or data.
-- New runner lives in a separate directory until proven through local testing.
-- See `docs/thor_ai_harness_rebuild.md` for the migration strategy.
+- Do not bind production port 8090
+- Do not replace current AI Harness
+- Do not update Caddy
+- Do not update Cloudflare
+- Do not restart existing services
+
+See [thor_todo.md](../../thor_todo.md) Phase 8 for full design specification.

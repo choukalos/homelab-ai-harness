@@ -70,12 +70,12 @@ python -m server
 ## Architecture
 
 ```
-Client (LiteLLM / Skill Runner) → MCP (stdio) → Qdrant (http)
+Client (LiteLLM / Skill Runner) → MCP (SSE, :8000) → Qdrant (http)
                                    ↓
                               Collection allowlist enforcement
 ```
 
-- Uses the MCP Python SDK (`mcp` package) with stdio transport
+- Uses the MCP Python SDK (`mcp` package) with SSE transport (port 8000)
 - Communicates with Qdrant via `qdrant-client` async client
 - Stateless: creates a new client per tool call
 

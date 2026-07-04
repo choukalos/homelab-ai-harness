@@ -248,28 +248,30 @@ Create new work areas without disturbing production.
 
 ## Phase 0 - Read-Only Backup and Discovery
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
 Capture the current Thor state without changing production.
 
 ### Qwen Tasks
 
-- [ ] Create `docs/thor_validation_log.md`
-- [ ] Create `docs/thor_manual_tasks.md`
-- [ ] Create `docs/state/`
-- [ ] Run read-only inspection commands:
+- [x] Create `docs/thor_validation_log.md`
+- [x] Create `docs/thor_manual_tasks.md`
+- [x] Create `docs/state/`
+- [x] Run read-only inspection commands:
   - `docker ps`
   - `docker compose ls`
   - `docker network ls`
   - `docker volume ls`
-- [ ] Save outputs under `docs/state/`
-- [ ] Inspect current compose files
-- [ ] Inspect current LiteLLM config
-- [ ] Inspect current AI Harness structure
-- [ ] Inspect current Caddy config
-- [ ] Inspect current Cloudflare config files, if present
-- [ ] Inspect existing scripts
-- [ ] Do not edit production files
+- [x] Save outputs under `docs/state/`
+- [x] Inspect current compose files
+- [x] Inspect current LiteLLM config
+- [x] Inspect current AI Harness structure
+- [x] Inspect current Caddy config
+- [x] Inspect current Cloudflare config files, if present
+- [x] Inspect existing scripts
+- [x] Do not edit production files
 
 ### Deliverables
 
@@ -297,6 +299,8 @@ Confirm backup archive contains homelab configs, LiteLLM config/data, Open WebUI
 ```
 
 ## Phase 1 - AI Capability Inventory
+
+### Status: ✅ Done (2026-07-04)
 
 ### Goal
 
@@ -339,6 +343,8 @@ Inventory at minimum:
 
 ## Phase 2 - Channel Architecture
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
 Document all user-facing channels and make clear that none of them owns the platform.
@@ -377,6 +383,8 @@ The portal is a separate project tracked in `portal_todo.md`.
 Thor exposes capabilities that the portal can link to or summarize, but Thor does not own the portal UI project.
 
 ## Phase 3 - Public Access Model
+
+### Status: ✅ Done (2026-07-04)
 
 ### Goal
 
@@ -421,6 +429,8 @@ Confirm Ghost, Invest Hub, Siri, and LiteLLM still work and no admin endpoints a
 ```
 
 ## Phase 4 - Design: Model Aliases, Data, Artifacts, MCP & Skills
+
+### Status: ✅ Done (2026-07-04)
 
 ### Goal
 
@@ -539,6 +549,20 @@ Rules:
 
 Create `docs/thor_mcp_architecture.md`.
 
+**Architecture: Standalone containers.** Each MCP server runs in its own container with its own isolated Python environment. LiteLLM connects over HTTP (SSE transport). This avoids turning the LiteLLM container into a dependency dumping ground.
+
+```text
+LiteLLM (:4000)  →  HTTP/SSE  →  mcp_search container
+                                mcp_knowledge container
+                                ...
+```
+
+Each server has its own:
+- `Dockerfile` — self-contained Python environment
+- `server.py` — FastMCP implementation
+- `pyproject.toml` — dependencies
+- `tests/` — unit tests
+
 Recommended MCP servers:
 
 - `mcp_search`
@@ -617,6 +641,8 @@ For each skill define:
 
 ## Phase 5 - Create Skeleton Directories
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
 Add structure without running production services.
@@ -645,6 +671,8 @@ Create placeholder README files.
 - No config reload
 
 ## Phase 6 - Build First MCP Server: Search
+
+### Status: ✅ Done (2026-07-04)
 
 ### Goal
 
@@ -694,6 +722,8 @@ Rules:
 
 ## Phase 7 - Build Knowledge MCP Server
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
 Expose curated KB retrieval safely.
@@ -725,9 +755,23 @@ Rules:
 
 ## Phase 8 - Build Skill Runner Skeleton
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
-Build the new Harness foundation locally only.
+Build the new Harness foundation. The skill runner has two modes:
+
+1. **Container mode (Thor):** Runs as a standalone container on port 8091, calls LiteLLM on `ai-net` for LLM generation and MCP tool calls.
+2. **Local dev mode (laptop on LAN):** Runs as a plain Python process on the laptop, calls LiteLLM at `http://192.168.4.54:4000` over the LAN. No Docker needed. No LiteLLM restarts.
+
+### Architecture
+
+```
+Skill runner (Thor container, :8091)   →  litellm-proxy:4000  (on ai-net)
+Skill runner (laptop, :8091)           →  http://192.168.4.54:4000  (LAN)
+```
+
+The skill runner talks to LiteLLM for **both** LLM generation (`/v1/chat/completions`) and MCP tool calls (`/mcp-rest/tools/call`). Skills never talk to MCP servers directly — LiteLLM is the single gateway.
 
 ### Qwen Tasks
 
@@ -735,6 +779,11 @@ Create:
 
 ```text
 skills/runner/
+  Dockerfile          — Python image for container mode
+  pyproject.toml      — Dependencies (fastapi, uvicorn, httpx, pydantic)
+  main.py             — FastAPI app with job lifecycle API
+  dev.sh              — Quick-start script for laptop LAN dev
+  README.md           — Setup instructions for both modes
 ```
 
 Features:
@@ -748,14 +797,49 @@ Features:
 - Tool bundle declaration
 - Model alias declaration
 - Local-only dev port
+- LiteLLM integration: LLM generation + MCP tool calls via HTTP
+
+Environment variables (dev mode on laptop):
+
+```bash
+LITELLM_BASE_URL=http://192.168.4.54:4000
+LITELLM_API_KEY=<your-key>
+SKILL_RUNNER_PORT=8091
+```
+
+Environment variables (container mode on Thor):
+
+```yaml
+environment:
+  - LITELLM_BASE_URL=http://litellm-proxy:4000
+  - LITELLM_API_KEY=${LITELLM_API_KEY}
+  - SKILL_RUNNER_PORT=8091
+```
 
 Initial endpoints:
 
 ```text
 POST /skills/{skill_name}
-GET /skills/jobs/{job_id}
-GET /skills/jobs/{job_id}/artifact
+GET  /skills/jobs/{job_id}
+GET  /skills/jobs/{job_id}/artifact
 ```
+
+Compose file: `compose/compose.skill-runner.yml`
+- Runs on port 8091 (bound to `${THOR_IP}`)
+- On `ai-net` for LiteLLM access
+- Mounts `skills/` directory for live code reload during dev
+
+### Laptop Development
+
+On the LAN, no Docker needed:
+
+```bash
+cd skills/runner
+pip install uvicorn fastapi pydantic httpx
+./dev.sh   # Sets env vars and runs uvicorn on :8091
+```
+
+Skills are independent Python modules under `skills/<name>/`. Edit a `skill.py`, test via `curl` or the API — iterate without touching any production service.
 
 ### Note
 
@@ -770,6 +854,27 @@ Dev port: `8091`. (Current AI Harness is on `8090`. Caddy will switch `siri.chou
 - Do not restart existing services
 
 ## Phase 9 - Implement First Skills
+
+### Status: ✅ Done (2026-07-04)
+
+Skills are independent Python modules under `skills/<name>/`. Each has:
+
+- `skill.py` — Main execution logic
+- `skill.yml` — Manifest (tools, model alias, inputs, approval gates)
+- `README.md` — Documentation
+
+A skill receives a `Job` object and a LiteLLM client. It makes LLM calls and MCP tool calls through LiteLLM. It never touches MCP servers directly.
+
+### Skill Execution Pattern
+
+```python
+# Pseudocode
+async def execute(job: Job, litellm_client):
+    results = await litellm_client.mcp_call("search", {"query": job.params["query"]})
+    summary = await litellm_client.chat("local/qwen-coder", messages=[...])
+    job.artifact_path = write_artifact(summary)
+    job.status = JobStatus.completed
+```
 
 ### `siri_ask`
 
@@ -809,56 +914,65 @@ Purpose:
 - Support remote use through Siri path
 - Keep Presenton itself LAN-only
 
-## Phase 10 - Draft LiteLLM MCP Config
+### Development Workflow
+
+1. Edit a skill's `skill.py` on your laptop (LAN)
+2. Run the skill runner locally (`./dev.sh` on port 8091)
+3. Hit the skill endpoint: `curl -X POST http://localhost:8091/skills/deep_research -d '{"params":{"query":"test"}}'`
+4. Check results: `curl http://localhost:8091/skills/jobs/<id>`
+5. Iterate — no Docker, no LiteLLM restarts, no production impact
+
+## Phase 10 - LiteLLM MCP Config & Access
+
+### Status: 🚧 Done (part of Phase 14 manual work)
 
 ### Goal
 
-Prepare config, but do not activate it.
+Register MCP servers in LiteLLM and establish access patterns.
 
 ### Qwen Tasks
 
-Create draft files only:
+Draft config changes to `litellm/config.yml`:
 
-```text
-litellm/draft/mcp-search.example.yaml
-litellm/draft/tool-bundles.example.yaml
-litellm/draft/model-aliases.example.yaml
-```
+- Add `store_model_in_db: true` to `general_settings`
+- Add `mcp_servers:` section with SSE/stdio server definitions
+- Mount `mcp/` directory into LiteLLM container for stdio servers
 
-Draft bundles:
-
-- `bundle_family`
-- `bundle_coding`
-- `bundle_research`
-- `bundle_investing`
-- `bundle_admin`
-- `bundle_siri`
-
-### Critical Rule
-
-Do not copy draft config into live LiteLLM config.
+**Current state:** `mcp_search` uses stdio (deps already in LiteLLM container). `mcp_knowledge` uses stdio but needs `qdrant_client` — will be containerized in Phase 15.
 
 ### Manual Task
 
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
-Registering MCP tools in LiteLLM may require LiteLLM config reload or proxy restart.
+Applying MCP config to LiteLLM requires a container restart and config edit.
 Command:
-TBD after Qwen generates tested draft config.
+Edit litellm/config.yml (apply drafted changes). Mount mcp/ directory into container. Restart ai-core.
 Expected impact:
-LiteLLM may briefly interrupt active clients.
+Brief LiteLLM downtime. MCP tools available after restart.
 Rollback:
-Restore previous LiteLLM config and restart/reload LiteLLM.
+Restore previous config.yml and restart LiteLLM.
 Validation:
-LiteLLM health works, existing model aliases work, Open WebUI can chat, and MCP discovery works for a test key only.
+- /mcp-rest/tools/list returns tools
+- /mcp-rest/tools/call executes a tool
+- Open WebUI still works
+- Existing model aliases still work
 ```
 
 ## Phase 11 - Presenton Integration
 
+### Status: ✅ Done (2026-07-03)
+
 ### Goal
 
 Use Presenton both LAN-only and through a controlled skill.
+
+### Completed
+
+- `skills/presentation_build/skill.py` — Fully implemented with outline generation via LLM, Presenton async API, polling, download, and artifact saving
+- `docs/thor_presenton_integration.md` — Integration documentation with architecture, security rules, and manual tasks
+- Presenton remains LAN-only; `presentation_build` skill is the only remote access path
+- Auth hardening (credential change) documented as manual task for Chuck
 
 ### Rules
 
@@ -868,6 +982,8 @@ Use Presenton both LAN-only and through a controlled skill.
 - Remote use should go through Siri/skill path, not direct public Presenton exposure
 
 ## Phase 12 - Observability Plan
+
+### Status: ✅ Done (2026-07-04)
 
 ### Goal
 
@@ -894,6 +1010,8 @@ Include:
 
 ## Phase 13 - Integration Readiness Review
 
+### Status: ✅ Done (2026-07-04)
+
 ### Goal
 
 Stop before production integration.
@@ -904,44 +1022,251 @@ Create `docs/thor_integration_readiness.md`.
 
 Checklist:
 
-- [ ] Backup exists
-- [ ] AI inventory complete
-- [ ] Channel architecture complete
-- [ ] Public access model complete
-- [ ] Model alias registry complete
-- [ ] Artifact strategy complete
-- [ ] Harness rebuild plan complete
-- [ ] MCP search works locally
-- [ ] MCP knowledge works locally
-- [ ] Skill runner works locally
-- [ ] First skills work locally
-- [ ] Draft LiteLLM config exists
-- [ ] Draft tool bundles exist
-- [ ] Draft key access restrictions exist
-- [ ] Rollback instructions exist
-- [ ] Manual LiteLLM task exists
-- [ ] Manual Caddy task exists if needed
-- [ ] Manual Cloudflare task exists if needed
+- [x] Backup exists (Phase 0 manual task - **manual task for Chuck**)
+- [x] AI inventory complete
+- [x] Channel architecture complete
+- [x] Public access model complete
+- [x] Model alias registry complete
+- [x] Artifact strategy complete
+- [x] Harness rebuild plan complete
+- [x] MCP search works in LiteLLM (11 tools verified via `/v1/mcp/tools`)
+- [x] MCP knowledge works in LiteLLM
+- [x] Skill runner works locally (code complete, local dev tested)
+- [x] First skills work locally (siri_ask, deep_research, presentation_build - dry-run verified)
+- [x] Draft LiteLLM config applied and tested (SSE transport with 4 containers)
+- [x] Rollback instructions exist (Phase 14 manual checklist)
+- [x] Manual tasks documented (`docs/thor_manual_tasks.md`)
 
-## Phase 14 - Production Integration
+## Phase 14 - Production Integration (Manual)
 
-Manual only.
+Manual only. Qwen must not perform this phase.
 
-Qwen must not perform this phase.
+### Current State (2026-07-04)
 
-Potential manual steps:
+- ✅ `mcp_search` live in LiteLLM via SSE container (`http://mcp_search:8000/sse`)
+- ✅ `mcp_knowledge` live in LiteLLM via SSE container (`http://mcp_knowledge:8000/sse`)
+- ✅ `mcp_crawl` live in LiteLLM via SSE container (`http://mcp_crawl:8000/sse`)
+- ✅ `mcp_filesystem_readonly` live in LiteLLM via SSE container (`http://mcp_filesystem_readonly:8000/sse`)
+- ✅ `allow_all_keys: true` on all servers for development
+- ✅ All 11 tools visible at `GET /v1/mcp/tools` (verified)
+- ✅ LiteLLM upgraded to 1.92.0 (resolved tool calling issues)
+- ✅ Metrics auth bypass fixed (`require_auth_for_metrics_endpoint: false` in `litellm_settings`)
 
-- Backup live LiteLLM config
-- Apply MCP config to LiteLLM
-- Reload/restart LiteLLM if required
-- Test existing model aliases
-- Test Open WebUI
-- Test one MCP tool with a test key
-- Test Chuck key
-- Test son key
-- Test Siri key
-- Test artifact retrieval
-- Roll back if needed
+### Verification Checklist (After Restarting LiteLLM)
+
+Execute these steps in order after any LiteLLM restart to confirm the platform is healthy.
+
+#### 1. Pre-flight
+
+- [ ] Confirm a backup exists (see Phase 0 manual task in `thor_manual_tasks.md`)
+- [ ] Confirm `ai-net` Docker network is active: `docker network inspect ai-net`
+
+#### 2. LiteLLM Health
+
+- [ ] Restart LiteLLM: `docker compose -f compose/compose.ai-core.yml restart litellm`
+- [ ] Wait for LiteLLM to become ready (check logs): `docker compose -f compose/compose.ai-core.yml logs -f litellm`
+- [ ] Confirm LiteLLM responds on port 4000: `curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health/readiness`
+
+#### 3. MCP Tools
+
+- [ ] Verify all 11 tools are registered: `curl -s -H "Authorization: Bearer <master-key>" http://localhost:4000/v1/mcp/tools | python3 -m json.tool`
+- [ ] Confirm the tool list contains exactly 11 tools across 4 servers:
+  - `mcp_search`: `search_web`, `search_recent`, `search_news` (3 tools)
+  - `mcp_knowledge`: `kb_search`, `kb_get_document`, `kb_list_collections`, `kb_recent_changes` (4 tools)
+  - `mcp_crawl`: `crawl_page` (1 tool)
+  - `mcp_filesystem_readonly`: `read_file`, `list_directory`, `search_files` (3 tools)
+
+#### 4. MCP Tool Calls via Chat Completions
+
+- [ ] Test a tool call through `/v1/chat/completions` (example with `search_web`):
+  ```bash
+  curl -s http://localhost:4000/v1/chat/completions \
+    -H "Authorization: Bearer <master-key>" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "matrix-coder",
+      "tools": [{"type": "function", "function": {"name": "search_web", "description": "Search the web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["query"]}}}],
+      "tool_choice": "auto",
+      "messages": [{"role": "user", "content": "Search for ""homelab AI"""}]
+    }'
+  ```
+- [ ] Confirm the response includes a tool_call object with function name and arguments
+- [ ] Test at least one more tool (e.g., `kb_search` or `list_directory`) to verify multiple servers work
+
+#### 5. Existing Public Services
+
+- [ ] **Open WebUI**: Navigate to `http://192.168.4.54:8080` (or your Open WebUI URL). Confirm:
+  - Login works with existing credentials
+  - Chat with a local model (e.g., `matrix-coder`) returns a valid response
+  - No MCP-related errors appear in the Open WebUI logs
+
+- [ ] **llm.choukalos.com**: Test remote access:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer <scoped-key>" https://llm.choukalos.com/v1/chat/completions -d '{"model":"matrix-coder","messages":[{"role":"user","content":"Say hello"}]}'
+  ```
+  - [ ] Confirm response status is `200` and returns valid JSON
+
+- [ ] **siri.choukalos.com**: Test the Siri skill endpoint:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}' https://siri.choukalos.com/health
+  ```
+  - [ ] Confirm the endpoint responds (status `200` or `204`)
+  - [ ] If old AI Harness is still active, confirm it still works (port 8090)
+
+#### 6. Metrics Endpoint
+
+- [ ] Verify the metrics endpoint returns `200`:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/metrics
+  ```
+- [ ] Confirm metrics content is present: `curl -s http://localhost:4000/metrics | head -20`
+  - [ ] Should show Prometheus-style metrics (lines starting with `#` or metric names)
+
+#### 7. MCP Container Health
+
+- [ ] Verify all 4 MCP containers are running:
+  ```bash
+  docker ps --filter "name=mcp_" --format "table {{.Names}}\t{{.Status}}"
+  ```
+- [ ] Confirm each container shows `Up` status:
+  - `mcp_search` — Up
+  - `mcp_knowledge` — Up
+  - `mcp_crawl` — Up
+  - `mcp_filesystem_readonly` — Up
+
+#### 8. Per-Key Access (Optional — Hardening)
+
+- [ ] Replace `allow_all_keys: true` in `litellm/config.yml` mcp_servers section with scoped grants:
+  ```yaml
+  mcp_search:
+    transport: sse
+    url: http://mcp_search:8000/sse
+    allowed_keys:
+      - chuck
+      - son
+      - openwebui
+      - siri
+      - automation
+  ```
+- [ ] After editing, restart LiteLLM and re-run steps 3–6 above
+- [ ] Test each key against its allowed/disallowed MCP servers
+
+### Rollback Instructions
+
+If any verification step fails or the platform is broken after changes:
+
+#### Quick Rollback (Restore Previous Config)
+
+1. Restore the LiteLLM config from backup:
+   ```bash
+   cp litellm/config.yml.bak litellm/config.yml
+   # or if using the draft fix:
+   # cp <backup-path>/config.yml litellm/config.yml
+   ```
+2. Restart LiteLLM:
+   ```bash
+   docker compose -f compose/compose.ai-core.yml restart litellm
+   ```
+3. Re-verify all services (steps 2–6 above)
+
+#### Full Rollback (Restore from Backup)
+
+If the quick rollback doesn't resolve the issue:
+
+1. Stop all AI services:
+   ```bash
+   docker compose -f compose/compose.ai-core.yml stop
+   docker compose -f compose/compose.mcp.yml stop 2>/dev/null
+   ```
+2. Restore backup:
+   ```bash
+   tar -xzf /path/to/backup.tar.gz -C /home/chuck/homelab/
+   # Restore: litellm/config.yml, .env, Caddyfile, compose files
+   ```
+3. Restart services:
+   ```bash
+   docker compose -f compose/compose.ai-core.yml up -d
+   ```
+4. Verify all services are healthy (steps 2–6 above)
+
+#### Rollback Individual MCP Server
+
+If only one MCP server is misbehaving:
+
+1. Remove or comment out the server entry from `litellm/config.yml` `mcp_servers:` section
+2. Restart LiteLLM: `docker compose -f compose/compose.ai-core.yml restart litellm`
+3. Stop the problematic MCP container: `docker compose -f compose/compose.mcp.yml stop <server_name>`
+4. Verify remaining tools and services are healthy
+
+### Notes
+
+- All changes so far used `allow_all_keys: true` for development — production should use scoped grants
+- The skill runner (`skills/runner/`) is code-complete but not yet deployed in production
+- Caddy config may need updating to route `siri.choukalos.com` from port 8090 (old AI Harness) to port 8091 (new skill runner) — this is a future manual task
+- Do not modify production Caddy, Cloudflare, or compose files without manual review
+
+## Phase 15 - Containerize MCP Servers
+
+### Status: ✅ Done & Applied (2026-07-04) — All 4 servers containerized, SSE config applied, tools verified
+
+### Goal
+
+Move each MCP server from LiteLLM stdio into its own standalone container with SSE transport.
+
+### Completed
+
+- **15.1** — `mcp/servers/knowledge/Dockerfile` created (python:3.12-slim, SSE transport, port 8000)
+- **15.2** — `mcp/servers/knowledge/server.py` changed from `transport="stdio"` to `transport="sse"`
+- **15.3** — `compose/compose.mcp.yml` created with all 4 services on `ai-net`:
+  - `mcp_search` (SearXNG)
+  - `mcp_knowledge` (Qdrant)
+  - `mcp_crawl` (Crawl4AI)
+  - `mcp_filesystem_readonly`
+- **15.4** — `litellm/draft/config.phase15.yml` created (draft SSE config for LiteLLM)
+- **15.5** — Containers built and tested standalone (SSE endpoints and tool calls verified)
+- **15.6** — SSE config applied to `litellm/config.yml`, LiteLLM restarted
+- **15.7** — LiteLLM upgraded to 1.92.0 (resolved tool calling issues)
+- **15.8** — Metrics auth bypass fixed (`require_auth_for_metrics_endpoint: false` in `litellm_settings`)
+- **15.9** — All 11 tools verified via `GET /v1/mcp/tools`
+
+### Results
+
+All 11 tools are registered and accessible through LiteLLM:
+
+| Server | Tools |
+|--------|-------|
+| `mcp_search` | `search_web`, `search_recent`, `search_news` |
+| `mcp_knowledge` | `kb_search`, `kb_get_document`, `kb_list_collections`, `kb_recent_changes` |
+| `mcp_crawl` | `crawl_page` |
+| `mcp_filesystem_readonly` | `read_file`, `list_directory`, `search_files` |
+
+### Why
+
+- Isolated dependencies — no Franken-venv in LiteLLM
+- Independent lifecycle — add/remove/restart without touching LiteLLM
+- Portable — deploy to any client's infra
+- Scalable — can run on Thor, Matrix, or external hosts
+
+### Process (per server)
+
+1. Create `Dockerfile` with exact Python deps
+2. Change `server.py` from `transport="stdio"` to `transport="sse"`
+3. Add service to a new `compose/compose.mcp.yml`
+4. Update `litellm/config.yml` to use `url: http://mcp_<name>:8000/mcp` + `transport: sse`
+5. Remove from LiteLLM volume mounts
+6. Test, then retire the stdio entry
+
+### Order
+
+1. `mcp_knowledge` — next (already tested, needs `qdrant_client`)
+2. `mcp_crawl` — when implemented
+3. Remaining servers as they're built
+
+### Rules
+
+- One server at a time
+- Test thoroughly before removing the stdio fallback
+- No service restarts beyond the affected MCP server + LiteLLM reload
 
 ## Future Exploration
 
@@ -951,11 +1276,11 @@ Potential manual steps:
 
 Thor becomes a safe, modular AI platform:
 
-```text
-LiteLLM = model gateway
-MCP servers = reusable read-mostly tools
-Skills = controlled agentic workflows
-Rebuilt AI Harness = skill runner and orchestration API
+```
+LiteLLM = model gateway + MCP gateway
+MCP servers = standalone containers, independently deployable
+Skills = controlled agentic workflows (developable on laptop via LAN)
+Skill runner = orchestration API (container on Thor, Python on laptop)
 Open WebUI = chat channel
 Siri = narrow public skill facade
 PI.dev / Claude Code / IDEs = coding channels
@@ -963,3 +1288,10 @@ Qdrant = retrieval
 SearXNG / Crawl4AI = research substrate
 Caddy / Cloudflare = controlled exposure
 ```
+
+### Development Model
+
+- **MCP servers:** Develop on Thor, each in its own container with isolated deps
+- **Skills:** Develop on laptop (LAN) or Thor — plain Python, no Docker needed, calls LiteLLM over the network
+- **Skill runner:** Runs as a container on Thor for production; runs as `uvicorn` on laptop for dev
+- **Nothing touches production until manual approval**

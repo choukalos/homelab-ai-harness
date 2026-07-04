@@ -41,6 +41,7 @@ services:
     volumes:
       - ../litellm/config.yml:/app/config.yaml:ro
       - /home/chuck/data/litellm:/app/data
+      - ../mcp:/home/chuck/homelab/mcp
     extra_hosts:
       - "macstudio:${MAC_STUDIO_IP:-127.0.0.1}"
       - "matrix:${MATRIX_IP:-127.0.0.1}"

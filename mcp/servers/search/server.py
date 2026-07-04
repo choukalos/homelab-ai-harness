@@ -101,6 +101,7 @@ async def _searxng_search(
 
 mcp = FastMCP(
     name="mcp_search",
+    host="0.0.0.0",
     instructions="Read-only web search via SearXNG. "
     "Results include title, URL, and a truncated snippet.",
 )
@@ -166,10 +167,10 @@ async def search_news(query: str, max_results: int = 5) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP search server over stdio."""
+    """Run the MCP search server over SSE."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_search on %s", SEARXNG_URL)
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":
