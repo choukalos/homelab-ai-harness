@@ -418,7 +418,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_knowledge on %s", QDRANT_URL)
     logger.info("Allowed collections: %s", ", ".join(ALLOWED_COLLECTIONS))
-    mcp.run(transport="sse")  # SSE defaults to 0.0.0.0:8000
+    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
 
 
 if __name__ == "__main__":

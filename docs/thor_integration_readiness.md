@@ -97,7 +97,7 @@ All documentation, implementation, and containerization phases are complete. MCP
 | # | Item | Status | Notes |
 |---|---|---|---|
 | 1 | Rollback instructions | ⚠️ **PARTIAL** | `thor_manual_tasks.md` has Phase 0 backup task. Phase 14 rollback needs detail. |
-| 2 | Manual LiteLLM tasks documented | ✅ | `thor_todo.md` Phase 10 and `thor_manual_tasks.md` Phase 0 |
+| 2 | Manual LiteLLM tasks documented | ✅ | `TODO.md` Phase 10 and `thor_manual_tasks.md` Phase 0 |
 | 3 | Manual Caddy task drafted | ⚠️ **NEEDED** | Required for skill runner routing (`:8091` behind Caddy). |
 | 4 | Manual Cloudflare task drafted | ⚠️ **NEEDED** | Required for any new public endpoints. |
 | 5 | Manual Victoria Metrics task | ✅ | `thor_observability_plan.md` has scrape config drafts. |
@@ -147,18 +147,18 @@ All phases 0–9, 12, and 15 are done:
 
 | # | Task | Where | Description |
 |---|---|---|---|
-| 1 | Execute backup | `thor_manual_tasks.md` / `thor_todo.md` Phase 0 | Full backup of all production configs and data |
+| 1 | Execute backup | `thor_manual_tasks.md` / `TODO.md` Phase 0 | Full backup of all production configs and data |
 | 2 | Draft Caddy task | — | Route skill runner behind Caddy on LAN (`:8091`) |
 | 3 | Draft Cloudflare task | — | Define any new public endpoints (if needed) |
-| 4 | Create per-key MCP restrictions | `thor_todo.md` Phase 14 | Replace `allow_all_keys: true` with scoped grants |
+| 4 | Create per-key MCP restrictions | `TODO.md` Phase 14 | Replace `allow_all_keys: true` with scoped grants |
 
 ### Phase 14 Verification (After Restart)
 
 | # | Task | Where | Description |
 |---|---|---|---|
-| 5 | Verify existing services | `thor_todo.md` Phase 14 | Open WebUI, llm.choukalos.com, siri.choukalos.com all work |
-| 6 | Test MCP tool calls | `thor_todo.md` Phase 14 | Test through `/v1/chat/completions` with tool definitions |
-| 7 | Test per-key MCP access | `thor_todo.md` Phase 14 | Each key against allowed/disallowed MCP servers |
+| 5 | Verify existing services | `TODO.md` Phase 14 | Open WebUI, llm.choukalos.com, siri.choukalos.com all work |
+| 6 | Test MCP tool calls | `TODO.md` Phase 14 | Test through `/v1/chat/completions` with tool definitions |
+| 7 | Test per-key MCP access | `TODO.md` Phase 14 | Each key against allowed/disallowed MCP servers |
 | 8 | Verify /v1/mcp/tools | — | All 11 tools still visible after any config changes |
 | 9 | Verify /metrics endpoint | — | Returns 200 with auth bypass |
 
@@ -170,7 +170,7 @@ All phases 0–9, 12, and 15 are done:
 | 11 | Extend Victoria Metrics | `thor_observability_plan.md` | Add scrape targets for skill runner, MCP servers |
 | 12 | Create Grafana dashboards | `thor_observability_plan.md` | Dashboards for skill runner, MCP tools |
 | 13 | Harden Presenton auth | `thor_presenton_integration.md` | Change default credentials |
-| 14 | Implement remaining skills | `thor_todo.md` Phase 9 | 6 skills currently have READMEs only |
+| 14 | Implement remaining skills | `TODO.md` Phase 9 | 6 skills currently have READMEs only |
 
 ---
 

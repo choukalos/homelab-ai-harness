@@ -214,7 +214,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_crawl, Crawl4AI at %s", CRAWL4AI_URL)
     logger.info("Rate limit: %d concurrent, %d max chars", MAX_CONCURRENT, MAX_CHARS)
-    mcp.run(transport="sse")  # SSE defaults to 0.0.0.0:8000
+    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
 
 
 if __name__ == "__main__":
