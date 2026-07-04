@@ -49,6 +49,32 @@ services:
     networks:
       - ai-net
 
+  mcp_mysql:
+    build:
+      context: ../mcp/servers/mysql
+    container_name: mcp_mysql
+    environment:
+      - MYSQL_HOST=thor.local
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${AI_DB_USER}
+      - MYSQL_PASSWORD=${AI_DB_PASS}
+      - LITELLM_API_BASE=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_MODEL=studio-gemma4-4b
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  mcp_homelab_status:
+    build:
+      context: ../mcp/servers/homelab_status
+    container_name: mcp_homelab_status
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:

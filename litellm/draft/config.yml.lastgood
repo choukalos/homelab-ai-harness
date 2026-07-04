@@ -143,16 +143,4 @@ mcp_servers:
     url: http://mcp_filesystem_readonly:8000/mcp
     allow_all_keys: true
 
-  # ── MySQL (Read-Only Database Queries) ──────────────────────────
-  mcp_mysql:
-    transport: http
-    url: http://mcp_mysql:8000/mcp
-    allow_all_keys: true
-
-  # ── Homelab Status (Docker/System) ──────────────────────────────
-  mcp_homelab_status:
-    transport: http
-    url: http://mcp_homelab_status:8000/mcp
-    allow_all_keys: true
-
 

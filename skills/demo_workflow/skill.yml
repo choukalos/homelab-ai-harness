@@ -1,0 +1,14 @@
+name: demo_workflow
+version: "1.0"
+description: "One-page clickable demo via deep agents. Takes a prompt, researches, builds, and verifies an interactive HTML demo."
+inputs:
+  - name: prompt
+    type: string
+    required: true
+    description: "The demo topic/description."
+tools: []
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/presentations/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 600

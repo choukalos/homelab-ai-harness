@@ -1,4 +1,5 @@
 # Never commit private content
+tmp/
 media/
 outputs/
 *.png
