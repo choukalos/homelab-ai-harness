@@ -324,7 +324,7 @@ def main() -> None:
     logger.info("Starting mcp_filesystem_readonly")
     logger.info("Allowed paths: %s", ", ".join(ALLOWED_PATHS))
     logger.info("Max file size: %d bytes (%.0f MB)", MAX_FILE_SIZE, MAX_FILE_SIZE / (1024 * 1024))
-    mcp.run(transport="sse")  # SSE defaults to 0.0.0.0:8000
+    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
 
 
 if __name__ == "__main__":

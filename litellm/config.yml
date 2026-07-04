@@ -121,24 +121,24 @@ mcp_servers:
 
   # ── Search (SearXNG) ─────────────────────────────────────────────
   mcp_search:
-    transport: sse
-    url: http://mcp_search:8000/sse
+    transport: http
+    url: http://mcp_search:8000/mcp
     allow_all_keys: true
 
   # ── Knowledge (Qdrant) ───────────────────────────────────────────
   mcp_knowledge:
-    transport: sse
-    url: http://mcp_knowledge:8000/sse
+    transport: http
+    url: http://mcp_knowledge:8000/mcp
     allow_all_keys: true
 
   # ── Crawl (Crawl4AI) ─────────────────────────────────────────────
   mcp_crawl:
-    transport: sse
-    url: http://mcp_crawl:8000/sse
+    transport: http
+    url: http://mcp_crawl:8000/mcp
     allow_all_keys: true
 
   # ── Filesystem Readonly ─────────────────────────────────────────
   mcp_filesystem_readonly:
-    transport: sse
-    url: http://mcp_filesystem_readonly:8000/sse
+    transport: http
+    url: http://mcp_filesystem_readonly:8000/mcp
     allow_all_keys: true
