@@ -82,7 +82,7 @@ curl with each key to verify allowed/denied model access is correct.
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
-Presenton uses default auth credentials (presenton/changeme123). These should be changed before any remote skill access.
+Presenton uses HTTP Basic auth. Set `PRESENTON_AUTH_PASSWORD` in `.env` before enabling remote skill access.
 Command:
 Edit Presenton environment variables in compose/compose.ai-core.yml (PRESENTON_AUTH_USERNAME, PRESENTON_AUTH_PASSWORD). Restart Presenton container only.
 Expected impact:

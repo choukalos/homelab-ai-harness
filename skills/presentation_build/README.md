@@ -97,7 +97,7 @@ See [skill.yml](skill.yml) for the full manifest.
 |---|---|---|
 | `PRESENTON_URL` | `http://presenton:80` | Presenton base URL |
 | `PRESENTON_AUTH_USERNAME` | `presenton` | Presenton HTTP Basic auth username |
-| `PRESENTON_AUTH_PASSWORD` | `changeme123` | Presenton HTTP Basic auth password |
+| `PRESENTON_AUTH_PASSWORD` | `${PRESENTON_AUTH_PASSWORD}` | Presenton HTTP Basic auth password |
 | `PRESENTON_GENERATION_TIMEOUT` | `240` | Timeout (seconds) for Presenton generation polling |
 | `PRESENTATION_BUILD_MAX_RUNTIME` | `300` | Total skill max runtime in seconds |
 | `PRESENTATION_BUILD_ARTIFACT_DIR` | `/home/chuck/data/media/presentations` | Artifact output directory |

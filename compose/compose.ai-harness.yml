@@ -43,7 +43,7 @@ services:
 
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
-      - PRESENTON_AUTH_PASSWORD=changeme123
+      - PRESENTON_AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
 
       - MYSQL_DB_HOST=${MYSQL_DB_HOST}
       - AI_DB_USER=${AI_DB_USER}
@@ -83,7 +83,7 @@ services:
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
-      - PRESENTON_AUTH_PASSWORD=changeme123
+      - PRESENTON_AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
       - MYSQL_DB_HOST=${MYSQL_DB_HOST}
       - AI_DB_USER=${AI_DB_USER}
       - AI_DB_PASS=${AI_DB_PASS}
@@ -121,7 +121,7 @@ services:
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
-      - PRESENTON_AUTH_PASSWORD=changeme123
+      - PRESENTON_AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
       - MYSQL_DB_HOST=${MYSQL_DB_HOST}
       - AI_DB_USER=${AI_DB_USER}
       - AI_DB_PASS=${AI_DB_PASS}
@@ -159,7 +159,7 @@ services:
       - WORKSPACE=${WORKSPACE:-/home/chuck/workspace}
       - PRESENTON_BASE_URL=http://presenton:80
       - PRESENTON_AUTH_USERNAME=presenton
-      - PRESENTON_AUTH_PASSWORD=changeme123
+      - PRESENTON_AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
       - MYSQL_DB_HOST=${MYSQL_DB_HOST}
       - AI_DB_USER=${AI_DB_USER}
       - AI_DB_PASS=${AI_DB_PASS}

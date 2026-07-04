@@ -298,7 +298,7 @@ on read via `PresentationMetadata._fill_urls()`.
 |---|---|---|
 | `PRESENTON_BASE_URL` | `http://presenton:80` | Presenton container URL |
 | `PRESENTON_AUTH_USERNAME` | `presenton` | Presenton Basic auth username |
-| `PRESENTON_AUTH_PASSWORD` | `changeme123` | Presenton Basic auth password |
+| `PRESENTON_AUTH_PASSWORD` | `${PRESENTON_AUTH_PASSWORD}` | Presenton Basic auth password |
 | `INTERNAL_BASE_URL` | `http://thor.local:8090` | Internal API base URL |
 | `PUBLIC_BASE_URL` | `https://siri.choukalos.com` | Public download base URL |
 

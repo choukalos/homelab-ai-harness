@@ -336,7 +336,7 @@ pending → running → success
 ```bash
 # 1. Create the workflow definition
 WF_ID=$(curl -sS -X POST http://thor.local:8090/workflows/ \
-  -H "X-API-Key: sk-homelab" \
+  -H "X-API-Key: ${LITELLM_MASTER_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Research Pipeline",
@@ -358,7 +358,7 @@ WF_ID=$(curl -sS -X POST http://thor.local:8090/workflows/ \
 
 # 2. Start a run
 RUN_ID=$(curl -sS -X POST http://thor.local:8090/workflows/$WF_ID/runs \
-  -H "X-API-Key: sk-homelab" \
+  -H "X-API-Key: ${LITELLM_MASTER_KEY}" \
   -H "Content-Type: application/json" \
   | jq -r '.run_id')
 
@@ -366,31 +366,31 @@ RUN_ID=$(curl -sS -X POST http://thor.local:8090/workflows/$WF_ID/runs \
 for step in search summarize format; do
   # Dispatch to Celery
   TASK_ID=$(curl -sS -X POST http://thor.local:8090/tasks/prompt \
-    -H "X-API-Key: sk-homelab" \
+    -H "X-API-Key: ${LITELLM_MASTER_KEY}" \
     -H "Content-Type: application/json" \
     -d '{"prompt": "...", "system": "..."}' \
     | jq -r '.task_id')
 
   # Mark step running
   curl -sS -X PATCH http://thor.local:8090/workflows/runs/$RUN_ID/steps/$step \
-    -H "X-API-Key: sk-homelab" \
+    -H "X-API-Key: ${LITELLM_MASTER_KEY}" \
     -H "Content-Type: application/json" \
     -d "{\"status\": \"running\", \"celery_task_id\": \"$TASK_ID\"}"
 
   # Wait for task to complete
   until curl -sS http://thor.local:8090/tasks/$TASK_ID \
-    -H "X-API-Key: sk-homelab" | jq -r '.status' | grep -q SUCCESS; do
+    -H "X-API-Key: ${LITELLM_MASTER_KEY}" | jq -r '.status' | grep -q SUCCESS; do
     sleep 2
   done
 
   # Mark step complete
   curl -sS -X POST http://thor.local:8090/workflows/runs/$RUN_ID/complete-step/$step \
-    -H "X-API-Key: sk-homelab"
+    -H "X-API-Key: ${LITELLM_MASTER_KEY}"
 done
 
 # 4. Check final run status
 curl -sS http://thor.local:8090/workflows/runs/$RUN_ID \
-  -H "X-API-Key: sk-homelab"
+  -H "X-API-Key: ${LITELLM_MASTER_KEY}"
 ```
 
 ---
