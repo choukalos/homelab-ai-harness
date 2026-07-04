@@ -217,7 +217,120 @@ def _http_basic_headers() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Outline generation via LLM
+# LiteLLM client abstraction
+#
+# When running through the skill runner, the runner passes an async
+# LiteLLMClient instance. When running standalone (CLI), we fall back to
+# synchronous urllib calls to the LiteLLM proxy.
+# ---------------------------------------------------------------------------
+
+
+class _SyncLiteLLMClient:
+    """
+    Synchronous LiteLLM client for standalone/CLI use.
+
+    Makes HTTP calls to the LiteLLM proxy for LLM generation via
+    /v1/chat/completions. This class ensures the skill never touches
+    MCP servers directly — all LLM interactions go through LiteLLM.
+    """
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
+        self.base_url = (base_url or LITELLM_BASE_URL).rstrip("/")
+        self.api_key = api_key or LITELLM_API_KEY
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Call /v1/chat/completions for LLM text generation."""
+        import urllib.request
+        import urllib.error
+
+        payload: dict[str, Any] = {"model": model, "messages": messages}
+        payload.update(kwargs)
+
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        req = urllib.request.Request(
+            f"{self.base_url}/v1/chat/completions",
+            data=data,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+            raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Cannot reach LiteLLM at {self.base_url}: {exc.reason}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid JSON from LiteLLM: {exc}") from exc
+
+
+class _SyncAsyncWrapper:
+    """
+    Wraps an async LiteLLMClient (from the runner) so skill code can
+    call it synchronously.
+    """
+
+    def __init__(self, async_client):
+        self._client = async_client
+        self.base_url = getattr(async_client, "base_url", LITELLM_BASE_URL)
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                self._client.chat_completion(model, messages, **kwargs)
+            )
+            return result
+        finally:
+            loop.close()
+
+
+def _resolve_litellm_client(litellm_client=None) -> Any:
+    """
+    Resolve the LiteLLM client to a sync interface.
+
+    - If litellm_client is an async LiteLLMClient from the runner, wrap it.
+    - If litellm_client is already sync, use as-is.
+    - Otherwise, create a new sync client from env vars.
+    """
+    if litellm_client is None:
+        return _SyncLiteLLMClient()
+    if hasattr(litellm_client, "chat_completion"):
+        import inspect
+        if inspect.iscoroutinefunction(litellm_client.chat_completion):
+            return _SyncAsyncWrapper(litellm_client)
+        return litellm_client
+    return _SyncLiteLLMClient()
+
+
+# ---------------------------------------------------------------------------
+# Outline generation via LLM (uses resolved LiteLLM client)
 # ---------------------------------------------------------------------------
 
 OUTLINE_PROMPT_TEMPLATE = textwrap.dedent("""\
@@ -286,53 +399,25 @@ def _style_to_tone(style: str) -> str:
     return tone_map.get(style.lower(), "default")
 
 
-def _call_litellm(messages: list[dict[str, str]], max_tokens: int = 4096) -> str:
+def _call_litellm(client: Any, messages: list[dict[str, str]], max_tokens: int = 4096) -> str:
     """
-    Call LiteLLM for outline generation.
+    Call LiteLLM for outline generation via the resolved client.
     """
-    import urllib.request
-    import urllib.error
-
-    payload = {
-        "model": MODEL_ALIAS,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-        "stream": False,
-    }
-    data = json.dumps(payload).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    if LITELLM_API_KEY:
-        headers["Authorization"] = f"Bearer {LITELLM_API_KEY}"
-
-    req = urllib.request.Request(
-        f"{LITELLM_BASE_URL}/v1/chat/completions",
-        data=data,
-        headers=headers,
-        method="POST",
+    result = client.chat_completion(
+        MODEL_ALIAS,
+        messages,
+        max_tokens=max_tokens,
+        temperature=0.3,
+        stream=False,
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices", [])
-            if not choices:
-                return "No response generated."
-            return choices[0].get("message", {}).get("content", "No content in response.")
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-        raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Cannot reach LiteLLM at {LITELLM_BASE_URL}: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from LiteLLM: {exc}") from exc
+    choices = result.get("choices", [])
+    if not choices:
+        return "No response generated."
+    return choices[0].get("message", {}).get("content", "No content in response.")
 
 
-def _generate_outline(topic: str, n_slides: int, style: str, content_context: str = "") -> str:
+def _generate_outline(client: Any, topic: str, n_slides: int, style: str, content_context: str = "") -> str:
     """
     Generate a presentation outline via the LLM.
     Returns the markdown outline text.
@@ -343,7 +428,7 @@ def _generate_outline(topic: str, n_slides: int, style: str, content_context: st
         {"role": "user", "content": prompt},
     ]
 
-    return _call_litellm(messages, max_tokens=4096)
+    return _call_litellm(client, messages, max_tokens=4096)
 
 
 # ---------------------------------------------------------------------------
@@ -537,17 +622,24 @@ def _write_artifact(file_bytes: bytes, topic: str, extension: str = "pptx") -> O
 # ---------------------------------------------------------------------------
 
 
-def run(params: dict[str, Any], job) -> dict[str, Any]:
+def run(params: dict[str, Any], job, litellm_client=None) -> dict[str, Any]:
     """
     Execute the presentation_build skill.
+
+    All LLM interactions go through LiteLLM. Presenton is accessed directly
+    as it is not an MCP server (see Phase 11 for architecture).
 
     Args:
         params: Skill parameters (topic, slide_count, style, content_source).
         job: The runner Job object for logging.
+        litellm_client: Optional LiteLLM client from the runner.
+            If not provided, a sync client is created from env vars.
 
     Returns:
         Dict with 'summary', 'presentation_id', 'artifact_path', and metadata.
     """
+    # Resolve LiteLLM client (sync interface guaranteed)
+    client = _resolve_litellm_client(litellm_client)
     # Validate inputs
     topic = params.get("topic")
     if not topic or not str(topic).strip():
@@ -592,7 +684,7 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
         if hasattr(job, "add_log"):
             job.add_log("Phase 1: Generating outline via LLM...")
 
-        outline = _generate_outline(topic, slide_count, style, content_context)
+        outline = _generate_outline(client, topic, slide_count, style, content_context)
 
         if hasattr(job, "add_log"):
             job.add_log(f"Outline generated ({len(outline)} chars)")
@@ -806,7 +898,9 @@ def main():
         "style": args.style,
         "content_source": args.content_source,
     }
-    result = run(params, _MockJob())
+    # Pass a sync LiteLLM client for standalone use
+    client = _SyncLiteLLMClient(base_url=base_url, api_key=api_key)
+    result = run(params, _MockJob(), litellm_client=client)
 
     print(f"\n--- presentation_build response ---")
     print(f"Summary: {result.get('summary', 'N/A')}")

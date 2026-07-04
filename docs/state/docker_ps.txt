@@ -1,29 +1,37 @@
-CONTAINER ID   IMAGE                                        COMMAND                  CREATED          STATUS                 PORTS                                                                                             NAMES
-3dcd63b16b2b   invest-hub-client:latest                     "/docker-entrypoint.…"   38 minutes ago   Up 38 minutes          80/tcp                                                                                            invest-hub-client
-2a22179c5bae   invest-hub-server:latest                     "sh /app/docker-entr…"   38 minutes ago   Up 38 minutes          4000/tcp                                                                                          invest-hub-server
-f5c2a280c75c   myoung34/github-runner:latest                "/entrypoint.sh ./bi…"   50 minutes ago   Up 50 minutes                                                                                                            github-runner
-4b5637908214   ghcr.io/plausible/community-edition:v3.2.0   "/entrypoint.sh sh -…"   6 days ago       Up 6 days              0.0.0.0:8082->8000/tcp, [::]:8082->8000/tcp                                                       plausible
-78b04f9f254e   victoriametrics/victoria-metrics:latest      "/victoria-metrics-p…"   6 days ago       Up 6 days              0.0.0.0:9090->8428/tcp, [::]:9090->8428/tcp, 0.0.0.0:9091->8429/tcp, [::]:9091->8429/tcp          victoria-metrics
-19fae1b80a2e   postgres:16-alpine                           "docker-entrypoint.s…"   6 days ago       Up 6 days (healthy)    5432/tcp                                                                                          plausible-db
-405d22bbeb51   clickhouse/clickhouse-server:24.12-alpine    "/entrypoint.sh"         6 days ago       Up 6 days (healthy)    8123/tcp, 9000/tcp, 9009/tcp                                                                      plausible-events-db
-899ab3212884   home-ai-harness:local                        "uvicorn app:app --h…"   10 days ago      Up 10 days             192.168.4.54:8090->8090/tcp                                                                       ai-harness
-22bb79222c3d   home-ai-harness:local                        "celery -A infra.cor…"   10 days ago      Up 10 days                                                                                                               ai-harness-worker-1
-6c75ff216c6d   home-ai-harness:local                        "celery -A infra.cor…"   10 days ago      Up 10 days                                                                                                               ai-harness-beat
-a7b299bccc37   home-ai-harness:local                        "python family_kb_wa…"   10 days ago      Up 10 days                                                                                                               ai-kb-watcher
-f3964c7b1239   home-ai-harness:local                        "celery -A infra.cor…"   10 days ago      Up 10 days                                                                                                               ai-harness-worker-2
-a5ed053da916   ghcr.io/open-webui/open-webui:main           "bash start.sh"          11 days ago      Up 11 days (healthy)   0.0.0.0:3000->8080/tcp, [::]:3000->8080/tcp                                                       open-webui
-4d9506e4da1f   ghcr.io/presenton/presenton:latest           "node /app/start.js"     11 days ago      Up 11 days             0.0.0.0:5000->80/tcp, [::]:5000->80/tcp                                                           presenton
-ec933da907a0   ghcr.io/berriai/litellm:main-latest          "docker/prod_entrypo…"   11 days ago      Up 11 days (healthy)   0.0.0.0:4000->4000/tcp, [::]:4000->4000/tcp                                                       litellm-proxy
-5d91e44f1870   searxng/searxng:latest                       "/usr/local/searxng/…"   11 days ago      Up 11 days             0.0.0.0:8088->8080/tcp, [::]:8088->8080/tcp                                                       searxng
-8e66bda80749   unclecode/crawl4ai:latest                    "supervisord -c supe…"   11 days ago      Up 11 days (healthy)   6379/tcp, 0.0.0.0:11235->11235/tcp, [::]:11235->11235/tcp                                         crawl4ai
-c1f9fcab8e3c   postgres:16-alpine                           "docker-entrypoint.s…"   11 days ago      Up 11 days (healthy)   5432/tcp                                                                                          litellm-db
-c451f490ad30   redis:7-alpine                               "docker-entrypoint.s…"   11 days ago      Up 11 days             6379/tcp                                                                                          ai-redis
-573518ddcb78   squidfunk/mkdocs-material:latest             "/sbin/tini -- mkdoc…"   11 days ago      Up 11 days             0.0.0.0:8011->8000/tcp, [::]:8011->8000/tcp                                                       family-wiki
-61e02e62f140   qdrant/qdrant:latest                         "./entrypoint.sh"        11 days ago      Up 11 days             0.0.0.0:6333->6333/tcp, [::]:6333->6333/tcp, 6334/tcp                                             qdrant
-28d711b2bfc8   valkey/valkey:9-alpine                       "docker-entrypoint.s…"   11 days ago      Up 11 days             6379/tcp                                                                                          searxng-valkey
-0727c0eb7d35   grafana/grafana:latest                       "/run.sh"                11 days ago      Up 11 days (healthy)   0.0.0.0:3001->3000/tcp, [::]:3001->3000/tcp                                                       grafana
-fe69ab59664e   prom/node-exporter:latest                    "/bin/node_exporter …"   11 days ago      Up 11 days             0.0.0.0:9100->9100/tcp, [::]:9100->9100/tcp                                                       node-exporter
-d6059f2baddd   gcr.io/cadvisor/cadvisor:latest              "/usr/bin/cadvisor -…"   11 days ago      Up 11 days (healthy)   0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp                                                       cadvisor
-851b7d397c3c   ghost:5-alpine                               "docker-entrypoint.s…"   13 days ago      Up 11 days             2368/tcp                                                                                          ghost-blog
-02575e760322   cloudflare/cloudflared:latest                "cloudflared --no-au…"   3 weeks ago      Up 11 days                                                                                                               cloudflared
-a2fd68ddb9c4   caddy:2                                      "caddy run --config …"   3 weeks ago      Up 6 days              0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp   caddy
+# Docker State Capture
+> Date: 2026-07-04
+
+CONTAINER ID   NAMES                     IMAGE                                        STATUS                       PORTS
+41365029ec01   litellm-proxy             ghcr.io/berriai/litellm:main-latest          Up 16 minutes (healthy)      0.0.0.0:4000->4000/tcp, [::]:4000->4000/tcp
+8b2ad13f0c7e   mcp_filesystem_readonly   compose-mcp_filesystem_readonly              Up About an hour             8000/tcp
+ba2826c43fb4   mcp_knowledge             compose-mcp_knowledge                        Up About an hour             8000/tcp
+badc1a48f930   mcp_crawl                 compose-mcp_crawl                            Up About an hour             8000/tcp
+dc5d2720febf   mcp_search                compose-mcp_search                           Up About an hour             8000/tcp
+a5202c1e534a   skill-runner              skill-runner-skill-runner                    Up About an hour             0.0.0.0:8091->8091/tcp, [::]:8091->8091/tcp
+36754b30efc8   ai-harness-worker-1       home-ai-harness:local                        Up About an hour             
+d89d146012f3   ai-harness                home-ai-harness:local                        Up About an hour             192.168.4.54:8090->8090/tcp
+cb7bf7777f47   ai-harness-worker-2       home-ai-harness:local                        Up About an hour             
+184b411bcc42   ai-kb-watcher             home-ai-harness:local                        Up About an hour             
+5413762c4536   ai-harness-beat           home-ai-harness:local                        Up About an hour             
+3c5916346170   open-webui                ghcr.io/open-webui/open-webui:main           Up About an hour (healthy)   0.0.0.0:3000->8080/tcp, [::]:3000->8080/tcp
+9d726f2575d4   presenton                 ghcr.io/presenton/presenton:latest           Up 45 minutes                0.0.0.0:5000->80/tcp, [::]:5000->80/tcp
+4dc09e3f4ef8   searxng                   searxng/searxng:latest                       Up About an hour             0.0.0.0:8088->8080/tcp, [::]:8088->8080/tcp
+b5e61b9ea1b0   crawl4ai                  unclecode/crawl4ai:latest                    Up About an hour (healthy)   6379/tcp, 0.0.0.0:11235->11235/tcp, [::]:11235->11235/tcp
+59bd6f049821   litellm-db                postgres:16-alpine                           Up About an hour (healthy)   5432/tcp
+d97d16efea22   ai-redis                  redis:7-alpine                               Up About an hour             6379/tcp
+ba559847deb7   qdrant                    qdrant/qdrant:latest                         Up About an hour             0.0.0.0:6333->6333/tcp, [::]:6333->6333/tcp, 6334/tcp
+6f2d44642259   searxng-valkey            valkey/valkey:9-alpine                       Up About an hour             6379/tcp
+be014e7b221a   family-wiki               squidfunk/mkdocs-material:latest             Up About an hour             0.0.0.0:8011->8000/tcp, [::]:8011->8000/tcp
+3dcd63b16b2b   invest-hub-client         invest-hub-client:latest                     Up About an hour             80/tcp
+2a22179c5bae   invest-hub-server         invest-hub-server:latest                     Up About an hour             4000/tcp
+f5c2a280c75c   github-runner             myoung34/github-runner:latest                Up About an hour             
+4b5637908214   plausible                 ghcr.io/plausible/community-edition:v3.2.0   Up About an hour             0.0.0.0:8082->8000/tcp, [::]:8082->8000/tcp
+78b04f9f254e   victoria-metrics          victoriametrics/victoria-metrics:latest      Up About an hour             0.0.0.0:9090->8428/tcp, [::]:9090->8428/tcp, 0.0.0.0:9091->8429/tcp, [::]:9091->8429/tcp
+19fae1b80a2e   plausible-db              postgres:16-alpine                           Up About an hour (healthy)   5432/tcp
+405d22bbeb51   plausible-events-db       clickhouse/clickhouse-server:24.12-alpine    Up About an hour (healthy)   8123/tcp, 9000/tcp, 9009/tcp
+0727c0eb7d35   grafana                   grafana/grafana:latest                       Up About an hour (healthy)   0.0.0.0:3001->3000/tcp, [::]:3001->3000/tcp
+fe69ab59664e   node-exporter             prom/node-exporter:latest                    Up About an hour             0.0.0.0:9100->9100/tcp, [::]:9100->9100/tcp
+d6059f2baddd   cadvisor                  gcr.io/cadvisor/cadvisor:latest              Up About an hour (healthy)   0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp
+851b7d397c3c   ghost-blog                ghost:5-alpine                               Up About an hour             2368/tcp
+02575e760322   cloudflared               cloudflare/cloudflared:latest                Up About an hour             
+a2fd68ddb9c4   caddy                     caddy:2                                      Up About an hour             0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp

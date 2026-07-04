@@ -3,17 +3,18 @@
 deep_research skill — multi-source deep research with cited markdown reports.
 
 Purpose:
-  Execute a structured research workflow: search the web and knowledge base,
-  collect and deduplicate sources, synthesize a cited markdown report, and
-  save the result as an artifact.
+  Execute a structured research workflow: search the web and knowledge base
+  through LiteLLM's MCP gateway, collect and deduplicate sources, optionally
+  crawl top pages via LiteLLM, and synthesize a cited markdown report via
+  the LLM — all routed through LiteLLM. Never touch MCP servers directly.
 
 Workflow:
   1. Validate inputs and determine search parameters from depth setting.
-  2. Search mcp_search (web) for relevant sources.
-  3. Optionally search mcp_knowledge for internal knowledge.
+  2. Call mcp_search via LiteLLM for relevant web sources.
+  3. Optionally call mcp_knowledge via LiteLLM for internal knowledge.
   4. Collect, deduplicate, and rank sources up to max_sources.
-  5. Optionally crawl top pages via mcp_crawl for deeper content.
-  6. Synthesize a cited markdown report via the model.
+  5. Optionally crawl top pages via mcp_crawl through LiteLLM for deeper content.
+  6. Synthesize a cited markdown report via LiteLLM chat completion.
   7. Save the report as an artifact file.
   8. Return summary, full report, source list, and artifact path.
 
@@ -23,6 +24,7 @@ Constraints:
   - Result limits enforced per search call.
   - No crawling beyond max_sources.
   - No browser automation.
+  - All MCP calls go through LiteLLM — never direct MCP server access.
   - Artifacts saved to /home/chuck/data/media/research_reports/
 
 See skill.yml for the full manifest and README.md for usage.
@@ -51,12 +53,7 @@ MAX_RUNTIME_SECS = int(os.environ.get("DEEP_RESEARCH_MAX_RUNTIME", "900"))
 # LiteLLM endpoint (set by skill runner or environment)
 LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
-MODEL_ALIAS = os.environ.get("DEEP_RESEARCH_MODEL_ALIAS", "local/qwen-coder")
-
-# MCP server endpoints (configured per environment)
-MCP_SEARCH_URL = os.environ.get("MCP_SEARCH_URL", "http://localhost:8080")
-MCP_CRAWL_URL = os.environ.get("MCP_CRAWL_URL", "http://localhost:11235")
-MCP_KNOWLEDGE_URL = os.environ.get("MCP_KNOWLEDGE_URL", "http://localhost:6333")
+MODEL_ALIAS = os.environ.get("DEEP_RESEARCH_MODEL_ALIAS", "matrix-coder")
 
 logger = logging.getLogger("skill.deep_research")
 
@@ -116,35 +113,8 @@ def _cancel_timeout():
 
 
 # ---------------------------------------------------------------------------
-# MCP tool callers (HTTP-based, non-stdio for skill runner use)
+# Source model
 # ---------------------------------------------------------------------------
-
-
-def _http_post(url: str, payload: dict, timeout: int = 60) -> Optional[dict]:
-    """
-    Generic HTTP POST helper for MCP tool calls.
-    Returns parsed JSON dict or None on failure.
-    """
-    import urllib.request
-    import urllib.error
-
-    data = json.dumps(payload).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8")
-            return json.loads(body)
-    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as exc:
-        logger.warning("HTTP call failed to %s: %s", url, exc)
-        return None
-    except TimeoutError:
-        raise  # let timeout propagate
-    except Exception as exc:
-        logger.warning("Unexpected error calling %s: %s", url, exc)
-        return None
 
 
 class Source:
@@ -171,34 +141,231 @@ class Source:
         return f"Source({self.title!r}, {self.url!r})"
 
 
-def _search_web(query: str, max_results: int = 10) -> list[Source]:
+# ---------------------------------------------------------------------------
+# LiteLLM client abstraction
+#
+# When running through the skill runner, the runner passes an async
+# LiteLLMClient instance. When running standalone (CLI), we fall back to
+# synchronous urllib calls to the LiteLLM proxy.
+# ---------------------------------------------------------------------------
+
+
+class _SyncLiteLLMClient:
     """
-    Search the web via mcp_search (SearXNG backend).
+    Synchronous LiteLLM client for standalone/CLI use.
+
+    Makes HTTP calls to the LiteLLM proxy for:
+    - LLM generation via /v1/chat/completions
+    - MCP tool calls via /mcp-rest/tools/call
+
+    This class ensures the skill never touches MCP servers directly —
+    all MCP interactions go through the LiteLLM proxy.
+    """
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> None:
+        self.base_url = (base_url or LITELLM_BASE_URL).rstrip("/")
+        self.api_key = api_key or LITELLM_API_KEY
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Call /v1/chat/completions for LLM text generation."""
+        import urllib.request
+        import urllib.error
+
+        payload: dict[str, Any] = {"model": model, "messages": messages}
+        payload.update(kwargs)
+
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        req = urllib.request.Request(
+            f"{self.base_url}/v1/chat/completions",
+            data=data,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+            raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Cannot reach LiteLLM at {self.base_url}: {exc.reason}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid JSON from LiteLLM: {exc}") from exc
+
+    def mcp_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        server_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Call /mcp-rest/tools/call for MCP tool execution.
+
+        All MCP tool calls are routed through LiteLLM — this skill
+        never contacts MCP servers directly.
+        """
+        import urllib.request
+        import urllib.error
+
+        payload: dict[str, Any] = {"name": tool_name, "arguments": arguments}
+        if server_id:
+            payload["server_id"] = server_id
+        payload.update(kwargs)
+
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        req = urllib.request.Request(
+            f"{self.base_url}/mcp-rest/tools/call",
+            data=data,
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+            logger.warning("MCP tool call via LiteLLM failed (%s): %s", tool_name, body)
+            return {}
+        except urllib.error.URLError as exc:
+            logger.warning(
+                "Cannot reach LiteLLM for MCP tool %s: %s", tool_name, exc
+            )
+            return {}
+        except json.JSONDecodeError as exc:
+            logger.warning("Invalid JSON from LiteLLM MCP call: %s", exc)
+            return {}
+        except TimeoutError:
+            raise  # let timeout propagate
+
+
+class _SyncAsyncWrapper:
+    """
+    Wraps an async LiteLLMClient (from the runner) so skill code can
+    call it synchronously. Used when the runner passes an async client.
+    """
+
+    def __init__(self, async_client):
+        self._client = async_client
+        self.base_url = getattr(async_client, "base_url", LITELLM_BASE_URL)
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                self._client.chat_completion(model, messages, **kwargs)
+            )
+            return result
+        finally:
+            loop.close()
+
+    def mcp_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        server_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                self._client.mcp_call(tool_name, arguments, server_id=server_id, **kwargs)
+            )
+            return result
+        finally:
+            loop.close()
+
+
+def _resolve_litellm_client(litellm_client=None) -> Any:
+    """
+    Resolve the LiteLLM client to a sync interface.
+
+    - If litellm_client is an async LiteLLMClient from the runner, wrap it.
+    - If litellm_client is already sync, use as-is.
+    - Otherwise, create a new sync client from env vars.
+    """
+    if litellm_client is None:
+        return _SyncLiteLLMClient()
+    # Check if it's the runner's async LiteLLMClient
+    if hasattr(litellm_client, "chat_completion") and hasattr(litellm_client, "mcp_call"):
+        # Check if methods are coroutines (async)
+        import inspect
+        if inspect.iscoroutinefunction(litellm_client.chat_completion):
+            return _SyncAsyncWrapper(litellm_client)
+        # Already sync
+        return litellm_client
+    return _SyncLiteLLMClient()
+
+
+# ---------------------------------------------------------------------------
+# MCP tool wrappers (all calls go through LiteLLM)
+# ---------------------------------------------------------------------------
+
+
+def _search_web(client: Any, query: str, max_results: int = 10) -> list[Source]:
+    """
+    Search the web via mcp_search through LiteLLM.
     Returns a list of Source objects.
     """
-    # SearXNG search API: POST /search with json
-    payload = {
-        "q": query,
-        "format": "json",
-        "categories": "general",
-        "language": "en",
-        "engines": ["google", "bing", "duckduckgo", "wikipedia"],
-    }
-
-    result = _http_post(f"{MCP_SEARCH_URL}/search", payload, timeout=60)
+    result = client.mcp_call(
+        "search_web",
+        {"query": query, "max_results": max_results},
+        server_id="mcp_search",
+    )
     if not result:
         logger.warning("Web search returned no results for: %s", query[:100])
         return []
 
+    # Handle various response formats from LiteLLM MCP gateway
     sources: list[Source] = []
-    for item in result.get("results", []):
+    results_list = result.get("result", result.get("results", []))
+
+    # If result is a dict with a "result" key containing the actual data
+    if isinstance(result.get("result"), dict):
+        results_list = result["result"].get("results", result["result"].get("data", []))
+
+    for item in results_list:
         if len(sources) >= max_results:
             break
         sources.append(
             Source(
                 title=item.get("title", "Untitled"),
                 url=item.get("url", ""),
-                snippet=item.get("content", item.get("snippet", ""))[:500],
+                snippet=item.get("snippet", item.get("content", ""))[:500],
                 source_name=item.get("engine", "web"),
                 score=float(item.get("score", 0)),
             )
@@ -208,29 +375,29 @@ def _search_web(query: str, max_results: int = 10) -> list[Source]:
     return sources
 
 
-def _search_recent(query: str, days: int = 30, max_results: int = 10) -> list[Source]:
-    """Search for recent results (within N days)."""
-    payload = {
-        "q": query,
-        "format": "json",
-        "categories": "general",
-        "language": "en",
-        "time_range": f"{days}d",
-    }
-
-    result = _http_post(f"{MCP_SEARCH_URL}/search", payload, timeout=60)
+def _search_recent(client: Any, query: str, days: int = 30, max_results: int = 10) -> list[Source]:
+    """Search for recent results (within N days) via LiteLLM."""
+    result = client.mcp_call(
+        "search_recent",
+        {"query": query, "days": days, "max_results": max_results},
+        server_id="mcp_search",
+    )
     if not result:
         return []
 
     sources: list[Source] = []
-    for item in result.get("results", []):
+    results_list = result.get("result", result.get("results", []))
+    if isinstance(result.get("result"), dict):
+        results_list = result["result"].get("results", result["result"].get("data", []))
+
+    for item in results_list:
         if len(sources) >= max_results:
             break
         sources.append(
             Source(
                 title=item.get("title", "Untitled"),
                 url=item.get("url", ""),
-                snippet=item.get("content", item.get("snippet", ""))[:500],
+                snippet=item.get("snippet", item.get("content", ""))[:500],
                 source_name=item.get("engine", "web"),
                 score=float(item.get("score", 0)),
             )
@@ -238,28 +405,29 @@ def _search_recent(query: str, days: int = 30, max_results: int = 10) -> list[So
     return sources
 
 
-def _search_news(query: str, max_results: int = 10) -> list[Source]:
-    """Search news specifically."""
-    payload = {
-        "q": query,
-        "format": "json",
-        "categories": "news",
-        "language": "en",
-    }
-
-    result = _http_post(f"{MCP_SEARCH_URL}/search", payload, timeout=60)
+def _search_news(client: Any, query: str, max_results: int = 10) -> list[Source]:
+    """Search news via LiteLLM."""
+    result = client.mcp_call(
+        "search_news",
+        {"query": query, "max_results": max_results},
+        server_id="mcp_search",
+    )
     if not result:
         return []
 
     sources: list[Source] = []
-    for item in result.get("results", []):
+    results_list = result.get("result", result.get("results", []))
+    if isinstance(result.get("result"), dict):
+        results_list = result["result"].get("results", result["result"].get("data", []))
+
+    for item in results_list:
         if len(sources) >= max_results:
             break
         sources.append(
             Source(
                 title=item.get("title", "Untitled"),
                 url=item.get("url", ""),
-                snippet=item.get("content", item.get("snippet", ""))[:500],
+                snippet=item.get("snippet", item.get("content", ""))[:500],
                 source_name="news",
                 score=float(item.get("score", 0)),
             )
@@ -267,54 +435,66 @@ def _search_news(query: str, max_results: int = 10) -> list[Source]:
     return sources
 
 
-def _search_knowledge(query: str, top_k: int = 5, collections: list[str] = None) -> list[Source]:
+def _search_knowledge(
+    client: Any,
+    query: str,
+    top_k: int = 5,
+    collections: list[str] = None,
+) -> list[Source]:
     """
-    Search the knowledge base via mcp_knowledge (Qdrant backend).
+    Search the knowledge base via mcp_knowledge through LiteLLM.
     Returns a list of Source objects from internal knowledge.
     """
     if collections is None:
         collections = ["family_curated", "homelab_curated"]
 
-    results = []
+    results: list[Source] = []
     for collection in collections:
-        payload = {
-            "query": query,
-            "collection": collection,
-            "top_k": top_k,
-        }
-        result = _http_post(f"{MCP_KNOWLEDGE_URL}/api/v1/search", payload, timeout=30)
+        result = client.mcp_call(
+            "kb_search",
+            {"query": query, "top_k": top_k, "collection": collection},
+            server_id="mcp_knowledge",
+        )
         if not result:
             continue
 
-        for item in result.get("matches", result.get("results", [])):
-            results.append(
-                Source(
-                    title=item.get("title", f"KB: {collection}"),
-                    url=item.get("url", f"kb://{collection}/{item.get('id', 'unknown')}"),
-                    snippet=item.get("text", item.get("payload", {}).get("text", ""))[:500],
-                    source_name=f"kb:{collection}",
-                    score=float(item.get("score", 0)),
+        matches = result.get("result", result.get("results", result.get("matches", [])))
+        if isinstance(result.get("result"), dict):
+            matches = result["result"].get("matches", result["result"].get("results", []))
+
+        for item in matches:
+            if isinstance(item, dict):
+                results.append(
+                    Source(
+                        title=item.get("title", f"KB: {collection}"),
+                        url=item.get("url", f"kb://{collection}/{item.get('id', 'unknown')}"),
+                        snippet=item.get("text", item.get("payload", {}).get("text", ""))[:500],
+                        source_name=f"kb:{collection}",
+                        score=float(item.get("score", 0)),
+                    )
                 )
-            )
 
     logger.info("Knowledge search returned %d results", len(results))
     return results
 
 
-def _crawl_url(url: str, max_chars: int = 5000) -> Optional[str]:
+def _crawl_url(client: Any, url: str, max_chars: int = 5000) -> Optional[str]:
     """
-    Fetch and extract content from a URL via mcp_crawl (Crawl4AI backend).
+    Fetch and extract content from a URL via mcp_crawl through LiteLLM.
     Returns extracted text or None on failure.
     """
-    payload = {
-        "url": url,
-        "max_chars": max_chars,
-        "format": "text",
-    }
-    result = _http_post(f"{MCP_CRAWL_URL}/crawl", payload, timeout=120)
+    result = client.mcp_call(
+        "crawl",
+        {"url": url, "max_chars": max_chars, "format": "text"},
+        server_id="mcp_crawl",
+    )
     if not result:
         return None
-    return result.get("content", result.get("text", ""))
+    # Handle nested result formats
+    data = result.get("result", result)
+    if isinstance(data, dict):
+        return data.get("content", data.get("text", data.get("html", "")))
+    return str(data) if data else None
 
 
 # ---------------------------------------------------------------------------
@@ -361,9 +541,9 @@ def _deduplicate_sources(sources: list[Source], max_sources: int) -> list[Source
     return unique[:max_sources]
 
 
-def _collect_sources(query: str, depth: str, max_sources: int) -> list[Source]:
+def _collect_sources(client: Any, query: str, depth: str, max_sources: int) -> list[Source]:
     """
-    Phase 1: Collect research sources from web and knowledge base.
+    Phase 1: Collect research sources from web and knowledge base via LiteLLM.
     """
     config = DEPTH_CONFIG.get(depth, DEPTH_CONFIG["comprehensive"])
 
@@ -377,14 +557,14 @@ def _collect_sources(query: str, depth: str, max_sources: int) -> list[Source]:
     queries = _generate_search_queries(query, config["search_queries"])
     for i, q in enumerate(queries):
         logger.info("Search query %d/%d: %s", i + 1, len(queries), q[:80])
-        results = _search_web(q, max_results=per_query_max)
+        results = _search_web(client, q, max_results=per_query_max)
         all_sources.extend(results)
         if len(all_sources) >= effective_max * 2:
             break
 
     # Knowledge base search
     if config["kb_search"]:
-        kb_results = _search_knowledge(query, top_k=min(effective_max, 5))
+        kb_results = _search_knowledge(client, query, top_k=min(effective_max, 5))
         all_sources.extend(kb_results)
 
     # Deduplicate and cap
@@ -393,9 +573,9 @@ def _collect_sources(query: str, depth: str, max_sources: int) -> list[Source]:
     return sources
 
 
-def _crawl_top_sources(sources: list[Source], crawl_count: int) -> list[Source]:
+def _crawl_top_sources(client: Any, sources: list[Source], crawl_count: int) -> list[Source]:
     """
-    Phase 2: Crawl the top N web sources for full content.
+    Phase 2: Crawl the top N web sources for full content via LiteLLM.
     Only crawls web URLs (not KB sources).
     """
     if crawl_count <= 0:
@@ -407,7 +587,7 @@ def _crawl_top_sources(sources: list[Source], crawl_count: int) -> list[Source]:
             continue
         if crawled >= crawl_count:
             break
-        content = _crawl_url(source.url, max_chars=8000)
+        content = _crawl_url(client, source.url, max_chars=8000)
         if content:
             source.content = content
             crawled += 1
@@ -471,55 +651,27 @@ def _build_research_context(query: str, sources: list[Source]) -> str:
     return "\n".join(lines)
 
 
-def _call_litellm(messages: list[dict[str, str]], max_tokens: int = 8000) -> str:
+def _call_litellm_completion(client: Any, messages: list[dict[str, str]], max_tokens: int = 8000) -> str:
     """
-    Call LiteLLM for report synthesis.
+    Call LiteLLM for report synthesis via chat completion.
     """
-    import urllib.request
-    import urllib.error
-
-    payload = {
-        "model": MODEL_ALIAS,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-        "stream": False,
-    }
-    data = json.dumps(payload).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    if LITELLM_API_KEY:
-        headers["Authorization"] = f"Bearer {LITELLM_API_KEY}"
-
-    req = urllib.request.Request(
-        f"{LITELLM_BASE_URL}/v1/chat/completions",
-        data=data,
-        headers=headers,
-        method="POST",
+    result = client.chat_completion(
+        MODEL_ALIAS,
+        messages,
+        max_tokens=max_tokens,
+        temperature=0.3,
+        stream=False,
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices", [])
-            if not choices:
-                return "No response generated."
-            return choices[0].get("message", {}).get("content", "No content in response.")
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-        raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Cannot reach LiteLLM at {LITELLM_BASE_URL}: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from LiteLLM: {exc}") from exc
+    choices = result.get("choices", [])
+    if not choices:
+        return "No response generated."
+    return choices[0].get("message", {}).get("content", "No content in response.")
 
 
-def _synthesize_report(query: str, sources: list[Source]) -> str:
+def _synthesize_report(client: Any, query: str, sources: list[Source]) -> str:
     """
-    Phase 3: Synthesize the cited markdown report from collected sources.
+    Phase 3: Synthesize the cited markdown report from collected sources via LiteLLM.
     """
     context = _build_research_context(query, sources)
 
@@ -528,12 +680,12 @@ def _synthesize_report(query: str, sources: list[Source]) -> str:
         {"role": "user", "content": context},
     ]
 
-    # Determine max_tokens based on depth
+    # Determine max_tokens based on context size
     max_tokens = 8000
     if len(context) > 15000:
         max_tokens = 12000
 
-    return _call_litellm(messages, max_tokens=max_tokens)
+    return _call_litellm_completion(client, messages, max_tokens=max_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -597,17 +749,29 @@ def _extract_summary(report: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run(params: dict[str, Any], job) -> dict[str, Any]:
+def run(
+    params: dict[str, Any],
+    job,
+    litellm_client=None,
+) -> dict[str, Any]:
     """
     Execute the deep_research skill.
+
+    All LLM and MCP interactions go through LiteLLM. This skill never
+    contacts MCP servers directly.
 
     Args:
         params: Skill parameters (query, depth, max_sources).
         job: The runner Job object for logging.
+        litellm_client: Optional LiteLLM client from the runner.
+            If not provided, a sync client is created from env vars.
 
     Returns:
         Dict with 'summary', 'report', 'sources', 'artifact_path'.
     """
+    # Resolve LiteLLM client (sync interface guaranteed)
+    client = _resolve_litellm_client(litellm_client)
+
     # Validate inputs
     query = params.get("query")
     if not query or not str(query).strip():
@@ -641,6 +805,7 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
         job.add_log(f"Depth: {depth}, max_sources: {effective_max}")
         job.add_log(f"Model alias: {MODEL_ALIAS}")
         job.add_log(f"Max runtime: {MAX_RUNTIME_SECS}s")
+        job.add_log(f"LiteLLM: {client.base_url}")
 
     # Install timeout
     _install_timeout()
@@ -648,9 +813,9 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
     try:
         # Phase 1: Collect sources
         if hasattr(job, "add_log"):
-            job.add_log("Phase 1: Collecting sources...")
+            job.add_log("Phase 1: Collecting sources via LiteLLM...")
 
-        sources = _collect_sources(query, depth, effective_max)
+        sources = _collect_sources(client, query, depth, effective_max)
 
         if not sources:
             report = (
@@ -666,14 +831,14 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
             crawl_count = config.get("crawl_top", 0)
             if crawl_count > 0:
                 if hasattr(job, "add_log"):
-                    job.add_log(f"Phase 2: Crawling top {crawl_count} sources...")
-                sources = _crawl_top_sources(sources, crawl_count)
+                    job.add_log(f"Phase 2: Crawling top {crawl_count} sources via LiteLLM...")
+                sources = _crawl_top_sources(client, sources, crawl_count)
 
-            # Phase 3: Synthesize report
+            # Phase 3: Synthesize report via LiteLLM
             if hasattr(job, "add_log"):
-                job.add_log(f"Phase 3: Synthesizing report from {len(sources)} sources...")
+                job.add_log(f"Phase 3: Synthesizing report from {len(sources)} sources via LiteLLM...")
 
-            report = _synthesize_report(query, sources)
+            report = _synthesize_report(client, query, sources)
 
             if hasattr(job, "add_log"):
                 job.add_log(f"Report generated ({len(report)} chars)")
@@ -830,11 +995,6 @@ def main():
         default=None,
         help="LiteLLM API key",
     )
-    parser.add_argument(
-        "--search-url",
-        default=None,
-        help=f"SearXNG URL (default: {MCP_SEARCH_URL})",
-    )
     args = parser.parse_args()
 
     if args.dry_run:
@@ -846,28 +1006,27 @@ def main():
         print(f"  Max runtime: {MAX_RUNTIME_SECS}s")
         print(f"  Artifact dir: {ARTIFACT_DIR}")
         print(f"  LiteLLM: {LITELLM_BASE_URL}")
-        print(f"  SearXNG: {MCP_SEARCH_URL}")
-        print(f"  Crawl: {MCP_CRAWL_URL}")
-        print(f"  Knowledge: {MCP_KNOWLEDGE_URL}")
+        print()
+        print("  All MCP calls go through LiteLLM — no direct MCP server access")
+        print("  Tools used via LiteLLM: search_web, search_recent, search_news, kb_search, crawl")
 
         config = DEPTH_CONFIG[args.depth]
         print(f"  Depth config: {config}")
         return
 
     # Apply overrides for CLI testing
-    if args.base_url:
-        globals()["LITELLM_BASE_URL"] = args.base_url
-    if args.api_key:
-        globals()["LITELLM_API_KEY"] = args.api_key
-    if args.search_url:
-        globals()["MCP_SEARCH_URL"] = args.search_url
+    base_url = args.base_url or LITELLM_BASE_URL
+    api_key = args.api_key or LITELLM_API_KEY
 
     params = {
         "query": args.query,
         "depth": args.depth,
         "max_sources": args.max_sources,
     }
-    result = run(params, _MockJob())
+
+    # Pass a sync LiteLLM client for standalone use
+    client = _SyncLiteLLMClient(base_url=base_url, api_key=api_key)
+    result = run(params, _MockJob(), litellm_client=client)
 
     print(f"\n--- deep_research response ---")
     print(f"Summary: {result.get('summary', 'N/A')[:200]}")

@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+server.py
+mcp_search.egg-info/PKG-INFO
+mcp_search.egg-info/SOURCES.txt
+mcp_search.egg-info/dependency_links.txt
+mcp_search.egg-info/entry_points.txt
+mcp_search.egg-info/requires.txt
+mcp_search.egg-info/top_level.txt
+tests/test_search.py

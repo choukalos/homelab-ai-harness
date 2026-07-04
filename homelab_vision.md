@@ -37,15 +37,36 @@ CLI and scheduled automation are channels.
 The reusable platform is:
 
 ```text
-LiteLLM
-MCP servers
-Skill runner / rebuilt AI Harness
-Knowledge stores
-Workflow services
-Model aliases
-Access policies
-Observability
+LiteLLM           — model gateway + MCP gateway
+MCP servers       — standalone containers, each with isolated deps
+Skill runner      — agentic workflow orchestration
+Knowledge stores  — Qdrant (vector), Redis (cache)
+Workflow services — SearXNG, Crawl4AI, Presenton
+Model aliases     — local/* naming, per-key restrictions
+Access policies   — per-key MCP server/tool permissions
+Observability     — Victoria Metrics, Grafana
 ```
+
+### MCP Architecture
+
+MCP servers are **standalone containers**, each independently deployable.
+
+```text
+LiteLLM (:4000)  →  HTTP/SSE  →  mcp_search container
+                                mcp_knowledge container
+                                ...
+```
+
+Each server:
+- Runs in its own container with its own Python venv
+- Communicates with LiteLLM over HTTP (SSE transport)
+- Lives on the `ai-net` Docker network
+- Has its own `Dockerfile`, `server.py`, `pyproject.toml`, `tests/`
+- Is independently deployable to any client's infrastructure
+
+**Why standalone:** Avoids turning LiteLLM into a dependency dumping ground.
+Each server owns its dependencies, lifecycle, and scaling.
+This is the portable unit of the platform.
 
 ## Machine Responsibilities
 
@@ -366,7 +387,20 @@ Principles:
 
 ## Skills
 
-Skills are controlled agentic workflows.
+Skills are controlled agentic workflows. They compose MCP tools and LLM calls into repeatable processes.
+
+```
+Skill runner  →  calls MCP servers directly (ai-net)
+                →  calls LiteLLM for LLM generation
+                →  writes artifacts to /home/chuck/data/media/
+```
+
+**Skills vs MCP:** MCP servers provide atomic tools (search, kb lookup, crawl). Skills orchestrate multiple tools into a workflow (e.g. deep_research = search → crawl → kb_lookup → LLM synthesis → artifact).
+
+**Who calls skills:**
+- Clients via the skill runner API (`POST /skills/{name}`)
+- n8n for scheduled automation
+- Siri/iOS shortcuts for remote mobile access
 
 Use skills when the task:
 

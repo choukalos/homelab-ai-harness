@@ -1,0 +1,22 @@
+[project]
+name = "mcp-filesystem-readonly"
+version = "0.1.0"
+description = "MCP server for safe, read-only file system access with path allowlisting"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+mcp-filesystem-readonly = "server:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
