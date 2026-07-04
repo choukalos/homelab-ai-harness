@@ -1,0 +1,30 @@
+name: skill-runner
+
+services:
+  skill-runner:
+    build:
+      context: ../skills/runner
+      dockerfile: Dockerfile
+    container_name: skill-runner
+    restart: unless-stopped
+    ports:
+      - "${THOR_IP}:8091:8091"
+    environment:
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - ARTIFACT_ROOT=/home/chuck/data/media
+      - SKILL_RUNNER_LOG_DIR=/home/chuck/homelab/logs/skill_runner
+      - SKILL_RUNNER_PORT=8091
+      - SKILL_RUNNER_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - TZ=America/Chicago
+    volumes:
+      - ../skills:/app/skills:ro
+      - /home/chuck/data/media:/home/chuck/data/media
+      - /home/chuck/homelab/logs/skill_runner:/home/chuck/homelab/logs/skill_runner
+    networks:
+      - ai-net
+
+networks:
+  ai-net:
+    external: true

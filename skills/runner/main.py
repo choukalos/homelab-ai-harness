@@ -6,8 +6,14 @@ Runs on dev port 8091 alongside the current AI Harness (8090).
 Provides the job lifecycle API: launch, status, and artifact retrieval.
 """
 
+import asyncio
+import concurrent.futures
+import importlib.util
+import inspect
+import json
 import logging
 import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -16,6 +22,7 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
+from httpx import AsyncClient, Timeout
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -41,6 +48,10 @@ ARTIFACT_ROOT = Path(os.environ.get("ARTIFACT_ROOT", "/home/chuck/data/media"))
 APP_PORT = int(os.environ.get("SKILL_RUNNER_PORT", "8091"))
 APP_HOST = os.environ.get("SKILL_RUNNER_HOST", "0.0.0.0")
 DRY_RUN_MODE = os.environ.get("SKILL_RUNNER_DRY_RUN", "").lower() in ("true", "1", "yes")
+LITELLM_BASE_URL = os.environ.get(
+    "LITELLM_BASE_URL", "http://litellm-proxy:4000"
+)
+LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Job Model
@@ -142,17 +153,441 @@ KNOWN_SKILLS = [
 
 
 # ---------------------------------------------------------------------------
+# LiteLLM HTTP Client
+# ---------------------------------------------------------------------------
+
+class LiteLLMClient:
+    """
+    HTTP client for LiteLLM proxy.
+
+    Supports both LLM generation via /v1/chat/completions and MCP tool
+    calls via /mcp-rest/tools/call.  Skills use this client exclusively —
+    they never touch MCP servers directly.
+    """
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        timeout: float = 120.0,
+    ) -> None:
+        self.base_url = (base_url or LITELLM_BASE_URL).rstrip("/")
+        self.api_key = api_key or LITELLM_API_KEY
+        self._timeout = Timeout(timeout)
+        self._client: Optional[AsyncClient] = None
+
+    async def _get_client(self) -> AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = AsyncClient(
+                base_url=self.base_url,
+                timeout=self._timeout,
+                headers=self._auth_headers(),
+            )
+        return self._client
+
+    def _auth_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    async def close(self) -> None:
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+
+    # -----------------------------------------------------------------------
+    # LLM generation endpoint
+    # -----------------------------------------------------------------------
+
+    async def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Call /v1/chat/completions for LLM text generation.
+
+        Args:
+            model: Model alias (e.g. 'local/qwen-coder').
+            messages: List of {role, content} dicts.
+            **kwargs: Additional OpenAI-compatible params (temperature, max_tokens, tools, ...).
+
+        Returns:
+            Parsed JSON response dict from LiteLLM.
+        """
+        payload: dict[str, Any] = {"model": model, "messages": messages}
+        payload.update(kwargs)
+
+        client = await self._get_client()
+        response = await client.post("/v1/chat/completions", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    # -----------------------------------------------------------------------
+    # MCP tool call endpoint
+    # -----------------------------------------------------------------------
+
+    async def mcp_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        server_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Call an MCP tool via direct SSE (delegates to ``_mcp_call_sse``).
+
+        Args:
+            tool_name: Name of the MCP tool to call (e.g. 'search_web').
+            arguments: Dict of tool arguments.
+            server_id: MCP server name/ID (e.g. 'mcp_search'). Required for SSE path.
+            **kwargs: Additional params (currently unused; retained for compatibility).
+
+        Returns:
+            Dict with ``output`` (list of content dicts) and ``is_error`` (bool).
+        """
+        if not server_id:
+            return {
+                "output": [{"type": "text", "text": "server_id is required for SSE MCP calls"}],
+                "is_error": True,
+            }
+        return await self._mcp_call_sse(server_id, tool_name, arguments)
+
+    # -----------------------------------------------------------------------
+    # Convenience: list available tools
+    # -----------------------------------------------------------------------
+
+    async def mcp_list_tools(self) -> dict[str, Any]:
+        """Call /mcp-rest/tools/list to discover available MCP tools."""
+        client = await self._get_client()
+        response = await client.get("/mcp-rest/tools/list")
+        response.raise_for_status()
+        return response.json()
+
+    # -----------------------------------------------------------------------
+    # Direct SSE MCP tool call (bypasses LiteLLM proxy)
+    # -----------------------------------------------------------------------
+
+    async def _mcp_call_sse(
+        self,
+        server_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Call an MCP server directly over SSE (bypasses LiteLLM /mcp-rest).
+
+        The MCP SDK (FastMCP) SSE transport works as follows:
+        1. GET /sse opens a session and streams back event: endpoint with
+           the POST path. The SSE connection MUST stay open for the session to
+           remain alive.
+        2. MCP protocol requires an initialization handshake before tool calls:
+           - POST initialize with protocol version 2 → server responds
+           - POST notifications/initialized → acknowledges handshake
+        3. POST JSON-RPC tools/call to the endpoint path (while SSE is open).
+        4. The server sends the response back through the SAME SSE stream as
+           event: message.
+        5. Close the SSE connection when the response is received.
+
+        We use a SINGLE httpx.AsyncClient for both SSE and POST so connection
+        pooling keeps the SSE stream alive while POSTs happen on the same connection.
+
+        Returns:
+            Dict with output (list of content dicts) and is_error (bool).
+        """
+        name = server_id.removeprefix("mcp_")
+        env_key = f"MCP_SERVER_{name.upper()}_URL"
+        base_url = os.environ.get(env_key, f"http://{server_id}:8000").rstrip("/")
+
+        logger.info("SSE MCP call: server=%s base_url=%s tool=%s", server_id, base_url, tool_name)
+
+        jsonrpc_request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }
+        initialize_request = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": 2,
+                "capabilities": {},
+                "clientInfo": {"name": "skill-runner", "version": "0.1.0"},
+            },
+        }
+        initialized_notification = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+
+        result_content: list[dict[str, Any]] = []
+        structured_result: Optional[dict[str, Any]] = None
+        is_error = False
+        endpoint_url_holder: list[str] = [""]
+        init_response_holder: list[Optional[dict]] = [None]
+        parse_error_holder: list[Optional[str]] = [None]
+        endpoint_ready = asyncio.Event()
+        init_response_ready = asyncio.Event()
+        response_ready = asyncio.Event()
+
+        async with AsyncClient(timeout=Timeout(120.0)) as client:
+            sse_resp = await client.send(
+                client.build_request("GET", f"{base_url}/sse"), stream=True
+            )
+            sse_resp.raise_for_status()
+
+            async def sse_reader_task():
+                nonlocal is_error, structured_result
+                try:
+                    event_type: Optional[str] = None
+                    phase = "handshake"
+                    async for raw_line in sse_resp.aiter_lines():
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        if line.startswith("event: "):
+                            event_type = line[7:].strip()
+                        elif line.startswith("data: "):
+                            data_value = line[6:].strip()
+                            if phase == "handshake" and event_type == "endpoint" and data_value:
+                                endpoint_url_holder[0] = data_value
+                                endpoint_ready.set()
+                                logger.info("SSE endpoint obtained: %s", data_value)
+                                phase = "init"
+                            elif phase == "init" and event_type == "message" and data_value:
+                                try:
+                                    resp = json.loads(data_value)
+                                except json.JSONDecodeError:
+                                    parse_error_holder[0] = f"Failed to parse init response: {data_value}"
+                                    init_response_ready.set()
+                                    return
+                                init_response_holder[0] = resp
+                                init_response_ready.set()
+                                phase = "tool"
+                            elif phase == "tool" and event_type == "message" and data_value:
+                                try:
+                                    jsonrpc_response = json.loads(data_value)
+                                    logger.info("MCP tool response: keys=%s has_error=%s has_result=%s", list(jsonrpc_response.keys()), "error" in jsonrpc_response, "result" in jsonrpc_response)
+                                except json.JSONDecodeError:
+                                    parse_error_holder[0] = f"Failed to parse tool response: {data_value}"
+                                    response_ready.set()
+                                    return
+                                if "error" in jsonrpc_response and "result" not in jsonrpc_response:
+                                    is_error = True
+                                    result_content.append({"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"})
+                                elif "result" in jsonrpc_response:
+                                    result = jsonrpc_response["result"]
+                                    structured = result.get("structuredContent")
+                                    if structured:
+                                        # Store structuredContent separately — it has the parsed data
+                                        structured_result = structured
+                                        is_error = False
+                                    else:
+                                        content_items = result.get("content", [])
+                                        result_content.extend(content_items)
+                                        # Only mark as error if isError is set AND there's no actual content
+                                        is_error = result.get("isError", False) and not content_items
+                                response_ready.set()
+                                phase = "done"
+                                return
+                except Exception as exc:
+                    logger.error("SSE reader error: %s (phase=%s)", exc, phase)
+                    parse_error_holder[0] = f"SSE reader error: {exc}"
+                    endpoint_ready.set()
+                    init_response_ready.set()
+                    response_ready.set()
+
+            async def post_sender_task():
+                try:
+                    await asyncio.wait_for(endpoint_ready.wait(), timeout=30.0)
+                    endpoint_url = endpoint_url_holder[0]
+                    if not endpoint_url:
+                        parse_error_holder[0] = "Failed to obtain SSE endpoint path"
+                        response_ready.set()
+                        return
+                    post_url = f"{base_url}{endpoint_url}"
+
+                    # Init handshake
+                    logger.info("POSTing MCP initialize to %s", post_url)
+                    init_resp = await client.post(post_url, json=initialize_request, timeout=30.0)
+                    init_resp.raise_for_status()
+                    await asyncio.wait_for(init_response_ready.wait(), timeout=30.0)
+                    init_result = init_response_holder[0]
+                    if init_result and "error" in init_result:
+                        parse_error_holder[0] = f"MCP init error: {init_result['error']}"
+                        response_ready.set()
+                        return
+                    logger.info("MCP initialized (server: %s)", init_result.get("result", {}).get("serverInfo", {}).get("name", "unknown") if init_result else "unknown")
+
+                    # Send notifications/initialized
+                    init_ack = await client.post(post_url, json=initialized_notification, timeout=15.0)
+                    init_ack.raise_for_status()
+
+                    # Tool call
+                    logger.info("POSTing tools/call to %s", post_url)
+                    tool_resp = await client.post(post_url, json=jsonrpc_request, timeout=60.0)
+                    tool_resp.raise_for_status()
+                    logger.info("POST returned status %d", tool_resp.status_code)
+                except Exception as exc:
+                    parse_error_holder[0] = f"POST error: {exc}"
+                    response_ready.set()
+
+            reader_task = asyncio.create_task(sse_reader_task())
+            sender_task = asyncio.create_task(post_sender_task())
+            try:
+                await asyncio.wait_for(response_ready.wait(), timeout=60.0)
+            except asyncio.TimeoutError:
+                parse_error_holder[0] = "Timeout waiting for SSE response"
+            # Cancel tasks and properly close the SSE stream
+            reader_task.cancel()
+            sender_task.cancel()
+            # Close the SSE response stream to clean up the aiter_lines async generator
+            try:
+                await sse_resp.aclose()
+            except Exception:
+                pass
+            # Wait for task cancellation to complete
+            try:
+                await asyncio.gather(reader_task, sender_task, return_exceptions=True)
+            except Exception:
+                pass
+            # Let event loop process any remaining async generator cleanup
+            await asyncio.sleep(0)
+
+        logger.info("SSE call returning: parse_error=%s, structured=%s, content=%d, is_error=%s",
+                    parse_error_holder[0] is not None,
+                    structured_result is not None,
+                    len(result_content),
+                    is_error)
+
+        parse_error = parse_error_holder[0]
+        if parse_error:
+            return {"output": [{"type": "text", "text": parse_error}], "is_error": True}
+
+        # Build a return dict that skills can parse.
+        # Skills expect: result.get("result") to find the raw MCP result for parsing,
+        # and result["result"]["results"] to find the actual data list.
+        # We also include "output" for the normalized content list.
+        if structured_result is not None:
+            sc = structured_result
+            # Normalize: skills parse result["result"]["results"], so ensure that key exists
+            if isinstance(sc, dict):
+                for key in ("result", "matches", "data", "items"):
+                    if key in sc:
+                        sc = dict(sc)
+                        sc["results"] = sc[key]
+                        break
+                if "results" not in sc:
+                    sc = {"results": sc}
+            logger.info("SSE call returning structured result (server=%s, tool=%s, results_count=%d)",
+                        server_id, tool_name, len(sc.get("results", [])))
+            return {
+                "result": sc,
+                "output": result_content if result_content else [{"_structured": sc}],
+                "is_error": is_error,
+            }
+        if result_content:
+            logger.info("SSE call returning content result (server=%s, tool=%s, items=%d)",
+                        server_id, tool_name, len(result_content))
+            return {"output": result_content, "is_error": is_error}
+        if not is_error:
+            logger.warning("SSE call returned no data (server=%s, tool=%s)", server_id, tool_name)
+            return {"output": [{"type": "text", "text": "No response received from MCP server via SSE"}], "is_error": True}
+        return {"output": [], "is_error": is_error}
+
+
+# ---------------------------------------------------------------------------
+# Sync Wrapper for LiteLLMClient (used by synchronous skill code)
+# ---------------------------------------------------------------------------
+
+
+class _SyncLiteLLMWrapper:
+    """
+    Synchronous wrapper around the async ``LiteLLMClient``.
+
+    Skill modules run in synchronous code (no async event loop).  This wrapper
+    runs each async call in a dedicated thread with a fresh event loop, so it
+    never clashes with uvloop's running loop in the FastAPI/uvicorn main thread.
+
+    Usage:
+
+        client = LiteLLMClient()
+        sync = _SyncLiteLLMWrapper(client)
+        result = sync.chat_completion("matrix-coder", messages)
+        result = sync.mcp_call("search_web", {"query": "test"})
+    """
+
+    def __init__(self, client: LiteLLMClient) -> None:
+        self._client = client
+
+    @property
+    def base_url(self) -> str:
+        """Delegate to the wrapped client's base_url."""
+        return self._client.base_url
+
+    # Reusable thread pool for async execution
+    _thread_pool: concurrent.futures.ThreadPoolExecutor = None
+
+    def _get_thread_pool(self) -> concurrent.futures.ThreadPoolExecutor:
+        if self._thread_pool is None:
+            self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        return self._thread_pool
+
+    def _run_async_in_thread(self, coro) -> Any:
+        """Run an async coroutine in a dedicated thread with a new event loop."""
+        def _run():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+        return self._get_thread_pool().submit(_run).result()
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Sync wrapper for ``LiteLLMClient.chat_completion``."""
+        return self._run_async_in_thread(
+            self._client.chat_completion(model, messages, **kwargs)
+        )
+
+    def mcp_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        server_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Sync wrapper for ``LiteLLMClient.mcp_call``."""
+        return self._run_async_in_thread(
+            self._client.mcp_call(tool_name, arguments, server_id=server_id, **kwargs)
+        )
+
+
+# ---------------------------------------------------------------------------
 # Skill Execution
 # ---------------------------------------------------------------------------
 
 def _find_skill_module(skill_name: str) -> Optional[Path]:
     """Locate a skill's __init__.py or run.py in the skills/ directory."""
-    base = Path(__file__).resolve().parent.parent
-    skill_dir = base / skill_name
-    for entry in ("run.py", "skill.py", "__init__.py"):
-        p = skill_dir / entry
-        if p.is_file():
-            return p
+    # In container: skills mounted at /app/skills/
+    # In dev on laptop: skills are parent of runner dir
+    candidates = [
+        Path("/app/skills"),                           # container mode
+        Path(__file__).resolve().parent.parent,       # dev mode (laptop)
+    ]
+    for base in candidates:
+        skill_dir = base / skill_name
+        for entry in ("run.py", "skill.py", "__init__.py"):
+            p = skill_dir / entry
+            if p.is_file():
+                return p
     return None
 
 
@@ -187,21 +622,125 @@ def _execute_skill(job: Job) -> None:
     if skill_path is None:
         job.status = JobStatus.failed
         job.completed_at = datetime.now(timezone.utc).isoformat()
-        job.error = f"Skill '{job.skill}' module not found (expected {skill_path})"
+        job.error = f"Skill '{job.skill}' module not found"
         job.add_log(job.error)
         logger.error("Skill not found: %s", job.skill)
         return
 
     job.add_log(f"Skill module found at: {skill_path}")
-    job.add_log("Skeleton runner — skill execution placeholder. Phase 9 will implement real logic.")
 
-    # For now, mark as completed with a summary
-    job.status = JobStatus.completed
-    job.completed_at = datetime.now(timezone.utc).isoformat()
-    job.summary = f"Skill '{job.skill}' executed successfully (skeleton placeholder)."
+    # Build LiteLLM client and sync wrapper for the job
+    litellm_client = LiteLLMClient()
+    sync_client = _SyncLiteLLMWrapper(litellm_client)
+    job.add_log(
+        f"LiteLLM client initialised: base_url={litellm_client.base_url}"
+    )
 
-    # Compute artifact path if applicable
-    if job.skill in KNOWN_SKILLS:
+    try:
+        # Dynamically import the skill module using importlib.util
+        spec = importlib.util.spec_from_file_location(
+            f"skill_{job.skill}", skill_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(
+                f"Could not load module spec for {skill_path}"
+            )
+        skill_module = importlib.util.module_from_spec(spec)
+
+        # Add the skill's directory and parent to sys.path so relative imports work
+        skill_dir = str(skill_path.parent)
+        skills_root = str(skill_path.parent.parent)
+        for path_dir in [skill_dir, skills_root]:
+            if path_dir not in sys.path:
+                sys.path.insert(0, path_dir)
+
+        spec.loader.exec_module(skill_module)
+        job.add_log("Skill module imported successfully")
+
+        # Find the run() function
+        if not hasattr(skill_module, "run"):
+            raise ImportError(
+                f"Skill module '{job.skill}' has no 'run()' function"
+            )
+
+        # Determine if the run() function accepts a client parameter
+        sig = inspect.signature(skill_module.run)
+        param_names = list(sig.parameters.keys())
+        run_kwargs: dict[str, Any] = {"params": job.params, "job": job}
+        # Pass client if the signature accepts it (litellm_client or client)
+        for client_param_name in ("litellm_client", "client"):
+            if client_param_name in param_names:
+                run_kwargs[client_param_name] = sync_client
+                job.add_log(f"Passing sync client as '{client_param_name}'")
+                break
+
+        # Execute the skill
+        job.add_log("Invoking skill.run()...")
+        result = skill_module.run(**run_kwargs)
+
+        # Validate result is a dict
+        if not isinstance(result, dict):
+            raise ValueError(
+                f"Skill '{job.skill}' run() returned {type(result).__name__}, expected dict"
+            )
+
+        job.add_log(f"Skill.run() returned: {list(result.keys())}")
+
+        # Map skill result dict to job fields
+        if "error" in result:
+            job.error = result["error"]
+            job.add_log(f"Skill reported error: {job.error}")
+
+        if "summary" in result:
+            job.summary = result["summary"]
+            job.add_log(f"Skill summary: {job.summary[:200]}")
+        elif "answer" in result:
+            job.summary = result["answer"]
+            job.add_log(f"Skill answer (used as summary): {job.summary[:200]}")
+
+        if "artifact_path" in result and result["artifact_path"]:
+            job.artifact_path = result["artifact_path"]
+            job.add_log(f"Artifact path from skill: {job.artifact_path}")
+
+        # Merge extra result keys (report, sources, etc.) into job params for retrieval
+        extra_keys = {"report", "sources", "answer"}
+        for key in extra_keys:
+            if key in result and key != "summary":
+                job.params[f"_result_{key}"] = result[key]
+                job.add_log(f"Merged result key '{key}' into job params")
+
+        # Determine final status
+        if job.error:
+            job.status = JobStatus.failed
+        else:
+            job.status = JobStatus.completed
+
+    except ImportError as exc:
+        job.status = JobStatus.failed
+        job.error = f"Failed to import skill module: {exc}"
+        job.add_log(f"ImportError: {exc}")
+        logger.error("Skill import error: %s", exc)
+
+    except Exception as exc:
+        job.status = JobStatus.failed
+        job.error = str(exc)
+        job.add_log(f"Execution error: {exc}")
+        logger.error("Skill execution error: %s", exc)
+
+    # Finalize completion timestamp
+    if job.status in (JobStatus.completed, JobStatus.failed):
+        job.completed_at = datetime.now(timezone.utc).isoformat()
+        if job.status == JobStatus.completed:
+            logger.info("Job %s completed successfully.", job.job_id)
+        else:
+            logger.info("Job %s failed: %s", job.job_id, job.error)
+
+    # Compute artifact path if not already set by the skill
+    if (
+        job.status == JobStatus.completed
+        and not job.artifact_path
+        and job.skill in KNOWN_SKILLS
+    ):
         artifact_subdir = _artifact_subdir_for_skill(job.skill)
         if artifact_subdir:
             slug = job.params.get("query", job.params.get("topic", "output"))

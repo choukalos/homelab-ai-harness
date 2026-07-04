@@ -34,7 +34,7 @@ ARTIFACT_DIR = Path(
 )
 MAX_RUNTIME_SECS = int(os.environ.get("SIRI_ASK_MAX_RUNTIME", "30"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("SIRI_ASK_MAX_TOKENS", "500"))
-MODEL_ALIAS = os.environ.get("SIRI_ASK_MODEL_ALIAS", "local/qwen-coder")
+MODEL_ALIAS = os.environ.get("SIRI_ASK_MODEL_ALIAS", "matrix-coder")
 
 # LiteLLM endpoint (set by skill runner or environment)
 LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")

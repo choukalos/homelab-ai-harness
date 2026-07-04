@@ -8,7 +8,7 @@ Provides four read-only tools:
   - kb_recent_changes(days)                   Show recent changes across collections
 
 Backend: Qdrant at configurable QDRANT_URL (default: http://qdrant:6333)
-Transport: stdio
+Transport: SSE (HTTP, default 0.0.0.0:8000)
 Security: Collection allowlist enforced; read-only operations only.
 """
 
@@ -132,6 +132,8 @@ def _get_client() -> AsyncQdrantClient:
 # MCP Server
 # ---------------------------------------------------------------------------
 
+MCPS_HOST: str = os.environ.get("MCPS_HOST", "0.0.0.0")
+
 mcp = FastMCP(
     name="mcp_knowledge",
     instructions=(
@@ -140,6 +142,7 @@ mcp = FastMCP(
         + ", ".join(ALLOWED_COLLECTIONS)
         + ". No writes, no reindexing, no arbitrary file access."
     ),
+    host=MCPS_HOST,
 )
 
 
@@ -411,11 +414,11 @@ async def _scan_recent_changes(client, days: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP knowledge server over stdio."""
+    """Run the MCP knowledge server over SSE transport (0.0.0.0:8000)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_knowledge on %s", QDRANT_URL)
     logger.info("Allowed collections: %s", ", ".join(ALLOWED_COLLECTIONS))
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")  # SSE defaults to 0.0.0.0:8000
 
 
 if __name__ == "__main__":

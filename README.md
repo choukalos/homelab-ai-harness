@@ -388,8 +388,63 @@ LiteLLM acts as:
 - model gateway
 - OpenAI-compatible endpoint
 - model router
+- MCP gateway (routes tool calls to standalone MCP server containers)
 
 Clients talk to LiteLLM instead of directly to Ollama.
+
+---
+
+## MCP Servers
+
+MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with LiteLLM over HTTP (SSE transport).
+
+**Each MCP server is independently deployable and portable.**
+
+| Server | Backend | Status |
+|---|---|---|
+| `mcp_search` | SearXNG | ✅ Containerized, live in LiteLLM |
+| `mcp_knowledge` | Qdrant | 🚧 In LiteLLM (stdio), containerize next |
+| `mcp_crawl` | Crawl4AI | 🔲 Not implemented |
+| `mcp_filesystem_readonly` | Local filesystem | 🔲 Not implemented |
+| `mcp_stocks` | External APIs | 🔲 Not implemented |
+| `mcp_homelab_status` | Docker + Victoria Metrics | 🔲 Not implemented |
+| `mcp_media` | ComfyUI (Matrix) | 🔲 Not implemented |
+| `mcp_home` | Homebridge (Lego) | 🔲 Not implemented |
+
+**Architecture:**
+```
+LiteLLM (:4000)  →  HTTP/SSE  →  mcp_search container
+                                mcp_knowledge container
+                                ...
+```
+
+Each server has its own directory under `mcp/servers/<name>/` with:
+- `server.py` — FastMCP server implementation
+- `Dockerfile` — Self-contained Python environment
+- `pyproject.toml` — Dependencies
+- `README.md` — Tool documentation
+- `tests/` — Unit tests
+
+**Why standalone containers:**
+- Isolated dependencies — no Franken-venv in LiteLLM
+- Independent lifecycle — add/remove/restart without touching LiteLLM
+- Portable — deploy to any client's infra
+- Scalable — can run on Thor, Matrix, or external hosts
+
+---
+
+## Skill Runner
+
+Custom FastAPI-based AI orchestration layer (replaces old AI Harness).
+
+Runs on dev port 8091. Provides job lifecycle API:
+```
+POST /skills/{skill_name}
+GET  /skills/jobs/{job_id}
+GET  /skills/jobs/{job_id}/artifact
+```
+
+Skills compose MCP tools into controlled agentic workflows. The skill runner calls MCP servers directly over the Docker network.
 
 ---
 
@@ -401,45 +456,22 @@ Connected to LiteLLM.
 
 ---
 
-## AI Harness
-
-Custom FastAPI-based AI orchestration layer.
-
-Purpose:
-- web search
-- crawling
-- knowledge base
-- workflows
-- agents
-- Siri shortcut APIs
-- visual document generation (HTML + PDF with layout templates, styled tables, and AI-generated images)
-
-### Visual Document Pipeline
-
-The harness can produce polished HTML documents and PDFs by combining:
-- **Layout engine** — 10+ templates (magazine, split, grid, pitch, etc.), zone-based content
-- **Image generation** — inline AI image generation via ComfyUI, placed directly into layout zones
-- **Styled tables** — fully themed HTML tables with configurable colors, striping, hover
-- **PDF export** — WeasyPrint converts layouts to PDFs with configurable page sizes and margins
-- **One-shot build** — `/layout/build` orchestrates the entire pipeline (create, generate images, populate, render, export) in a single call
-
-Docs: `ai-harness/layout/README.md`
-
----
-
 ## Planned AI Services
 
 | Service | Purpose |
 |---|---|
-| LiteLLM | Model gateway |
+| LiteLLM | Model gateway + MCP gateway |
+| MCP servers | Reusable tool providers (standalone containers) |
+| Skill runner | Agentic workflow orchestration |
 | Open Web UI | Chat UI |
 | Qdrant | Vector DB |
 | SearXNG | Web search |
 | Crawl4AI | Web extraction |
 | Redis | Queues/cache |
 | MkDocs | Family wiki |
-| Harness API | Agent orchestration |
-| Presenton | Presentation generation (connected to LiteLLM + SearXNG) |
+| Presenton | Presentation generation |
+| Victoria Metrics | Metrics backend |
+| Grafana | Dashboards |
 | Plausible | Privacy-first web analytics |
 
 ---
@@ -728,16 +760,12 @@ Long-term backups stored on NAS.
 # Future Expansion
 
 Potential future additions:
-- Home Assistant integration
-- Voice assistant pipeline
-- MCP servers
-- LangGraph workflows
-- Local code agents
-- Local iOS APIs
-- Family task automation
-- Automated investment research
-- Personal RAG systems
-- Shared family AI assistant
+- Home automation MCP server (read-only)
+- Code MCP server (repo listing, git operations)
+- More skill implementations (investment_brief, code_review, morning_brief, etc.)
+- MCP server containerization (all remaining servers)
+- CI/CD for MCP servers and skills
+- Remote client deployment patterns
 
 ---
 
