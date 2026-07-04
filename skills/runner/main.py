@@ -236,12 +236,12 @@ class LiteLLMClient:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
-        Call an MCP tool via direct SSE (delegates to ``_mcp_call_sse``).
+        Call an MCP tool via direct streamable-http (delegates to ``_mcp_call_streamable``).
 
         Args:
             tool_name: Name of the MCP tool to call (e.g. 'search_web').
             arguments: Dict of tool arguments.
-            server_id: MCP server name/ID (e.g. 'mcp_search'). Required for SSE path.
+            server_id: MCP server name/ID (e.g. 'mcp_search'). Required for streamable-http path.
             **kwargs: Additional params (currently unused; retained for compatibility).
 
         Returns:
@@ -249,10 +249,10 @@ class LiteLLMClient:
         """
         if not server_id:
             return {
-                "output": [{"type": "text", "text": "server_id is required for SSE MCP calls"}],
+                "output": [{"type": "text", "text": "server_id is required for streamable-http MCP calls"}],
                 "is_error": True,
             }
-        return await self._mcp_call_sse(server_id, tool_name, arguments)
+        return await self._mcp_call_streamable(server_id, tool_name, arguments)
 
     # -----------------------------------------------------------------------
     # Convenience: list available tools
@@ -266,32 +266,30 @@ class LiteLLMClient:
         return response.json()
 
     # -----------------------------------------------------------------------
-    # Direct SSE MCP tool call (bypasses LiteLLM proxy)
+    # Direct Streamable-HTTP MCP tool call (bypasses LiteLLM proxy)
     # -----------------------------------------------------------------------
 
-    async def _mcp_call_sse(
+    async def _mcp_call_streamable(
         self,
         server_id: str,
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Call an MCP server directly over SSE (bypasses LiteLLM /mcp-rest).
+        Call an MCP server directly over the streamable-http protocol (bypasses LiteLLM /mcp-rest).
 
-        The MCP SDK (FastMCP) SSE transport works as follows:
-        1. GET /sse opens a session and streams back event: endpoint with
-           the POST path. The SSE connection MUST stay open for the session to
-           remain alive.
-        2. MCP protocol requires an initialization handshake before tool calls:
-           - POST initialize with protocol version 2 → server responds
-           - POST notifications/initialized → acknowledges handshake
-        3. POST JSON-RPC tools/call to the endpoint path (while SSE is open).
-        4. The server sends the response back through the SAME SSE stream as
-           event: message.
-        5. Close the SSE connection when the response is received.
-
-        We use a SINGLE httpx.AsyncClient for both SSE and POST so connection
-        pooling keeps the SSE stream alive while POSTs happen on the same connection.
+        The streamable-http transport (MCP spec) works as follows:
+        1. POST JSON-RPC ``initialize`` to ``{base_url}/mcp`` → server returns
+           ``X-Session-Id`` header in the response.
+        2. POST JSON-RPC ``notifications/initialized`` to ``{base_url}/mcp``
+           with the ``X-Session-Id`` header to complete the handshake.
+        3. POST JSON-RPC ``tools/call`` to ``{base_url}/mcp`` with
+           ``X-Session-Id`` header.
+           - 200 OK with JSON-RPC result body (direct/synchronous result).
+           - 202 Accepted (server will stream response via SSE).
+        4. On 202, open GET ``{base_url}/mcp`` with ``X-Session-Id`` to receive
+           an SSE stream containing the JSON-RPC response message.
+        5. DELETE ``{base_url}/mcp`` with ``X-Session-Id`` to clean up the session.
 
         Returns:
             Dict with output (list of content dicts) and is_error (bool).
@@ -300,17 +298,12 @@ class LiteLLMClient:
         env_key = f"MCP_SERVER_{name.upper()}_URL"
         base_url = os.environ.get(env_key, f"http://{server_id}:8000").rstrip("/")
 
-        logger.info("SSE MCP call: server=%s base_url=%s tool=%s", server_id, base_url, tool_name)
+        logger.info("Streamable HTTP MCP call: server=%s base_url=%s tool=%s",
+                     server_id, base_url, tool_name)
 
-        jsonrpc_request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        }
         initialize_request = {
             "jsonrpc": "2.0",
-            "id": 0,
+            "id": 1,
             "method": "initialize",
             "params": {
                 "protocolVersion": 2,
@@ -319,158 +312,257 @@ class LiteLLMClient:
             },
         }
         initialized_notification = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+        jsonrpc_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }
 
-        result_content: list[dict[str, Any]] = []
-        structured_result: Optional[dict[str, Any]] = None
-        is_error = False
-        endpoint_url_holder: list[str] = [""]
-        init_response_holder: list[Optional[dict]] = [None]
+        mcp_url = f"{base_url}/mcp"
+        session_id: Optional[str] = None
         parse_error_holder: list[Optional[str]] = [None]
-        endpoint_ready = asyncio.Event()
-        init_response_ready = asyncio.Event()
-        response_ready = asyncio.Event()
+        result_content: list[dict[str, Any]] = []
+        structured_result_holder: list[Optional[dict[str, Any]]] = [None]
+        is_error = False
 
         async with AsyncClient(timeout=Timeout(120.0)) as client:
-            sse_resp = await client.send(
-                client.build_request("GET", f"{base_url}/sse"), stream=True
+            # ---- Step 1: POST initialize, get X-Session-Id ----
+            try:
+                init_resp = await client.post(mcp_url, json=initialize_request, timeout=30.0)
+                init_resp.raise_for_status()
+                init_body = init_resp.json()
+                session_id = init_resp.headers.get("X-Session-Id")
+                if not session_id:
+                    parse_error_holder[0] = "initialize response missing X-Session-Id header"
+                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+                if "error" in init_body:
+                    parse_error_holder[0] = f"MCP init error: {init_body['error']}"
+                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+                server_info = init_body.get("result", {}).get("serverInfo", {})
+                logger.info("MCP initialized (server: %s, session: %s)",
+                            server_info.get("name", "unknown"), session_id)
+            except Exception as exc:
+                parse_error_holder[0] = f"MCP initialize failed: {exc}"
+                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+            # ---- Step 2: POST notifications/initialized ----
+            try:
+                init_ack = await client.post(
+                    mcp_url,
+                    json=initialized_notification,
+                    headers={"X-Session-Id": session_id},
+                    timeout=15.0,
+                )
+                init_ack.raise_for_status()
+                logger.info("MCP initialized notification sent")
+            except Exception as exc:
+                parse_error_holder[0] = f"MCP initialized notification failed: {exc}"
+                # Attempt cleanup and return
+                try:
+                    await client.delete(mcp_url, headers={"X-Session-Id": session_id}, timeout=10.0)
+                except Exception:
+                    pass
+                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+            # ---- Step 3: POST tools/call ----
+            try:
+                tool_resp = await client.post(
+                    mcp_url,
+                    json=jsonrpc_request,
+                    headers={"X-Session-Id": session_id},
+                    timeout=60.0,
+                )
+            except Exception as exc:
+                parse_error_holder[0] = f"tools/call POST failed: {exc}"
+                # Attempt cleanup
+                try:
+                    await client.delete(mcp_url, headers={"X-Session-Id": session_id}, timeout=10.0)
+                except Exception:
+                    pass
+                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+            logger.info("tools/call POST returned status %d", tool_resp.status_code)
+
+            # ---- Step 3a: 200 OK — direct JSON-RPC result ----
+            if tool_resp.status_code == 200:
+                try:
+                    jsonrpc_response = tool_resp.json()
+                except Exception as exc:
+                    parse_error_holder[0] = f"Failed to parse tool response JSON: {exc}"
+                    # Attempt cleanup
+                    try:
+                        await client.delete(mcp_url, headers={"X-Session-Id": session_id}, timeout=10.0)
+                    except Exception:
+                        pass
+                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+                self._parse_tool_response(jsonrpc_response, result_content,
+                                           parse_error_holder, structured_result_holder)
+
+                if parse_error_holder[0]:
+                    error = parse_error_holder[0]
+                    try:
+                        await client.delete(mcp_url, headers={"X-Session-Id": session_id}, timeout=10.0)
+                    except Exception:
+                        pass
+                    return {"output": [{"type": "text", "text": error}], "is_error": True}
+
+                # Continue to step 5 (cleanup)
+                await self._cleanup_session(client, mcp_url, session_id)
+                return self._build_result(result_content, structured_result_holder[0], is_error,
+                                           server_id, tool_name)
+
+            # ---- Step 3b: 202 Accepted — read SSE stream for response ----
+            elif tool_resp.status_code == 202:
+                logger.info("Got 202 Accepted, reading SSE stream for response")
+                try:
+                    sse_resp = await client.send(
+                        client.build_request("GET", mcp_url,
+                                              headers={"X-Session-Id": session_id}),
+                        stream=True,
+                    )
+                    sse_resp.raise_for_status()
+
+                    response_ready = asyncio.Event()
+
+                    async def sse_reader_task():
+                        try:
+                            event_type: Optional[str] = None
+                            async for raw_line in sse_resp.aiter_lines():
+                                line = raw_line.strip()
+                                if not line:
+                                    continue
+                                if line.startswith("event: "):
+                                    event_type = line[7:].strip()
+                                elif line.startswith("data: "):
+                                    data_value = line[6:].strip()
+                                    if event_type == "message" and data_value:
+                                        try:
+                                            jsonrpc_response = json.loads(data_value)
+                                            logger.info("MCP tool response via streamable-http SSE stream: keys=%s has_error=%s has_result=%s",
+                                                        list(jsonrpc_response.keys()),
+                                                        "error" in jsonrpc_response,
+                                                        "result" in jsonrpc_response)
+                                        except json.JSONDecodeError:
+                                            parse_error_holder[0] = f"Failed to parse SSE tool response: {data_value}"
+                                            response_ready.set()
+                                            return
+
+                                        if "error" in jsonrpc_response and "result" not in jsonrpc_response:
+                                            is_error = True
+                                            result_content.append(
+                                                {"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"}
+                                            )
+                                        elif "result" in jsonrpc_response:
+                                            result = jsonrpc_response["result"]
+                                            structured = result.get("structuredContent")
+                                            if structured:
+                                                structured_result_holder[0] = structured
+                                                is_error = False
+                                            else:
+                                                content_items = result.get("content", [])
+                                                result_content.extend(content_items)
+                                                is_error = result.get("isError", False) and not content_items
+                                        response_ready.set()
+                                        return
+                        except Exception as exc:
+                            logger.error("SSE reader error: %s", exc)
+                            parse_error_holder[0] = f"SSE reader error: {exc}"
+                            response_ready.set()
+
+                    reader_task = asyncio.create_task(sse_reader_task())
+                    try:
+                        await asyncio.wait_for(response_ready.wait(), timeout=60.0)
+                    except asyncio.TimeoutError:
+                        parse_error_holder[0] = "Timeout waiting for SSE response after 202"
+                    reader_task.cancel()
+                    try:
+                        await asyncio.gather(reader_task, return_exceptions=True)
+                    except Exception:
+                        pass
+                    try:
+                        await sse_resp.aclose()
+                    except Exception:
+                        pass
+
+                except Exception as exc:
+                    parse_error_holder[0] = f"SSE stream after 202 failed: {exc}"
+
+                # ---- Step 5: cleanup ----
+                await self._cleanup_session(client, mcp_url, session_id)
+
+                if parse_error_holder[0]:
+                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+                return self._build_result(result_content, structured_result_holder[0], is_error,
+                                           server_id, tool_name)
+
+            else:
+                parse_error_holder[0] = f"Unexpected status {tool_resp.status_code} from tools/call"
+                await self._cleanup_session(client, mcp_url, session_id)
+                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
+
+    # -----------------------------------------------------------------------
+    # Streamable-HTTP helpers
+    # -----------------------------------------------------------------------
+
+    async def _cleanup_session(
+        self, client: AsyncClient, mcp_url: str, session_id: Optional[str]
+    ) -> None:
+        """DELETE the MCP session to clean up server-side resources."""
+        if not session_id:
+            return
+        try:
+            del_resp = await client.delete(
+                mcp_url,
+                headers={"X-Session-Id": session_id},
+                timeout=10.0,
             )
-            sse_resp.raise_for_status()
+            logger.debug("Session cleanup: status=%d", del_resp.status_code)
+        except Exception as exc:
+            logger.warning("Session cleanup failed: %s", exc)
 
-            async def sse_reader_task():
-                nonlocal is_error, structured_result
-                try:
-                    event_type: Optional[str] = None
-                    phase = "handshake"
-                    async for raw_line in sse_resp.aiter_lines():
-                        line = raw_line.strip()
-                        if not line:
-                            continue
-                        if line.startswith("event: "):
-                            event_type = line[7:].strip()
-                        elif line.startswith("data: "):
-                            data_value = line[6:].strip()
-                            if phase == "handshake" and event_type == "endpoint" and data_value:
-                                endpoint_url_holder[0] = data_value
-                                endpoint_ready.set()
-                                logger.info("SSE endpoint obtained: %s", data_value)
-                                phase = "init"
-                            elif phase == "init" and event_type == "message" and data_value:
-                                try:
-                                    resp = json.loads(data_value)
-                                except json.JSONDecodeError:
-                                    parse_error_holder[0] = f"Failed to parse init response: {data_value}"
-                                    init_response_ready.set()
-                                    return
-                                init_response_holder[0] = resp
-                                init_response_ready.set()
-                                phase = "tool"
-                            elif phase == "tool" and event_type == "message" and data_value:
-                                try:
-                                    jsonrpc_response = json.loads(data_value)
-                                    logger.info("MCP tool response: keys=%s has_error=%s has_result=%s", list(jsonrpc_response.keys()), "error" in jsonrpc_response, "result" in jsonrpc_response)
-                                except json.JSONDecodeError:
-                                    parse_error_holder[0] = f"Failed to parse tool response: {data_value}"
-                                    response_ready.set()
-                                    return
-                                if "error" in jsonrpc_response and "result" not in jsonrpc_response:
-                                    is_error = True
-                                    result_content.append({"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"})
-                                elif "result" in jsonrpc_response:
-                                    result = jsonrpc_response["result"]
-                                    structured = result.get("structuredContent")
-                                    if structured:
-                                        # Store structuredContent separately — it has the parsed data
-                                        structured_result = structured
-                                        is_error = False
-                                    else:
-                                        content_items = result.get("content", [])
-                                        result_content.extend(content_items)
-                                        # Only mark as error if isError is set AND there's no actual content
-                                        is_error = result.get("isError", False) and not content_items
-                                response_ready.set()
-                                phase = "done"
-                                return
-                except Exception as exc:
-                    logger.error("SSE reader error: %s (phase=%s)", exc, phase)
-                    parse_error_holder[0] = f"SSE reader error: {exc}"
-                    endpoint_ready.set()
-                    init_response_ready.set()
-                    response_ready.set()
+    @staticmethod
+    def _parse_tool_response(
+        jsonrpc_response: dict,
+        result_content: list[dict[str, Any]],
+        parse_error_holder: list[Optional[str]],
+        structured_result_holder: list[Optional[dict]],
+    ) -> None:
+        """Parse a JSON-RPC tool response into result_content / structured_result."""
+        if "error" in jsonrpc_response and "result" not in jsonrpc_response:
+            parse_error_holder[0] = f"MCP error: {jsonrpc_response['error']}"
+            result_content.append({"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"})
+        elif "result" in jsonrpc_response:
+            result = jsonrpc_response["result"]
+            structured = result.get("structuredContent")
+            if structured:
+                structured_result_holder[0] = structured
+            else:
+                content_items = result.get("content", [])
+                result_content.extend(content_items)
 
-            async def post_sender_task():
-                try:
-                    await asyncio.wait_for(endpoint_ready.wait(), timeout=30.0)
-                    endpoint_url = endpoint_url_holder[0]
-                    if not endpoint_url:
-                        parse_error_holder[0] = "Failed to obtain SSE endpoint path"
-                        response_ready.set()
-                        return
-                    post_url = f"{base_url}{endpoint_url}"
-
-                    # Init handshake
-                    logger.info("POSTing MCP initialize to %s", post_url)
-                    init_resp = await client.post(post_url, json=initialize_request, timeout=30.0)
-                    init_resp.raise_for_status()
-                    await asyncio.wait_for(init_response_ready.wait(), timeout=30.0)
-                    init_result = init_response_holder[0]
-                    if init_result and "error" in init_result:
-                        parse_error_holder[0] = f"MCP init error: {init_result['error']}"
-                        response_ready.set()
-                        return
-                    logger.info("MCP initialized (server: %s)", init_result.get("result", {}).get("serverInfo", {}).get("name", "unknown") if init_result else "unknown")
-
-                    # Send notifications/initialized
-                    init_ack = await client.post(post_url, json=initialized_notification, timeout=15.0)
-                    init_ack.raise_for_status()
-
-                    # Tool call
-                    logger.info("POSTing tools/call to %s", post_url)
-                    tool_resp = await client.post(post_url, json=jsonrpc_request, timeout=60.0)
-                    tool_resp.raise_for_status()
-                    logger.info("POST returned status %d", tool_resp.status_code)
-                except Exception as exc:
-                    parse_error_holder[0] = f"POST error: {exc}"
-                    response_ready.set()
-
-            reader_task = asyncio.create_task(sse_reader_task())
-            sender_task = asyncio.create_task(post_sender_task())
-            try:
-                await asyncio.wait_for(response_ready.wait(), timeout=60.0)
-            except asyncio.TimeoutError:
-                parse_error_holder[0] = "Timeout waiting for SSE response"
-            # Cancel tasks and properly close the SSE stream
-            reader_task.cancel()
-            sender_task.cancel()
-            # Close the SSE response stream to clean up the aiter_lines async generator
-            try:
-                await sse_resp.aclose()
-            except Exception:
-                pass
-            # Wait for task cancellation to complete
-            try:
-                await asyncio.gather(reader_task, sender_task, return_exceptions=True)
-            except Exception:
-                pass
-            # Let event loop process any remaining async generator cleanup
-            await asyncio.sleep(0)
-
-        logger.info("SSE call returning: parse_error=%s, structured=%s, content=%d, is_error=%s",
-                    parse_error_holder[0] is not None,
-                    structured_result is not None,
-                    len(result_content),
-                    is_error)
-
-        parse_error = parse_error_holder[0]
-        if parse_error:
+    @staticmethod
+    def _build_result(
+        result_content: list[dict[str, Any]],
+        structured_result: Optional[dict[str, Any]],
+        is_error: bool,
+        server_id: str,
+        tool_name: str,
+    ) -> dict[str, Any]:
+        """Build the final result dict from parsed content and structured result."""
+        parse_error: Optional[str] = None
+        if not result_content and not structured_result and not is_error:
+            parse_error = "No response received from MCP server via Streamable HTTP"
+            logger.warning("Streamable HTTP call returned no data (server=%s, tool=%s)",
+                           server_id, tool_name)
             return {"output": [{"type": "text", "text": parse_error}], "is_error": True}
 
-        # Build a return dict that skills can parse.
-        # Skills expect: result.get("result") to find the raw MCP result for parsing,
-        # and result["result"]["results"] to find the actual data list.
-        # We also include "output" for the normalized content list.
         if structured_result is not None:
             sc = structured_result
-            # Normalize: skills parse result["result"]["results"], so ensure that key exists
             if isinstance(sc, dict):
                 for key in ("result", "matches", "data", "items"):
                     if key in sc:
@@ -479,7 +571,7 @@ class LiteLLMClient:
                         break
                 if "results" not in sc:
                     sc = {"results": sc}
-            logger.info("SSE call returning structured result (server=%s, tool=%s, results_count=%d)",
+            logger.info("Streamable HTTP call returning structured result (server=%s, tool=%s, results_count=%d)",
                         server_id, tool_name, len(sc.get("results", [])))
             return {
                 "result": sc,
@@ -487,12 +579,9 @@ class LiteLLMClient:
                 "is_error": is_error,
             }
         if result_content:
-            logger.info("SSE call returning content result (server=%s, tool=%s, items=%d)",
+            logger.info("Streamable HTTP call returning content result (server=%s, tool=%s, items=%d)",
                         server_id, tool_name, len(result_content))
             return {"output": result_content, "is_error": is_error}
-        if not is_error:
-            logger.warning("SSE call returned no data (server=%s, tool=%s)", server_id, tool_name)
-            return {"output": [{"type": "text", "text": "No response received from MCP server via SSE"}], "is_error": True}
         return {"output": [], "is_error": is_error}
 
 

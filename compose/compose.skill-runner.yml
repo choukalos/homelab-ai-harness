@@ -1,12 +1,15 @@
-name: skill-runner
+name: ai-skill-runner
 
 services:
   skill-runner:
     build:
       context: ../skills/runner
       dockerfile: Dockerfile
+    image: skill-runner:local
     container_name: skill-runner
     restart: unless-stopped
+    env_file:
+      - ../.env
     ports:
       - "${THOR_IP}:8091:8091"
     environment:
@@ -16,15 +19,26 @@ services:
       - SKILL_RUNNER_LOG_DIR=/home/chuck/homelab/logs/skill_runner
       - SKILL_RUNNER_PORT=8091
       - SKILL_RUNNER_HOST=0.0.0.0
+      - MCP_SERVER_SEARCH_URL=http://mcp_search:8000
+      - MCP_SERVER_KNOWLEDGE_URL=http://mcp_knowledge:8000
+      - MCP_SERVER_CRAWL_URL=http://mcp_crawl:8000
+      - MCP_SERVER_FILESYSTEM_READONLY_URL=http://mcp_filesystem_readonly:8000
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
     volumes:
       - ../skills:/app/skills:ro
       - /home/chuck/data/media:/home/chuck/data/media
+      - /home/chuck/workspace:/home/chuck/workspace
       - /home/chuck/homelab/logs/skill_runner:/home/chuck/homelab/logs/skill_runner
+    # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
+    # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
+    # supported by Docker Compose.
     networks:
       - ai-net
+      - public-net
 
 networks:
   ai-net:
+    external: true
+  public-net:
     external: true
