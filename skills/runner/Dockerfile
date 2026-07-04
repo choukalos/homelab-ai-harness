@@ -30,4 +30,7 @@ ENV MCP_SERVER_FILESYSTEM_READONLY_URL=http://mcp_filesystem_readonly:8000
 
 EXPOSE 8091
 
+# Create required application directories
+RUN mkdir -p /app/skills /app/logs
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8091", "--log-level", "info"]

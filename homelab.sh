@@ -12,6 +12,8 @@ HARNESS="${COMPOSE_DIR}/compose.ai-harness.yml"
 INVEST="${COMPOSE_DIR}/compose.invest-hub.yml"
 N8N="${COMPOSE_DIR}/compose.n8n.yml"
 MONITORING="${COMPOSE_DIR}/compose.monitoring.yml"
+MCP="${COMPOSE_DIR}/compose.mcp.yml"
+SKILL_RUNNER="${COMPOSE_DIR}/compose.skill-runner.yml"
 
 cd "${BASE_DIR}"
 
@@ -47,7 +49,7 @@ Stacks:
   core        Caddy only
   edge        Caddy + Cloudflare Tunnel
   ghost       Caddy + Cloudflare Tunnel + Ghost
-  ai          AI core (litellm, open-webui, etc.) + Harness
+  ai          AI core (litellm, open-webui, etc.) + MCP + Skill Runner
   invest      Caddy + Cloudflare Tunnel + Invest Hub
   public      Caddy + Cloudflare Tunnel + Ghost + Invest Hub
   n8n         Caddy + n8n
@@ -60,14 +62,21 @@ Stacks:
   ghost-only     Ghost only (Caddy + cloudflared kept running)
   ai-only        AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
   harness-only   Harness only (FastAPI, workers, beat, kb-watcher)
+  mcp-only       MCP servers only
+  skill-only     Skill Runner only (MCP and AI core kept running)
   invest-only    Invest only (Caddy + cloudflared kept running)
   n8n-only
   monitoring-only
 
 Notes:
-  ai and harness are separate Docker Compose projects sharing the ai-net
-  bridge network. Rebuilding harness-only will NOT restart litellm or
-  other ai-core services, so your LLM connection stays alive.
+  The ai stack comprises three separate Docker Compose projects sharing
+  the ai-net bridge network: ai-core (litellm, open-webui, etc.),
+  ai-mcp (MCP servers), and ai-skill-runner (skill runner). Rebuilding
+  mcp-only or skill-only will NOT restart litellm or other ai-core
+  services, so your LLM connection stays alive.
+
+  harness is also a separate project. Rebuilding harness-only will NOT
+  restart litellm or other ai-core services.
 
   ghost and invest are also separate projects. Rebuilding ghost-only or
   invest-only will NOT restart Caddy or Cloudflare Tunnel.
@@ -116,36 +125,47 @@ run_ai_stack() {
   case "${command}" in
     up)
       run_compose_single up "-f ${AI_CORE}" -d "$@"
-      run_compose_single up "-f ${HARNESS}" -d "$@"
+      run_compose_single up "-f ${MCP}" -d "$@"
+      run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
       ;;
     down)
-      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+      run_compose_single down "-f ${MCP}" "$@"
       run_compose_single down "-f ${AI_CORE}" "$@"
       ;;
     restart)
-      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+      run_compose_single down "-f ${MCP}" "$@"
       run_compose_single down "-f ${AI_CORE}" "$@"
       run_compose_single up "-f ${AI_CORE}" -d
-      run_compose_single up "-f ${HARNESS}" -d
+      run_compose_single up "-f ${MCP}" -d
+      run_compose_single up "-f ${SKILL_RUNNER}" -d
       ;;
     rebuild)
-      run_compose_single down "-f ${HARNESS}" "$@"
+      run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+      run_compose_single down "-f ${MCP}" "$@"
+      run_compose_single down "-f ${AI_CORE}" "$@"
       run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
-      run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+      run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
+      run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
       ;;
     pull)
       run_compose_single pull "-f ${AI_CORE}" "$@"
-      run_compose_single pull "-f ${HARNESS}" "$@"
+      run_compose_single pull "-f ${MCP}" "$@"
+      run_compose_single pull "-f ${SKILL_RUNNER}" "$@"
       ;;
     logs)
       run_compose_single logs "-f ${AI_CORE}" "$@"
-      run_compose_single logs "-f ${HARNESS}" "$@"
+      run_compose_single logs "-f ${MCP}" "$@"
+      run_compose_single logs "-f ${SKILL_RUNNER}" "$@"
       ;;
     ps|config)
       echo "=== ai-core project ==="
       run_compose_single "${command}" "-f ${AI_CORE}" "$@"
-      echo -e "\n=== ai-harness project ==="
-      run_compose_single "${command}" "-f ${HARNESS}" "$@"
+      echo -e "\n=== ai-mcp project ==="
+      run_compose_single "${command}" "-f ${MCP}" "$@"
+      echo -e "\n=== ai-skill-runner project ==="
+      run_compose_single "${command}" "-f ${SKILL_RUNNER}" "$@"
       ;;
     *)
       echo "Unknown command: ${command}" >&2
@@ -309,6 +329,54 @@ do_dispatch() {
           ;;
       esac
       ;;
+    mcp-only)
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${MCP}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${MCP}" "$@"
+          if [[ "${cmd}" == "restart" || "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          run_compose_single pull "-f ${MCP}" "$@"
+          ;;
+        logs|ps|config)
+          run_compose_single "${cmd}" "-f ${MCP}" "$@"
+          ;;
+        *)
+          echo "Unknown command: ${cmd}" >&2
+          usage
+          exit 1
+          ;;
+      esac
+      ;;
+    skill-only)
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+          if [[ "${cmd}" == "restart" || "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          run_compose_single pull "-f ${SKILL_RUNNER}" "$@"
+          ;;
+        logs|ps|config)
+          run_compose_single "${cmd}" "-f ${SKILL_RUNNER}" "$@"
+          ;;
+        *)
+          echo "Unknown command: ${cmd}" >&2
+          usage
+          exit 1
+          ;;
+      esac
+      ;;
     all)
       case "${cmd}" in
         up)
@@ -317,12 +385,14 @@ do_dispatch() {
           run_compose_single up "-f ${GHOST}" -d "$@"
           run_compose_single up "-f ${INVEST}" -d "$@"
           run_compose_single up "-f ${AI_CORE}" -d "$@"
-          run_compose_single up "-f ${HARNESS}" -d "$@"
+          run_compose_single up "-f ${MCP}" -d "$@"
+          run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
           run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
         down|restart|rebuild)
           run_compose_single down "-f ${MONITORING}" "$@"
-          run_compose_single down "-f ${HARNESS}" "$@"
+          run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+          run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
           run_compose_single down "-f ${GHOST}" "$@"
@@ -331,7 +401,8 @@ do_dispatch() {
           if [[ "${cmd}" == "restart" ]]; then
             run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
             run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
-            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
+            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
+            run_compose_single up "-f ${SKILL_RUNNER}" -d
             run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
@@ -339,17 +410,18 @@ do_dispatch() {
             run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${AI_CORE}" "${HARNESS}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core harness monitoring; do
+          for f in core edge ghost invest ai-core mcp skill-runner monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
@@ -365,14 +437,16 @@ do_dispatch() {
           run_compose_single up "-f ${GHOST}" -d "$@"
           run_compose_single up "-f ${INVEST}" -d "$@"
           run_compose_single up "-f ${AI_CORE}" -d "$@"
-          run_compose_single up "-f ${HARNESS}" -d "$@"
+          run_compose_single up "-f ${MCP}" -d "$@"
+          run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
           run_compose_single up "-f ${N8N}" -d "$@"
           run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
         down|restart|rebuild)
           run_compose_single down "-f ${MONITORING}" "$@"
           run_compose_single down "-f ${N8N}" "$@"
-          run_compose_single down "-f ${HARNESS}" "$@"
+          run_compose_single down "-f ${SKILL_RUNNER}" "$@"
+          run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
           run_compose_single down "-f ${GHOST}" "$@"
@@ -381,7 +455,8 @@ do_dispatch() {
           if [[ "${cmd}" == "restart" ]]; then
             run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
             run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
-            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${HARNESS}" -d
+            run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
+            run_compose_single up "-f ${SKILL_RUNNER}" -d
             run_compose_single up "-f ${N8N}" -d
             run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
@@ -390,18 +465,19 @@ do_dispatch() {
             run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${HARNESS}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${N8N}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${N8N}" "${HARNESS}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${N8N}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core harness n8n monitoring; do
+          for f in core edge ghost invest ai-core mcp skill-runner n8n monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
