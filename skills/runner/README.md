@@ -151,4 +151,4 @@ Set `dry_run: true` in the request body or set `SKILL_RUNNER_DRY_RUN=true` globa
 - Do not update Cloudflare
 - Do not restart existing services
 
-See [thor_todo.md](../../thor_todo.md) Phase 8 for full design specification.
+See [TODO.md](../../TODO.md) Phase 8 for full design specification.
