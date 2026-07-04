@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${LITELLM_DB_USER:-litellm}
-      - POSTGRES_PASSWORD=${LITELLM_DB_PASS:-litellm}
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASS}
       - POSTGRES_DB=${LITELLM_DB_NAME:-litellm}
       - TZ=America/Chicago
     networks:
@@ -164,7 +164,7 @@ services:
       - /home/chuck/data/presenton:/app_data
     environment:
       - AUTH_USERNAME=presenton
-      - AUTH_PASSWORD=changeme123
+      - AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
       - CAN_CHANGE_KEYS=false
       - LLM=custom
       - CUSTOM_LLM_URL=http://litellm-proxy:4000/v1

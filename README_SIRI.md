@@ -400,6 +400,42 @@ The harness auto-detects intent from keywords in your `text`. Here's every suppo
 
 ---
 
+### ✏️ Update Presentation (Async — Celery)
+
+| Trigger | Examples |
+|---|---|
+| `update a presentation`, `update presentation`, `change the presentation`, `revise the presentation`, `modify the presentation`, `improve the presentation`, `fix the presentation` | `"update the AI homelab presentation to be more casual"`, `"change the quarterly review to 12 slides"`, `"improve my presentation about AI"` |
+
+**Async:** ✅ YES — fires a Celery background task (3-5 minutes).
+
+**How it works:**
+
+1. Siri parses the presentation title from your voice text (strips prefixes like "update the", "change my")
+2. If you include instructions (e.g. "to be more casual", "to 12 slides"), the LLM parses them into structured update parameters
+3. The harness searches for your presentation by title, then dispatches an async update to Presenton
+4. **You follow up** by asking Siri `"list my presentations"` to see if the update is done
+
+**Input:** `"text": "update the AI homelab to be more casual"`
+
+**Output (Step 1 — Dispatch):**
+```json
+{
+  "speak": "I've started updating your 'AI homelab' presentation. Changing: tone to casual. It will take a couple minutes. Ask me to list your presentations when it's done.",
+  "display": "Presentation update started!\nTitle: AI homelab (v1 → v2)\nTask ID: abc-123-xyz\n\nChanges: tone to casual\n\nTypical completion time: 3-5 minutes.\nFollow up with: 'list my presentations'",
+  "session_id": null,
+  "data": {
+    "presentation_id": "...",
+    "title": "AI homelab",
+    "task_id": "abc-123-xyz",
+    "changes": { "tone": "casual" }
+  }
+}
+```
+
+**⚠️ Note:** If no update instructions are provided, Siri will ask what changes you'd like to make (e.g. "Make it more casual" or "Add more slides").
+
+---
+
 ## 🔄 Async Flow Cheat Sheet
 
 These intents return **immediately** while work happens in the background. You must follow up in a **second Siri call**:
@@ -408,6 +444,7 @@ These intents return **immediately** while work happens in the background. You m
 |---|---|---|
 | **Create Demo** | `"I've started building your demo..."` + `task_id` in `data` | `"list my demos"` — check if it's ready |
 | **Create Presentation** | `"I've started creating your presentation..."` (fire-and-forget) | `"list my presentations"` — check if it's ready |
+| **Update Presentation** | `"I've started updating your presentation..."` + `task_id` in `data` | `"list my presentations"` — check if the update is done |
 | **Deep Research** | ⚠️ Blocks for up to 180 sec (not truly async from Siri's view) | — |
 | **Image Generation** | ⚠️ Blocks for 30-60 sec while ComfyUI renders | — |
 | **Research Brief** | ⚠️ Blocks for 10-30 sec | — |
@@ -477,6 +514,12 @@ curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_SIRI_API_KEY" \
   -d '{"text":"something ambiguous", "intent":"research"}'
+
+# Update a presentation (async)
+curl -X POST https://siri.choukalos.com/siri/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -d '{"text":"update the AI homelab to be more casual"}'
 ```
 
 ---

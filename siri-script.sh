@@ -41,6 +41,12 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Intent definitions ──────────────────────────────────────
+# Format: name|example text|intent override|timeout|description
+#   name         — CLI shorthand for quick-run mode
+#   example text — default text sent to Siri (user can override)
+#   intent       — explicit intent override sent in JSON body
+#   timeout      — curl timeout in seconds
+#   description  — shown in interactive menu
 declare -a INTENTS=(
     "chat|Say hello from Siri|chat|60|🧠 General Chat — default conversation"
     "research|Research best local embedding models|research|120|🔍 Research Brief (~10-30 sec)"
@@ -53,6 +59,7 @@ declare -a INTENTS=(
     "demo-quality|How well does the pet adoption demo work?|demo-quality|30|📈 Demo Quality Score"
     "demo-complexity|How complex is the pet adoption demo?|demo-complexity|30|🧩 Demo Complexity"
     "create-presentation|Create a presentation about our AI homelab|create-presentation|30|📽️ Create Presentation (async)"
+    "update-presentation|Update the AI homelab presentation to be more casual|update-presentation|30|✏️ Update Presentation (async)"
     "list-presentations|List my presentations|list-presentations|30|📋 List Presentations"
     "find-presentation|Find presentation about homelab|find-presentation|30|🔍 Find Presentation by keyword"
     "health|Health check|health|10|💚 Health Check (GET /health, no auth needed)"
@@ -201,7 +208,7 @@ json.dump(payload, sys.stdout)
         deep-research) timeout=180 ;;
         image) timeout=120 ;;
         health) timeout=10 ;;
-        create-demo|create-presentation) timeout=30 ;;
+        create-demo|create-presentation|update-presentation) timeout=30 ;;
         *) timeout=60 ;;
     esac
 

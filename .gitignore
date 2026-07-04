@@ -9,3 +9,32 @@ outputs/
 *.mp4
 .env
 
+# Environment file variants
+.env.local
+.env.production
+.env.staging
+.env.backup
+.env.bak
+.env.*.local
+.env.*.production
+
+# Private keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa
+id_ed25519
+id_ecdsa
+
+# Secrets, tokens, and credentials
+*.secret
+*.token
+*.credentials
+credentials.json
+
+# MySQL config with credentials
+mysql-exporter/.my.cnf
+

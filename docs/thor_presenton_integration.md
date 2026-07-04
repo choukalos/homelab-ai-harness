@@ -105,7 +105,7 @@ Already implemented in `skills/presentation_build/`:
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
-Presenton uses default auth credentials (presenton/changeme123). These should be changed.
+Presenton uses HTTP Basic auth. Set `PRESENTON_AUTH_PASSWORD` in `.env` to configure a strong password.
 Command:
 Edit Presenton environment variables in compose/compose.ai-core.yml and restart Presenton container only.
 Expected impact:

@@ -38,7 +38,7 @@ QUERY_TIMEOUT: int = 30  # seconds
 
 # LiteLLM config for NL-to-SQL
 LITELLM_API_BASE: str = os.environ.get("LITELLM_API_BASE", "http://litellm-proxy:4000")
-LITELLM_API_KEY: str = os.environ.get("LITELLM_API_KEY", "sk-homelab")
+LITELLM_API_KEY: str = os.environ.get("LITELLM_API_KEY")
 LITELLM_MODEL: str = os.environ.get("LITELLM_MODEL", "studio-gemma4-4b")
 
 # Databases to exclude from list_databases

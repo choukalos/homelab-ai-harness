@@ -22,7 +22,7 @@ Read-only MySQL database access with natural-language-to-SQL translation via Lit
 | `MYSQL_PASSWORD` | _(required)_ | MySQL password |
 | `MYSQL_DATABASE` | _(none)_ | Default database |
 | `LITELLM_API_BASE` | `http://litellm:4000` | LiteLLM API base URL |
-| `LITELLM_API_KEY` | `sk-homelab` | LiteLLM API key |
+| `LITELLM_API_KEY` | `${LITELLM_API_KEY}` | LiteLLM API key |
 | `LITELLM_MODEL` | `studio-gemma4-4b` | LiteLLM model for NL-to-SQL |
 | `MCPS_HOST` | `0.0.0.0` | Bind address for streamable-http |
 
@@ -51,7 +51,7 @@ mcp_mysql:
     MYSQL_USER: ai
     MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     LITELLM_API_BASE: http://litellm:4000
-    LITELLM_API_KEY: sk-homelab
+    LITELLM_API_KEY: ${LITELLM_API_KEY}
     LITELLM_MODEL: studio-gemma4-4b
 ```
 

@@ -59,7 +59,7 @@ MODEL_ALIAS = os.environ.get("PRESENTATION_BUILD_MODEL_ALIAS", "local/qwen-coder
 # Default: Docker internal network (presenton:80). Override with PRESENTON_URL env var.
 PRESENTON_URL = os.environ.get("PRESENTON_URL", "http://presenton:80")
 PRESENTON_USERNAME = os.environ.get("PRESENTON_AUTH_USERNAME", "presenton")
-PRESENTON_PASSWORD = os.environ.get("PRESENTON_AUTH_PASSWORD", "changeme123")
+PRESENTON_PASSWORD = os.environ.get("PRESENTON_AUTH_PASSWORD")
 PRESENTON_GENERATION_TIMEOUT = float(
     os.environ.get("PRESENTON_GENERATION_TIMEOUT", "240")
 )  # seconds for Presenton polling

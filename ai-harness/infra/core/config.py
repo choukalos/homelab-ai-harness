@@ -32,7 +32,7 @@ MEDIA_OUTPUT_DIR = os.getenv("MEDIA_OUTPUT_DIR", "/data/media")
 # Presenton (AI presentation generation engine)
 PRESENTON_BASE_URL = os.getenv("PRESENTON_BASE_URL", "http://presenton:80")
 PRESENTON_AUTH_USERNAME = os.getenv("PRESENTON_AUTH_USERNAME", "presenton")
-PRESENTON_AUTH_PASSWORD = os.getenv("PRESENTON_AUTH_PASSWORD", "changeme123")
+PRESENTON_AUTH_PASSWORD = os.getenv("PRESENTON_AUTH_PASSWORD")
 
 # Base URLs for serving generated media
 # INTERNAL_BASE_URL: used by internal API responses (e.g. thor.local:8090)
