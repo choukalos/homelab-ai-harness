@@ -73,14 +73,16 @@
 
 	@siri_media host siri.choukalos.com path /media/files/*
 	handle @siri_media {
-		reverse_proxy http://ai-harness:8090
+		# Old: reverse_proxy http://ai-harness:8090
+		reverse_proxy http://skill-runner:8091
 	}
 
 	@siri host siri.choukalos.com
 	handle @siri {
 		# Optional health check
 		handle /health {
-			reverse_proxy http://ai-harness:8090
+			# Old: reverse_proxy http://ai-harness:8090
+			reverse_proxy http://skill-runner:8091
 		}
 
 		# Siri API requires auth
@@ -88,7 +90,8 @@
 			@noAuth not header X-API-Key {$SIRI_API_KEY}
 			respond @noAuth "Unauthorized" 401
 
-			reverse_proxy http://ai-harness:8090
+			# Old: reverse_proxy http://ai-harness:8090
+			reverse_proxy http://skill-runner:8091
 		}
 
 		respond "Not Found" 404

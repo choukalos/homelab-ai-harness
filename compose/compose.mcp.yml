@@ -2,6 +2,8 @@
 # Each MCP server runs as a standalone container on the ai-net network.
 # LiteLLM reaches them by service name (e.g. http://mcp_knowledge:8000/mcp).
 
+name: ai-mcp
+
 services:
 
   mcp_knowledge:
