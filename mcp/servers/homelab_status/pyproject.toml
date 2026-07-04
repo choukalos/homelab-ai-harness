@@ -1,0 +1,24 @@
+[project]
+name = "mcp-homelab-status"
+version = "0.1.0"
+description = "MCP server for Docker and system monitoring"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "mcp>=1.0.0",
+    "docker>=7.0",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+mcp-homelab-status = "server:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

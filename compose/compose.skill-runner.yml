@@ -25,6 +25,7 @@ services:
       - MCP_SERVER_FILESYSTEM_READONLY_URL=http://mcp_filesystem_readonly:8000
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
+      - HARNESS_URL=http://ai-harness:8090
     volumes:
       - ../skills:/app/skills:ro
       - /home/chuck/data/media:/home/chuck/data/media
