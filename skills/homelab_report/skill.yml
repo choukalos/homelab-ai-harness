@@ -1,0 +1,17 @@
+name: homelab_report
+version: "1.0"
+description: "Generate a homelab infrastructure health report. Checks Docker containers, system resources, and service status."
+inputs:
+  - name: scope
+    type: string
+    required: false
+    enum: [full, containers, system]
+    default: full
+    description: "Report scope: full (all), containers (Docker only), system (CPU/RAM/disk only)."
+tools:
+  - mcp_homelab_status
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/homelab_reports/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 120
