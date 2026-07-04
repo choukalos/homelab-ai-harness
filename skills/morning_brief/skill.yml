@@ -1,0 +1,28 @@
+name: morning_brief
+version: "1.0"
+description: "Daily morning brief: news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary."
+inputs:
+  - name: interests
+    type: string
+    required: false
+    description: "Comma-separated list of interest topics. Overrides default_interests if provided."
+  - name: max_items
+    type: integer
+    required: false
+    default: 5
+    description: "Maximum number of news items per interest category."
+config:
+  default_interests:
+    - "technology news"
+    - "smart home security"
+    - "Ring SimpliSafe Nest Arlo ADT news"
+    - "Xfinity press release"
+    - "artificial intelligence news"
+  format: short_and_sweet
+tools:
+  - mcp_search
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/homelab_reports/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 180  # seconds

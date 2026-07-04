@@ -52,6 +52,7 @@ LITELLM_BASE_URL = os.environ.get(
     "LITELLM_BASE_URL", "http://litellm-proxy:4000"
 )
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
+HARNESS_URL = os.environ.get("HARNESS_URL", "http://ai-harness:8090")
 
 # ---------------------------------------------------------------------------
 # Job Model
@@ -149,6 +150,7 @@ KNOWN_SKILLS = [
     "family_kb_ingest",
     "morning_brief",
     "homelab_report",
+    "demo_workflow",
 ]
 
 
@@ -852,6 +854,7 @@ def _artifact_subdir_for_skill(skill: str) -> Optional[str]:
         "homelab_report": "homelab_reports",
         "siri_ask": "siri_outputs",
         "family_kb_ingest": None,  # ingests into Qdrant, no file artifact
+        "demo_workflow": "presentations",
     }
     return mapping.get(skill)
 
