@@ -8,8 +8,9 @@ inputs:
     description: "The presentation topic or title."
   - name: slide_count
     type: integer
-    required: true
-    description: "Number of slides to generate (1-20)."
+    required: false
+    default: 8
+    description: "Number of slides to generate (1-50)."
   - name: style
     type: string
     required: false

@@ -1,0 +1,2 @@
+[console_scripts]
+mcp-search = server:main

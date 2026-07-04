@@ -1,0 +1,61 @@
+# Docker Compose for MCP (Model Context Protocol) server containers
+# Each MCP server runs as a standalone container on the ai-net network.
+# LiteLLM reaches them by service name (e.g. http://mcp_knowledge:8000/mcp).
+
+services:
+
+  mcp_knowledge:
+    build:
+      context: ../mcp/servers/knowledge
+    container_name: mcp_knowledge
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_TIMEOUT=15
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  mcp_search:
+    build:
+      context: ../mcp/servers/search
+    container_name: mcp_search
+    environment:
+      - SEARXNG_URL=http://searxng:8080
+      - SEARXNG_TIMEOUT=10
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  mcp_crawl:
+    build:
+      context: ../mcp/servers/crawl
+    container_name: mcp_crawl
+    environment:
+      - CRAWL4AI_URL=http://crawl4ai:11235
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  mcp_filesystem_readonly:
+    build:
+      context: ../mcp/servers/filesystem_readonly
+    container_name: mcp_filesystem_readonly
+    volumes:
+      - /home/chuck/workspace:/home/chuck/workspace:ro
+      - /home/chuck/data/media:/home/chuck/data/media:ro
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  # --- Future MCP servers ---------------------------------------------------
+  # mcp_presentation:
+  #   build:
+  #     context: ../mcp/servers/presentation
+  #   container_name: mcp_presentation
+  #   restart: unless-stopped
+  #   networks:
+  #     - ai-net
+
+networks:
+  ai-net:
+    external: true
