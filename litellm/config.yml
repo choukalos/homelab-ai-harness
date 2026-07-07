@@ -51,8 +51,8 @@ model_list:
     model_info:
       input_cost_per_token: 0.00000075
       output_cost_per_token: 0.0000045
-      cache_creation_input_token_cost: 0.00000075
-      cache_read_input_token_cost: 0.000000075
+      cache_creation_input_token_cost: 0.000000075
+      cache_read_input_token_cost: 0.0000000075
     litellm_params:
       model: openai/qwen36-27b
       api_base: http://matrix:8000/v1
@@ -63,8 +63,8 @@ model_list:
     model_info:
       input_cost_per_token: 0.00000025
       output_cost_per_token: 0.000002
-      cache_creation_input_token_cost: 0.00000025
-      cache_read_input_token_cost: 0.000000025
+      cache_creation_input_token_cost: 0.000000025
+      cache_read_input_token_cost: 0.0000000025
     litellm_params:
       model: ollama/gemma4:26b
       api_base: http://matrix:11434
@@ -86,6 +86,14 @@ model_list:
       api_base: http://matrix:11434
       api_key: "unused"
       num_retries: 2
+
+  - model_name: hf-sd3
+    litellm_params:
+      model: huggingface/stabilityai/stable-diffusion-3-medium
+      api_key: os.environ/HF_TOKEN
+      num_retries: 1
+      fallbacks:
+        - {model: openai/comfyui-flux, api_base: http://matrix:8188, api_key: ""}
 
 general_settings:
   master_key: "os.environ/LITELLM_MASTER_KEY"
@@ -153,6 +161,18 @@ mcp_servers:
   mcp_homelab_status:
     transport: http
     url: http://mcp_homelab_status:8000/mcp
+    allow_all_keys: true
+
+  # ── Filesystem (Read/Write, scoped to /home/chuck/workspace) ────
+  mcp_filesystem:
+    transport: http
+    url: http://mcp_filesystem:8000/mcp
+    allow_all_keys: true
+
+  # ── Media (Image Generation/Editing via LiteLLM proxy) ──────────
+  mcp_media:
+    transport: http
+    url: http://mcp_media:8000/mcp
     allow_all_keys: true
 
 

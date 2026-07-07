@@ -160,7 +160,7 @@ NOT committed to GitHub.
     .my.cnf
 
   skills/                   # Skill runner + skill implementations
-    runner/                 # FastAPI orchestration API
+    runner/                 # FastAPI orchestration API + chat gateway + scheduler
     siri_ask/               # Quick mobile Q&A
     deep_research/          # Multi-source cited research
     presentation_build/     # Presenton-powered presentations
@@ -171,6 +171,10 @@ NOT committed to GitHub.
     family_kb_ingest/       # KB ingestion (approval gate)
     code_review/            # Code quality review
     repo_maintenance/       # Repo hygiene (approval gate)
+    siri_chat/              # Enhanced chat with MCP tool access
+    presentation_update/    # Update existing presentations
+    demo_browse/            # Search/browse demos by keyword
+    research_brief/         # Lightweight web research + summarization
 
   mcp/                      # MCP server implementations
     servers/                # Individual MCP server dirs
@@ -417,7 +421,7 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **streamable HTTP** transport.
 
-**Six MCP servers are currently deployed** via `compose.mcp.yml`.
+**Eight MCP servers are currently deployed** via `compose.mcp.yml` (29 tools total).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -427,8 +431,9 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_filesystem_readonly` | Local filesystem | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_mysql` | MySQL (InvestorHub) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_homelab_status` | Docker API + Victoria Metrics | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_media` | Image gen/edit via LiteLLM | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
-| `mcp_media` | ComfyUI (Matrix) | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
 **Architecture:**
@@ -439,6 +444,8 @@ Skill Runner (:8091)  →  Streamable HTTP  →  mcp_search container
                                            mcp_filesystem_readonly container
                                            mcp_mysql container
                                            mcp_homelab_status container
+                                           mcp_filesystem container
+                                           mcp_media container
 
 LiteLLM (:4000)       →  Streamable HTTP  →  same MCP servers (for tool routing)
 ```
@@ -465,16 +472,28 @@ Each server has its own directory under `mcp/servers/<name>/` with:
 
 Custom FastAPI-based AI orchestration layer. Runs on port 8091 via `compose.skill-runner.yml`.
 
-Provides job lifecycle API:
+Provides the **chat gateway** (unified Siri/API interface) and the **job lifecycle API**:
 ```
-POST /skills/{skill_name}          — Launch a skill job
-GET  /skills/jobs/{job_id}         — Get job status
-GET  /skills/jobs/{job_id}/artifact — Retrieve artifact file
-POST /skills/jobs/{job_id}/approve  — Approve a job at an approval gate
-POST /skills/jobs/{job_id}/cancel   — Cancel a job
+POST /api/chat                        — Unified chat with intent detection
+GET  /api/jobs/{job_id}               — Poll async job status
+POST /api/schedule                    — Create a recurring schedule
+GET  /api/schedule                    — List all schedules
+DELETE /api/schedule/{id}             — Remove a schedule
+POST /api/schedule/{id}/run-now       — Trigger a schedule immediately
+```
+
+**Job lifecycle API** (direct skill invocation):
+```
+POST /skills/{skill_name}             — Launch a skill job
+GET  /skills/jobs/{job_id}            — Get job status
+GET  /skills/jobs/{job_id}/artifact   — Retrieve artifact file
+POST /skills/jobs/{job_id}/approve    — Approve a job at an approval gate
+POST /skills/jobs/{job_id}/cancel     — Cancel a job
 ```
 
 Skills compose MCP tools into controlled agentic workflows. The skill runner calls MCP servers **directly** over streamable HTTP on the Docker network (no LiteLLM proxy for tool calls).
+
+**Built-in scheduler:** A background thread (`scheduler.py`) checks a JSON config file every 60 seconds and dispatches matching scheduled jobs.
 
 ### Skills Inventory
 
@@ -490,6 +509,14 @@ Skills compose MCP tools into controlled agentic workflows. The skill runner cal
 | `family_kb_ingest` | — | **Yes** | CLI, Pi, n8n | Curated KB ingestion into Qdrant |
 | `code_review` | — | No | CLI, Pi, n8n | Code quality review |
 | `repo_maintenance` | — | **Yes** | CLI, Pi, n8n | Repository health, cleanup |
+| `siri_chat` | mcp_search, mcp_knowledge, mcp_homelab_status | No | Siri | Enhanced chat with MCP tool access |
+| `presentation_update` | model_chat + Presenton API | No | Siri | Update existing presentations (tone, content, etc.) |
+| `demo_browse` | Local filesystem | No | Siri | Search/browse demos by keyword |
+| `research_brief` | mcp_search | No | Siri | Lightweight web research + summarization (faster than deep_research) |
+| `siri_chat` | mcp_search, mcp_knowledge, mcp_homelab_status | No | Siri | Enhanced chat with MCP tool access |
+| `presentation_update` | model_chat + Presenton API | No | Siri | Update existing presentations (tone, content, etc.) |
+| `demo_browse` | Local filesystem | No | Siri | Search/browse demos by keyword in `/home/chuck/data/media/demos/` |
+| `research_brief` | mcp_search | No | Siri | Lightweight web research with summarization (faster than deep_research) |
 
 Skills with **approval gates** (`family_kb_ingest`, `repo_maintenance`) pause at `awaiting_approval` until explicitly approved via the API.
 
@@ -508,9 +535,9 @@ Connected to LiteLLM.
 | Service | Purpose | Status |
 |---|---|---|
 | LiteLLM | Model gateway + MCP gateway | ✅ Running |
-| MCP servers | Reusable tool providers (standalone containers) | ✅ 6 deployed |
-| Skill runner | Agentic workflow orchestration | ✅ Running (:8091) |
-| AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ✅ Running (:8090) |
+| MCP servers | Reusable tool providers (standalone containers) | ✅ 8 deployed (29 tools) |
+| Skill runner | Agentic workflow orchestration + chat gateway + scheduler | ✅ Running (:8091) |
+| AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ⏳ Decommission pending |
 | Open Web UI | Family/local AI chat interface | ✅ Running |
 | Qdrant | Vector DB for knowledge base | ✅ Running |
 | SearXNG | Privacy-first web search | ✅ Running |
@@ -528,31 +555,31 @@ Connected to LiteLLM.
 
 Two pathways coexist:
 
-**1. AI Harness (legacy, current public path):**
+**1. Skill Runner (current public path):**
+```
+iPhone Shortcut  →  Cloudflare Tunnel  →  Caddy  →  Skill Runner (:8091)  →  MCP servers / LiteLLM
+```
+Endpoint: `POST https://siri.choukalos.com/api/chat`
+Auth: `X-API-Key` header (`SIRI_API_KEY` from `.env`)
+
+Intent routing in `_detect_intent()` auto-detects from the user's `text`:
+- **chat** — General Q&A via `siri_chat` skill
+- **deep-research** — Multi-source deep research (~180s)
+- **research-brief** — Lightweight web research (~30-60s)
+- **build-presentation** — Create a new presentation deck
+- **update-presentation** — Update an existing presentation (tone, content)
+- **find-demos** / **list-demos** — Browse/search demos
+- **list-presentations** — List existing presentations
+- **media-generate** — Generate an image (requires image model key)
+
+**2. AI Harness (legacy, decommission pending):**
 ```
 iPhone Shortcut  →  Cloudflare Tunnel  →  Caddy  →  AI Harness (:8090)  →  LiteLLM / Celery
 ```
-Endpoint: `POST https://siri.choukalos.com/siri/chat`
-Auth: `X-API-Key` header (`SIRI_API_KEY` from `.env`)
-
-Intent routing inside the harness auto-detects from the user's `text`:
-- **chat** — General Q&A (instant)
-- **research** — Quick research brief (~10-30s)
-- **deep_research** — Multi-source deep research (~180s, blocking)
-- **image** — Image generation via ComfyUI (~30-60s)
-- **demo** — One-page HTML demo (instant)
-- **create_demo** — Full demo pipeline (async, Celery, 2-5 min)
-- **list_demos** / **find_demo** — Demo listing & search
-- **demo_quality** / **demo_complexity** — Demo metadata queries
-- **create_presentation** — Presentation generation (async, Celery, 3-5 min)
-- **update_presentation** — Update existing presentation (async, Celery)
-- **list_presentations** / **find_presentation** — Presentation listing & search
-
-**2. Skill Runner (new path, port 8091):**
+Once Caddy cutover is confirmed stable on the skill runner, decommission:
+```bash
+docker compose -f compose/compose.ai-harness.yml down
 ```
-Siri →  siri.choukalos.com  →  Caddy  →  Skill Runner (:8091)  →  MCP servers / LiteLLM
-```
-The skill runner is the future gateway. Skills like `siri_ask`, `deep_research`, and `presentation_build` run as orchestrated jobs. Caddy routing to the skill runner will be added when the cutover is ready.
 
 See [README_SIRI.md](README_SIRI.md) for full Siri API reference and Shortcut configuration.
 
@@ -619,6 +646,8 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_filesystem_readonly` — Read-only filesystem access
 - `mcp_mysql` — Database queries via MySQL (InvestorHub)
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
+- `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
+- `mcp_media` — Image generation/editing via Hugging Face (fallback to ComfyUI on rate-limit)
 
 All run on `ai-net`. Accessed by the skill runner over streamable HTTP.
 

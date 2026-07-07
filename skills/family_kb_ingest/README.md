@@ -49,7 +49,7 @@ python skill.py --file-path /path/to/document.pdf --harness-url http://localhost
 
 | Environment Variable              | Default                      | Description                         |
 |-----------------------------------|------------------------------|-------------------------------------|
-| FAMILY_KB_INGEST_HARNESS_URL      | `http://ai-harness:8090`     | AI Harness base URL                 |
+| FAMILY_KB_INGEST_HARNESS_URL      | `http://skill-runner:8091`     | Skill Runner base URL             |
 | FAMILY_KB_INGEST_MAX_RUNTIME      | `300`                        | Max runtime in seconds              |
 
 ## File Validation

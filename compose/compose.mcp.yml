@@ -75,6 +75,31 @@ services:
     networks:
       - ai-net
 
+  # --- New MCP servers -------------------------------------------------------
+
+  mcp_filesystem:
+    build:
+      context: ../mcp/servers/filesystem
+    container_name: mcp_filesystem
+    volumes:
+      - /home/chuck/workspace:/home/chuck/workspace
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  mcp_media:
+    build:
+      context: ../mcp/servers/media
+    container_name: mcp_media
+    environment:
+      - LITELLM_BASE_URL=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - COMFYUI_BASE_URL=http://matrix:8188
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:

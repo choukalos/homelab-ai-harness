@@ -1962,3 +1962,890 @@ I need to follow the structure:
 2026-07-03 21:53:58,637 INFO skill_runner: Job 74794afc9598: Merged result key 'report' into job params
 2026-07-03 21:53:58,637 INFO skill_runner: Job 74794afc9598 completed successfully.
 2026-07-03 21:53:58,638 INFO skill_runner: Job 74794afc9598 launched for skill 'deep_research'.
+2026-07-05 15:15:18,363 INFO skill_runner: Chat request: intent=chat text=hello model=matrix-coder
+2026-07-05 15:15:19,248 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:15:22,268 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:15:23,203 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:15:23,205 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:15:23,229 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 15:15:23,231 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 15:17:05,497 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:17:09,445 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:17:09,447 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:17:09,481 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 15:17:09,482 INFO skill_runner: Streamable HTTP MCP call: server=mcp_knowledge base_url=http://mcp_knowledge:8000 tool=family_kb_search
+2026-07-05 15:17:09,501 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 15:17:11,825 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:17:11,827 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_status
+2026-07-05 15:17:11,861 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 15:17:13,320 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:17:58,793 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:18:01,594 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:18:01,596 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:18:01,630 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:18:02,880 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:18:02,882 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:18:02,917 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:18:05,052 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:18:05,053 INFO skill_runner: Streamable HTTP MCP call: server=mcp_knowledge base_url=http://mcp_knowledge:8000 tool=family_kb_search
+2026-07-05 15:18:05,085 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:18:59,060 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:19:00,584 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:19:00,586 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:19:00,619 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:19:03,531 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:19:03,533 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:19:03,563 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:19:05,666 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:19:05,668 INFO skill_runner: Streamable HTTP MCP call: server=mcp_knowledge base_url=http://mcp_knowledge:8000 tool=family_kb_search
+2026-07-05 15:19:05,699 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:20:32,855 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:20:33,786 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:20:33,787 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:20:33,808 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:20:33,949 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-07-05 15:20:33,950 ERROR skill_runner: Chat error: Client error '400 Bad Request' for url 'http://litellm-proxy:4000/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+2026-07-05 15:21:21,414 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:21:22,848 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:21:22,850 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:21:22,883 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:21:22,973 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-07-05 15:21:22,975 ERROR skill_runner: Chat error: Client error '400 Bad Request' for url 'http://litellm-proxy:4000/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+2026-07-05 15:22:02,075 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:22:03,156 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:22:03,158 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:22:03,189 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:22:05,182 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:26:03,914 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-coder
+2026-07-05 15:26:05,660 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 15:26:05,661 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 15:26:05,692 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 15:26:06,417 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:43:22,311 INFO skill_runner: Chat request: intent=chat text=What is the capital of France? model=matrix-gemma4-moe
+2026-07-05 18:43:23,095 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:43:23,096 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:43:23,118 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:43:23,972 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:02,059 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-gemma4-moe
+2026-07-05 18:44:05,347 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:30,900 INFO skill_runner: Chat request: intent=chat text=search for thor homelab setup model=matrix-gemma4-moe
+2026-07-05 18:44:31,982 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:49,351 INFO skill_runner: Chat request: intent=chat text=What is 2+2? model=matrix-gemma4-moe
+2026-07-05 18:44:50,040 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:50,042 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:44:50,078 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:44:52,205 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:54,233 INFO skill_runner: Chat request: intent=chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:44:54,884 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:44:54,885 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:44:54,922 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:44:59,559 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:48:32,268 INFO skill_runner: Chat request: intent=chat text=What is the capital of France? model=matrix-gemma4-moe
+2026-07-05 18:48:34,219 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:48:36,062 INFO skill_runner: Chat request: intent=chat text=--model model=matrix-gemma4-moe
+2026-07-05 18:48:47,044 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:48:49,502 INFO skill_runner: Chat request: intent=chat text=--intent model=matrix-gemma4-moe
+2026-07-05 18:49:01,165 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:49:05,068 INFO skill_runner: Chat request: intent=chat text=siri-chat model=matrix-gemma4-moe
+2026-07-05 18:49:12,542 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:49:36,816 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:49:36,817 INFO skill_runner: Job e07db6d389e1: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:49:36,817 INFO skill_runner: Job e07db6d389e1: Executing skill 'siri_chat'
+2026-07-05 18:49:36,817 INFO skill_runner: Job e07db6d389e1: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:49:36,818 INFO skill_runner: Job e07db6d389e1: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:49:36,836 INFO skill_runner: Job e07db6d389e1: Skill module imported successfully
+2026-07-05 18:49:36,836 INFO skill_runner: Job e07db6d389e1: Passing sync client as 'litellm_client'
+2026-07-05 18:49:36,837 INFO skill_runner: Job e07db6d389e1: Invoking skill.run()...
+2026-07-05 18:49:36,837 INFO skill_runner: Job e07db6d389e1: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:49:36,837 INFO skill_runner: Job e07db6d389e1: Model: matrix-coder
+2026-07-05 18:49:36,837 INFO skill_runner: Job e07db6d389e1: Max tool rounds: 3
+2026-07-05 18:49:38,277 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:49:38,280 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:49:38,314 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 18:49:38,317 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 18:49:38,321 INFO skill_runner: Job e07db6d389e1: Runtime error: LiteLLM chat_completion failed: Event loop is closed
+2026-07-05 18:49:38,321 INFO skill_runner: Job e07db6d389e1: Skill.run() returned: ['answer', 'error', 'sources', 'model_alias']
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1: Skill reported error: LiteLLM chat_completion failed: Event loop is closed
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1: Skill answer (used as summary): I couldn't reach my backend right now. Please try again in a moment.
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1: Merged result key 'sources' into job params
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1: Merged result key 'answer' into job params
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1 failed: LiteLLM chat_completion failed: Event loop is closed
+2026-07-05 18:49:38,322 INFO skill_runner: Job e07db6d389e1 launched for skill 'siri_chat'.
+2026-07-05 18:50:44,299 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:50:44,300 INFO skill_runner: Job 9a8d46b0cc19: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:50:44,300 INFO skill_runner: Job 9a8d46b0cc19: Executing skill 'siri_chat'
+2026-07-05 18:50:44,300 INFO skill_runner: Job 9a8d46b0cc19: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:50:44,300 INFO skill_runner: Job 9a8d46b0cc19: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:50:44,311 INFO skill_runner: Job 9a8d46b0cc19: Skill module imported successfully
+2026-07-05 18:50:44,312 INFO skill_runner: Job 9a8d46b0cc19: Passing sync client as 'litellm_client'
+2026-07-05 18:50:44,312 INFO skill_runner: Job 9a8d46b0cc19: Invoking skill.run()...
+2026-07-05 18:50:44,312 INFO skill_runner: Job 9a8d46b0cc19: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:50:44,312 INFO skill_runner: Job 9a8d46b0cc19: Model: matrix-coder
+2026-07-05 18:50:44,312 INFO skill_runner: Job 9a8d46b0cc19: Max tool rounds: 3
+2026-07-05 18:50:44,314 INFO skill_runner: Job 9a8d46b0cc19: Runtime error: LiteLLM chat_completion failed: _SyncLiteLLMWrapper.chat_completion.<locals>.<lambda>() got an unexpected keyword argument 'tools'
+2026-07-05 18:50:44,314 INFO skill_runner: Job 9a8d46b0cc19: Skill.run() returned: ['answer', 'error', 'sources', 'model_alias']
+2026-07-05 18:50:44,314 INFO skill_runner: Job 9a8d46b0cc19: Skill reported error: LiteLLM chat_completion failed: _SyncLiteLLMWrapper.chat_completion.<locals>.<lambda>() got an unexpected keyword argument 'tools'
+2026-07-05 18:50:44,315 INFO skill_runner: Job 9a8d46b0cc19: Skill answer (used as summary): I couldn't reach my backend right now. Please try again in a moment.
+2026-07-05 18:50:44,315 INFO skill_runner: Job 9a8d46b0cc19: Merged result key 'sources' into job params
+2026-07-05 18:50:44,315 INFO skill_runner: Job 9a8d46b0cc19: Merged result key 'answer' into job params
+2026-07-05 18:50:44,315 INFO skill_runner: Job 9a8d46b0cc19 failed: LiteLLM chat_completion failed: _SyncLiteLLMWrapper.chat_completion.<locals>.<lambda>() got an unexpected keyword argument 'tools'
+2026-07-05 18:50:44,315 INFO skill_runner: Job 9a8d46b0cc19 launched for skill 'siri_chat'.
+2026-07-05 18:52:20,459 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:52:20,459 INFO skill_runner: Job 79413b2f46f6: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:52:20,459 INFO skill_runner: Job 79413b2f46f6: Executing skill 'siri_chat'
+2026-07-05 18:52:20,460 INFO skill_runner: Job 79413b2f46f6: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:52:20,460 INFO skill_runner: Job 79413b2f46f6: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:52:20,471 INFO skill_runner: Job 79413b2f46f6: Skill module imported successfully
+2026-07-05 18:52:20,471 INFO skill_runner: Job 79413b2f46f6: Passing sync client as 'litellm_client'
+2026-07-05 18:52:20,472 INFO skill_runner: Job 79413b2f46f6: Invoking skill.run()...
+2026-07-05 18:52:20,472 INFO skill_runner: Job 79413b2f46f6: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:52:20,472 INFO skill_runner: Job 79413b2f46f6: Model: matrix-coder
+2026-07-05 18:52:20,472 INFO skill_runner: Job 79413b2f46f6: Max tool rounds: 3
+2026-07-05 18:52:21,550 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:52:21,552 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:52:21,574 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 406 Not Acceptable"
+2026-07-05 18:52:21,577 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 18:52:22,673 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:52:22,676 INFO skill_runner: Job 79413b2f46f6: Response generated (177 chars)
+2026-07-05 18:52:22,676 INFO skill_runner: Job 79413b2f46f6: Sources: 1 found
+2026-07-05 18:52:22,677 INFO skill_runner: Job 79413b2f46f6: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 18:52:22,677 INFO skill_runner: Job 79413b2f46f6: Skill answer (used as summary): 
+
+I'm sorry, but I'm currently unable to check the weather because the search tool is experiencing a technical error. Please try again later or check a weather website directly.
+2026-07-05 18:52:22,677 INFO skill_runner: Job 79413b2f46f6: Merged result key 'answer' into job params
+2026-07-05 18:52:22,677 INFO skill_runner: Job 79413b2f46f6: Merged result key 'sources' into job params
+2026-07-05 18:52:22,678 INFO skill_runner: Job 79413b2f46f6 completed successfully.
+2026-07-05 18:52:22,678 INFO skill_runner: Job 79413b2f46f6 launched for skill 'siri_chat'.
+2026-07-05 18:53:59,397 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:53:59,397 INFO skill_runner: Job fe788fc62c91: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:53:59,397 INFO skill_runner: Job fe788fc62c91: Executing skill 'siri_chat'
+2026-07-05 18:53:59,398 INFO skill_runner: Job fe788fc62c91: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:53:59,398 INFO skill_runner: Job fe788fc62c91: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:53:59,410 INFO skill_runner: Job fe788fc62c91: Skill module imported successfully
+2026-07-05 18:53:59,410 INFO skill_runner: Job fe788fc62c91: Passing sync client as 'litellm_client'
+2026-07-05 18:53:59,411 INFO skill_runner: Job fe788fc62c91: Invoking skill.run()...
+2026-07-05 18:53:59,411 INFO skill_runner: Job fe788fc62c91: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:53:59,411 INFO skill_runner: Job fe788fc62c91: Model: matrix-coder
+2026-07-05 18:53:59,411 INFO skill_runner: Job fe788fc62c91: Max tool rounds: 3
+2026-07-05 18:54:00,510 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:54:00,512 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:54:00,534 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:54:00,537 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 18:54:01,809 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:54:01,812 INFO skill_runner: Job fe788fc62c91: Response generated (172 chars)
+2026-07-05 18:54:01,813 INFO skill_runner: Job fe788fc62c91: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 18:54:01,813 INFO skill_runner: Job fe788fc62c91: Skill answer (used as summary): 
+
+I'm sorry, but I'm currently unable to check the weather because my search tool is experiencing a technical error. Please try again later or check a weather app directly.
+2026-07-05 18:54:01,813 INFO skill_runner: Job fe788fc62c91: Merged result key 'sources' into job params
+2026-07-05 18:54:01,814 INFO skill_runner: Job fe788fc62c91: Merged result key 'answer' into job params
+2026-07-05 18:54:01,814 INFO skill_runner: Job fe788fc62c91 completed successfully.
+2026-07-05 18:54:01,814 INFO skill_runner: Job fe788fc62c91 launched for skill 'siri_chat'.
+2026-07-05 18:55:15,650 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:55:15,650 INFO skill_runner: Job 412381be53b0: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:55:15,650 INFO skill_runner: Job 412381be53b0: Executing skill 'siri_chat'
+2026-07-05 18:55:15,651 INFO skill_runner: Job 412381be53b0: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:55:15,651 INFO skill_runner: Job 412381be53b0: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Skill module imported successfully
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Passing sync client as 'litellm_client'
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Invoking skill.run()...
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Model: matrix-coder
+2026-07-05 18:55:15,657 INFO skill_runner: Job 412381be53b0: Max tool rounds: 3
+2026-07-05 18:55:16,948 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:55:16,950 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:55:16,972 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:55:16,974 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 18:55:19,592 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0: Response generated (251 chars)
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0: Skill answer (used as summary): 
+
+I'm sorry, but I'm currently unable to retrieve the weather information due to a technical issue with my search tool. I recommend checking a reliable weather website or app like Weather.com or AccuW
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0: Merged result key 'sources' into job params
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0: Merged result key 'answer' into job params
+2026-07-05 18:55:19,594 INFO skill_runner: Job 412381be53b0 completed successfully.
+2026-07-05 18:55:19,595 INFO skill_runner: Job 412381be53b0 launched for skill 'siri_chat'.
+2026-07-05 18:56:16,372 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 18:56:16,372 INFO skill_runner: Job 0666e1023a4b: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 18:56:16,373 INFO skill_runner: Job 0666e1023a4b: Executing skill 'siri_chat'
+2026-07-05 18:56:16,373 INFO skill_runner: Job 0666e1023a4b: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 18:56:16,373 INFO skill_runner: Job 0666e1023a4b: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 18:56:16,385 INFO skill_runner: Job 0666e1023a4b: Skill module imported successfully
+2026-07-05 18:56:16,386 INFO skill_runner: Job 0666e1023a4b: Passing sync client as 'litellm_client'
+2026-07-05 18:56:16,386 INFO skill_runner: Job 0666e1023a4b: Invoking skill.run()...
+2026-07-05 18:56:16,386 INFO skill_runner: Job 0666e1023a4b: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 18:56:16,386 INFO skill_runner: Job 0666e1023a4b: Model: matrix-gemma4-moe
+2026-07-05 18:56:16,387 INFO skill_runner: Job 0666e1023a4b: Max tool rounds: 3
+2026-07-05 18:56:23,629 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 18:56:23,631 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 18:56:23,666 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 18:56:23,669 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 18:58:16,387 INFO skill_runner: Job 0666e1023a4b: Runtime error: LiteLLM chat_completion failed: siri_chat exceeded 120s max runtime
+2026-07-05 18:58:16,387 INFO skill_runner: Job 0666e1023a4b: Skill.run() returned: ['answer', 'error', 'sources', 'model_alias']
+2026-07-05 18:58:16,387 INFO skill_runner: Job 0666e1023a4b: Skill reported error: LiteLLM chat_completion failed: siri_chat exceeded 120s max runtime
+2026-07-05 18:58:16,388 INFO skill_runner: Job 0666e1023a4b: Skill answer (used as summary): I couldn't reach my backend right now. Please try again in a moment.
+2026-07-05 18:58:16,388 INFO skill_runner: Job 0666e1023a4b: Merged result key 'sources' into job params
+2026-07-05 18:58:16,388 INFO skill_runner: Job 0666e1023a4b: Merged result key 'answer' into job params
+2026-07-05 18:58:16,388 INFO skill_runner: Job 0666e1023a4b failed: LiteLLM chat_completion failed: siri_chat exceeded 120s max runtime
+2026-07-05 18:58:16,388 INFO skill_runner: Job 0666e1023a4b launched for skill 'siri_chat'.
+2026-07-05 19:29:00,498 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-coder
+2026-07-05 19:29:00,499 INFO skill_runner: Job c0db4821ed81: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:29:00,499 INFO skill_runner: Job c0db4821ed81: Executing skill 'siri_chat'
+2026-07-05 19:29:00,499 INFO skill_runner: Job c0db4821ed81: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:29:00,499 INFO skill_runner: Job c0db4821ed81: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:29:00,510 INFO skill_runner: Job c0db4821ed81: Skill module imported successfully
+2026-07-05 19:29:00,510 INFO skill_runner: Job c0db4821ed81: Passing sync client as 'litellm_client'
+2026-07-05 19:29:00,510 INFO skill_runner: Job c0db4821ed81: Invoking skill.run()...
+2026-07-05 19:29:00,510 INFO skill_runner: Job c0db4821ed81: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 19:29:00,511 INFO skill_runner: Job c0db4821ed81: Model: matrix-gemma4-moe
+2026-07-05 19:29:00,511 INFO skill_runner: Job c0db4821ed81: Max tool rounds: 3
+2026-07-05 19:29:13,667 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:29:13,669 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:29:13,691 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:29:13,694 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:29:16,417 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81: Response generated (990 chars)
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81: Skill answer (used as summary): {"thought": "The user has encountered an error message regarding MCP initialization. This is likely a technical issue with the system or communication between components, not a direct question that ca
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81: Merged result key 'sources' into job params
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81: Merged result key 'answer' into job params
+2026-07-05 19:29:16,421 INFO skill_runner: Job c0db4821ed81 completed successfully.
+2026-07-05 19:29:16,422 INFO skill_runner: Job c0db4821ed81 launched for skill 'siri_chat'.
+2026-07-05 19:30:06,039 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-coder
+2026-07-05 19:30:06,040 INFO skill_runner: Job 4d8a2c9493cb: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:30:06,040 INFO skill_runner: Job 4d8a2c9493cb: Executing skill 'siri_chat'
+2026-07-05 19:30:06,040 INFO skill_runner: Job 4d8a2c9493cb: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:30:06,040 INFO skill_runner: Job 4d8a2c9493cb: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:30:06,051 INFO skill_runner: Job 4d8a2c9493cb: Skill module imported successfully
+2026-07-05 19:30:06,051 INFO skill_runner: Job 4d8a2c9493cb: Passing sync client as 'litellm_client'
+2026-07-05 19:30:06,052 INFO skill_runner: Job 4d8a2c9493cb: Invoking skill.run()...
+2026-07-05 19:30:06,052 INFO skill_runner: Job 4d8a2c9493cb: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 19:30:06,052 INFO skill_runner: Job 4d8a2c9493cb: Model: matrix-coder
+2026-07-05 19:30:06,052 INFO skill_runner: Job 4d8a2c9493cb: Max tool rounds: 3
+2026-07-05 19:30:07,302 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:30:07,304 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:30:07,329 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:30:07,333 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:30:08,246 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:30:08,248 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:30:08,277 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:30:08,279 INFO skill.siri_chat: Tool round 2 complete (1 tool calls executed)
+2026-07-05 19:30:10,186 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:30:10,189 INFO skill_runner: Job 4d8a2c9493cb: Response generated (304 chars)
+2026-07-05 19:30:10,189 INFO skill_runner: Job 4d8a2c9493cb: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:30:10,189 INFO skill_runner: Job 4d8a2c9493cb: Skill answer (used as summary): 
+
+I'm sorry, but I'm unable to access real-time weather information right now due to a technical issue with my search tools. For the most accurate and up-to-date weather in Tokyo, I recommend checking
+2026-07-05 19:30:10,189 INFO skill_runner: Job 4d8a2c9493cb: Merged result key 'sources' into job params
+2026-07-05 19:30:10,189 INFO skill_runner: Job 4d8a2c9493cb: Merged result key 'answer' into job params
+2026-07-05 19:30:10,190 INFO skill_runner: Job 4d8a2c9493cb completed successfully.
+2026-07-05 19:30:10,190 INFO skill_runner: Job 4d8a2c9493cb launched for skill 'siri_chat'.
+2026-07-05 19:31:11,089 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the weather in Tokyo today? model=matrix-coder
+2026-07-05 19:31:11,089 INFO skill_runner: Job b22e5a65f075: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:31:11,089 INFO skill_runner: Job b22e5a65f075: Executing skill 'siri_chat'
+2026-07-05 19:31:11,090 INFO skill_runner: Job b22e5a65f075: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:31:11,090 INFO skill_runner: Job b22e5a65f075: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:31:11,099 INFO skill_runner: Job b22e5a65f075: Skill module imported successfully
+2026-07-05 19:31:11,100 INFO skill_runner: Job b22e5a65f075: Passing sync client as 'litellm_client'
+2026-07-05 19:31:11,100 INFO skill_runner: Job b22e5a65f075: Invoking skill.run()...
+2026-07-05 19:31:11,100 INFO skill_runner: Job b22e5a65f075: Executing siri_chat: query='siri-chat: What is the weather in Tokyo today?...'
+2026-07-05 19:31:11,100 INFO skill_runner: Job b22e5a65f075: Model: matrix-coder
+2026-07-05 19:31:11,101 INFO skill_runner: Job b22e5a65f075: Max tool rounds: 3
+2026-07-05 19:31:12,834 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:31:12,837 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:31:12,877 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:31:12,878 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:31:15,208 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:31:15,209 INFO skill_runner: Job b22e5a65f075: Response generated (198 chars)
+2026-07-05 19:31:15,209 INFO skill_runner: Job b22e5a65f075: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:31:15,210 INFO skill_runner: Job b22e5a65f075: Skill answer (used as summary): 
+
+I'm sorry, but I'm currently unable to fetch the live weather data for Tokyo due to a temporary connection issue. Please check a reliable weather website or app for the most up-to-date conditions.
+2026-07-05 19:31:15,210 INFO skill_runner: Job b22e5a65f075: Merged result key 'sources' into job params
+2026-07-05 19:31:15,210 INFO skill_runner: Job b22e5a65f075: Merged result key 'answer' into job params
+2026-07-05 19:31:15,210 INFO skill_runner: Job b22e5a65f075 completed successfully.
+2026-07-05 19:31:15,210 INFO skill_runner: Job b22e5a65f075 launched for skill 'siri_chat'.
+2026-07-05 19:32:40,251 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the weather in Tokyo today? model=matrix-coder
+2026-07-05 19:32:40,251 INFO skill_runner: Job 558b81c526dc: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:32:40,251 INFO skill_runner: Job 558b81c526dc: Executing skill 'siri_chat'
+2026-07-05 19:32:40,252 INFO skill_runner: Job 558b81c526dc: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:32:40,252 INFO skill_runner: Job 558b81c526dc: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:32:40,260 INFO skill_runner: Job 558b81c526dc: Skill module imported successfully
+2026-07-05 19:32:40,261 INFO skill_runner: Job 558b81c526dc: Passing sync client as 'litellm_client'
+2026-07-05 19:32:40,261 INFO skill_runner: Job 558b81c526dc: Invoking skill.run()...
+2026-07-05 19:32:40,261 INFO skill_runner: Job 558b81c526dc: Executing siri_chat: query='siri-chat: What is the weather in Tokyo today?...'
+2026-07-05 19:32:40,261 INFO skill_runner: Job 558b81c526dc: Model: matrix-coder
+2026-07-05 19:32:40,261 INFO skill_runner: Job 558b81c526dc: Max tool rounds: 3
+2026-07-05 19:32:41,675 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:32:41,678 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:32:41,699 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:32:41,701 INFO skill.siri_chat: DEBUG: Tool search_web result_text=[{"type": "text", "text": "MCP initialize failed: Expecting value: line 1 column 1 (char 0)"}]
+2026-07-05 19:32:41,701 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:32:47,005 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:32:47,008 INFO skill_runner: Job 558b81c526dc: Response generated (204 chars)
+2026-07-05 19:32:47,008 INFO skill_runner: Job 558b81c526dc: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:32:47,009 INFO skill_runner: Job 558b81c526dc: Skill answer (used as summary): 
+
+I'm sorry, but I'm having trouble connecting to the internet right now, so I can't check the weather in Tokyo. You'll need to check a weather app or website directly for the most up-to-date informat
+2026-07-05 19:32:47,009 INFO skill_runner: Job 558b81c526dc: Merged result key 'sources' into job params
+2026-07-05 19:32:47,009 INFO skill_runner: Job 558b81c526dc: Merged result key 'answer' into job params
+2026-07-05 19:32:47,009 INFO skill_runner: Job 558b81c526dc completed successfully.
+2026-07-05 19:32:47,010 INFO skill_runner: Job 558b81c526dc launched for skill 'siri_chat'.
+2026-07-05 19:34:17,435 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the weather in Tokyo today? model=matrix-coder
+2026-07-05 19:34:17,435 INFO skill_runner: Job c344d7e8d817: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:34:17,435 INFO skill_runner: Job c344d7e8d817: Executing skill 'siri_chat'
+2026-07-05 19:34:17,436 INFO skill_runner: Job c344d7e8d817: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:34:17,436 INFO skill_runner: Job c344d7e8d817: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:34:17,442 INFO skill_runner: Job c344d7e8d817: Skill module imported successfully
+2026-07-05 19:34:17,443 INFO skill_runner: Job c344d7e8d817: Passing sync client as 'litellm_client'
+2026-07-05 19:34:17,443 INFO skill_runner: Job c344d7e8d817: Invoking skill.run()...
+2026-07-05 19:34:17,443 INFO skill_runner: Job c344d7e8d817: Executing siri_chat: query='siri-chat: What is the weather in Tokyo today?...'
+2026-07-05 19:34:17,443 INFO skill_runner: Job c344d7e8d817: Model: matrix-coder
+2026-07-05 19:34:17,443 INFO skill_runner: Job c344d7e8d817: Max tool rounds: 3
+2026-07-05 19:34:18,785 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:34:18,787 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:34:18,813 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:34:18,815 INFO skill_runner: MCP initialized (server: mcp_search, session: 433481a3344249ac9a4c454002ba4ed2)
+2026-07-05 19:34:18,819 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:34:18,820 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:34:18,824 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:34:19,841 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:34:19,847 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:34:19,849 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=5)
+2026-07-05 19:34:19,850 INFO skill.siri_chat: DEBUG: Tool search_web result_text={"result": [{"title": "Tokyo, Tokyo, Japan Weather Forecast - AccuWeather", "url": "https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396", "snippet": "10-Day Weather Forecast ; Today. 7/6. 81° 68° ; Tue. 7/7. 82° 71° ; Wed. 7/8. 84° 70° ; Thu. 7/9. 90° 73° ; Fri. 7/10. 88° 73°."}, {"title": "Tokyo, Tokyo, Japan Hourly Weather | AccuWeather", "url": "https://www.accuweather.com/en/jp/tokyo/226396/hourly-weather-forecast/226396", "snippet": "The current hour shows 71° with a Real
+2026-07-05 19:34:19,850 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:34:25,478 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:34:25,480 INFO skill_runner: Job c344d7e8d817: Response generated (150 chars)
+2026-07-05 19:34:25,480 INFO skill_runner: Job c344d7e8d817: Sources: 5 found
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817: Skill answer (used as summary): 
+
+It's currently 71°F (22°C) in Tokyo with light rain showers. The high for today is expected to be 81°F (27°C). This information is from AccuWeather.
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817: Merged result key 'sources' into job params
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817: Merged result key 'answer' into job params
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817 completed successfully.
+2026-07-05 19:34:25,481 INFO skill_runner: Job c344d7e8d817 launched for skill 'siri_chat'.
+2026-07-05 19:35:03,871 INFO skill_runner: Chat request: intent=chat text=What is 2+2? model=matrix-gemma4-moe
+2026-07-05 19:35:18,390 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:35:18,418 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 19:35:18,419 INFO skill_runner: Job db20b51204fe: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:35:18,419 INFO skill_runner: Job db20b51204fe: Executing skill 'siri_chat'
+2026-07-05 19:35:18,419 INFO skill_runner: Job db20b51204fe: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:35:18,419 INFO skill_runner: Job db20b51204fe: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:35:18,427 INFO skill_runner: Job db20b51204fe: Skill module imported successfully
+2026-07-05 19:35:18,427 INFO skill_runner: Job db20b51204fe: Passing sync client as 'litellm_client'
+2026-07-05 19:35:18,427 INFO skill_runner: Job db20b51204fe: Invoking skill.run()...
+2026-07-05 19:35:18,427 INFO skill_runner: Job db20b51204fe: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 19:35:18,428 INFO skill_runner: Job db20b51204fe: Model: matrix-coder
+2026-07-05 19:35:18,428 INFO skill_runner: Job db20b51204fe: Max tool rounds: 3
+2026-07-05 19:35:19,983 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:35:19,986 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:35:20,015 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:35:20,017 INFO skill_runner: MCP initialized (server: mcp_search, session: dfa8308f73ce464c906223c91c49fac1)
+2026-07-05 19:35:20,020 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:35:20,021 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:35:20,025 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:35:20,917 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:35:20,922 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:35:20,923 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=5)
+2026-07-05 19:35:20,924 INFO skill.siri_chat: DEBUG: Tool search_web result_text={"result": [{"title": "Tokyo, Tokyo, Japan Weather Forecast - AccuWeather", "url": "https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396", "snippet": "10-Day Weather Forecast ; Today. 7/6. 81° 68° ; Tue. 7/7. 82° 71° ; Wed. 7/8. 84° 70° ; Thu. 7/9. 90° 73° ; Fri. 7/10. 88° 73°."}, {"title": "Tokyo, Japan 14 day weather forecast - Time and Date", "url": "https://www.timeanddate.com/weather/japan/tokyo/ext", "snippet": "2 Week Extended Forecast in Tokyo, Japan ; 77 / 69 °F · Pass
+2026-07-05 19:35:20,924 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:35:23,789 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:35:23,792 INFO skill_runner: Job db20b51204fe: Response generated (244 chars)
+2026-07-05 19:35:23,792 INFO skill_runner: Job db20b51204fe: Sources: 5 found
+2026-07-05 19:35:23,792 INFO skill_runner: Job db20b51204fe: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:35:23,792 INFO skill_runner: Job db20b51204fe: Skill answer (used as summary): 
+
+It is currently cloudy in Tokyo with a temperature of 72°F (22°C). The forecast for today calls for a high of 81°F (27°C) and a low of 68°F (20°C), with overcast skies and a chance of passing shower
+2026-07-05 19:35:23,793 INFO skill_runner: Job db20b51204fe: Merged result key 'answer' into job params
+2026-07-05 19:35:23,793 INFO skill_runner: Job db20b51204fe: Merged result key 'sources' into job params
+2026-07-05 19:35:23,793 INFO skill_runner: Job db20b51204fe completed successfully.
+2026-07-05 19:35:23,793 INFO skill_runner: Job db20b51204fe launched for skill 'siri_chat'.
+2026-07-05 19:36:09,369 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the homelab setup? model=matrix-coder
+2026-07-05 19:36:09,369 INFO skill_runner: Job f4a7b402a45b: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:36:09,369 INFO skill_runner: Job f4a7b402a45b: Executing skill 'siri_chat'
+2026-07-05 19:36:09,369 INFO skill_runner: Job f4a7b402a45b: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:36:09,370 INFO skill_runner: Job f4a7b402a45b: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:36:09,377 INFO skill_runner: Job f4a7b402a45b: Skill module imported successfully
+2026-07-05 19:36:09,377 INFO skill_runner: Job f4a7b402a45b: Passing sync client as 'litellm_client'
+2026-07-05 19:36:09,377 INFO skill_runner: Job f4a7b402a45b: Invoking skill.run()...
+2026-07-05 19:36:09,377 INFO skill_runner: Job f4a7b402a45b: Executing siri_chat: query='siri-chat: What is the homelab setup?...'
+2026-07-05 19:36:09,378 INFO skill_runner: Job f4a7b402a45b: Model: matrix-coder
+2026-07-05 19:36:09,378 INFO skill_runner: Job f4a7b402a45b: Max tool rounds: 3
+2026-07-05 19:36:10,886 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:36:10,888 INFO skill_runner: Streamable HTTP MCP call: server=mcp_knowledge base_url=http://mcp_knowledge:8000 tool=family_kb_search
+2026-07-05 19:36:10,911 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:10,913 INFO skill_runner: MCP initialized (server: mcp_knowledge, session: 383e9f8afea248669e02754b5bffd1ea)
+2026-07-05 19:36:10,917 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:36:10,918 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:36:10,922 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:10,927 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:36:10,933 INFO httpx: HTTP Request: DELETE http://mcp_knowledge:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:36:10,934 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_knowledge, tool=family_kb_search, items=1)
+2026-07-05 19:36:10,935 INFO skill.siri_chat: DEBUG: Tool family_kb_search result_text=Unknown tool: family_kb_search
+2026-07-05 19:36:10,936 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:36:13,031 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:36:13,034 INFO skill_runner: Streamable HTTP MCP call: server=mcp_knowledge base_url=http://mcp_knowledge:8000 tool=family_kb_ask
+2026-07-05 19:36:13,055 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:13,056 INFO skill_runner: MCP initialized (server: mcp_knowledge, session: c133c914702d4262997d47a6711643d5)
+2026-07-05 19:36:13,060 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:36:13,062 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:36:13,066 INFO httpx: HTTP Request: POST http://mcp_knowledge:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:13,069 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:36:13,075 INFO httpx: HTTP Request: DELETE http://mcp_knowledge:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:36:13,077 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_knowledge, tool=family_kb_ask, items=1)
+2026-07-05 19:36:13,078 INFO skill.siri_chat: DEBUG: Tool family_kb_ask result_text=Unknown tool: family_kb_ask
+2026-07-05 19:36:13,078 INFO skill.siri_chat: Tool round 2 complete (1 tool calls executed)
+2026-07-05 19:36:14,312 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:36:14,314 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_status
+2026-07-05 19:36:14,344 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:14,346 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: cdae54f33c024e978f841a296c458a47)
+2026-07-05 19:36:14,350 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:36:14,351 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:36:14,354 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:36:14,356 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:36:14,360 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:36:14,362 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_homelab_status, tool=docker_status, items=1)
+2026-07-05 19:36:14,363 INFO skill.siri_chat: DEBUG: Tool docker_status result_text=Unknown tool: docker_status
+2026-07-05 19:36:14,363 INFO skill.siri_chat: Tool round 3 complete (1 tool calls executed)
+2026-07-05 19:36:24,713 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:36:24,715 INFO skill_runner: Job f4a7b402a45b: Response generated (0 chars)
+2026-07-05 19:36:24,715 INFO skill_runner: Job f4a7b402a45b: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:36:24,715 INFO skill_runner: Job f4a7b402a45b: Skill answer (used as summary): 
+2026-07-05 19:36:24,715 INFO skill_runner: Job f4a7b402a45b: Merged result key 'answer' into job params
+2026-07-05 19:36:24,715 INFO skill_runner: Job f4a7b402a45b: Merged result key 'sources' into job params
+2026-07-05 19:36:24,716 INFO skill_runner: Job f4a7b402a45b completed successfully.
+2026-07-05 19:36:24,716 INFO skill_runner: Job f4a7b402a45b launched for skill 'siri_chat'.
+2026-07-05 19:37:04,430 INFO skill_runner: Chat request: intent=chat text=What is 2+2? model=matrix-gemma4-moe
+2026-07-05 19:37:06,170 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:06,337 INFO skill_runner: Chat request: intent=siri-chat text=What is the latest news about OpenAI? model=matrix-gemma4-moe
+2026-07-05 19:37:06,337 INFO skill_runner: Job f7790fde8bd5: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:37:06,337 INFO skill_runner: Job f7790fde8bd5: Executing skill 'siri_chat'
+2026-07-05 19:37:06,338 INFO skill_runner: Job f7790fde8bd5: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:37:06,338 INFO skill_runner: Job f7790fde8bd5: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:37:06,348 INFO skill_runner: Job f7790fde8bd5: Skill module imported successfully
+2026-07-05 19:37:06,348 INFO skill_runner: Job f7790fde8bd5: Passing sync client as 'litellm_client'
+2026-07-05 19:37:06,349 INFO skill_runner: Job f7790fde8bd5: Invoking skill.run()...
+2026-07-05 19:37:06,349 INFO skill_runner: Job f7790fde8bd5: Executing siri_chat: query='What is the latest news about OpenAI?...'
+2026-07-05 19:37:06,349 INFO skill_runner: Job f7790fde8bd5: Model: matrix-coder
+2026-07-05 19:37:06,349 INFO skill_runner: Job f7790fde8bd5: Max tool rounds: 3
+2026-07-05 19:37:07,166 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:07,169 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:37:07,193 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:07,195 INFO skill_runner: MCP initialized (server: mcp_search, session: 191130a090bc4562ab98317aea506c98)
+2026-07-05 19:37:07,199 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:37:07,200 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:37:07,204 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:08,619 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:37:08,624 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:37:08,626 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=5)
+2026-07-05 19:37:08,627 INFO skill.siri_chat: DEBUG: Tool search_web result_text={"result": [{"title": "OpenAI News", "url": "https://openai.com/news/", "snippet": "Stay up to speed on the rapid advancement of AI technology and the benefits it offers to humanity."}, {"title": "OpenAI News | Today's Latest Stories - Reuters", "url": "https://www.reuters.com/technology/openai/", "snippet": "SoftBank Group has ​reopened talks with a consortium of lenders for a $10 billion loan backed by its stake in OpenAI, after earlier attempts ‌to secure a ..."}, {"title": "OpenAI Release No
+2026-07-05 19:37:08,627 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:37:10,993 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:10,995 INFO skill_runner: Job f7790fde8bd5: Response generated (545 chars)
+2026-07-05 19:37:10,996 INFO skill_runner: Job f7790fde8bd5: Sources: 5 found
+2026-07-05 19:37:10,996 INFO skill_runner: Job f7790fde8bd5: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:37:10,996 INFO skill_runner: Job f7790fde8bd5: Skill answer (used as summary): 
+
+Here is the latest news regarding OpenAI:
+
+*   **New Model Release:** OpenAI has launched **GPT-5.6**, a new model family featuring variants named Sol, Terra, and Luna. This release emphasizes stron
+2026-07-05 19:37:10,996 INFO skill_runner: Job f7790fde8bd5: Merged result key 'sources' into job params
+2026-07-05 19:37:10,996 INFO skill_runner: Job f7790fde8bd5: Merged result key 'answer' into job params
+2026-07-05 19:37:10,997 INFO skill_runner: Job f7790fde8bd5 completed successfully.
+2026-07-05 19:37:10,997 INFO skill_runner: Job f7790fde8bd5 launched for skill 'siri_chat'.
+2026-07-05 19:37:37,716 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the homelab status? model=matrix-coder
+2026-07-05 19:37:37,716 INFO skill_runner: Job b1d944b3f24a: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:37:37,716 INFO skill_runner: Job b1d944b3f24a: Executing skill 'siri_chat'
+2026-07-05 19:37:37,716 INFO skill_runner: Job b1d944b3f24a: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:37:37,716 INFO skill_runner: Job b1d944b3f24a: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:37:37,723 INFO skill_runner: Job b1d944b3f24a: Skill module imported successfully
+2026-07-05 19:37:37,723 INFO skill_runner: Job b1d944b3f24a: Passing sync client as 'litellm_client'
+2026-07-05 19:37:37,723 INFO skill_runner: Job b1d944b3f24a: Invoking skill.run()...
+2026-07-05 19:37:37,724 INFO skill_runner: Job b1d944b3f24a: Executing siri_chat: query='siri-chat: What is the homelab status?...'
+2026-07-05 19:37:37,724 INFO skill_runner: Job b1d944b3f24a: Model: matrix-coder
+2026-07-05 19:37:37,724 INFO skill_runner: Job b1d944b3f24a: Max tool rounds: 3
+2026-07-05 19:37:38,702 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:38,704 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_status
+2026-07-05 19:37:38,726 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:38,729 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: 2393f03efbeb449bb37156e1ca92bf55)
+2026-07-05 19:37:38,733 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:37:38,734 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:37:38,739 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:38,743 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:37:38,750 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:37:38,751 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_homelab_status, tool=docker_status, items=1)
+2026-07-05 19:37:38,752 INFO skill.siri_chat: DEBUG: Tool docker_status result_text=Unknown tool: docker_status
+2026-07-05 19:37:38,753 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:37:40,513 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:40,516 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_status
+2026-07-05 19:37:40,535 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:40,537 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: a0d0fa4679f942bb9c5007feba5b9ce5)
+2026-07-05 19:37:40,539 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:37:40,540 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:37:40,543 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:37:40,545 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:37:40,549 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:37:40,550 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_homelab_status, tool=docker_status, items=1)
+2026-07-05 19:37:40,551 INFO skill.siri_chat: DEBUG: Tool docker_status result_text=Unknown tool: docker_status
+2026-07-05 19:37:40,551 INFO skill.siri_chat: Tool round 2 complete (1 tool calls executed)
+2026-07-05 19:37:42,899 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a: Response generated (218 chars)
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a: Skill answer (used as summary): 
+
+I'm sorry, but I'm currently unable to retrieve the homelab status. The Docker status check tool isn't responding right now. Please try again later or check your homelab dashboard directly for the l
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a: Merged result key 'sources' into job params
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a: Merged result key 'answer' into job params
+2026-07-05 19:37:42,902 INFO skill_runner: Job b1d944b3f24a completed successfully.
+2026-07-05 19:37:42,903 INFO skill_runner: Job b1d944b3f24a launched for skill 'siri_chat'.
+2026-07-05 19:38:39,408 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the homelab status? model=matrix-coder
+2026-07-05 19:38:39,408 INFO skill_runner: Job 135631d2b17e: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:38:39,408 INFO skill_runner: Job 135631d2b17e: Executing skill 'siri_chat'
+2026-07-05 19:38:39,409 INFO skill_runner: Job 135631d2b17e: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:38:39,409 INFO skill_runner: Job 135631d2b17e: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Skill module imported successfully
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Passing sync client as 'litellm_client'
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Invoking skill.run()...
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Executing siri_chat: query='siri-chat: What is the homelab status?...'
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Model: matrix-coder
+2026-07-05 19:38:39,417 INFO skill_runner: Job 135631d2b17e: Max tool rounds: 3
+2026-07-05 19:38:40,503 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:38:40,506 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=system_info
+2026-07-05 19:38:40,529 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:38:40,531 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: 4235ed793dd949f9ae1b58583f7502c1)
+2026-07-05 19:38:40,535 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:38:40,536 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:38:40,541 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:38:41,548 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:38:41,554 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:38:41,556 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_homelab_status, tool=system_info, items=1)
+2026-07-05 19:38:41,557 INFO skill.siri_chat: DEBUG: Tool system_info result_text={
+  "cpu": {
+    "percent": 8.7,
+    "cores": 8
+  },
+  "memory": {
+    "total_bytes": 32538656768,
+    "used_bytes": 9853882368,
+    "available_bytes": 22684774400,
+    "percent": 30.3
+  },
+  "disk": [
+    {
+      "device": "/dev/mapper/ubuntu--vg-ubuntu--lv",
+      "mountpoint": "/etc/resolv.conf",
+      "fstype": "ext4",
+      "total_bytes": 237201645568,
+      "used_bytes": 184573599744,
+      "free_bytes": 41852510208,
+      "percent": 81.5
+    },
+    {
+      "device": "/dev/mapper/ubuntu--v
+2026-07-05 19:38:41,558 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_ps
+2026-07-05 19:38:41,599 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:38:41,601 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: 01097329b07e4e5fb535ee9e81c5f0f1)
+2026-07-05 19:38:41,605 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:38:41,606 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:38:41,612 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:38:44,490 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:38:44,496 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:38:44,498 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_homelab_status, tool=docker_ps, results_count=35)
+2026-07-05 19:38:44,499 INFO skill.siri_chat: DEBUG: Tool docker_ps result_text={"result": [{"name": "skill-runner", "id": "53543a72bf50", "state": "running", "image": "skill-runner:local", "ports": [{"container": "8091/tcp", "host_ip": "192.168.4.54", "host_port": "8091"}], "started_at": "2026-07-06T00:38:32.285621925Z", "health": "unknown", "exit_code": null}, {"name": "mcp_mysql", "id": "c2ddba1bf73d", "state": "running", "image": "ai-mcp-mcp_mysql:latest", "ports": [{"container": "8000/tcp", "host_ip": "", "host_port": ""}], "started_at": "2026-07-04T21:49:21.044264518Z
+2026-07-05 19:38:44,499 INFO skill.siri_chat: Tool round 1 complete (2 tool calls executed)
+2026-07-05 19:38:51,687 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:38:51,689 INFO skill_runner: Job 135631d2b17e: Response generated (269 chars)
+2026-07-05 19:38:51,690 INFO skill_runner: Job 135631d2b17e: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:38:51,690 INFO skill_runner: Job 135631d2b17e: Skill answer (used as summary): 
+
+Your homelab is running smoothly. All 35 Docker containers are up, with 8 reporting a healthy status including Open WebUI, Grafana, and your AI services. System resources look good too: CPU is at 9%
+2026-07-05 19:38:51,690 INFO skill_runner: Job 135631d2b17e: Merged result key 'answer' into job params
+2026-07-05 19:38:51,690 INFO skill_runner: Job 135631d2b17e: Merged result key 'sources' into job params
+2026-07-05 19:38:51,690 INFO skill_runner: Job 135631d2b17e completed successfully.
+2026-07-05 19:38:51,691 INFO skill_runner: Job 135631d2b17e launched for skill 'siri_chat'.
+2026-07-05 19:39:20,021 INFO skill_runner: Chat request: intent=chat text=What is the capital of France? model=matrix-gemma4-moe
+2026-07-05 19:39:21,977 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:39:22,159 INFO skill_runner: Chat request: intent=siri-chat text=What is the weather in Tokyo today? model=matrix-gemma4-moe
+2026-07-05 19:39:22,159 INFO skill_runner: Job a554be8355ae: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:39:22,159 INFO skill_runner: Job a554be8355ae: Executing skill 'siri_chat'
+2026-07-05 19:39:22,160 INFO skill_runner: Job a554be8355ae: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:39:22,160 INFO skill_runner: Job a554be8355ae: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:39:22,172 INFO skill_runner: Job a554be8355ae: Skill module imported successfully
+2026-07-05 19:39:22,173 INFO skill_runner: Job a554be8355ae: Passing sync client as 'litellm_client'
+2026-07-05 19:39:22,173 INFO skill_runner: Job a554be8355ae: Invoking skill.run()...
+2026-07-05 19:39:22,173 INFO skill_runner: Job a554be8355ae: Executing siri_chat: query='What is the weather in Tokyo today?...'
+2026-07-05 19:39:22,173 INFO skill_runner: Job a554be8355ae: Model: matrix-coder
+2026-07-05 19:39:22,173 INFO skill_runner: Job a554be8355ae: Max tool rounds: 3
+2026-07-05 19:39:23,331 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:39:23,333 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-05 19:39:23,361 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:23,363 INFO skill_runner: MCP initialized (server: mcp_search, session: d3d5e44bceaf4f1091ae98a22492dd93)
+2026-07-05 19:39:23,367 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:39:23,368 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:39:23,372 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:24,697 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:39:24,703 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:39:24,705 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=5)
+2026-07-05 19:39:24,707 INFO skill.siri_chat: DEBUG: Tool search_web result_text={"result": [{"title": "Tokyo, Tokyo, Japan Weather Forecast - AccuWeather", "url": "https://www.accuweather.com/en/jp/tokyo/226396/weather-forecast/226396", "snippet": "10-Day Weather Forecast ; Today. 7/6. 81° 68° ; Tue. 7/7. 82° 71° ; Wed. 7/8. 84° 70° ; Thu. 7/9. 90° 73° ; Fri. 7/10. 88° 73°."}, {"title": "Today's Weather in Tokyo - Hourly Forecast and Conditions", "url": "https://www.easeweather.com/asia/japan/tokyo/today", "snippet": "Get the latest hourly weather updates for Tokyo today. D
+2026-07-05 19:39:24,707 INFO skill.siri_chat: Tool round 1 complete (1 tool calls executed)
+2026-07-05 19:39:27,671 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Response generated (201 chars)
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Sources: 5 found
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Skill answer (used as summary): 
+
+Today in Tokyo, expect cloudy skies with a high of around 80°F (27°C) and a low of 68°F (20°C). There is only a slight chance of rain. This information comes from AccuWeather and The Weather Channel
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Merged result key 'answer' into job params
+2026-07-05 19:39:27,674 INFO skill_runner: Job a554be8355ae: Merged result key 'sources' into job params
+2026-07-05 19:39:27,675 INFO skill_runner: Job a554be8355ae completed successfully.
+2026-07-05 19:39:27,675 INFO skill_runner: Job a554be8355ae launched for skill 'siri_chat'.
+2026-07-05 19:39:42,789 INFO skill_runner: Chat request: intent=siri-chat text=siri-chat: What is the homelab status? model=matrix-coder
+2026-07-05 19:39:42,790 INFO skill_runner: Job 9ce04e1d69a3: Chat intent 'siri-chat' dispatched to skill 'siri_chat'
+2026-07-05 19:39:42,790 INFO skill_runner: Job 9ce04e1d69a3: Executing skill 'siri_chat'
+2026-07-05 19:39:42,790 INFO skill_runner: Job 9ce04e1d69a3: Skill module found at: /app/skills/siri_chat/skill.py
+2026-07-05 19:39:42,791 INFO skill_runner: Job 9ce04e1d69a3: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-05 19:39:42,799 INFO skill_runner: Job 9ce04e1d69a3: Skill module imported successfully
+2026-07-05 19:39:42,799 INFO skill_runner: Job 9ce04e1d69a3: Passing sync client as 'litellm_client'
+2026-07-05 19:39:42,800 INFO skill_runner: Job 9ce04e1d69a3: Invoking skill.run()...
+2026-07-05 19:39:42,800 INFO skill_runner: Job 9ce04e1d69a3: Executing siri_chat: query='siri-chat: What is the homelab status?...'
+2026-07-05 19:39:42,800 INFO skill_runner: Job 9ce04e1d69a3: Model: matrix-coder
+2026-07-05 19:39:42,800 INFO skill_runner: Job 9ce04e1d69a3: Max tool rounds: 3
+2026-07-05 19:39:44,195 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:39:44,198 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=docker_ps
+2026-07-05 19:39:44,222 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:44,224 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: 1d7359e28aac48ad992f5b3a7341cc70)
+2026-07-05 19:39:44,227 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:39:44,229 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:39:44,233 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:47,117 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:39:47,122 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:39:47,123 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_homelab_status, tool=docker_ps, results_count=35)
+2026-07-05 19:39:47,125 INFO skill.siri_chat: DEBUG: Tool docker_ps result_text={"result": [{"name": "skill-runner", "id": "53543a72bf50", "state": "running", "image": "skill-runner:local", "ports": [{"container": "8091/tcp", "host_ip": "192.168.4.54", "host_port": "8091"}], "started_at": "2026-07-06T00:38:32.285621925Z", "health": "unknown", "exit_code": null}, {"name": "mcp_mysql", "id": "c2ddba1bf73d", "state": "running", "image": "ai-mcp-mcp_mysql:latest", "ports": [{"container": "8000/tcp", "host_ip": "", "host_port": ""}], "started_at": "2026-07-04T21:49:21.044264518Z
+2026-07-05 19:39:47,125 INFO skill_runner: Streamable HTTP MCP call: server=mcp_homelab_status base_url=http://mcp_homelab_status:8000 tool=system_info
+2026-07-05 19:39:47,144 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:47,145 INFO skill_runner: MCP initialized (server: mcp_homelab_status, session: bb200a0d129c4246b6ebb1e3b27d4c81)
+2026-07-05 19:39:47,149 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-05 19:39:47,150 INFO skill_runner: MCP initialized notification sent
+2026-07-05 19:39:47,156 INFO httpx: HTTP Request: POST http://mcp_homelab_status:8000/mcp "HTTP/1.1 200 OK"
+2026-07-05 19:39:48,161 INFO skill_runner: tools/call POST returned status 200
+2026-07-05 19:39:48,166 INFO httpx: HTTP Request: DELETE http://mcp_homelab_status:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-05 19:39:48,168 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_homelab_status, tool=system_info, items=1)
+2026-07-05 19:39:48,169 INFO skill.siri_chat: DEBUG: Tool system_info result_text={
+  "cpu": {
+    "percent": 18.6,
+    "cores": 8
+  },
+  "memory": {
+    "total_bytes": 32538656768,
+    "used_bytes": 9826942976,
+    "available_bytes": 22711713792,
+    "percent": 30.2
+  },
+  "disk": [
+    {
+      "device": "/dev/mapper/ubuntu--vg-ubuntu--lv",
+      "mountpoint": "/etc/resolv.conf",
+      "fstype": "ext4",
+      "total_bytes": 237201645568,
+      "used_bytes": 184573779968,
+      "free_bytes": 41852329984,
+      "percent": 81.5
+    },
+    {
+      "device": "/dev/mapper/ubuntu--
+2026-07-05 19:39:48,169 INFO skill.siri_chat: Tool round 1 complete (2 tool calls executed)
+2026-07-05 19:39:54,143 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:39:54,146 INFO skill_runner: Job 9ce04e1d69a3: Response generated (365 chars)
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3: Skill.run() returned: ['answer', 'sources', 'model_alias']
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3: Skill answer (used as summary): 
+
+Everything looks good! All 35 Docker containers are currently running.
+
+Key services like Open WebUI, LiteLLM, Grafana, and your databases are reporting a healthy status.
+
+System resources are also 
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3: Merged result key 'answer' into job params
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3: Merged result key 'sources' into job params
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3 completed successfully.
+2026-07-05 19:39:54,147 INFO skill_runner: Job 9ce04e1d69a3 launched for skill 'siri_chat'.
+2026-07-05 19:40:22,604 INFO skill_runner: Chat request: intent=chat text=What is the capital of Japan? model=matrix-gemma4-moe
+2026-07-05 19:40:25,003 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-05 19:46:52,411 INFO skill_runner: Chat request: intent=chat text=hello model=matrix-gemma4-moe
+2026-07-05 19:47:06,859 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-06 17:31:04,863 INFO skill_runner.scheduler: Config file not found at /root/.thor/scheduler.json — creating default config.
+2026-07-06 17:31:04,884 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:31:04,884 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-06 17:31:04,884 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-06 17:31:04,885 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-06 17:31:04,885 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-06 17:31:04,886 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:33:08,497 INFO skill_runner: Chat request: intent=build-presentation text=update the Q4 review presentation to be more casual model=matrix-gemma4-moe
+2026-07-06 17:33:08,498 INFO skill_runner: Job 2d09143558bb: Chat intent 'build-presentation' dispatched to skill 'presentation_builder'
+2026-07-06 17:33:08,498 INFO skill_runner: Job 2d09143558bb: Executing skill 'presentation_builder'
+2026-07-06 17:33:08,499 INFO skill_runner: Job 2d09143558bb: Skill 'presentation_builder' module not found
+2026-07-06 17:33:08,499 ERROR skill_runner: Skill not found: presentation_builder
+2026-07-06 17:33:08,499 INFO skill_runner: Job 2d09143558bb launched for skill 'presentation_builder'.
+2026-07-06 17:33:44,666 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-06 17:33:44,667 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-06 17:33:44,667 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-06 17:33:44,668 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-06 17:33:44,668 INFO skill_runner: Shutdown complete.
+2026-07-06 17:33:46,333 INFO skill_runner.scheduler: Config file not found at /root/.thor/scheduler.json — creating default config.
+2026-07-06 17:33:46,335 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:33:46,336 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-06 17:33:46,336 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-06 17:33:46,336 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-06 17:33:46,337 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-06 17:33:46,338 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:33:59,189 INFO skill_runner: Chat request: intent=update-presentation text=update the Q4 review presentation to be more casual model=matrix-gemma4-moe
+2026-07-06 17:33:59,189 INFO skill_runner: Job 493998f4eed4: Intent 'update-presentation' dispatched to skill 'presentation_update'
+2026-07-06 17:33:59,189 INFO skill_runner: Job 493998f4eed4: Executing skill 'presentation_update'
+2026-07-06 17:33:59,190 INFO skill_runner: Job 493998f4eed4: Skill module found at: /app/skills/presentation_update/skill.py
+2026-07-06 17:33:59,190 INFO skill_runner: Job 493998f4eed4: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-06 17:33:59,191 INFO skill_runner: Job 493998f4eed4: Skill module imported successfully
+2026-07-06 17:33:59,191 INFO skill_runner: Job 493998f4eed4: Passing sync client as 'litellm_client'
+2026-07-06 17:33:59,191 INFO skill_runner: Job 493998f4eed4: Invoking skill.run()...
+2026-07-06 17:33:59,192 INFO skill_runner: Job 493998f4eed4: Validation failed: missing presentation_title
+2026-07-06 17:33:59,192 INFO skill_runner: Job 493998f4eed4: Skill.run() returned: ['error']
+2026-07-06 17:33:59,192 INFO skill_runner: Job 493998f4eed4: Skill reported error: Missing required 'presentation_title' parameter
+2026-07-06 17:33:59,192 INFO skill_runner: Job 493998f4eed4 failed: Missing required 'presentation_title' parameter
+2026-07-06 17:33:59,192 INFO skill_runner: Job 493998f4eed4 launched for skill 'presentation_update'.
+2026-07-06 17:33:59,240 INFO skill_runner: Chat request: intent=list-demos text=list my demos model=matrix-gemma4-moe
+2026-07-06 17:33:59,285 INFO skill_runner: Chat request: intent=find-demos text=find demo about fitness model=matrix-gemma4-moe
+2026-07-06 17:33:59,285 INFO skill_runner: Job 1128154ba004: Intent 'find-demos' dispatched to skill 'demo_browse'
+2026-07-06 17:33:59,286 INFO skill_runner: Job 1128154ba004: Executing skill 'demo_browse'
+2026-07-06 17:33:59,286 INFO skill_runner: Job 1128154ba004: Skill module found at: /app/skills/demo_browse/skill.py
+2026-07-06 17:33:59,286 INFO skill_runner: Job 1128154ba004: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-06 17:33:59,295 INFO skill_runner: Job 1128154ba004: Skill module imported successfully
+2026-07-06 17:33:59,295 INFO skill_runner: Job 1128154ba004: Invoking skill.run()...
+2026-07-06 17:33:59,295 INFO skill_runner: Job 1128154ba004: Executing demo_browse: query='find demo about fitness'
+2026-07-06 17:33:59,295 INFO skill_runner: Job 1128154ba004: Demo directory: /home/chuck/data/media/demos
+2026-07-06 17:33:59,295 INFO skill_runner: Job 1128154ba004: Limit: 20
+2026-07-06 17:33:59,296 INFO skill_runner: Job 1128154ba004: Scanning demos directory...
+2026-07-06 17:33:59,299 INFO skill_runner: Job 1128154ba004: Found 6 total demos
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004: Matching against query: 'find demo about fitness'
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004: Found 4 matching demos
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004:   [1] OpenWebUI Smoke Test Quick Demo — Notes App (score: 10.0)
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004:   [2] OpenWebUI Smoke Test Quick Demo — Notes App (score: 10.0)
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004:   [3] OpenWebUI Smoke Test Quick Demo (score: 10.0)
+2026-07-06 17:33:59,300 INFO skill_runner: Job 1128154ba004:   [4] Todo App — PM Demo (score: 10.0)
+2026-07-06 17:33:59,301 INFO skill_runner: Job 1128154ba004: demo_browse completed successfully
+2026-07-06 17:33:59,301 INFO skill_runner: Job 1128154ba004: Skill.run() returned: ['query', 'demo_dir', 'total_demos', 'matched_count', 'limit', 'results']
+2026-07-06 17:33:59,301 INFO skill_runner: Job 1128154ba004 completed successfully.
+2026-07-06 17:33:59,301 INFO skill_runner: Job 1128154ba004 launched for skill 'demo_browse'.
+2026-07-06 17:33:59,346 INFO skill_runner: Chat request: intent=research-brief text=research brief: latest developments in quantum computing model=matrix-gemma4-moe
+2026-07-06 17:33:59,347 INFO skill_runner: Job 8f5d036ec853: Intent 'research-brief' dispatched to skill 'research_brief'
+2026-07-06 17:33:59,347 INFO skill_runner: Job 8f5d036ec853: Executing skill 'research_brief'
+2026-07-06 17:33:59,347 INFO skill_runner: Job 8f5d036ec853: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-06 17:33:59,348 INFO skill_runner: Job 8f5d036ec853: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-06 17:33:59,365 INFO skill_runner: Job 8f5d036ec853: Skill module imported successfully
+2026-07-06 17:33:59,365 INFO skill_runner: Job 8f5d036ec853: Passing sync client as 'litellm_client'
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Invoking skill.run()...
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Executing research_brief: topic='research brief: latest developments in quantum computing'
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Sub-queries: 3, max_results/query: 8
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Model alias: matrix-coder
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Max runtime: 120s
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: LiteLLM: http://litellm-proxy:4000
+2026-07-06 17:33:59,366 INFO skill_runner: Job 8f5d036ec853: Step 1: Generating sub-queries via LLM...
+2026-07-06 17:34:04,744 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-06 17:34:04,747 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-06 17:34:04,747 INFO skill_runner: Job 8f5d036ec853: Generated 3 sub-queries:
+2026-07-06 17:34:04,747 INFO skill_runner: Job 8f5d036ec853:   [1] research brief: latest developments in quantum computing
+2026-07-06 17:34:04,747 INFO skill_runner: Job 8f5d036ec853:   [2] research brief: latest developments in quantum computing overview
+2026-07-06 17:34:04,747 INFO skill_runner: Job 8f5d036ec853:   [3] research brief: latest developments in quantum computing latest news
+2026-07-06 17:34:04,747 INFO skill_runner: Job 8f5d036ec853: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-06 17:34:04,748 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-06 17:34:04,775 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:04,777 INFO skill_runner: MCP initialized (server: mcp_search, session: f7a31d2cc7b643c2816b5938b2933076)
+2026-07-06 17:34:04,780 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-06 17:34:04,782 INFO skill_runner: MCP initialized notification sent
+2026-07-06 17:34:04,787 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:05,666 INFO skill_runner: tools/call POST returned status 200
+2026-07-06 17:34:05,672 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-06 17:34:05,674 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-06 17:34:05,675 INFO skill_runner: Job 8f5d036ec853:   Query [1] 'research brief: latest developments in quantum computing': 8 results (mcp)
+2026-07-06 17:34:05,676 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-06 17:34:05,701 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:05,703 INFO skill_runner: MCP initialized (server: mcp_search, session: 4b8546ebd2db4a559a99aa0a02f1aae3)
+2026-07-06 17:34:05,710 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-06 17:34:05,712 INFO skill_runner: MCP initialized notification sent
+2026-07-06 17:34:05,718 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:06,649 INFO skill_runner: tools/call POST returned status 200
+2026-07-06 17:34:06,657 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-06 17:34:06,659 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-06 17:34:06,661 INFO skill_runner: Job 8f5d036ec853:   Query [2] 'research brief: latest developments in quantum computing ove': 8 results (mcp)
+2026-07-06 17:34:06,661 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-06 17:34:06,689 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:06,691 INFO skill_runner: MCP initialized (server: mcp_search, session: 9ae297c4493c4992889fe9f6fce44314)
+2026-07-06 17:34:06,693 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-06 17:34:06,694 INFO skill_runner: MCP initialized notification sent
+2026-07-06 17:34:06,698 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-06 17:34:07,453 INFO skill_runner: tools/call POST returned status 200
+2026-07-06 17:34:07,459 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-06 17:34:07,462 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-06 17:34:07,463 INFO skill_runner: Job 8f5d036ec853:   Query [3] 'research brief: latest developments in quantum computing lat': 8 results (mcp)
+2026-07-06 17:34:07,463 INFO skill_runner: Job 8f5d036ec853: Collected 24 raw results via mcp
+2026-07-06 17:34:07,463 INFO skill_runner: Job 8f5d036ec853: Deduplicated to 15 unique sources
+2026-07-06 17:34:07,463 INFO skill_runner: Job 8f5d036ec853: Step 3: Synthesizing research brief via LLM...
+2026-07-06 17:34:26,761 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-06 17:34:26,764 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-06 17:34:26,765 INFO skill_runner: Job 8f5d036ec853: Brief generated (3013 chars)
+2026-07-06 17:34:26,765 INFO skill_runner: Job 8f5d036ec853: research_brief completed: 15 sources, method=mcp
+2026-07-06 17:34:26,765 INFO skill_runner: Job 8f5d036ec853: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-06 17:34:26,765 INFO skill_runner: Job 8f5d036ec853: Skill summary: 1. **Quantum Computers News -- ScienceDaily** — https://www.sciencedaily.com/news/computers_math/quantum_computers/
+2026-07-06 17:34:26,766 INFO skill_runner: Job 8f5d036ec853: Merged result key 'sources' into job params
+2026-07-06 17:34:26,766 INFO skill_runner: Job 8f5d036ec853 completed successfully.
+2026-07-06 17:34:26,766 INFO skill_runner: Job 8f5d036ec853 launched for skill 'research_brief'.
+2026-07-06 17:34:56,635 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-06 17:34:56,635 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-06 17:34:56,635 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-06 17:34:56,636 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-06 17:34:56,636 INFO skill_runner: Shutdown complete.
+2026-07-06 17:34:58,445 INFO skill_runner.scheduler: Config file not found at /root/.thor/scheduler.json — creating default config.
+2026-07-06 17:34:58,448 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:34:58,448 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-06 17:34:58,448 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-06 17:34:58,448 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-06 17:34:58,449 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-06 17:34:58,449 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-06 17:35:04,876 INFO skill_runner: Chat request: intent=list-demos text=list my demos model=matrix-gemma4-moe
+2026-07-06 17:35:04,876 INFO skill_runner: Job 7eb285a45da0: Intent 'find-demos' dispatched to skill 'demo_browse'
+2026-07-06 17:35:04,876 INFO skill_runner: Job 7eb285a45da0: Executing skill 'demo_browse'
+2026-07-06 17:35:04,877 INFO skill_runner: Job 7eb285a45da0: Skill module found at: /app/skills/demo_browse/skill.py
+2026-07-06 17:35:04,877 INFO skill_runner: Job 7eb285a45da0: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-06 17:35:04,886 INFO skill_runner: Job 7eb285a45da0: Skill module imported successfully
+2026-07-06 17:35:04,886 INFO skill_runner: Job 7eb285a45da0: Invoking skill.run()...
+2026-07-06 17:35:04,887 INFO skill_runner: Job 7eb285a45da0: Executing demo_browse: query='list my demos'
+2026-07-06 17:35:04,887 INFO skill_runner: Job 7eb285a45da0: Demo directory: /home/chuck/data/media/demos
+2026-07-06 17:35:04,887 INFO skill_runner: Job 7eb285a45da0: Limit: 20
+2026-07-06 17:35:04,887 INFO skill_runner: Job 7eb285a45da0: Scanning demos directory...
+2026-07-06 17:35:04,892 INFO skill_runner: Job 7eb285a45da0: Found 6 total demos
+2026-07-06 17:35:04,892 INFO skill_runner: Job 7eb285a45da0: Matching against query: 'list my demos'
+2026-07-06 17:35:04,893 INFO skill_runner: Job 7eb285a45da0: Found 1 matching demos
+2026-07-06 17:35:04,893 INFO skill_runner: Job 7eb285a45da0:   [1] Taskflow — Todo List App (score: 14.0)
+2026-07-06 17:35:04,893 INFO skill_runner: Job 7eb285a45da0: demo_browse completed successfully
+2026-07-06 17:35:04,893 INFO skill_runner: Job 7eb285a45da0: Skill.run() returned: ['query', 'demo_dir', 'total_demos', 'matched_count', 'limit', 'results']
+2026-07-06 17:35:04,893 INFO skill_runner: Job 7eb285a45da0 completed successfully.
+2026-07-06 17:35:04,894 INFO skill_runner: Job 7eb285a45da0 launched for skill 'demo_browse'.
+2026-07-06 17:35:23,152 INFO skill_runner.scheduler: Added schedule: id=c40f94031d97 name=Test Daily Brief
+2026-07-06 17:35:28,899 INFO skill_runner: Job 91fe1b0e5cd6: Run-now trigger for schedule 'c40f94031d97' (Test Daily Brief)
+2026-07-06 17:35:28,899 INFO skill_runner: Job 91fe1b0e5cd6: Executing skill 'morning_brief'
+2026-07-06 17:35:28,900 INFO skill_runner: Job 91fe1b0e5cd6: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-06 17:35:28,900 INFO skill_runner: Job 91fe1b0e5cd6: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-06 17:35:28,912 INFO skill_runner: Job 91fe1b0e5cd6: Skill module imported successfully
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Passing sync client as 'litellm_client'
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Invoking skill.run()...
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Model alias: local/qwen-coder
+2026-07-06 17:35:28,913 INFO skill_runner: Job 91fe1b0e5cd6: Max runtime: 180s
+2026-07-06 17:35:28,914 INFO skill_runner: Job 91fe1b0e5cd6: LiteLLM: http://litellm-proxy:4000
+2026-07-06 17:35:28,914 INFO skill_runner: Job 91fe1b0e5cd6: Execution error: signal only works in main thread of the main interpreter
+2026-07-06 17:35:28,914 ERROR skill_runner: Skill execution error: signal only works in main thread of the main interpreter
+2026-07-06 17:35:28,914 INFO skill_runner: Job 91fe1b0e5cd6 failed: signal only works in main thread of the main interpreter
+2026-07-06 17:35:28,914 INFO skill_runner: Run-now job 91fe1b0e5cd6 launched for schedule 'c40f94031d97'.
+2026-07-06 17:35:29,001 INFO skill_runner.scheduler: Removed schedule: id=c40f94031d97

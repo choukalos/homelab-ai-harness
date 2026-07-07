@@ -1,0 +1,31 @@
+name: research_brief
+version: "1.0"
+description: "Lightweight web research — generates sub-queries from a topic, searches via SearXNG/MCP, and summarizes findings."
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: "The research topic or question to investigate."
+  - name: num_sub_queries
+    type: integer
+    required: false
+    default: 3
+    description: "Number of sub-queries to generate (1-5, default 3)."
+  - name: max_results_per_query
+    type: integer
+    required: false
+    default: 5
+    description: "Maximum search results per sub-query (default 5, cap 10)."
+  - name: include_news
+    type: boolean
+    required: false
+    default: false
+    description: "Also search news sources (default false)."
+tools:
+  - mcp_search
+  - model_chat
+model_alias: local/qwen-coder
+artifact_path: /home/chuck/data/media/research_reports/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 120  # seconds (2 minutes)

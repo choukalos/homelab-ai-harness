@@ -1,0 +1,27 @@
+name: siri_chat
+version: "1.0"
+description: "Conversational chat with web search, knowledge base, and homelab status tools"
+inputs:
+  - name: query
+    type: string
+    required: true
+    description: "The user's question or request."
+  - name: context
+    type: string
+    required: false
+    description: "Optional previous conversation context for continuity."
+  - name: model
+    type: string
+    required: false
+    default: matrix-coder
+    description: "Model alias to use (default: matrix-coder)."
+tools:
+  - mcp_search
+  - mcp_knowledge
+  - mcp_homelab_status
+  - model_chat
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/siri_outputs/
+approval_gates: []
+channels: [siri, cli, api]
+max_runtime: 120  # seconds

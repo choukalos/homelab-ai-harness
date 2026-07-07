@@ -7,6 +7,7 @@ WORKDIR /app
 
 # Copy application code
 COPY main.py .
+COPY scheduler.py .
 COPY pyproject.toml .
 
 # Install runtime dependencies directly (single-file app, no package distribution needed)

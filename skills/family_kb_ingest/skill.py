@@ -40,7 +40,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 MAX_RUNTIME_SECS = int(os.environ.get("FAMILY_KB_INGEST_MAX_RUNTIME", "300"))
-HARNESS_URL = os.environ.get("FAMILY_KB_INGEST_HARNESS_URL", "http://ai-harness:8090")
+HARNESS_URL = os.environ.get("FAMILY_KB_INGEST_HARNESS_URL", "http://skill-runner:8091")
 
 logger = logging.getLogger("skill.family_kb_ingest")
 

@@ -39,7 +39,7 @@ ARTIFACT_DIR = Path(
     os.environ.get("DEMO_WORKFLOW_ARTIFACT_DIR", "/home/chuck/data/media/presentations")
 )
 MAX_RUNTIME_SECS = int(os.environ.get("DEMO_WORKFLOW_MAX_RUNTIME", "600"))
-HARNESS_URL = os.environ.get("DEMO_WORKFLOW_HARNESS_URL", "http://ai-harness:8090")
+HARNESS_URL = os.environ.get("DEMO_WORKFLOW_HARNESS_URL", "http://skill-runner:8091")
 
 logger = logging.getLogger("skill.demo_workflow")
 
