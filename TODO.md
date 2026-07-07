@@ -27,7 +27,7 @@
   - `GET /api/schedule`, `POST /api/schedule`, `DELETE /api/schedule/{id}`,
     `POST /api/schedule/{id}/run-now`
 - **Siri API** on `siri.choukalos.com` → Skill Runner `:8091` (Caddy cutover done)
-- **Documentation** current (`README.md`, `README_SIRI.md`, `siri-script.sh`)
+- **Documentation** current (`README.md`, `README_SIRI.md`, `cli/run-skill.sh`)
 
 ### ⚠️ Blocked / Deferred
 
@@ -48,6 +48,19 @@ The Caddy cutover to Skill Runner was confirmed stable.
 The old `ai-harness` source code has been archived to `ai-harness-decommissioned/`
 and Docker images pruned.  The compose file `compose.ai-harness.yml.bak` is preserved
 for reference if needed.
+
+---
+
+### ✅ Log Rotation & Script Updates (Done 2026-07-07)
+
+**Log Rotation:**
+- Added `RotatingFileHandler` to `skills/runner/main.py` (max 10MB, 3 backups)
+- Added `logs/` to `.gitignore` to prevent 98MB log files from being committed
+- Old log files will auto-truncate on next restart
+
+**CLI Scripts:**
+- `siri-script.sh` archived (stale endpoint `8090`)
+- `cli/run-skill.sh` updated: `--public` flag for `siri.choukalos.com`, `media-generate` intent, removed duplicate `poll_job`
 
 ---
 
