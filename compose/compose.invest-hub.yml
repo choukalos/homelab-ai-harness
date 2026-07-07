@@ -51,6 +51,7 @@ services:
       - YF_SYMBOL_DELAY_MS=2000
       - YF_SYMBOL_JITTER_MS=1000
       - YF_RATE_LIMIT_COOLOFF_MS=45000
+      - MAX_DAILY_SYMBOLS=2000
       - CORS_ORIGINS=https://invest.choukalos.com,https://api.choukalos.com
       - ADMIN_EMAIL=${INVEST_ADMIN_EMAIL}
       - ADMIN_PASSWORD=${INVEST_ADMIN_PASSWORD}
