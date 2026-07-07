@@ -2,6 +2,7 @@
 tmp/
 media/
 outputs/
+logs/  # Skill runner logs — auto-rotating, 10MB max
 *.png
 *.jpg
 *.jpeg

@@ -29,8 +29,10 @@ elif [[ -f "${SCRIPT_DIR}/.env" ]]; then
     set +a
 fi
 
+# Endpoint config — default to local, use --public for remote
 SIRI_API_KEY="${SIRI_API_KEY:?SIRI_API_KEY is not set (needs .env or env var)}"
 BASE_SKILL_RUNNER="${BASE_SKILL_RUNNER:-http://${THOR_IP:-192.168.4.54}:8091}"
+BASE_PUBLIC="https://siri.choukalos.com"
 
 # ── Color helpers ────────────────────────────────────────────
 RED='\033[0;31m'
@@ -57,7 +59,9 @@ detect_intent() {
     local text_lower
     text_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 
-    if [[ "$text_lower" == *"deep research"* ]] || [[ "$text_lower" == *"deep-research"* ]]; then
+    if [[ "$text_lower" == *"image"* ]] || [[ "$text_lower" == *"picture"* ]] || [[ "$text_lower" == *"photo"* ]]; then
+        echo "media-generate"
+    elif [[ "$text_lower" == *"deep research"* ]] || [[ "$text_lower" == *"deep-research"* ]]; then
         echo "deep-research"
     elif [[ "$text_lower" == *"research"* ]]; then
         echo "research"
@@ -65,6 +69,8 @@ detect_intent() {
         echo "create-demo"
     elif [[ "$text_lower" == *"create presentation"* ]] || [[ "$text_lower" == *"create-presentation"* ]]; then
         echo "create-presentation"
+    elif [[ "$text_lower" == *"update presentation"* ]] || [[ "$text_lower" == *"update-presentation"* ]]; then
+        echo "update-presentation"
     elif [[ "$text_lower" == *"list demo"* ]] || [[ "$text_lower" == *"list-demo"* ]]; then
         echo "list-demos"
     elif [[ "$text_lower" == *"find demo"* ]] || [[ "$text_lower" == *"find-demo"* ]]; then
@@ -73,106 +79,16 @@ detect_intent() {
         echo "list-presentations"
     elif [[ "$text_lower" == *"find presentation"* ]] || [[ "$text_lower" == *"find-presentation"* ]]; then
         echo "find-presentation"
-    elif [[ "$text_lower" == *"generate image"* ]] || [[ "$text_lower" == *"create image"* ]]; then
-        echo "image"
     else
         echo "chat"
     fi
 }
 
 # ── Poll async job ──────────────────────────────────────────
-poll_job() {
-    local job_id="$1"
-    local max_attempts=600
-    local interval=2
-
-    echo -e "\n${CYAN}━━━ POLLING JOB ━━━${NC}"
-    echo -e "  ${BOLD}Job ID:${NC} ${BOLD}${job_id}${NC}"
-    echo -e "  ${BOLD}Endpoint:${NC} ${BASE_SKILL_RUNNER}/api/jobs/${job_id}"
-    echo ""
-
-    for ((i = 1; i <= max_attempts; i++)); do
-        sleep "$interval"
-
-        local resp_file
-        resp_file=$(mktemp)
-        local http_code
-        http_code=$(curl -sS -o "${resp_file}" -w "%{http_code}" \
-            -X GET "${BASE_SKILL_RUNNER}/api/jobs/${job_id}" \
-            -H "X-API-Key: ${SIRI_API_KEY}" \
-            --max-time 30 2>/dev/null) || http_code="000"
-
-        if [[ "$http_code" != "200" ]]; then
-            echo -e "  ${YELLOW}⏳ Attempt ${i}/${max_attempts} — HTTP ${http_code}, retrying...${NC}"
-            rm -f "$resp_file"
-            continue
-        fi
-
-        # Check job status
-        local status
-        status=$(python3 -c "
-import json
-d = json.load(open('${resp_file}'))
-print(d.get('status','unknown'))
-" 2>/dev/null) || status="unknown"
-
-        local speak display
-        speak=$(python3 -c "
-import json
-d = json.load(open('${resp_file}'))
-s = d.get('speak', '')
-if not s:
-    s = d.get('display', '')
-    if isinstance(s, str) and len(s) > 200:
-        s = s[:197] + '...'
-print(s)
-" 2>/dev/null) || speak=""
-        display=$(python3 -c "import json; print(json.load(open('${resp_file}')).get('display', ''))" 2>/dev/null) || display=""
-
-        rm -f "$resp_file"
-
-        case "$status" in
-            running|pending|queued)
-                echo -e "  ${YELLOW}⏳ Job still running... (attempt ${i}/${max_attempts})${NC}"
-                ;;
-            completed|done|success)
-                echo -e "  ${GREEN}✓ Job completed!${NC}"
-                echo -e "\n${GREEN}━━━ JOB RESULT ━━━${NC}"
-                if [[ -n "$speak" ]]; then
-                    echo -e "  ${BOLD}Speak:${NC} ${speak}"
-                fi
-                if [[ -n "$display" ]] && [[ "$display" != "$speak" ]]; then
-                    echo -e "\n  ${BOLD}Display:${NC}"
-                    echo "$display" | sed 's/^/  /'
-                fi
-                return 0
-                ;;
-            failed|error)
-                echo -e "  ${RED}✗ Job failed!${NC}"
-                echo -e "\n${RED}━━━ JOB RESULT ━━━${NC}"
-                if [[ -n "$speak" ]]; then
-                    echo -e "  ${BOLD}Speak:${NC} ${speak}"
-                fi
-                if [[ -n "$display" ]]; then
-                    echo -e "\n  ${BOLD}Display:${NC}"
-                    echo "$display" | sed 's/^/  /'
-                fi
-                return 1
-                ;;
-            *)
-                echo -e "  ${YELLOW}⏳ Status: ${status} (attempt ${i}/${max_attempts})${NC}"
-                ;;
-        esac
-    done
-
-    echo -e "  ${RED}✗ Polling timed out after ${max_attempts} attempts${NC}"
-    return 1
-}
-
 # ── Check if intent is async ────────────────────────────────
 is_async_intent() {
     case "$1" in
-        deep-research|create-demo|create-presentation|update-presentation)
+        deep-research|create-demo|create-presentation|update-presentation|media-generate)
             return 0 ;;
         *)
             return 1 ;;
@@ -287,7 +203,7 @@ json.dump(payload, sys.stdout)
         deep-research|research) timeout=180 ;;
         create-demo|create-presentation|update-presentation) timeout=60 ;;
         list-demos|find-demo|list-presentations|find-presentation) timeout=30 ;;
-        image) timeout=120 ;;
+        media-generate) timeout=120 ;;
         chat) timeout=120 ;;
         *) timeout=60 ;;
     esac
@@ -377,19 +293,20 @@ usage() {
     echo -e "  ${CYAN}./run-skill.sh 'your question'${NC}                    Auto-detect intent (default: chat)"
     echo -e "  ${CYAN}./run-skill.sh deep-research 'quantum computing'${NC}  Explicit intent + text"
     echo -e "  ${CYAN}./run-skill.sh list-demos${NC}                       Sync intent"
+    echo -e "  ${CYAN}./run-skill.sh --public 'your question'${NC}         Use public endpoint (siri.choukalos.com)"
     echo ""
     echo -e "Intents:"
     echo -e "  ${CYAN}chat${NC}                    — General chat with MCP tools"
     echo -e "  ${CYAN}deep-research${NC}           — Async deep research"
     echo -e "  ${CYAN}create-demo${NC}             — Async demo creation"
     echo -e "  ${CYAN}create-presentation${NC}     — Async presentation build"
+    echo -e "  ${CYAN}media-generate${NC}          — Image generation via ComfyUI"
     echo -e "  ${CYAN}list-demos${NC}              — Sync: list demos"
     echo -e "  ${CYAN}find-demo${NC}               — Sync: find demo"
     echo -e "  ${CYAN}list-presentations${NC}      — Sync: list presentations"
     echo -e "  ${CYAN}find-presentation${NC}       — Sync: find presentation"
-    echo -e "  ${CYAN}image${NC}                   — Image generation"
     echo ""
-    echo -e "Environment: ${CYAN}SIRI_API_KEY${NC} (from .env), ${CYAN}BASE_SKILL_RUNNER${NC} (default: ${BASE_SKILL_RUNNER})"
+    echo -e "Environment: ${CYAN}SIRI_API_KEY${NC} (from .env), ${CYAN}BASE_SKILL_RUNNER${NC} (default: ${BASE_SKILL_RUNNER}), ${CYAN}BASE_PUBLIC${NC} (default: ${BASE_PUBLIC})"
 }
 
 # ── Main ─────────────────────────────────────────────────────
@@ -397,6 +314,10 @@ case "${1:-}" in
     --help|-h)
         usage
         exit 0
+        ;;
+    --public)
+        BASE_SKILL_RUNNER="$BASE_PUBLIC"
+        shift
         ;;
     "")
         echo -e "${RED}Error: No arguments provided.${NC}"
@@ -410,7 +331,7 @@ case "${1:-}" in
         # Check if first arg is a known intent
         known_intent=""
         case "$first_arg" in
-            deep-research|research|create-demo|create-presentation|update-presentation|list-demos|find-demo|list-presentations|find-presentation|chat|image)
+            deep-research|research|create-demo|create-presentation|update-presentation|list-demos|find-demo|list-presentations|find-presentation|chat|media-generate)
                 known_intent="$first_arg"
                 ;;
             *)

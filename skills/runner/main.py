@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import json
 import logging
+import logging.handlers
 import os
 import re
 import signal
@@ -35,12 +36,15 @@ from pydantic import BaseModel, Field
 LOG_DIR = Path(os.environ.get("SKILL_RUNNER_LOG_DIR", "/home/chuck/homelab/logs/skill_runner"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+# Auto-rotate log at 10MB, keep 3 backups (max 30MB on disk)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(LOG_DIR / "skill_runner.log"),
+        logging.handlers.RotatingFileHandler(
+            LOG_DIR / "skill_runner.log", maxBytes=10*1024*1024, backupCount=3
+        ),
     ],
 )
 logger = logging.getLogger("skill_runner")
