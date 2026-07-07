@@ -132,7 +132,6 @@ NOT committed to GitHub.
     compose.edge.yml
     compose.ghost.yml
     compose.ai-core.yml
-    compose.ai-harness.yml
     compose.mcp.yml          # MCP server containers (6 active)
     compose.skill-runner.yml # Skill orchestration API (port 8091)
     compose.invest-hub.yml
@@ -432,7 +431,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_mysql` | MySQL (InvestorHub) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_homelab_status` | Docker API + Victoria Metrics | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
-| `mcp_media` | Image gen/edit via LiteLLM | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_media` | Image gen/edit via ComfyUI | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
@@ -570,16 +569,51 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **update-presentation** — Update an existing presentation (tone, content)
 - **find-demos** / **list-demos** — Browse/search demos
 - **list-presentations** — List existing presentations
-- **media-generate** — Generate an image (requires image model key)
+- **media-generate** — Generate an image via `mcp_media.generate_image` (ComfyUI backend)
 
-**2. AI Harness (legacy, decommission pending):**
-```
-iPhone Shortcut  →  Cloudflare Tunnel  →  Caddy  →  AI Harness (:8090)  →  LiteLLM / Celery
-```
-Once Caddy cutover is confirmed stable on the skill runner, decommission:
+### Media Generation (Image)
+
+The `media-generate` intent dispatches directly to the `mcp_media` MCP server
+(ComfyUI on Matrix) without spawning a background skill job. It blocks for
+the duration of image generation (~30–60 sec).
+
+**Keywords that trigger it:** `generate image`, `create image`, `make image`,
+`create media`, `media generate`, `generate media`, `image generate`
+
+**Example:**
 ```bash
-docker compose -f compose/compose.ai-harness.yml down
+curl -s -X POST https://siri.choukalos.com/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $SIRI_API_KEY" \
+  -d '{"text": "generate image of a geometric abstract logo"}'
 ```
+
+**Response:**
+```json
+{
+  "speak": "I've generated an image for you. It's saved at /home/chuck/data/media/generated/gen_a geometric abstract logo.png.",
+  "display": "Image generated from prompt: generate image of a geometric abstract logo",
+  "job_id": "abc123",
+  "media": "/home/chuck/data/media/generated/gen_a geometric abstract logo.png",
+  "data": {
+    "skill": "mcp_media",
+    "intent": "media-generate",
+    "image_url": "/home/chuck/data/media/generated/gen_a geometric abstract logo.png"
+  }
+}
+```
+
+**Generated images** are saved to `/home/chuck/data/media/generated/` as PNG files.
+Requires the `mcp_media` container to be running on `ai-net`.
+Prerequisite: ComfyUI must be running on the AI Workstation (Matrix).
+
+**2. Siri/Mobile Access (Skill Runner):**
+```
+iPhone Shortcut  →  Cloudflare Tunnel  →  Caddy  →  Skill Runner (:8091)  →  LiteLLM / MCP
+```
+
+The legacy AI Harness (`ai-harness/`) has been **decommissioned** (replaced by Skill Runner).
+Source code archived as `ai-harness-decommissioned/`.
 
 See [README_SIRI.md](README_SIRI.md) for full Siri API reference and Shortcut configuration.
 
@@ -621,19 +655,7 @@ AI infrastructure (separate Docker Compose project `ai-core`):
 - Crawl4AI
 - MkDocs family wiki
 
-Rarely changes. Services communicate with the harness via the shared `ai-net` network.
-
----
-
-## compose.ai-harness.yml
-
-AI harness (separate Docker Compose project `ai-harness`):
-- FastAPI harness
-- Celery workers
-- Celery beat scheduler
-- Knowledge base watcher
-
-Frequently iterated. Rebuilding this project does **not** restart litellm or other ai-core services, so LLM connections stay alive during development.
+Rarely changes. Services communicate via the shared `ai-net` network.
 
 ---
 
@@ -647,7 +669,7 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_mysql` — Database queries via MySQL (InvestorHub)
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
 - `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
-- `mcp_media` — Image generation/editing via Hugging Face (fallback to ComfyUI on rate-limit)
+- `mcp_media` — Image generation/editing via ComfyUI on Matrix
 
 All run on `ai-net`. Accessed by the skill runner over streamable HTTP.
 
@@ -733,10 +755,7 @@ Examples:
 ./homelab.sh up ai
 ./homelab.sh down ai
 
-# Rebuild only the harness — litellm and other core services stay alive
-./homelab.sh rebuild harness-only
-
-# Rebuild only core AI services (no harness rebuild)
+# Rebuild only core AI services
 ./homelab.sh rebuild ai-only
 
 # Manage MCP servers independently
@@ -771,7 +790,6 @@ Examples:
 `ai-core` (litellm, open-webui, qdrant, redis, searxng, etc.), `ai-mcp` (MCP servers),
 and `ai-skill-runner` (skill runner). Rebuilding `mcp-only` or `skill-only` will **not**
 restart litellm or other ai-core services — your LLM connection stays alive.
-Similarly, `rebuild harness-only` will **not** touch any of the ai-core services.
 
 ---
 

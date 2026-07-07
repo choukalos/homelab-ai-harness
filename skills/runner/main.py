@@ -2,8 +2,9 @@
 """
 Thor Skill Runner — Lightweight skill orchestration API.
 
-Runs on dev port 8091 alongside the current AI Harness (8090).
-Provides the job lifecycle API: launch, status, and artifact retrieval.
+Runs on port 8091.  Provides job lifecycle API: launch, status, and artifact
+retrieval.  Accepts chat requests via /api/chat and dispatches to skills or
+MCP servers.
 """
 
 import asyncio
@@ -13,6 +14,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import uuid
@@ -1070,6 +1072,9 @@ def _detect_intent(text: str, override: Optional[str]) -> str:
         return "research-brief"
     if any(k in text_lower for k in ("generate image", "create image", "image generate", "media generate", "generate media", "make image", "create media")):
         return "media-generate"
+    if re.search(r"(?:generate|create|make)\s+(?:an\s+)?image", text_lower) or \
+       re.search(r"(?:create|generate)\s+(?:an\s+)?media", text_lower):
+        return "media-generate"
     if any(k in text_lower for k in ("deep", "research", "deep research")):
         return "deep-research"
     if any(k in text_lower for k in ("present", "slide", "deck")):
@@ -1167,27 +1172,140 @@ def _handle_research_brief(text: str) -> ChatResponse:
     )
 
 
-def _handle_media_generate(text: str) -> ChatResponse:
+async def _handle_media_generate(text: str) -> ChatResponse:
     """
     Handler for 'media-generate' intent.
-    Dispatches to the mcp_media MCP server via the mcp_call mechanism.
+    Calls mcp_media.generate_image directly via the MCP streamable-http transport
+    and returns a structured response containing the generated image path.
     """
-    job = Job(
-        skill="mcp_media",
-        params={"query": text, "prompt": text},
-        requester="siri",
-        channel="siri",
-    )
-    job.add_log("Intent 'media-generate' dispatched to MCP server 'mcp_media'")
-    _execute_skill(job)
-    jobs[job.job_id] = job
-    logger.info("Job %s launched for media generation.", job.job_id)
-    return ChatResponse(
-        speak="I'm generating an image for you. This may take a moment.",
-        display=f"Job {job.job_id} started for image generation.",
-        job_id=job.job_id,
-        data={"skill": "mcp_media", "intent": "media-generate"},
-    )
+    client = LiteLLMClient()
+    try:
+        result = await client.mcp_call(
+            tool_name="generate_image",
+            arguments={"prompt": text},
+            server_id="mcp_media",
+        )
+
+        # Extract the image path from the MCP response
+        image_url = None
+        error_msg = None
+        if result.get("is_error"):
+            error_msg = "Image generation failed."
+            for item in result.get("output", []):
+                if isinstance(item, dict) and item.get("type") == "text":
+                    error_msg = item.get("text", error_msg)
+                    break
+            logger.error("media-generate error: %s", error_msg)
+            return ChatResponse(
+                speak="I couldn't generate an image. Please try again.",
+                display=f"Error: {error_msg}",
+                data={"skill": "mcp_media", "intent": "media-generate", "error": error_msg},
+            )
+
+        # Try structured result first, then output content
+        if result.get("result"):
+            structured = result["result"]
+            # The _build_result wrapper nests the actual tool result under "results"
+            tool_result = structured.get("results", structured)
+            if isinstance(tool_result, dict):
+                # mcp_media.generate_image returns saved_paths (list of file paths)
+                saved_paths = tool_result.get("saved_paths", [])
+                if saved_paths:
+                    # Filter out error paths
+                    for p in saved_paths:
+                        if p and not p.startswith("ERROR"):
+                            image_url = p
+                            break
+                    else:
+                        image_url = None
+                if not image_url:
+                    image_url = (
+                        tool_result.get("file_path")
+                        or tool_result.get("path")
+                        or tool_result.get("output_path")
+                        or tool_result.get("url")
+                    )
+            elif not image_url:
+                image_url = (
+                    structured.get("file_path")
+                    or structured.get("path")
+                    or structured.get("output_path")
+                    or structured.get("url")
+                )
+        if not image_url:
+            for item in result.get("output", []):
+                if isinstance(item, dict):
+                    if item.get("type") == "image":
+                        image_url = item.get("uri") or item.get("url")
+                        break
+                    elif item.get("type") == "text":
+                        text_val = item.get("text")
+                        if isinstance(text_val, str) and text_val.startswith("{"):
+                            # The MCP library may stringify the tool result dict
+                            try:
+                                parsed = json.loads(text_val)
+                                if isinstance(parsed, dict):
+                                    # Check for saved_paths (mcp_media)
+                                    sp = parsed.get("saved_paths", [])
+                                    if sp:
+                                        for p in sp:
+                                            if p and not p.startswith("ERROR"):
+                                                image_url = p
+                                                break
+                                        if image_url:
+                                            break
+                                    # Check other common path keys
+                                    if not image_url:
+                                        image_url = (
+                                            parsed.get("file_path")
+                                            or parsed.get("path")
+                                            or parsed.get("output_path")
+                                            or parsed.get("url")
+                                        )
+                                        if image_url:
+                                            break
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        if not image_url:
+                            image_url = text_val
+                        break
+
+        job = Job(
+            skill="mcp_media",
+            params={"query": text, "prompt": text},
+            requester="siri",
+            channel="siri",
+        )
+        job.add_log("Intent 'media-generate' dispatched to MCP server 'mcp_media'")
+        if image_url:
+            job.artifact_path = image_url
+            job.add_log(f"Image generated: {image_url}")
+        job.status = JobStatus.completed
+        job.completed_at = datetime.now(timezone.utc).isoformat()
+        job.summary = f"Image generated from prompt: {text}"
+        jobs[job.job_id] = job
+        logger.info("Job %s completed for media generation. image=%s", job.job_id, image_url)
+
+        speak = "I've generated an image for you."
+        if image_url:
+            speak = f"I've generated an image for you. It's saved at {image_url}."
+
+        return ChatResponse(
+            speak=speak,
+            display=f"Image generated from prompt: {text}",
+            job_id=job.job_id,
+            media=image_url,
+            data={"skill": "mcp_media", "intent": "media-generate", "image_url": image_url},
+        )
+    except Exception as exc:
+        logger.error("media-generate exception: %s", exc)
+        return ChatResponse(
+            speak="I encountered an error generating the image. Please try again.",
+            display=f"Error: {exc}",
+            data={"skill": "mcp_media", "intent": "media-generate", "error": str(exc)},
+        )
+    finally:
+        await client.close()
 
 
 def _scan_demos(query: str) -> ChatResponse:
@@ -1374,7 +1492,7 @@ async def api_chat(
     if intent == "research-brief":
         return _handle_research_brief(body.text)
     if intent == "media-generate":
-        return _handle_media_generate(body.text)
+        return await _handle_media_generate(body.text)
 
     # --- Async dispatch to skills ---
     skill_name = _INTENT_SKILL_MAP.get(intent)
@@ -1524,6 +1642,12 @@ async def get_job_artifact(job_id: str):
         ".html": "text/html",
         ".csv": "text/csv",
         ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
     }
     media_type = media_types.get(ext, "application/octet-stream")
 

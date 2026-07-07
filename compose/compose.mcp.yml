@@ -95,7 +95,9 @@ services:
       - LITELLM_BASE_URL=http://litellm-proxy:4000
       - LITELLM_API_KEY=${LITELLM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
-      - COMFYUI_BASE_URL=http://matrix:8188
+      - COMFYUI_BASE_URL=http://192.168.4.55:8188
+    volumes:
+      - /home/chuck/data/media/generated:/home/chuck/data/media/generated
     restart: unless-stopped
     networks:
       - ai-net

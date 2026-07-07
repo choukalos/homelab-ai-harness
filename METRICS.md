@@ -76,7 +76,7 @@ To exclude the internal health-check key from stats:
 api_key_alias != "litellm-internal-health-check"
 ```
 
-The master key (`api_key_alias=""`, `user="default_user_id"`) **is included** in all stats — it represents system/ai-harness activity.
+The master key (`api_key_alias=""`, `user="default_user_id"`) **is included** in all stats — it represents system/skill-runner activity.
 
 ### Budget Pricing
 
@@ -206,5 +206,4 @@ count(count by (api_key_alias)
 | `grafana/dashboards/llm-gpu-monitor.json` | Dashboard 1 JSON |
 | `grafana/dashboards/homelab-overview.json` | Dashboard 2 JSON |
 | `compose/compose.ai-core.yml` | LiteLLM + Prometheus + Grafana stack |
-| `compose/compose.ai-harness.yml` | AI harness services |
 | `homelab.sh` | CLI for key management (`key info`, `key list`, etc.) |
