@@ -47,7 +47,7 @@ python skill.py --prompt "Build a solar system simulator" --harness-url http://l
 
 | Environment Variable          | Default                        | Description                     |
 |-------------------------------|--------------------------------|---------------------------------|
-| DEMO_WORKFLOW_HARNESS_URL     | `http://ai-harness:8090`       | AI Harness base URL             |
+| DEMO_WORKFLOW_HARNESS_URL     | `http://skill-runner:8091`       | Skill Runner base URL             |
 | DEMO_WORKFLOW_MAX_RUNTIME     | `600`                          | Max runtime in seconds          |
 | DEMO_WORKFLOW_ARTIFACT_DIR    | `/home/chuck/data/media/presentations` | Artifact output directory |
 

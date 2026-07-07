@@ -23,14 +23,19 @@ services:
       - MCP_SERVER_KNOWLEDGE_URL=http://mcp_knowledge:8000
       - MCP_SERVER_CRAWL_URL=http://mcp_crawl:8000
       - MCP_SERVER_FILESYSTEM_READONLY_URL=http://mcp_filesystem_readonly:8000
+      - MCP_SERVER_HOMELAB_STATUS_URL=http://mcp_homelab_status:8000
+      - MCP_SERVER_FILESYSTEM_URL=http://mcp_filesystem:8000
+      - MCP_SERVER_MEDIA_URL=http://mcp_media:8000
+      - SKILL_RUNNER_API_KEY=${SIRI_API_KEY}
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
-      - HARNESS_URL=http://ai-harness:8090
+      - HARNESS_URL=http://skill-runner:8091
     volumes:
       - ../skills:/app/skills:ro
       - /home/chuck/data/media:/home/chuck/data/media
       - /home/chuck/workspace:/home/chuck/workspace
       - /home/chuck/homelab/logs/skill_runner:/home/chuck/homelab/logs/skill_runner
+      - /home/chuck/homelab/data/scheduler:/app/data/scheduler
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
     # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
     # supported by Docker Compose.

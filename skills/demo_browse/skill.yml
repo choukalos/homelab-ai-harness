@@ -1,0 +1,22 @@
+name: demo_browse
+version: "1.0"
+description: "Scan demos directory and keyword-match demos by title, description, and tags."
+inputs:
+  - name: query
+    type: string
+    required: true
+    description: "Search keywords to match against demo titles, descriptions, and tags."
+  - name: demo_dir
+    type: string
+    required: false
+    description: "Root demos directory to scan. Defaults to /home/chuck/data/media/demos/."
+  - name: limit
+    type: integer
+    required: false
+    description: "Maximum number of results to return. Defaults to 20."
+tools: []
+model_alias: none
+artifact_path: /home/chuck/data/media/demos/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 30

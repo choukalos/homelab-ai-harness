@@ -29,6 +29,7 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_PUBLIC_API_KEY=${LITELLM_PUBLIC_API_KEY}
       - LITELLM_API_KEY=${LITELLM_MASTER_KEY}
+      - HF_TOKEN=${HF_TOKEN}
       - DATABASE_URL=${LITELLM_DATABASE_URL}
       - MAC_STUDIO_IP=192.168.4.56
       - MATRIX_IP=192.168.4.55
@@ -73,9 +74,9 @@ services:
       - ENABLE_PERSISTENT_CONFIG=False
       - ENABLE_IMAGE_GENERATION=true
       - IMAGE_GENERATION_API_URL=http://${MATRIX_IP}:8188
-      - HARNESS_URL=http://ai-harness:8090
+      - HARNESS_URL=http://skill-runner:8091
       - HARNESS_API_KEY=${HARNESS_API_KEY}
-      - HARNESS_DISPLAY_URL=http://${THOR_IP:-192.168.4.54}:8090
+      - HARNESS_DISPLAY_URL=http://${THOR_IP:-192.168.4.54}:8091
     volumes:
       - /home/chuck/data/open-webui:/app/backend/data
     depends_on:

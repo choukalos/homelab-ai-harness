@@ -1,0 +1,19 @@
+name: presentation_update
+version: "1.0"
+description: "Update an existing presentation by title using natural-language instructions"
+inputs:
+  - name: presentation_title
+    type: string
+    required: true
+    description: "Title (or partial title) of the presentation to update."
+  - name: instructions
+    type: string
+    required: true
+    description: "Natural-language update instructions (e.g. 'make it more casual and add 3 slides')."
+tools:
+  - presenton_api
+  - model_chat
+model_alias: local/qwen-coder
+approval_gates: []
+channels: [cli, pi, n8n, siri]
+max_runtime: 300  # seconds (5 minutes)
