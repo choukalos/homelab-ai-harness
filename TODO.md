@@ -42,57 +42,42 @@
 
 ## Remaining Work
 
-### 🛑 Decommission Legacy Harness (Manual — Chuck)
+### ✅ Decommission Legacy Harness (Done 2026-07-07)
 
-The Caddy cutover to Skill Runner is confirmed stable. Stop the old harness:
-
-```bash
-docker compose -f compose/compose.ai-harness.yml down
-```
-
-The `ai-harness` image can be pruned after stopping.
+The Caddy cutover to Skill Runner was confirmed stable.
+The old `ai-harness` source code has been archived to `ai-harness-decommissioned/`
+and Docker images pruned.  The compose file `compose.ai-harness.yml.bak` is preserved
+for reference if needed.
 
 ---
 
-### A2-verify: `mcp_media` — End-to-End Image Generation (Manual — Chuck)
+### A2-verify: `mcp_media` — Image Generation via ComfyUI ✅ VERIFIED
 
-The `mcp_media` server is deployed and the 4 tools are registered with LiteLLM
-(`generate_image`, `edit_image`, `image_info`, `list_images`). The server code
-is complete and the container is healthy.
+**Image backend:** ComfyUI on Matrix (`192.168.4.55:8188`)
+- Primary: `comfyui` (local GPU, free)
+- Default model in `mcp_media` is `comfyui`
 
-**Image backend configured:**
-- **Primary:** Hugging Face `stable-diffusion-3-medium` via your `HF_TOKEN`
-- **Fallback:** ComfyUI on `matrix:8188` (auto-triggers on HF rate-limit)
-- Default model in `mcp_media` is `hf-sd3`
+**Full stack test 2026-07-06:**
+- `mcp_media` container → ComfyUI via `http://192.168.4.55:8188` ✅
+- Workflow: SDXL checkpoint → KSampler → VAE decode → SaveImage ✅
+- End-to-end via LiteLLM MCP REST: `generate_image("a geometric abstract logo", "comfyui")` ✅
+- Generated: `gen_a geometric abstract logo.png` (1024×1024, 1.6MB) ✅
+- Saved to `/home/chuck/data/media/generated/` ✅
 
-**What's left to verify end-to-end:**
-
-1. **Restart LiteLLM** to pick up the new `hf-sd3` model config + `HF_TOKEN`:
-   ```bash
-   docker compose -f compose/compose.ai-core.yml restart litellm
-   ```
-
-2. **Test** by calling `generate_image("a sunset over Tokyo skyline")` via
-   the LiteLLM proxy `/v1/images/generate` or via the skill runner chat gateway.
-
-Once verified, confirm:
-- `generate_image(...)` → saves to `/home/chuck/data/media/generated/images/`
-- `list_images()` → returns the generated image
-- `image_info(...)` → returns dimensions
-- HF rate-limit fallback to ComfyUI works (spin up ComfyUI to test)
+**Notes:**
+- HF Inference API DNS doesn't resolve from Thor (path left in code but inactive)
+- ComfyUI workflow uses `sd_xl_base_1.0.safetensors` (matches your checkpoint)
 
 ---
 
-### C2: `media-generate` chat handler (Chuck or AI)
+### C2: `media-generate` chat handler ✅ DONE
 
-The `media-generate` intent is detected in `_detect_intent()` but the inline
-handler in `main.py` is still a stub. Needs a real implementation that:
-- Constructs an MCP tool call to `mcp_media.generate_image`
-- Returns the result with the image artifact path
+The `media-generate` intent handler in `main.py` calls `mcp_media.generate_image`
+via streamable HTTP and returns the image URL in the chat response.
 
-Also needed: **C8 — Fix `demo_workflow` skill HARNESS_URL** — the skill still
-points to `http://ai-harness:8090`. Update to use the skill runner or
-standalone mode.
+### C8: `demo_workflow` skill HARNESS_URL ✅ FIXED
+
+Updated to `http://skill-runner:8091` (was `http://ai-harness:8090`).
 
 ---
 

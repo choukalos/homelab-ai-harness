@@ -8,7 +8,6 @@ CORE="${COMPOSE_DIR}/compose.core.yml"
 EDGE="${COMPOSE_DIR}/compose.edge.yml"
 GHOST="${COMPOSE_DIR}/compose.ghost.yml"
 AI_CORE="${COMPOSE_DIR}/compose.ai-core.yml"
-HARNESS="${COMPOSE_DIR}/compose.ai-harness.yml"
 INVEST="${COMPOSE_DIR}/compose.invest-hub.yml"
 N8N="${COMPOSE_DIR}/compose.n8n.yml"
 MONITORING="${COMPOSE_DIR}/compose.monitoring.yml"
@@ -61,7 +60,6 @@ Stacks:
   edge-only
   ghost-only     Ghost only (Caddy + cloudflared kept running)
   ai-only        AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
-  harness-only   Harness only (FastAPI, workers, beat, kb-watcher)
   mcp-only       MCP servers only
   skill-only     Skill Runner only (MCP and AI core kept running)
   invest-only    Invest only (Caddy + cloudflared kept running)
@@ -74,9 +72,6 @@ Notes:
   ai-mcp (MCP servers), and ai-skill-runner (skill runner). Rebuilding
   mcp-only or skill-only will NOT restart litellm or other ai-core
   services, so your LLM connection stays alive.
-
-  harness is also a separate project. Rebuilding harness-only will NOT
-  restart litellm or other ai-core services.
 
   ghost and invest are also separate projects. Rebuilding ghost-only or
   invest-only will NOT restart Caddy or Cloudflare Tunnel.
@@ -95,7 +90,6 @@ compose_files() {
     ghost)          echo "-f ${CORE} -f ${EDGE} -f ${GHOST}" ;;
     ghost-only)     echo "-f ${GHOST}" ;;
     ai-only)        echo "-f ${AI_CORE}" ;;
-    harness-only)   echo "-f ${HARNESS}" ;;
     invest)         echo "-f ${CORE} -f ${EDGE} -f ${INVEST}" ;;
     invest-only)    echo "-f ${INVEST}" ;;
     public)         echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST}" ;;
