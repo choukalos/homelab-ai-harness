@@ -95,7 +95,7 @@ Edit `compose/compose.monitoring.yml` to add these services:
       - "8082:8000"         # 8081 is taken by cAdvisor; LAN admin at 192.168.4.54:8082
     environment:
       DATABASE_TYPE: postgres
-      DATABASE_URL: postgres://plausible:plausible@plausible-db:5432/plausible
+      DATABASE_URL: postgres://plausible:${PLAUSIBLE_DB_PASS}@plausible-db:5432/plausible
       SECRET_KEY_BASE: ${PLAUSIBLE_SECRET_KEY}
       PLAUSIBLE_HOSTNAME: https://plausible.choukalos.com
       GOOGLE_APPLICATION_CREDENTIALS: ""
@@ -111,7 +111,7 @@ Edit `compose/compose.monitoring.yml` to add these services:
       - monitoring-net
     environment:
       POSTGRES_USER: plausible
-      POSTGRES_PASSWORD: plausible
+      POSTGRES_PASSWORD: ${PLAUSIBLE_DB_PASS}
       POSTGRES_DB: plausible
     volumes:
       - /home/chuck/data/plausible-db:/var/lib/postgresql/data
