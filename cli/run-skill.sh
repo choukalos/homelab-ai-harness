@@ -310,14 +310,17 @@ usage() {
 }
 
 # ── Main ─────────────────────────────────────────────────────
+
+# Handle --public flag before the case (can't use fallthrough with comments)
+if [[ "${1:-}" == "--public" ]]; then
+    BASE_SKILL_RUNNER="$BASE_PUBLIC"
+    shift
+fi
+
 case "${1:-}" in
     --help|-h)
         usage
         exit 0
-        ;;
-    --public)
-        BASE_SKILL_RUNNER="$BASE_PUBLIC"
-        shift
         ;;
     "")
         echo -e "${RED}Error: No arguments provided.${NC}"
