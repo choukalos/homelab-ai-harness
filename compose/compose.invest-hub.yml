@@ -31,6 +31,7 @@ services:
       dockerfile: Dockerfile
     container_name: invest-hub-server
     restart: unless-stopped
+    stop_grace_period: 30s
     env_file:
       - ../.env
     networks:
@@ -68,6 +69,7 @@ services:
         VITE_PLAUSIBLE_DOMAIN: invest.choukalos.com
     container_name: invest-hub-client
     restart: unless-stopped
+    stop_grace_period: 30s
     env_file:
       - ../.env
     environment:
