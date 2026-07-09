@@ -510,12 +510,11 @@ Skills compose MCP tools into controlled agentic workflows. The skill runner cal
 | `repo_maintenance` | — | **Yes** | CLI, Pi, n8n | Repository health, cleanup |
 | `siri_chat` | mcp_search, mcp_knowledge, mcp_homelab_status | No | Siri | Enhanced chat with MCP tool access |
 | `presentation_update` | model_chat + Presenton API | No | Siri | Update existing presentations (tone, content, etc.) |
-| `demo_browse` | Local filesystem | No | Siri | Search/browse demos by keyword |
-| `research_brief` | mcp_search | No | Siri | Lightweight web research + summarization (faster than deep_research) |
-| `siri_chat` | mcp_search, mcp_knowledge, mcp_homelab_status | No | Siri | Enhanced chat with MCP tool access |
-| `presentation_update` | model_chat + Presenton API | No | Siri | Update existing presentations (tone, content, etc.) |
 | `demo_browse` | Local filesystem | No | Siri | Search/browse demos by keyword in `/home/chuck/data/media/demos/` |
 | `research_brief` | mcp_search | No | Siri | Lightweight web research with summarization (faster than deep_research) |
+| `list-demos` | Local filesystem | No | Siri, CLI | List all demos with accessible URLs |
+| `list-presentations` | Presenton API | No | Siri, CLI | List presentations with view/edit URLs |
+| `list-images` | Local filesystem | No | Siri, CLI | List generated images with accessible URLs |
 
 Skills with **approval gates** (`family_kb_ingest`, `repo_maintenance`) pause at `awaiting_approval` until explicitly approved via the API.
 
@@ -569,6 +568,7 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **update-presentation** — Update an existing presentation (tone, content)
 - **find-demos** / **list-demos** — Browse/search demos
 - **list-presentations** — List existing presentations
+- **list-images** — List generated images with accessible URLs
 - **media-generate** — Generate an image via `mcp_media.generate_image` (ComfyUI backend)
 
 ### Media Generation (Image)
@@ -591,21 +591,103 @@ curl -s -X POST https://siri.choukalos.com/api/chat \
 **Response:**
 ```json
 {
-  "speak": "I've generated an image for you. It's saved at /home/chuck/data/media/generated/gen_a geometric abstract logo.png.",
+  "speak": "I've generated an image. View it at https://siri.choukalos.com/media/files/generated/gen_a geometric abstract logo.png",
   "display": "Image generated from prompt: generate image of a geometric abstract logo",
   "job_id": "abc123",
   "media": "/home/chuck/data/media/generated/gen_a geometric abstract logo.png",
   "data": {
     "skill": "mcp_media",
     "intent": "media-generate",
-    "image_url": "/home/chuck/data/media/generated/gen_a geometric abstract logo.png"
+    "image_url": "https://siri.choukalos.com/media/files/generated/gen_a geometric abstract logo.png"
   }
 }
 ```
 
 **Generated images** are saved to `/home/chuck/data/media/generated/` as PNG files.
+The response includes accessible URLs — `image_url` is a public URL that can be
+viewed directly in a browser or embedded in markdown.
+
 Requires the `mcp_media` container to be running on `ai-net`.
 Prerequisite: ComfyUI must be running on the AI Workstation (Matrix).
+
+### Media URL Structure
+
+All generated assets are served through a single route proxied by Caddy:
+
+| Path | Local directory | Accessible URL (public) | Accessible URL (LAN) |
+|---|---|---|---|
+| `/media/files/*` | `/home/chuck/data/media/*` | `https://siri.choukalos.com/media/files/generated/img.png` | `http://192.168.4.54:8091/media/files/generated/img.png` |
+
+Subdirectories:
+- **`generated/`** — images from `media-generate` (ComfyUI)
+- **`demos/`** — demo HTML files from `demo_workflow` / `demo_browse`
+- **`images/`** — static images
+- **`presentations/`** — PPTX exports (downloadable, not the Presenton web portal)
+
+### Listing Intents
+
+Three listing intents scan local files/Presenton and return accessible URLs:
+
+| Intent | Source | What it lists |
+|---|---|---|
+| `list-images` | `/media/generated/`, `/media/images/` | Generated images with view URLs |
+| `list-demos` | `/media/demos/` | Demo HTML files with view URLs |
+| `list-presentations` | Presenton API (`/api/v1/ppt/presentation/all`) | Presentations with view/edit URLs |
+
+All listing intents dispatch asynchronously. The CLI polls for results.
+
+**CLI usage:**
+```bash
+# List all generated images
+./cli/run-skill.sh list-images
+
+# Filter by keyword
+./cli/run-skill.sh list-images sunset
+
+# List demos (all or by keyword)
+./cli/run-skill.sh list-demos
+./cli/run-skill.sh list-demos taskflow
+
+# List presentations
+./cli/run-skill.sh list-presentations
+
+# Use public endpoint (--public proxies through siri.choukalos.com)
+./cli/run-skill.sh --public list-images
+```
+
+Presentations use a separate web portal: `https://siri.choukalos.com/presentations/{id}` → Presenton
+
+### Listing Images
+
+The `list-images` intent scans `/media/generated/` and `/media/images/` and
+returns each image with accessible URLs:
+
+```bash
+./cli/run-skill.sh list-images                    # list all images
+./cli/run-skill.sh list-images "sunset"           # filter by keyword
+./cli/run-skill.sh --public list-images "rose"    # public endpoint
+```
+
+**Response** includes per-image `view_url` (public) and `view_url_lan` (LAN):
+```json
+{
+  "speak": "I found 15 images.",
+  "display": "Found 15 images:\n- a sunset (2.0MB, generated, 2026-07-08T10:30:00+00:00)\n...",
+  "data": {
+    "count": 15,
+    "images": [
+      {
+        "name": "a sunset",
+        "filename": "gen_a sunset.png",
+        "directory": "generated",
+        "size_human": "2.0MB",
+        "view_url": "https://siri.choukalos.com/media/files/generated/gen_a sunset.png",
+        "view_url_lan": "http://192.168.4.54:8091/media/files/generated/gen_a sunset.png"
+      }
+    ]
+  }
+}
+```
 
 **2. Siri/Mobile Access (Skill Runner):**
 ```

@@ -71,26 +71,45 @@
 #            }
 #	}
 
-	@siri_media host siri.choukalos.com path /media/files/*
+	@siri_media {
+		host siri.choukalos.com
+		path /media/files/*
+	}
 	handle @siri_media {
 		# Old: reverse_proxy http://ai-harness:8090
 		reverse_proxy http://skill-runner:8091
 	}
 
+	# Presenton web portal — user logs in to view/edit presentations
+	@siri_presentations {
+		host siri.choukalos.com
+		path /presentations/*
+	}
+	handle @siri_presentations {
+		uri strip_prefix /presentations
+		reverse_proxy http://presenton:80 {
+			header_up Authorization "Basic cHByZHNlbnRvbjpjaGFuZ2VtZTEyMw=="
+		}
+	}
+
 	@siri host siri.choukalos.com
 	handle @siri {
-		# Optional health check
+		# Health check
 		handle /health {
-			# Old: reverse_proxy http://ai-harness:8090
 			reverse_proxy http://skill-runner:8091
 		}
 
-		# Siri API requires auth
+		# Siri API — authenticated proxy to skill-runner
 		handle /siri/* {
 			@noAuth not header X-API-Key {$SIRI_API_KEY}
 			respond @noAuth "Unauthorized" 401
+			reverse_proxy http://skill-runner:8091
+		}
 
-			# Old: reverse_proxy http://ai-harness:8090
+		# Chat Gateway API — authenticated proxy to skill-runner
+		handle /api/* {
+			@noAuth not header X-API-Key {$SIRI_API_KEY}
+			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
 

@@ -59,24 +59,34 @@ detect_intent() {
     local text_lower
     text_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 
-    if [[ "$text_lower" == *"image"* ]] || [[ "$text_lower" == *"picture"* ]] || [[ "$text_lower" == *"photo"* ]]; then
+    # Media generation — match image/media creation keywords
+    if [[ "$text_lower" == *"image"* ]] || [[ "$text_lower" == *"picture"* ]] || [[ "$text_lower" == *"photo"* ]] || \
+       [[ "$text_lower" == *"draw"* ]] || [[ "$text_lower" == *"render"* ]] || [[ "$text_lower" == *"media generat"* ]] || \
+       [[ "$text_lower" == *"generate image"* ]] || [[ "$text_lower" == *"create image"* ]] || [[ "$text_lower" == *"make image"* ]] || \
+       [[ "$text_lower" == *"generate media"* ]] || [[ "$text_lower" == *"create media"* ]]; then
         echo "media-generate"
-    elif [[ "$text_lower" == *"deep research"* ]] || [[ "$text_lower" == *"deep-research"* ]]; then
+    elif [[ "$text_lower" == *"deep research"* ]] || [[ "$text_lower" == *"deep-research"* ]] || [[ "$text_lower" == *"deep research"* ]]; then
         echo "deep-research"
-    elif [[ "$text_lower" == *"research"* ]]; then
-        echo "research"
-    elif [[ "$text_lower" == *"create demo"* ]] || [[ "$text_lower" == *"create-demo"* ]]; then
+    elif [[ "$text_lower" == *"investment brief"* ]] || [[ "$text_lower" == *"investment-brief"* ]] || [[ "$text_lower" == *"stock brief"* ]] || [[ "$text_lower" == *"stock-brief"* ]]; then
+        echo "investment-brief"
+    elif [[ "$text_lower" == *"morning brief"* ]] || [[ "$text_lower" == *"morning-brief"* ]] || [[ "$text_lower" == *"daily brief"* ]] || [[ "$text_lower" == *"daily-brief"* ]] || [[ "$text_lower" == *"daily summary"* ]]; then
+        echo "morning-brief"
+    elif [[ "$text_lower" == *"research brief"* ]] || [[ "$text_lower" == *"research-brief"* ]] || [[ "$text_lower" == *"research summary"* ]]; then
+        echo "research-brief"
+    elif [[ "$text_lower" == *"create demo"* ]] || [[ "$text_lower" == *"create-demo"* ]] || [[ "$text_lower" == *"new demo"* ]]; then
         echo "create-demo"
     elif [[ "$text_lower" == *"create presentation"* ]] || [[ "$text_lower" == *"create-presentation"* ]]; then
         echo "create-presentation"
     elif [[ "$text_lower" == *"update presentation"* ]] || [[ "$text_lower" == *"update-presentation"* ]]; then
         echo "update-presentation"
-    elif [[ "$text_lower" == *"list demo"* ]] || [[ "$text_lower" == *"list-demo"* ]]; then
+    elif [[ "$text_lower" == *"list demo"* ]] || [[ "$text_lower" == *"list-demo"* ]] || [[ "$text_lower" == *"list demos"* ]] || [[ "$text_lower" == *"list-demos"* ]]; then
         echo "list-demos"
-    elif [[ "$text_lower" == *"find demo"* ]] || [[ "$text_lower" == *"find-demo"* ]]; then
+    elif [[ "$text_lower" == *"find demo"* ]] || [[ "$text_lower" == *"find-demo"* ]] || [[ "$text_lower" == *"search demo"* ]]; then
         echo "find-demo"
-    elif [[ "$text_lower" == *"list presentation"* ]] || [[ "$text_lower" == *"list-presentation"* ]]; then
+    elif [[ "$text_lower" == *"list presentation"* ]] || [[ "$text_lower" == *"list-presentation"* ]] || [[ "$text_lower" == *"list presentations"* ]]; then
         echo "list-presentations"
+    elif [[ "$text_lower" == *"list image"* ]] || [[ "$text_lower" == *"list-image"* ]] || [[ "$text_lower" == *"list images"* ]] || [[ "$text_lower" == *"list my image"* ]] || [[ "$text_lower" == *"show image"* ]] || [[ "$text_lower" == *"show images"* ]] || [[ "$text_lower" == *"show my image"* ]]; then
+        echo "list-images"
     elif [[ "$text_lower" == *"find presentation"* ]] || [[ "$text_lower" == *"find-presentation"* ]]; then
         echo "find-presentation"
     else
@@ -87,11 +97,12 @@ detect_intent() {
 # ── Poll async job ──────────────────────────────────────────
 # ── Check if intent is async ────────────────────────────────
 is_async_intent() {
+    # ALL non-chat intents now dispatch as background jobs and return job_id
     case "$1" in
-        deep-research|create-demo|create-presentation|update-presentation|media-generate)
-            return 0 ;;
-        *)
+        chat)
             return 1 ;;
+        *)
+            return 0 ;;
     esac
 }
 
@@ -104,7 +115,7 @@ poll_job() {
 
     echo -e "\n${CYAN}━━━ POLLING JOB ━━━${NC}"
     echo -e "  ${BLUE}Job ID:${NC}   ${BOLD}${job_id}${NC}"
-    echo -e "  ${BLUE}Endpoint:${NC} ${BASE_SKILL_RUNNER}/api/jobs/${job_id}"
+    echo -e "  ${BLUE}Endpoint:${NC} ${BASE_SKILL_RUNNER}/skills/jobs/${job_id}"
     echo ""
 
     while [[ $attempts -lt $max_attempts ]]; do
@@ -113,7 +124,7 @@ poll_job() {
         poll_resp=$(mktemp)
         local http_code
         http_code=$(curl -sS -o "${poll_resp}" -w "%{http_code}" \
-            -X GET "${BASE_SKILL_RUNNER}/api/jobs/${job_id}" \
+            -X GET "${BASE_SKILL_RUNNER}/skills/jobs/${job_id}" \
             -H "X-API-Key: ${SIRI_API_KEY}" \
             --max-time 30 2>/dev/null) || http_code="000"
 
@@ -132,22 +143,45 @@ poll_job() {
             echo -e "  ${GREEN}✓ Job completed!${NC}"
             echo ""
 
-            # Extract speak and display
-            local speak display
+            # Extract speak/display from top-level or from params for async dispatch
+            local speak display data_json
             speak=$(python3 -c "
 import json
 d = json.load(open('${poll_resp}'))
 s = d.get('speak', '')
 if not s:
-    s = d.get('display', '')
-    if isinstance(s, str) and len(s) > 200:
+    s = d.get('summary', '')
+    if s and isinstance(s, str) and len(s) > 200:
         s = s[:197] + '...'
 print(s)
-" 2>/dev/null) || speak="Failed to parse response"
+" 2>/dev/null) || speak=""
+
+            # For async-dispatched jobs, results are in params['_result_data']
+            data_json=$(python3 -c "
+import json
+d = json.load(open('${poll_resp}'))
+params = d.get('params', {})
+data = params.get('_result_data', None)
+if data:
+    print(json.dumps(data, indent=2, default=str))
+else:
+    speak_val = d.get('speak', '')
+    display_val = d.get('display', '')
+    if display_val and display_val != speak_val:
+        print(json.dumps({'display': display_val}, indent=2))
+" 2>/dev/null) || data_json=""
+
             display=$(python3 -c "
 import json
 d = json.load(open('${poll_resp}'))
-print(d.get('display', ''))
+params = d.get('params', {})
+result_display = params.get('_result_display', '')
+if not result_display:
+    result_display = d.get('display', '')
+if result_display and isinstance(result_display, str):
+    if len(result_display) > 500:
+        result_display = result_display[:497] + '...'
+    print(result_display)
 " 2>/dev/null) || display=""
 
             echo -e "${GREEN}━━━ RESULT ━━━${NC}"
@@ -158,6 +192,11 @@ print(d.get('display', ''))
                 echo ""
                 echo -e "  ${BOLD}Display:${NC}"
                 echo "$display" | sed 's/^/  /'
+            fi
+            if [[ -n "$data_json" ]]; then
+                echo ""
+                echo -e "  ${BOLD}Data:${NC}"
+                echo "$data_json" | sed 's/^/  /'
             fi
             rm -f "$poll_resp"
             return 0
@@ -202,7 +241,8 @@ json.dump(payload, sys.stdout)
     case "$intent" in
         deep-research|research) timeout=180 ;;
         create-demo|create-presentation|update-presentation) timeout=60 ;;
-        list-demos|find-demo|list-presentations|find-presentation) timeout=30 ;;
+        research-brief|investment-brief|morning-brief) timeout=60 ;;
+        list-demos|find-demo|list-presentations|find-presentation|list-images) timeout=30 ;;
         media-generate) timeout=120 ;;
         chat) timeout=120 ;;
         *) timeout=60 ;;
@@ -305,6 +345,10 @@ usage() {
     echo -e "  ${CYAN}find-demo${NC}               — Sync: find demo"
     echo -e "  ${CYAN}list-presentations${NC}      — Sync: list presentations"
     echo -e "  ${CYAN}find-presentation${NC}       — Sync: find presentation"
+    echo -e "  ${CYAN}list-images${NC}             — Sync: list generated images"
+    echo -e "  ${CYAN}investment-brief${NC}        — Investment/market briefing"
+    echo -e "  ${CYAN}morning-brief${NC}             — Daily morning briefing"
+    echo -e "  ${CYAN}research-brief${NC}            — Research summary/analysis"
     echo ""
     echo -e "Environment: ${CYAN}SIRI_API_KEY${NC} (from .env), ${CYAN}BASE_SKILL_RUNNER${NC} (default: ${BASE_SKILL_RUNNER}), ${CYAN}BASE_PUBLIC${NC} (default: ${BASE_PUBLIC})"
 }
@@ -334,7 +378,7 @@ case "${1:-}" in
         # Check if first arg is a known intent
         known_intent=""
         case "$first_arg" in
-            deep-research|research|create-demo|create-presentation|update-presentation|list-demos|find-demo|list-presentations|find-presentation|chat|media-generate)
+            deep-research|research|create-demo|create-presentation|update-presentation|list-demos|find-demo|list-presentations|find-presentation|list-images|investment-brief|morning-brief|research-brief|chat|media-generate)
                 known_intent="$first_arg"
                 ;;
             *)
@@ -346,7 +390,7 @@ case "${1:-}" in
             # First arg is intent, second is text
             shift
             text="${1:-}"
-            if [[ -z "$text" ]] && [[ "$known_intent" != "list-demos" ]] && [[ "$known_intent" != "list-presentations" ]]; then
+            if [[ -z "$text" ]] && [[ "$known_intent" != "list-demos" ]] && [[ "$known_intent" != "list-presentations" ]] && [[ "$known_intent" != "list-images" ]] && [[ "$known_intent" != "investment-brief" ]] && [[ "$known_intent" != "morning-brief" ]]; then
                 echo -e "${RED}Error: No text provided for intent '${known_intent}'.${NC}"
                 echo "Usage: ./run-skill.sh ${known_intent} 'your text'"
                 exit 1
@@ -356,6 +400,10 @@ case "${1:-}" in
                 case "$known_intent" in
                     list-demos) text="list my demos" ;;
                     list-presentations) text="list my presentations" ;;
+                    list-images) text="list my images" ;;
+                    investment-brief) text="brief me on today's market" ;;
+                    morning-brief) text="give me my morning briefing" ;;
+                    research-brief) text="give me a research summary" ;;
                 esac
             fi
             chat_request "$text" "$known_intent"

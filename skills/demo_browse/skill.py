@@ -29,9 +29,11 @@ import os
 import re
 import signal
 import sys
+import threading
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote as url_quote
 from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
@@ -60,15 +62,15 @@ def _timeout_handler(signum, frame):
 
 
 def _install_timeout():
-    """Install a signal-based timeout (Unix only)."""
-    if sys.platform != "win32":
+    """Install a signal-based timeout (Unix only, main thread only)."""
+    if sys.platform != "win32" and threading.main_thread() is threading.current_thread():
         signal.signal(signal.SIGALRM, _timeout_handler)
         signal.alarm(MAX_RUNTIME_SECS)
 
 
 def _cancel_timeout():
     """Cancel the pending alarm."""
-    if sys.platform != "win32":
+    if sys.platform != "win32" and threading.main_thread() is threading.current_thread():
         signal.alarm(0)
 
 
@@ -262,7 +264,19 @@ def _match_demos(demos: list[dict[str, Any]], query: str, limit: int) -> list[di
 
     Each word in the query is treated as a keyword.
     Results are sorted by score (highest first) and truncated to `limit`.
+    Special: query '*' or empty string returns ALL demos (sorted by name).
     """
+    # Wildcard / empty = return all demos
+    if query in ("*", "") or not query.strip():
+        result = []
+        for demo in demos:
+            d = dict(demo)
+            d["match_score"] = 1.0
+            d["matched_keywords"] = []
+            result.append(d)
+        result.sort(key=lambda d: d.get("title", "").lower())
+        return result[:limit]
+
     # Tokenize the query into keywords
     keywords = re.findall(r"[\w]+", query.lower())
     if not keywords:
@@ -345,6 +359,23 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
             job.add_log(f"Found {len(matched)} matching demos")
             for i, demo in enumerate(matched):
                 job.add_log(f"  [{i+1}] {demo['title']} (score: {demo['match_score']})")
+
+        # Add accessible URLs to each matched demo (URL-encoded for spaces)
+        for demo in matched:
+            # Demos are under /home/chuck/data/media/demos/ -> /media/files/demos/
+            title_slug = demo.get("slug") or demo.get("title", "").lower().replace(" ", "-")
+            demo_type = demo.get("type", "flat_html")
+            if demo_type == "workflow_dir":
+                workflow_dir = demo.get("workflow_dir") or title_slug
+                enc = url_quote(workflow_dir)
+                demo["rel_path"] = f"demos/{workflow_dir}"
+                demo["view_url"] = f"https://siri.choukalos.com/media/files/demos/{enc}"
+                demo["view_url_lan"] = f"http://192.168.4.54:8091/media/files/demos/{enc}"
+            else:
+                enc = url_quote(f"{title_slug}.html")
+                demo["rel_path"] = f"demos/{title_slug}.html"
+                demo["view_url"] = f"https://siri.choukalos.com/media/files/demos/{enc}"
+                demo["view_url_lan"] = f"http://192.168.4.54:8091/media/files/demos/{enc}"
 
         # Build result
         result: dict[str, Any] = {

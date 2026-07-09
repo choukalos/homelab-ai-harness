@@ -8,6 +8,7 @@ MCP servers.
 """
 
 import asyncio
+import base64
 import concurrent.futures
 import importlib.util
 import inspect
@@ -25,7 +26,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from httpx import AsyncClient, Timeout
 from pydantic import BaseModel, Field
@@ -56,6 +57,70 @@ ARTIFACT_ROOT = Path(os.environ.get("ARTIFACT_ROOT", "/home/chuck/data/media"))
 APP_PORT = int(os.environ.get("SKILL_RUNNER_PORT", "8091"))
 APP_HOST = os.environ.get("SKILL_RUNNER_HOST", "0.0.0.0")
 DRY_RUN_MODE = os.environ.get("SKILL_RUNNER_DRY_RUN", "").lower() in ("true", "1", "yes")
+
+# Public base URL for media assets (served via Caddy reverse proxy)
+# All assets live under /media/files/ and are served from ARTIFACT_ROOT:
+#   /media/files/generated/sunset.png
+#   /media/files/demos/some-demo.html
+#   /media/files/images/whatever.jpg
+#   /media/files/presentations/export.pptx
+PUBLIC_MEDIA_BASE = "https://siri.choukalos.com/media/files"
+LAN_MEDIA_BASE = os.environ.get("LAN_MEDIA_BASE", f"http://192.168.4.54:8091/media/files")
+
+# Presentation URLs point to Presenton's dashboard.
+# The user needs to log in (cookie-based auth) to view their presentations.
+# For LAN: direct access. For public: Caddy proxies with auth.
+PUBLIC_PRESENTATIONS_BASE = "https://siri.choukalos.com/presentations"
+LAN_PRESENTATIONS_BASE = "http://192.168.4.54:5000"
+
+
+from urllib.parse import quote as url_quote
+
+def _make_media_url(filepath: str, public: bool = True) -> str:
+    """Convert a local media file path to an accessible URL.
+    All media is under ARTIFACT_ROOT (/home/chuck/data/media).
+    Result: /media/files/{url_encoded_relative_path}
+    E.g. /home/chuck/data/media/generated/abc.png -> /media/files/generated/abc.png
+         /home/chuck/data/media/demos/demo.html -> /media/files/demos/demo.html
+    """
+    base = PUBLIC_MEDIA_BASE if public else LAN_MEDIA_BASE
+    try:
+        rel = os.path.relpath(filepath, str(ARTIFACT_ROOT))
+    except ValueError:
+        rel = filepath  # fallback
+    # URL-encode each path segment to handle spaces/special chars
+    encoded = "/".join(url_quote(seg) for seg in rel.split("/"))
+    return f"{base}/{encoded}"
+
+
+def _make_demo_url(demo_path: str, public: bool = True) -> str:
+    """Convert a demo relative path to an accessible URL.
+    Demos are under ARTIFACT_ROOT/demos/.  Result: /media/files/demos/{path}
+    """
+    return _make_media_url(str(ARTIFACT_ROOT / "demos" / demo_path), public=public)
+
+
+def _make_presentation_url(pres_id: str, action: str = "view", public: bool = True) -> str:
+    """Convert a presentation ID to Presenton URL.
+
+    Points to Presenton's root since the SPA requires cookie-based auth.
+    User opens the URL, logs in, and navigates to their presentation from the dashboard.
+    """
+    base = PUBLIC_PRESENTATIONS_BASE if public else LAN_PRESENTATIONS_BASE
+    # Presenton doesn't support direct URL navigation to specific presentations
+    # (SPA routing requires the user to be logged in and navigate from the dashboard)
+    return base
+
+
+def _human_size(nbytes: int) -> str:
+    """Convert bytes to human-readable size string."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(nbytes) < 1024.0:
+            return f"{nbytes:.1f}{unit}"
+        nbytes /= 1024.0
+    return f"{nbytes:.1f}TB"
+
+
 LITELLM_BASE_URL = os.environ.get(
     "LITELLM_BASE_URL", "http://litellm-proxy:4000"
 )
@@ -129,9 +194,89 @@ class Job(BaseModel):
 # ---------------------------------------------------------------------------
 jobs: dict[str, Job] = {}
 
+# Thread pool for background skill execution
+_exec_pool: Optional[concurrent.futures.ThreadPoolExecutor] = None
+
+
+def _get_exec_pool() -> concurrent.futures.ThreadPoolExecutor:
+    """Get (or create) the thread pool for background skill execution."""
+    global _exec_pool
+    if _exec_pool is None:
+        _exec_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="skill-exec")
+    return _exec_pool
+
+
+# Per-skill timeouts (seconds) — enforced in background threads
+_SKILL_TIMEOUTS = {
+    "list_demos": 30,
+    "list_images": 30,
+    "list_presentations": 30,
+    "deep_research": 180,
+    "media_generate": 120,
+    "siri_chat": 60,
+    "siri_ask": 30,
+    "demo_browse": 30,
+    "demo_workflow": 300,
+    "presentation_build": 120,
+    "presentation_update": 120,
+    "research_brief": 60,
+    "morning_brief": 60,
+    "homelab_report": 60,
+    "investment_brief": 60,
+    "family_kb_ingest": 60,
+    "code_review": 120,
+    "repo_maintenance": 120,
+}
+_DEFAULT_TIMEOUT = 120  # fallback
+
+
+def dispatch_job(skill: str, params: dict[str, Any], requester: str = "siri", channel: str = "siri") -> Job:
+    """
+    Create a job for the given skill and dispatch it to a background thread.
+
+    Returns the Job object IMMEDIATELY (execution happens in background).
+    The caller should store this in `jobs[]` and return the job_id to the client.
+    Timeout is enforced: if the skill exceeds its limit, the job is marked failed.
+    """
+    job = Job(
+        skill=skill,
+        params=params,
+        requester=requester,
+        channel=channel,
+    )
+    job.add_log(f"Dispatching job '{skill}' to background executor")
+
+    timeout = _SKILL_TIMEOUTS.get(skill, _DEFAULT_TIMEOUT)
+
+    def _run_with_timeout():
+        """Run the skill in a sub-future with timeout enforcement."""
+        pool = _get_exec_pool()
+        future = pool.submit(_execute_skill, job)
+        try:
+            future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            if job.status in (JobStatus.completed, JobStatus.failed):
+                return  # already handled
+            job.status = JobStatus.failed
+            job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.error = f"Skill '{skill}' timed out after {timeout}s"
+            job.add_log(f"TIMEOUT after {timeout}s")
+            logger.warning("Job %s timed out after %ds", job.job_id, timeout)
+        except Exception as exc:
+            if job.status in (JobStatus.completed, JobStatus.failed):
+                return
+            job.status = JobStatus.failed
+            job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.error = f"Execution error: {exc}"
+            job.add_log(f"Error: {exc}")
+
+    # Run the timeout wrapper in the pool (separate worker from _execute_skill)
+    _get_exec_pool().submit(_run_with_timeout)
+    return job
+
 # ---------------------------------------------------------------------------
 # Scheduler
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 from scheduler import SimpleScheduler  # noqa: F401 — imported for type awareness
 
@@ -1025,6 +1170,40 @@ def health() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Static file serving (for Caddy reverse proxy)
+# All assets live under ARTIFACT_ROOT (/home/chuck/data/media)
+# so /media/files/{filepath:path} serves the whole tree:
+#   /media/files/generated/gen_sunset.png
+#   /media/files/demos/some-demo.html
+#   /media/files/presentations/whatever.pptx
+#   /media/files/images/something.jpg
+# etc.
+# ---------------------------------------------------------------------------
+
+from fastapi.responses import FileResponse
+import mimetypes
+from urllib.parse import unquote as url_unquote
+
+
+@app.get("/media/files/{filepath:path}")
+def serve_media_file(filepath: str):
+    """Serve any file under ARTIFACT_ROOT. Path is relative to /home/chuck/data/media."""
+    # FastAPI doesn't auto-decode path params for :path type
+    filepath = url_unquote(filepath)
+    full_path = ARTIFACT_ROOT / filepath
+    if not full_path.is_file():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
+    content_type = mimetypes.guess_type(str(full_path))[0] or "application/octet-stream"
+    return FileResponse(str(full_path), media_type=content_type)
+
+
+# NOTE: Presenton SPA uses cookie-based auth (login form), so we can't proxy it.
+# Presentation URLs point to Presenton directly. Users log in to view their decks.
+
+
+
+# ---------------------------------------------------------------------------
 # Chat Gateway Models
 # ---------------------------------------------------------------------------
 
@@ -1051,13 +1230,17 @@ class ChatResponse(BaseModel):
 
 _INTENT_SKILL_MAP = {
     "deep-research": "deep_research",
-    "build-presentation": "presentation_builder",
+    "build-presentation": "presentation_build",
     "ask-siri": "siri_ask",
     "siri-chat": "siri_chat",
     "update-presentation": "presentation_update",
+    "create-demo": "demo_workflow",
     "find-demos": "demo_browse",
     "research-brief": "research_brief",
+    "investment-brief": "investment_brief",
+    "morning-brief": "morning_brief",
     "media-generate": "mcp_media",
+    "list-images": "list_images",
 }
 
 
@@ -1069,14 +1252,29 @@ def _detect_intent(text: str, override: Optional[str]) -> str:
     # --- update-presentation: match 'update' + 'presentation' anywhere (not just adjacent) ---
     if "update" in text_lower and any(k in text_lower for k in ("presentation", "deck", "slides")):
         return "update-presentation"
+    # --- list-demos: explicit list intent (must match BEFORE find-demos / generic demo) ---
+    if any(k in text_lower for k in ("list demo", "list demos", "list my demos")):
+        return "list-demos"
     # --- find-demos ---
     if any(k in text_lower for k in ("find demo", "find demos", "browse demos", "search demo", "search demos", "look for demo")):
         return "find-demos"
+    # --- list-presentations ---
+    if any(k in text_lower for k in ("list presentation", "list presentations", "list my presentations", "list my deck")):
+        return "list-presentations"
+    # --- list-images ---
+    if any(k in text_lower for k in ("list image", "list images", "list my images", "list my photos", "list my pics", "show my images", "show my photos", "what images", "list generated image")):
+        return "list-images"
+    # --- investment-brief: must match before morning-brief and research-brief ---
+    if any(k in text_lower for k in ("investment brief", "investment-brief", "stock brief", "stock-brief", "market brief", "market-brief")):
+        return "investment-brief"
+    # --- morning-brief: must match before research-brief ---
+    if any(k in text_lower for k in ("morning brief", "morning-brief", "daily brief", "daily-brief", "daily summary", "morning briefing")):
+        return "morning-brief"
     if any(k in text_lower for k in ("research brief", "research summary", "brief research")):
         return "research-brief"
-    if any(k in text_lower for k in ("generate image", "create image", "image generate", "media generate", "generate media", "make image", "create media")):
+    if any(k in text_lower for k in ("generate image", "create image", "image generate", "media generate", "generate media", "make image", "create media", "draw image", "render image")):
         return "media-generate"
-    if re.search(r"(?:generate|create|make)\s+(?:an\s+)?image", text_lower) or \
+    if re.search(r"(?:generate|create|make|draw|render)\s+(?:an\s+)?image", text_lower) or \
        re.search(r"(?:create|generate)\s+(?:an\s+)?media", text_lower):
         return "media-generate"
     if any(k in text_lower for k in ("deep", "research", "deep research")):
@@ -1085,8 +1283,8 @@ def _detect_intent(text: str, override: Optional[str]) -> str:
         return "build-presentation"
     if any(k in text_lower for k in ("siri ask", "siri-chat", "siri chat")):
         return "siri-chat"
-    if any(k in text_lower for k in ("demos", "demo", "list demos")):
-        return "list-demos"
+    if any(k in text_lower for k in ("create demo", "create-demo", "new demo")):
+        return "create-demo"
     return "chat"
 
 
@@ -1109,19 +1307,14 @@ def _truncate_for_speak(text: str, max_chars: int = 250) -> str:
 def _handle_update_presentation(text: str) -> ChatResponse:
     """
     Handler for 'update-presentation' intent.
-    Dispatches to the presentation_update skill, passing the user text as instructions.
-    The skill itself will try to determine the presentation title from context.
+    Dispatches to the presentation_update skill in a background thread.
     """
-    job = Job(
-        skill="presentation_update",
+    job = dispatch_job(
+        "presentation_update",
         params={"query": text, "instructions": text},
-        requester="siri",
-        channel="siri",
     )
-    job.add_log("Intent 'update-presentation' dispatched to skill 'presentation_update'")
-    _execute_skill(job)
     jobs[job.job_id] = job
-    logger.info("Job %s launched for skill 'presentation_update'.", job.job_id)
+    logger.info("Job %s dispatched (async) for skill 'presentation_update'.", job.job_id)
     return ChatResponse(
         speak="I've started updating your presentation. This typically takes a few minutes.",
         display=f"Job {job.job_id} started for presentation update.",
@@ -1132,19 +1325,15 @@ def _handle_update_presentation(text: str) -> ChatResponse:
 
 def _handle_find_demos(text: str) -> ChatResponse:
     """
-    Handler for 'find-demos' intent.
-    Dispatches to the demo_browse skill, passing the user text as the search query.
+    Handler for 'find-demos' / 'list-demos' intent.
+    Dispatches to the demo_browse skill in a background thread.
     """
-    job = Job(
-        skill="demo_browse",
+    job = dispatch_job(
+        "demo_browse",
         params={"query": text},
-        requester="siri",
-        channel="siri",
     )
-    job.add_log("Intent 'find-demos' dispatched to skill 'demo_browse'")
-    _execute_skill(job)
     jobs[job.job_id] = job
-    logger.info("Job %s launched for skill 'demo_browse'.", job.job_id)
+    logger.info("Job %s dispatched (async) for skill 'demo_browse'.", job.job_id)
     return ChatResponse(
         speak="I'm searching for demos matching your query. Results will be ready shortly.",
         display=f"Job {job.job_id} started for demo search.",
@@ -1153,21 +1342,36 @@ def _handle_find_demos(text: str) -> ChatResponse:
     )
 
 
+def _handle_list_demos(text: str) -> ChatResponse:
+    """
+    Handler for 'list-demos' intent — list ALL demos (no keyword filter).
+    Dispatches to the demo_browse skill in a background thread with a wildcard query.
+    """
+    job = dispatch_job(
+        "demo_browse",
+        params={"query": "*"},  # wildcard = return all
+    )
+    jobs[job.job_id] = job
+    logger.info("Job %s dispatched (async) for skill 'demo_browse' (list all).", job.job_id)
+    return ChatResponse(
+        speak="I'm listing your demos. Results will be ready shortly.",
+        display=f"Job {job.job_id} started for demo listing.",
+        job_id=job.job_id,
+        data={"skill": "demo_browse", "intent": "list-demos"},
+    )
+
+
 def _handle_research_brief(text: str) -> ChatResponse:
     """
     Handler for 'research-brief' intent.
-    Dispatches to the research_brief skill, passing the user text as the topic.
+    Dispatches to the research_brief skill in a background thread.
     """
-    job = Job(
-        skill="research_brief",
+    job = dispatch_job(
+        "research_brief",
         params={"topic": text},
-        requester="siri",
-        channel="siri",
     )
-    job.add_log("Intent 'research-brief' dispatched to skill 'research_brief'")
-    _execute_skill(job)
     jobs[job.job_id] = job
-    logger.info("Job %s launched for skill 'research_brief'.", job.job_id)
+    logger.info("Job %s dispatched (async) for skill 'research_brief'.", job.job_id)
     return ChatResponse(
         speak="I'm running a research brief on that topic. This may take a minute or two.",
         display=f"Job {job.job_id} started for research brief.",
@@ -1290,16 +1494,27 @@ async def _handle_media_generate(text: str) -> ChatResponse:
         jobs[job.job_id] = job
         logger.info("Job %s completed for media generation. image=%s", job.job_id, image_url)
 
+        # Convert local file path to accessible URL (public by default)
+        media_url = None
+        if image_url and image_url.startswith("/"):
+            # It's a local file path — convert to URL
+            try:
+                media_url = _make_media_url(image_url, public=True)
+            except Exception:
+                media_url = image_url
+        elif image_url:
+            media_url = image_url
+
         speak = "I've generated an image for you."
-        if image_url:
-            speak = f"I've generated an image for you. It's saved at {image_url}."
+        if media_url:
+            speak = f"I've generated an image for you. You can view it here: {media_url}"
 
         return ChatResponse(
             speak=speak,
             display=f"Image generated from prompt: {text}",
             job_id=job.job_id,
-            media=image_url,
-            data={"skill": "mcp_media", "intent": "media-generate", "image_url": image_url},
+            media=media_url,
+            data={"skill": "mcp_media", "intent": "media-generate", "image_url": media_url},
         )
     except Exception as exc:
         logger.error("media-generate exception: %s", exc)
@@ -1340,36 +1555,40 @@ def _scan_presentations(query: str) -> ChatResponse:
 
     Calls GET /api/v1/ppt/presentations with HTTP Basic auth,
     optionally filtering by title if a query is provided.
+
+    Uses httpx.AsyncClient internally so it can run in a background thread
+    without blocking the FastAPI event loop.
     """
     import base64
-    import urllib.request
-    import urllib.error
 
     credentials = f"{PRESENTON_USERNAME}:{PRESENTON_PASSWORD}"
     encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
     auth_header = {"Authorization": f"Basic {encoded}", "Accept": "application/json"}
 
-    url = f"{PRESENTON_URL}/api/v1/ppt/presentations"
+    url = f"{PRESENTON_URL}/api/v1/ppt/presentation/all"
 
+    # Use a short timeout (5s) — Presenton should respond quickly
+    import httpx
     try:
-        req = urllib.request.Request(url, headers=auth_header, method="GET")
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(url, headers=auth_header)
+            resp.raise_for_status()
+            body = resp.json()
+    except httpx.HTTPStatusError as exc:
         body = {}
         try:
-            body = json.loads(exc.read().decode("utf-8", errors="replace"))
+            body = exc.response.json()
         except Exception:
             pass
         return ChatResponse(
-            speak=f"Presenton returned an error: HTTP {exc.code}.",
-            display=f"Presenton error HTTP {exc.code}: {json.dumps(body)}",
+            speak=f"Presenton returned an error: HTTP {exc.response.status_code}.",
+            display=f"Presenton error HTTP {exc.response.status_code}: {json.dumps(body)}",
             data={"query": query, "error": str(exc)},
         )
-    except urllib.error.URLError as exc:
+    except httpx.ConnectError as exc:
         return ChatResponse(
             speak="I couldn't reach Presenton to list presentations.",
-            display=f"Cannot reach Presenton at {PRESENTON_URL}: {exc.reason}",
+            display=f"Cannot reach Presenton at {PRESENTON_URL}: {exc}",
             data={"query": query, "error": str(exc)},
         )
     except Exception as exc:
@@ -1379,21 +1598,27 @@ def _scan_presentations(query: str) -> ChatResponse:
             data={"query": query, "error": str(exc)},
         )
 
-    # Presenton returns {"presentations": [...]} or just a list
+    # Presenton returns a list of PresentationWithSlides objects
     presentations: list[dict] = []
     if isinstance(body, list):
         presentations = body
     elif isinstance(body, dict):
         presentations = body.get("presentations", body.get("items", []))
 
-    # Optional: filter by query keywords (title or description match)
-    if query and query.strip():
-        q = query.lower().strip()
+    # Optional: filter by query keywords (title or content match)
+    _PRESENTATION_LIST_ALL = [
+        "list my presentations", "list presentations", "list all presentations",
+        "show my presentations", "show presentations", "show all presentations",
+        "my presentations", "all presentations",
+    ]
+    q_lower = query.lower().strip() if query else ""
+    # Filter only if the query doesn't match a list-all pattern
+    has_filter = bool(q_lower and q_lower not in _PRESENTATION_LIST_ALL)
+    if has_filter:
         matched = [
             p for p in presentations
-            if q in (p.get("title", "").lower())
-            or q in (p.get("description", "").lower())
-            or q in (p.get("content", "").lower())
+            if q_lower in (p.get("title", "").lower())
+            or q_lower in (p.get("content", "").lower())
         ]
         if matched:
             presentations = matched
@@ -1402,20 +1627,23 @@ def _scan_presentations(query: str) -> ChatResponse:
     if not presentations:
         return ChatResponse(
             speak="No presentations found."
-            if not query
+            if not has_filter
             else f"No presentations matching '{query}'.",
-            display="No presentations found." if not query else f"No presentations matching '{query}'.",
+            display="No presentations found." if not has_filter else f"No presentations matching '{query}'.",
             data={"query": query, "count": 0, "presentations": []},
         )
 
-    # Format each presentation as a short line
+    # Presenton returns fields: id (UUID), title, content, n_slides, language,
+    # created_at, updated_at, tone, verbosity, slides, theme, fonts
     lines = []
     for p in presentations:
-        title = p.get("title", "Untitled")
-        version = p.get("version", 1)
-        slides = p.get("slide_count", "?")
-        created = p.get("created_at", "")[:10]  # date only
-        lines.append(f"- {title} (v{version}, {slides} slides, {created})")
+        title = p.get("title") or f"Presentation {str(p.get('id', ''))[:8]}"
+        slides = p.get("n_slides", "?")
+        tone = p.get("tone") or "default"
+        language = p.get("language") or "en"
+        created = str(p.get("created_at", ""))[:10]  # date only
+        pres_id = str(p.get("id", ""))
+        lines.append(f"- {title} ({slides} slides, {tone}, {language}, {created})")
 
     display = f"Found {len(presentations)} presentation(s):\n" + "\n".join(lines[:30])
     if len(presentations) > 30:
@@ -1423,23 +1651,179 @@ def _scan_presentations(query: str) -> ChatResponse:
 
     speak = (
         f"I found {len(presentations)} presentation(s)."
-        if not query
+        if not has_filter
         else f"I found {len(presentations)} presentation(s) matching '{query}'."
     )
 
-    # Include truncated presentation metadata in data
+    # Include presentation metadata in data (with accessible URLs)
     short_presentations = []
     for p in presentations[:30]:
+        pres_id = str(p.get("id", ""))
         short_presentations.append({
-            k: p.get(k)
-            for k in ("presentation_id", "id", "title", "version", "slide_count", "template", "tone", "created_at")
-            if p.get(k)
+            "id": pres_id,
+            "title": p.get("title"),
+            "n_slides": p.get("n_slides"),
+            "tone": p.get("tone"),
+            "language": p.get("language"),
+            "created_at": p.get("created_at"),
+            "updated_at": p.get("updated_at"),
+            "view_url": _make_presentation_url(pres_id, "view", public=True),
+            "edit_url": _make_presentation_url(pres_id, "edit", public=True),
+            "view_url_lan": _make_presentation_url(pres_id, "view", public=False),
         })
 
     return ChatResponse(
         speak=speak,
         display=display,
         data={"query": query, "count": len(presentations), "presentations": short_presentations},
+    )
+
+
+def _handle_list_presentations(text: str) -> ChatResponse:
+    """
+    Handler for 'list-presentations' intent.
+    Dispatches _scan_presentations in a background thread and returns job_id for polling.
+    """
+    job = Job(
+        skill="list_presentations",
+        params={"query": text},
+        requester="siri",
+        channel="siri",
+    )
+
+    def _run_scan():
+        job.add_log("Scanning Presenton for presentations...")
+        try:
+            result = _scan_presentations(text)
+            if result:
+                job.summary = result.speak
+                job.params["_result_data"] = result.data
+                job.params["_result_display"] = result.display
+                job.status = JobStatus.completed
+                job.completed_at = datetime.now(timezone.utc).isoformat()
+                job.add_log(f"Presentation scan completed: {result.speak[:100]}")
+            else:
+                job.error = "Presentation scan returned no result"
+                job.status = JobStatus.failed
+                job.completed_at = datetime.now(timezone.utc).isoformat()
+        except Exception as exc:
+            job.error = str(exc)
+            job.status = JobStatus.failed
+            job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.add_log(f"Presentation scan error: {exc}")
+
+    _get_exec_pool().submit(_run_scan)
+    jobs[job.job_id] = job
+
+    logger.info("Job %s dispatched (async) for presentation listing.", job.job_id)
+    return ChatResponse(
+        speak="I'm listing your presentations. Results will be ready shortly.",
+        display=f"Job {job.job_id} started for presentation listing.",
+        job_id=job.job_id,
+        data={"skill": "list_presentations", "intent": "list-presentations"},
+    )
+
+
+def _scan_images(query: str) -> ChatResponse:
+    """List generated images from /home/chuck/data/media/generated/ and /images/."""
+    generated_dir = ARTIFACT_ROOT / "generated"
+    images_dir = ARTIFACT_ROOT / "images"
+    exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+    image_files = []
+
+    for directory in [generated_dir, images_dir]:
+        if not directory.is_dir():
+            continue
+        for f in directory.iterdir():
+            if not f.is_file() or f.suffix.lower() not in exts:
+                continue
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            if st.st_size > 50 * 1024 * 1024:
+                continue
+            name = (f.stem.replace("gen_", "") or f.stem).strip()
+            image_files.append({
+                "filename": f.name,
+                "name": name,
+                "directory": directory.name,
+                "size_bytes": st.st_size,
+                "size_human": _human_size(st.st_size),
+                "modified": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                "view_url": _make_media_url(str(f), public=True),
+                "view_url_lan": _make_media_url(str(f), public=False),
+            })
+
+    # Normalize query: strip common "list all" phrases that shouldn't act as filters
+    _LIST_ALL_PATTERNS = [
+        "list my images", "list images", "list all images", "show my images",
+        "show images", "show all images", "my images", "all images",
+    ]
+    q_lower = query.lower().strip() if query else ""
+    # Filter only if the query doesn't match a list-all pattern
+    if q_lower and q_lower not in _LIST_ALL_PATTERNS:
+        image_files = [i for i in image_files if q_lower in i["name"].lower() or q_lower in i["filename"].lower()]
+    has_filter = bool(q_lower and q_lower not in _LIST_ALL_PATTERNS)
+
+    # Sort by most recent first
+    image_files.sort(key=lambda i: i["modified"], reverse=True)
+
+    if not image_files:
+        msg = "No images found." if not has_filter else f"No images matching '{query}'."
+        return ChatResponse(speak=msg, display=msg, data={"query": query, "count": 0, "images": []})
+
+    lines = [f"- {i['name']} ({i['size_human']}, {i['directory']}, {i['modified'][:19]})" for i in image_files]
+    display = f"Found {len(image_files)} image(s):\n" + "\n".join(lines[:50])
+    if len(image_files) > 50:
+        display += f"\n... and {len(image_files) - 50} more."
+
+    speak = f"I found {len(image_files)} image(s) matching '{query}'." if has_filter else f"I found {len(image_files)} image(s)."
+    return ChatResponse(speak=speak, display=display, data={"query": query, "count": len(image_files), "images": image_files[:50]})
+
+
+def _handle_list_images(text: str) -> ChatResponse:
+    """
+    Handler for 'list-images' intent.
+    Dispatches _scan_images in a background thread and returns job_id for polling.
+    """
+    job = Job(
+        skill="list_images",
+        params={"query": text},
+        requester="siri",
+        channel="siri",
+    )
+
+    def _run_scan():
+        job.add_log("Scanning for generated images...")
+        try:
+            result = _scan_images(text)
+            if result:
+                job.summary = result.speak
+                job.params["_result_data"] = result.data
+                job.params["_result_display"] = result.display
+                job.status = JobStatus.completed
+                job.completed_at = datetime.now(timezone.utc).isoformat()
+                job.add_log(f"Image scan completed: {result.speak[:100]}")
+            else:
+                job.error = "Image scan returned no result"
+                job.status = JobStatus.failed
+                job.completed_at = datetime.now(timezone.utc).isoformat()
+        except Exception as exc:
+            job.error = str(exc)
+            job.status = JobStatus.failed
+            job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.add_log(f"Image scan error: {exc}")
+
+    _get_exec_pool().submit(_run_scan)
+    jobs[job.job_id] = job
+
+    logger.info("Job %s dispatched (async) for image listing.", job.job_id)
+    return ChatResponse(
+        speak="I'm listing your images. Results will be ready shortly.",
+        display=f"Job {job.job_id} started for image listing.",
+        job_id=job.job_id,
+        data={"skill": "list_images", "intent": "list-images"},
     )
 
 
@@ -1482,11 +1866,13 @@ async def api_chat(
     if intent in ("siri-chat", "ask-siri"):
         intent = "siri-chat"
 
-    # --- Listing intents (sync) ---
+    # --- Listing intents (dispatch async — return job_id for polling) ---
     if intent == "list-demos":
-        return _handle_find_demos(body.text)
+        return _handle_list_demos(body.text)
     if intent == "list-presentations":
-        return _scan_presentations(body.text)
+        return _handle_list_presentations(body.text)
+    if intent == "list-images":
+        return _handle_list_images(body.text)
 
     # --- New intent handlers (dispatch to skills/MCP) ---
     if intent == "update-presentation":
@@ -1498,24 +1884,19 @@ async def api_chat(
     if intent == "media-generate":
         return await _handle_media_generate(body.text)
 
-    # --- Async dispatch to skills ---
+    # --- Async dispatch to skills (background thread — return job_id for polling) ---
     skill_name = _INTENT_SKILL_MAP.get(intent)
     if not skill_name:
         # Unknown intent — fall back to direct chat
         return await _chat_direct(body.text, model)
 
-    job = Job(
-        skill=skill_name,
+    job = dispatch_job(
+        skill_name,
         params={"query": body.text},
-        requester="siri",
-        channel="siri",
     )
-    job.add_log(f"Chat intent '{intent}' dispatched to skill '{skill_name}'")
-
-    _execute_skill(job)
     jobs[job.job_id] = job
 
-    logger.info("Job %s launched for skill '%s'.", job.job_id, skill_name)
+    logger.info("Job %s dispatched (async) for skill '%s'.", job.job_id, skill_name)
 
     return ChatResponse(
         speak=f"I've started processing your {intent.replace('-', ' ')} request. Please wait a moment.",
@@ -1604,8 +1985,9 @@ async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobRes
 
 
 @app.get("/skills/jobs/{job_id}")
+@app.get("/api/jobs/{job_id}")
 async def get_job_status(job_id: str) -> SkillJobResponse:
-    """Get the status of a skill job."""
+    """Get the status of a skill job (also available at /api/jobs/{job_id})."""
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

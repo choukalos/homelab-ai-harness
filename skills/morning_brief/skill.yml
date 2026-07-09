@@ -21,7 +21,7 @@ config:
   format: short_and_sweet
 tools:
   - mcp_search
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/homelab_reports/
 approval_gates: []
 channels: [cli, pi, n8n]
