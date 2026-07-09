@@ -24,7 +24,7 @@ inputs:
 tools:
   - mcp_search
   - model_chat
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/research_reports/
 approval_gates: []
 channels: [cli, pi, n8n]

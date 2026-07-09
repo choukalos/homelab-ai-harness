@@ -22,11 +22,72 @@ Skills never touch MCP servers directly — the runner is the single gateway.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
+| `POST` | `/api/chat` | Unified chat gateway (intent detection, skill dispatch) |
+| `GET` | `/api/jobs/{job_id}` | Poll async job status |
+| `POST` | `/api/schedule` | Create a recurring schedule |
+| `GET` | `/api/schedule` | List all schedules |
+| `DELETE` | `/api/schedule/{id}` | Remove a schedule |
+| `POST` | `/api/schedule/{id}/run-now` | Trigger a schedule immediately |
 | `POST` | `/skills/{skill_name}` | Launch a skill job |
 | `GET` | `/skills/jobs/{job_id}` | Get job status |
 | `GET` | `/skills/jobs/{job_id}/artifact` | Retrieve artifact file |
 | `POST` | `/skills/jobs/{job_id}/approve` | Approve a job at an approval gate |
 | `POST` | `/skills/jobs/{job_id}/cancel` | Cancel a job |
+| `GET` | `/media/files/{filepath:path}` | Serve any file under `ARTIFACT_ROOT` |
+| `GET` | `/skills/jobs/{job_id}` | Poll async job status (alternative to `/api/jobs/`) |
+
+### Static File Serving
+
+`/media/files/{filepath:path}` serves any file from the artifact root
+(`/home/chuck/data/media/`). Path is relative to that root:
+
+- `/media/files/generated/sunset.png` → generated images
+- `/media/files/demos/my-demo.html` → demo HTML files
+- `/media/files/presentations/deck.pptx` → exported PPTX files
+- `/media/files/images/photo.jpg` → images
+
+Proxied publicly via Caddy at `https://siri.choukalos.com/media/files/*`.
+
+Presentations use a separate Presenton web portal (proxied via Caddy at
+`https://siri.choukalos.com/presentations/*`).
+
+### Chat Gateway — `POST /api/chat`
+
+Unified entry point. Accepts `{"text": "...", "model": "..."}` and auto-detects
+the intent. Non-chat intents dispatch asynchronously and return a `job_id`
+for polling at `/api/jobs/{job_id}` (or `/skills/jobs/{job_id}`).
+
+**Intents:**
+
+| Intent | Description | Source |
+|---|---|---|
+| `chat` | Direct chat (no tools) | — |
+| `siri-chat` | Siri chat with MCP tool calling | siri_chat |
+| `deep-research` | Multi-source cited research | deep_research |
+| `research-brief` | Lightweight web research | research_brief |
+| `build-presentation` | Create new presentation | presentation_build |
+| `update-presentation` | Update existing presentation | presentation_update |
+| `find-demos` | Search demos by keyword | demo_browse |
+| `list-demos` | List all demos | demo_browse |
+| `list-presentations` | List presentations from Presenton | built-in |
+| `list-images` | List generated images | built-in |
+| `media-generate` | Generate image via ComfyUI | mcp_media |
+| `create-demo` | Create a demo workflow | demo_workflow |
+
+**Example — async listing with polling:**
+```bash
+# Request
+RESP=$(curl -s -X POST https://siri.choukalos.com/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $SIRI_API_KEY" \
+  -d '{"text": "list my images"}')
+
+JOB_ID=$(echo $RESP | jq -r .job_id)
+
+# Poll until complete
+curl -s https://siri.choukalos.com/api/jobs/$JOB_ID \
+  -H "X-API-Key: $SIRI_API_KEY" | jq .
+```
 
 ## Job Model
 
@@ -58,11 +119,26 @@ The runner recognizes these skill names (defined in Phase 4.6):
 - `deep_research` — Multi-source research with citations
 - `investment_brief` — Investment analysis reports
 - `presentation_build` — Generate presentations via Presenton
+- `presentation_update` — Update existing presentations
 - `code_review` — Code quality review
 - `repo_maintenance` — Repository hygiene (approval gate)
 - `family_kb_ingest` — KB ingestion (approval gate)
 - `morning_brief` — Daily morning briefing
 - `homelab_report` — Homelab health report
+- `siri_chat` — Enhanced chat with MCP tool access
+- `demo_workflow` — Full 8-phase demo pipeline
+- `demo_browse` — Search/browse demos by keyword
+- `research_brief` — Lightweight web research + summarization
+
+### Built-in Listing Intents (no skill manifest needed)
+
+These are handled directly by the chat gateway via `/api/chat`:
+
+- `list-demos` — Browse demos in `/home/chuck/data/media/demos/`
+- `list-presentations` — List presentations from Presenton API
+- `list-images` — List generated images from `/media/generated/` + `/media/images/`
+
+All listing intents dispatch asynchronously and return a `job_id` for polling.
 
 Skills with approval gates: `family_kb_ingest`, `repo_maintenance`
 

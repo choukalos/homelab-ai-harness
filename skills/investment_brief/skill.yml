@@ -27,7 +27,7 @@ config:
 tools:
   - mcp_mysql
   - mcp_search
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/investment_briefs/
 approval_gates: []
 channels: [cli, pi, n8n]

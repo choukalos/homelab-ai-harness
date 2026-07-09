@@ -35,6 +35,7 @@ import logging
 import os
 import re
 import signal
+import threading
 import sys
 import textwrap
 from datetime import datetime, timezone
@@ -100,15 +101,15 @@ def _timeout_handler(signum, frame):
 
 
 def _install_timeout():
-    """Install a signal-based timeout (Unix only)."""
-    if sys.platform != "win32":
+    """Install a signal-based timeout (Unix only, main thread only)."""
+    if sys.platform != "win32" and threading.main_thread() is threading.current_thread():
         signal.signal(signal.SIGALRM, _timeout_handler)
         signal.alarm(MAX_RUNTIME_SECS)
 
 
 def _cancel_timeout():
     """Cancel the pending alarm."""
-    if sys.platform != "win32":
+    if sys.platform != "win32" and threading.main_thread() is threading.current_thread():
         signal.alarm(0)
 
 
