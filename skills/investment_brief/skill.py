@@ -316,7 +316,7 @@ def _run_sql(client: Any, query: str, database: str = DATABASE) -> list[dict]:
     """
     result = client.mcp_call(
         "run_query",
-        {"query": query, "database": database},
+        {"sql": query, "database": database},
         server_id="mcp_mysql",
     )
     if not result:
@@ -324,9 +324,26 @@ def _run_sql(client: Any, query: str, database: str = DATABASE) -> list[dict]:
         return []
 
     # Handle various response formats from LiteLLM MCP gateway
-    rows = result.get("result", result.get("rows", result.get("data", [])))
+    # The gateway may return: {result: {...}}, {rows: [...]}, {data: [...]}, {output: [...]}
+    rows = result.get("result", result.get("rows", result.get("data", result.get("output", []))))
     if isinstance(result.get("result"), dict):
-        rows = result["result"].get("rows", result["result"].get("data", []))
+        inner = result["result"]
+        # The inner dict may have 'rows', 'data', or be wrapped as {results: ...}
+        rows = inner.get("rows", inner.get("data", inner.get("results", inner)))
+    # If rows is a list of {type: 'text', text: json_str} (MCP content format), extract the JSON
+    if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict) and rows[0].get("type") == "text":
+        try:
+            extracted = json.loads(rows[0].get("text", "[]"))
+            if isinstance(extracted, list):
+                rows = extracted
+            elif isinstance(extracted, dict):
+                # run_query returns {rows: [...], columns: [...], count: N}
+                rows = extracted.get("rows", extracted.get("data", [extracted]))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    # If rows is a single dict (not a list), wrap it
+    if isinstance(rows, dict):
+        rows = [rows]
 
     return rows if isinstance(rows, list) else []
 
@@ -387,10 +404,11 @@ def _lookup_user(client: Any, email: str) -> Optional[dict]:
 def _lookup_portfolios(client: Any, user_id: str) -> list[dict]:
     """
     Query 2: Look up portfolios for a user on investorhub.Portfolio.
+    Note: DB column is 'userId' (camelCase), not 'user_id'.
     """
     query = (
         f"SELECT * FROM `{DATABASE}`.Portfolio "
-        f"WHERE user_id = '{user_id}'"
+        f"WHERE userId = '{user_id}'"
     )
     rows = _run_sql(client, query)
     logger.info("Found %d portfolio(s) for user %s", len(rows), user_id)
@@ -400,16 +418,53 @@ def _lookup_portfolios(client: Any, user_id: str) -> list[dict]:
 def _lookup_holdings(client: Any, portfolio_id: str, max_holdings: int = 20) -> list[dict]:
     """
     Query 3: Holdings query — Position JOIN Symbol per portfolio on investorhub.
+    Note: DB uses camelCase column names. We try the actual schema.
     """
+    # First, discover the actual Position columns for this portfolio
+    probe_query = (
+        f"SELECT * FROM `{DATABASE}`.Position WHERE portfolioId = '{portfolio_id}' LIMIT 1"
+    )
+    probe = _run_sql(client, probe_query)
+    if not probe:
+        logger.info("No positions found for portfolio %s", portfolio_id)
+        return []
+
+    # Inspect actual column names from the probe row
+    col_names = list(probe[0].keys())
+    logger.info("Position table columns: %s", col_names)
+
+    # Map possible column names
+    ticker_col = None
+    for c in col_names:
+        if 'ticker' in c.lower():
+            ticker_col = c
+            break
+    shares_col = None
+    for c in col_names:
+        if c.lower() in ('shares', 'quantity', 'numshares', 'sharecount'):
+            shares_col = c
+            break
+    cost_col = None
+    for c in col_names:
+        if c.lower() in ('avgcost', 'avcostbasis', 'costbasis', 'cost', 'avgcostbasis'):
+            cost_col = c
+            break
+
+    # Use symbolId as the FK to Symbol, or ticker if available
+    join_col = 'symbolId' if 'symbolId' in col_names else (ticker_col if ticker_col else 'symbolId')
+    sym_join = f"p.{join_col} = s.id" if join_col == 'symbolId' else f"p.{join_col} = s.ticker"
+
+    select_cols = f"s.ticker, {shares_col or 'p.quantity'}, {cost_col or 'p.avg_cost'}, p.quantity, s.name"
     query = (
-        f"SELECT p.ticker, p.shares, p.avg_cost, p.quantity, p.purchase_date, "
-        f"s.name, s.exchange "
+        f"SELECT s.ticker, p.{shares_col or 'quantity'} as shares, p.{cost_col or 'avgCost'} as avg_cost, "
+        f"p.quantity as qty, s.name "
         f"FROM `{DATABASE}`.Position p "
-        f"JOIN `{DATABASE}`.Symbol s ON p.ticker = s.ticker "
-        f"WHERE p.portfolio_id = '{portfolio_id}' "
-        f"ORDER BY p.shares DESC "
+        f"JOIN `{DATABASE}`.Symbol s ON {sym_join} "
+        f"WHERE p.portfolioId = '{portfolio_id}' "
+        f"ORDER BY p.{shares_col or 'quantity'} DESC "
         f"LIMIT {max_holdings}"
     )
+    logger.info("Holdings query: %s", query[:200])
     rows = _run_sql(client, query)
     logger.info("Found %d holdings for portfolio %s", len(rows), portfolio_id)
     return rows
@@ -817,7 +872,10 @@ def _synthesize_brief(
     choices = result.get("choices", [])
     if not choices:
         return f"# Investment Brief — {user_email}\n\n**No brief generated.** LLM returned no content.\n"
-    return choices[0].get("message", {}).get("content", "# Investment Brief\n\n**No content returned.**\n")
+    content = (choices[0].get("message") or {}).get("content")
+    if not content:
+        return f"# Investment Brief — {user_email}\n\n**No brief generated.** LLM returned empty content.\n"
+    return content
 
 
 # ---------------------------------------------------------------------------

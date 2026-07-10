@@ -876,3 +876,1393 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 2026-07-08 20:53:08,066 INFO skill_runner: Job 08bdaf1327fc: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-09T01-53-08_choukalos-yahoo-com_dividend.md
 2026-07-08 20:53:08,066 INFO skill_runner: Job 08bdaf1327fc: Merged result key 'report' into job params
 2026-07-08 20:53:08,066 INFO skill_runner: Job 08bdaf1327fc completed successfully.
+2026-07-09 13:56:13,398 INFO skill_runner: Chat request: intent=list-images text=list my images model=matrix-gemma4-moe
+2026-07-09 13:56:13,398 INFO skill_runner: Job 3ead633dc98b dispatched (async) for image listing.
+2026-07-09 13:56:13,398 INFO skill_runner: Job 3ead633dc98b: Scanning for generated images...
+2026-07-09 13:56:13,403 INFO skill_runner: Job 3ead633dc98b: Image scan completed: I found 26 image(s).
+2026-07-09 14:00:57,310 INFO skill_runner: Chat request: intent=chat text=hello? model=matrix-gemma4-moe
+2026-07-09 14:01:08,005 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 14:01:22,365 INFO skill_runner: Chat request: intent=list-presentations text=list my presentations model=matrix-gemma4-moe
+2026-07-09 14:01:22,365 INFO skill_runner: Job af9b1de77a85 dispatched (async) for presentation listing.
+2026-07-09 14:01:22,366 INFO skill_runner: Job af9b1de77a85: Scanning Presenton for presentations...
+2026-07-09 14:01:22,490 INFO httpx: HTTP Request: GET http://presenton/api/v1/ppt/presentation/all "HTTP/1.1 200 OK"
+2026-07-09 14:01:22,497 INFO skill_runner: Job af9b1de77a85: Presentation scan completed: I found 33 presentation(s).
+2026-07-09 14:08:20,084 INFO skill_runner: Chat request: intent=morning-brief text=give me my morning briefing model=matrix-gemma4-moe
+2026-07-09 14:08:20,085 INFO skill_runner: Job 9343b6a5ed23: Dispatching job 'morning_brief' to background executor
+2026-07-09 14:08:20,085 INFO skill_runner: Job 9343b6a5ed23 dispatched (async) for skill 'morning_brief'.
+2026-07-09 14:08:20,085 INFO skill_runner: Job 9343b6a5ed23: Executing skill 'morning_brief'
+2026-07-09 14:08:20,086 INFO skill_runner: Job 9343b6a5ed23: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-09 14:08:20,086 INFO skill_runner: Job 9343b6a5ed23: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 14:08:20,093 INFO skill_runner: Job 9343b6a5ed23: Skill module imported successfully
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Passing sync client as 'litellm_client'
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Invoking skill.run()...
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Model alias: matrix-coder
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Max runtime: 180s
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: LiteLLM: http://litellm-proxy:4000
+2026-07-09 14:08:20,094 INFO skill_runner: Job 9343b6a5ed23: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-09 14:08:20,095 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 14:08:20,128 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:20,130 INFO skill_runner: MCP initialized (server: mcp_search, session: d8b1b6da29b44f7d9bc12e456eedc544)
+2026-07-09 14:08:20,134 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:08:20,135 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:08:20,139 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:21,165 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:08:21,172 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:08:21,173 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 14:08:21,175 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-09 14:08:21,175 INFO skill_runner: Job 9343b6a5ed23: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-09 14:08:21,175 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 14:08:21,208 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:21,210 INFO skill_runner: MCP initialized (server: mcp_search, session: 421e1493343c49d483656a5f1047efac)
+2026-07-09 14:08:21,214 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:08:21,215 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:08:21,220 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:22,134 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:08:22,141 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:08:22,143 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 14:08:22,144 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-09 14:08:22,144 INFO skill_runner: Job 9343b6a5ed23: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-09 14:08:22,145 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 14:08:22,183 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:22,185 INFO skill_runner: MCP initialized (server: mcp_search, session: 25c36eabe4ac43bb90dd83121b8220e6)
+2026-07-09 14:08:22,189 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:08:22,191 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:08:22,197 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:22,863 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:08:22,869 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:08:22,870 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 14:08:22,872 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-09 14:08:22,872 INFO skill_runner: Job 9343b6a5ed23: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-09 14:08:22,872 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 14:08:22,906 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:22,908 INFO skill_runner: MCP initialized (server: mcp_search, session: fa8cd0b66da14283bcde5591a16c8420)
+2026-07-09 14:08:22,912 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:08:22,913 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:08:22,917 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:23,791 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:08:23,797 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:08:23,799 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 14:08:23,800 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-09 14:08:23,800 INFO skill_runner: Job 9343b6a5ed23: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-09 14:08:23,801 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 14:08:23,843 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:23,845 INFO skill_runner: MCP initialized (server: mcp_search, session: fc925ae837294ec5829b0fc56ae8965d)
+2026-07-09 14:08:23,848 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:08:23,850 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:08:23,854 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:08:24,960 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:08:24,967 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:08:24,968 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 14:08:24,969 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-09 14:08:24,969 INFO skill_runner: Job 9343b6a5ed23: Phase 1 complete: collected 25 raw items
+2026-07-09 14:08:24,970 INFO skill_runner: Job 9343b6a5ed23: Phase 2: Deduplicating results...
+2026-07-09 14:08:24,970 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-09 14:08:24,970 INFO skill_runner: Job 9343b6a5ed23: Phase 3: Grouping by category...
+2026-07-09 14:08:24,970 INFO skill_runner: Job 9343b6a5ed23: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-09 14:09:00,757 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 14:09:00,760 INFO skill_runner: Job 9343b6a5ed23: Brief generated (2752 chars)
+2026-07-09 14:09:00,761 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-09T19-09-00.md
+2026-07-09 14:09:00,761 INFO skill_runner: Job 9343b6a5ed23: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-09T19-09-00.md
+2026-07-09 14:09:00,761 INFO skill_runner: Job 9343b6a5ed23: morning_brief completed: 25 raw items, 2752 chars
+2026-07-09 14:09:00,762 INFO skill_runner: Job 9343b6a5ed23: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-09 14:09:00,762 INFO skill_runner: Job 9343b6a5ed23: Skill summary: # Morning Brief — 2026-07-09  ## technology news - **Meta Launches New A.I. Model as Global Technology Race Heats Up** — Meta introduces a paid AI service, shifting from its long-standing free-tier mo
+2026-07-09 14:09:00,762 INFO skill_runner: Job 9343b6a5ed23: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-09T19-09-00.md
+2026-07-09 14:09:00,762 INFO skill_runner: Job 9343b6a5ed23: Merged result key 'report' into job params
+2026-07-09 14:09:00,762 INFO skill_runner: Job 9343b6a5ed23 completed successfully.
+2026-07-09 14:09:46,910 INFO skill_runner: Chat request: intent=media-generate text=Rat wearing a leather jacket with an eye patch smiling menacing in 4 color comic book style. model=matrix-gemma4-moe
+2026-07-09 14:09:46,911 INFO skill_runner: Streamable HTTP MCP call: server=mcp_media base_url=http://mcp_media:8000 tool=generate_image
+2026-07-09 14:09:46,939 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:09:46,941 INFO skill_runner: MCP initialized (server: mcp_media, session: 5791d49d7a634ce689a9dc428cddf02d)
+2026-07-09 14:09:46,945 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 14:09:46,946 INFO skill_runner: MCP initialized notification sent
+2026-07-09 14:09:46,951 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 14:09:51,085 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 14:09:51,120 INFO httpx: HTTP Request: DELETE http://mcp_media:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 14:09:51,121 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_media, tool=generate_image, items=1)
+2026-07-09 14:09:51,126 INFO skill_runner: Job b07bc59b6452: Intent 'media-generate' dispatched to MCP server 'mcp_media'
+2026-07-09 14:09:51,127 INFO skill_runner: Job b07bc59b6452: Image generated: /home/chuck/data/media/generated/gen_Rat wearing a leather jacket with an eye patch smi.png
+2026-07-09 14:09:51,127 INFO skill_runner: Job b07bc59b6452 completed for media generation. image=/home/chuck/data/media/generated/gen_Rat wearing a leather jacket with an eye patch smi.png
+2026-07-09 19:58:16,438 INFO skill_runner: Chat request: intent=investment-brief text=brief me on today's market model=matrix-gemma4-moe
+2026-07-09 19:58:16,439 INFO skill_runner: Job a411c52617be: Dispatching job 'investment_brief' to background executor
+2026-07-09 19:58:16,439 INFO skill_runner: Job a411c52617be dispatched (async) for skill 'investment_brief'.
+2026-07-09 19:58:16,439 INFO skill_runner: Job a411c52617be: Executing skill 'investment_brief'
+2026-07-09 19:58:16,440 INFO skill_runner: Job a411c52617be: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 19:58:16,440 INFO skill_runner: Job a411c52617be: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 19:58:16,461 INFO skill_runner: Job a411c52617be: Skill module imported successfully
+2026-07-09 19:58:16,461 INFO skill_runner: Job a411c52617be: Passing sync client as 'litellm_client'
+2026-07-09 19:58:16,461 INFO skill_runner: Job a411c52617be: Invoking skill.run()...
+2026-07-09 19:58:16,461 INFO skill_runner: Job a411c52617be: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 19:58:16,461 INFO skill_runner: Job a411c52617be: Model alias: matrix-coder
+2026-07-09 19:58:16,462 INFO skill_runner: Job a411c52617be: Max runtime: 300s
+2026-07-09 19:58:16,462 INFO skill_runner: Job a411c52617be: LiteLLM: http://litellm-proxy:4000
+2026-07-09 19:58:16,462 INFO skill_runner: Job a411c52617be: Database: investorhub
+2026-07-09 19:58:16,462 INFO skill_runner: Job a411c52617be: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 19:58:16,463 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 19:58:16,492 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 19:58:16,493 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 0f6e4089002c4a7d9dfeada0c033a45d)
+2026-07-09 19:58:16,496 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 19:58:16,497 INFO skill_runner: MCP initialized notification sent
+2026-07-09 19:58:16,501 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 19:58:16,503 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 19:58:16,509 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 19:58:16,511 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 19:58:16,511 INFO skill.investment_brief: No user found for email: choukalos@yahoo.com
+2026-07-09 19:58:16,512 INFO skill_runner: Job a411c52617be: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 19:58:16,512 INFO skill_runner: Job a411c52617be: No portfolios found — using fallback market brief
+2026-07-09 19:58:16,513 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 19:58:16,533 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 19:58:16,535 INFO skill_runner: MCP initialized (server: mcp_search, session: 303eb6617c3c41148862c83a20e95dbb)
+2026-07-09 19:58:16,538 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 19:58:16,539 INFO skill_runner: MCP initialized notification sent
+2026-07-09 19:58:16,603 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 19:58:17,408 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 19:58:17,415 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 19:58:17,417 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=10)
+2026-07-09 19:58:17,418 INFO skill.investment_brief: News search returned 10 results for: dividend aristocrats REITs yield market outlook 2026
+2026-07-09 19:58:17,419 INFO skill_runner: Job a411c52617be: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 19:58:54,822 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 19:58:54,825 INFO skill_runner: Job a411c52617be: Brief generated (4028 chars)
+2026-07-09 19:58:54,826 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T00-58-54_choukalos-yahoo-com_dividend.md
+2026-07-09 19:58:54,826 INFO skill_runner: Job a411c52617be: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T00-58-54_choukalos-yahoo-com_dividend.md
+2026-07-09 19:58:54,827 INFO skill_runner: Job a411c52617be: investment_brief completed: 0 holdings, 0 flags, 4028 chars
+2026-07-09 19:58:54,827 INFO skill_runner: Job a411c52617be: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 19:58:54,827 INFO skill_runner: Job a411c52617be: Skill summary: # Dividend-Focused Investment Brief - **Date:** 2026-07-10 - **User:** choukalos@yahoo.com - **Focus:** Dividend Income & Aristocrats
+2026-07-09 19:58:54,827 INFO skill_runner: Job a411c52617be: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T00-58-54_choukalos-yahoo-com_dividend.md
+2026-07-09 19:58:54,827 INFO skill_runner: Job a411c52617be: Merged result key 'report' into job params
+2026-07-09 19:58:54,828 INFO skill_runner: Job a411c52617be completed successfully.
+2026-07-09 20:01:22,868 INFO skill_runner: Chat request: intent=morning-brief text=daily-brief model=matrix-gemma4-moe
+2026-07-09 20:01:22,869 INFO skill_runner: Job b35437d3a7a6: Dispatching job 'morning_brief' to background executor
+2026-07-09 20:01:22,869 INFO skill_runner: Job b35437d3a7a6 dispatched (async) for skill 'morning_brief'.
+2026-07-09 20:01:22,870 INFO skill_runner: Job b35437d3a7a6: Executing skill 'morning_brief'
+2026-07-09 20:01:22,870 INFO skill_runner: Job b35437d3a7a6: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-09 20:01:22,871 INFO skill_runner: Job b35437d3a7a6: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:01:22,885 INFO skill_runner: Job b35437d3a7a6: Skill module imported successfully
+2026-07-09 20:01:22,885 INFO skill_runner: Job b35437d3a7a6: Passing sync client as 'litellm_client'
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: Invoking skill.run()...
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: Model alias: matrix-coder
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: Max runtime: 180s
+2026-07-09 20:01:22,886 INFO skill_runner: Job b35437d3a7a6: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:01:22,887 INFO skill_runner: Job b35437d3a7a6: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-09 20:01:22,887 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:01:22,921 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:22,922 INFO skill_runner: MCP initialized (server: mcp_search, session: b0cf39bbfc654d00ba01a42f24088b44)
+2026-07-09 20:01:22,926 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:01:22,927 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:01:22,931 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:25,982 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:01:25,987 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:01:25,989 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:01:25,989 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-09 20:01:25,990 INFO skill_runner: Job b35437d3a7a6: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-09 20:01:25,990 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:01:26,012 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:26,014 INFO skill_runner: MCP initialized (server: mcp_search, session: ade812fd7bbb448388d449594ce51203)
+2026-07-09 20:01:26,018 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:01:26,019 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:01:26,024 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:26,933 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:01:26,940 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:01:26,942 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:01:26,943 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-09 20:01:26,943 INFO skill_runner: Job b35437d3a7a6: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-09 20:01:26,944 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:01:26,975 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:26,977 INFO skill_runner: MCP initialized (server: mcp_search, session: 7f4850d9cd9a4fae8219da659abce09f)
+2026-07-09 20:01:26,981 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:01:26,983 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:01:26,988 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:27,556 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:01:27,560 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:01:27,561 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:01:27,562 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-09 20:01:27,562 INFO skill_runner: Job b35437d3a7a6: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-09 20:01:27,562 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:01:27,584 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:27,586 INFO skill_runner: MCP initialized (server: mcp_search, session: 081c103bcb8c4508b3f9737904c562ab)
+2026-07-09 20:01:27,590 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:01:27,591 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:01:27,596 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:28,368 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:01:28,376 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:01:28,378 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:01:28,379 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-09 20:01:28,379 INFO skill_runner: Job b35437d3a7a6: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-09 20:01:28,380 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:01:28,409 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:28,410 INFO skill_runner: MCP initialized (server: mcp_search, session: 904a965ff45f44efa3df7624754b1015)
+2026-07-09 20:01:28,413 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:01:28,414 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:01:28,418 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:01:29,811 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:01:29,817 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:01:29,818 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:01:29,820 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-09 20:01:29,820 INFO skill_runner: Job b35437d3a7a6: Phase 1 complete: collected 25 raw items
+2026-07-09 20:01:29,820 INFO skill_runner: Job b35437d3a7a6: Phase 2: Deduplicating results...
+2026-07-09 20:01:29,820 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-09 20:01:29,820 INFO skill_runner: Job b35437d3a7a6: Phase 3: Grouping by category...
+2026-07-09 20:01:29,821 INFO skill_runner: Job b35437d3a7a6: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-09 20:02:05,659 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:02:05,661 INFO skill_runner: Job b35437d3a7a6: Unexpected error: object of type 'NoneType' has no len()
+2026-07-09 20:02:05,662 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-10T01-02-05.md
+2026-07-09 20:02:05,662 INFO skill_runner: Job b35437d3a7a6: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'error', 'model_alias']
+2026-07-09 20:02:05,662 INFO skill_runner: Job b35437d3a7a6: Skill reported error: Unexpected error: object of type 'NoneType' has no len()
+2026-07-09 20:02:05,663 INFO skill_runner: Job b35437d3a7a6: Skill summary: Brief failed: Unexpected error: object of type 'NoneType' has no len()
+2026-07-09 20:02:05,663 INFO skill_runner: Job b35437d3a7a6: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-10T01-02-05.md
+2026-07-09 20:02:05,663 INFO skill_runner: Job b35437d3a7a6: Merged result key 'report' into job params
+2026-07-09 20:02:05,663 INFO skill_runner: Job b35437d3a7a6 failed: Unexpected error: object of type 'NoneType' has no len()
+2026-07-09 20:11:46,138 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:11:46,138 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:11:46,138 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:11:46,139 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:11:46,139 INFO skill_runner: Shutdown complete.
+2026-07-09 20:11:47,409 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:11:47,409 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:11:47,409 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:11:47,409 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:11:47,410 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:11:47,410 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:12:40,768 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:12:40,768 INFO skill_runner: Job 6dfc85c33ddd: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:12:40,769 INFO skill_runner: Job 6dfc85c33ddd dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:12:40,770 INFO skill_runner: Job 6dfc85c33ddd: Executing skill 'investment_brief'
+2026-07-09 20:12:40,771 INFO skill_runner: Job 6dfc85c33ddd: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:12:40,772 INFO skill_runner: Job 6dfc85c33ddd: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Skill module imported successfully
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Passing sync client as 'litellm_client'
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Invoking skill.run()...
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Model alias: matrix-coder
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Max runtime: 300s
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:12:40,786 INFO skill_runner: Job 6dfc85c33ddd: Database: investorhub
+2026-07-09 20:12:40,787 INFO skill_runner: Job 6dfc85c33ddd: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:12:40,788 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:12:40,862 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,864 INFO skill_runner: MCP initialized (server: mcp_mysql, session: b3d29b2a90d54a1bb50a91b7fc72bd36)
+2026-07-09 20:12:40,867 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:12:40,868 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:12:40,872 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,874 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:12:40,880 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:12:40,881 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:12:40,883 INFO skill.investment_brief: Found user: unknown
+2026-07-09 20:12:40,883 INFO skill_runner: Job 6dfc85c33ddd: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:12:40,884 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:12:40,906 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,907 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 88e995a3847944e3acc16842600f2b05)
+2026-07-09 20:12:40,910 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:12:40,911 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:12:40,914 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,917 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:12:40,922 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:12:40,924 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:12:40,925 INFO skill.investment_brief: Found 1 portfolio(s) for user 
+2026-07-09 20:12:40,925 INFO skill_runner: Job 6dfc85c33ddd: Phase 3: Building holdings for portfolio 'Primary' ()...
+2026-07-09 20:12:40,925 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:12:40,950 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,952 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 621606fe5b414908a43f497c32aab675)
+2026-07-09 20:12:40,955 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:12:40,956 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:12:40,959 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:12:40,961 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:12:40,966 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:12:40,968 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:12:40,969 INFO skill.investment_brief: Found 1 holdings for portfolio 
+2026-07-09 20:12:40,969 INFO skill_runner: Job 6dfc85c33ddd: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:12:58,932 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:12:58,934 INFO skill_runner: Job 6dfc85c33ddd: Brief generated (1041 chars)
+2026-07-09 20:12:58,935 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-12-58_choukalos-yahoo-com_dividend.md
+2026-07-09 20:12:58,935 INFO skill_runner: Job 6dfc85c33ddd: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-12-58_choukalos-yahoo-com_dividend.md
+2026-07-09 20:12:58,935 INFO skill_runner: Job 6dfc85c33ddd: investment_brief completed: 0 holdings, 0 flags, 1041 chars
+2026-07-09 20:12:58,935 INFO skill_runner: Job 6dfc85c33ddd: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:12:58,935 INFO skill_runner: Job 6dfc85c33ddd: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos (choukalos@yahoo.com) | **Focus:** Dividend Strategy  ## Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:12:58,935 INFO skill_runner: Job 6dfc85c33ddd: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-12-58_choukalos-yahoo-com_dividend.md
+2026-07-09 20:12:58,936 INFO skill_runner: Job 6dfc85c33ddd: Merged result key 'report' into job params
+2026-07-09 20:12:58,936 INFO skill_runner: Job 6dfc85c33ddd completed successfully.
+2026-07-09 20:13:47,714 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:13:47,714 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:13:47,715 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:13:47,715 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:13:47,716 INFO skill_runner: Shutdown complete.
+2026-07-09 20:13:49,140 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:13:49,140 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:13:49,140 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:13:49,141 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:13:49,141 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:13:49,141 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:14:28,044 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:14:28,044 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:14:28,044 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:14:28,045 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:14:28,045 INFO skill_runner: Shutdown complete.
+2026-07-09 20:14:29,330 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:14:29,330 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:14:29,330 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:14:29,331 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:14:29,331 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:14:29,332 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:14:40,647 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:14:40,647 INFO skill_runner: Job b111dba782e0: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:14:40,648 INFO skill_runner: Job b111dba782e0 dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:14:40,649 INFO skill_runner: Job b111dba782e0: Executing skill 'investment_brief'
+2026-07-09 20:14:40,650 INFO skill_runner: Job b111dba782e0: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:14:40,651 INFO skill_runner: Job b111dba782e0: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:14:40,674 INFO skill_runner: Job b111dba782e0: Skill module imported successfully
+2026-07-09 20:14:40,674 INFO skill_runner: Job b111dba782e0: Passing sync client as 'litellm_client'
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Invoking skill.run()...
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Model alias: matrix-coder
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Max runtime: 300s
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Database: investorhub
+2026-07-09 20:14:40,675 INFO skill_runner: Job b111dba782e0: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:14:40,676 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:14:40,754 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,756 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 9f64f9b9a6854a83bcb24f002b93a3df)
+2026-07-09 20:14:40,759 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:14:40,760 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:14:40,764 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,767 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:14:40,773 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:14:40,774 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:14:40,775 INFO skill.investment_brief: Found user: unknown
+2026-07-09 20:14:40,775 INFO skill_runner: Job b111dba782e0: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:14:40,776 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:14:40,798 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,799 INFO skill_runner: MCP initialized (server: mcp_mysql, session: dc78e327ce614bfcae6570c866491737)
+2026-07-09 20:14:40,802 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:14:40,803 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:14:40,806 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,809 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:14:40,813 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:14:40,815 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:14:40,815 INFO skill.investment_brief: Found 1 portfolio(s) for user 
+2026-07-09 20:14:40,816 INFO skill_runner: Job b111dba782e0: Phase 3: Building holdings for portfolio 'Primary' ()...
+2026-07-09 20:14:40,816 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:14:40,838 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,840 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 35258c780dcd457fa5007170610043cf)
+2026-07-09 20:14:40,843 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:14:40,844 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:14:40,848 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:14:40,852 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:14:40,857 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:14:40,858 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:14:40,859 INFO skill.investment_brief: Found 1 holdings for portfolio 
+2026-07-09 20:14:40,862 INFO skill_runner: Job b111dba782e0: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:15:01,614 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:15:01,616 INFO skill_runner: Job b111dba782e0: Brief generated (2558 chars)
+2026-07-09 20:15:01,617 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-15-01_choukalos-yahoo-com_dividend.md
+2026-07-09 20:15:01,617 INFO skill_runner: Job b111dba782e0: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-15-01_choukalos-yahoo-com_dividend.md
+2026-07-09 20:15:01,617 INFO skill_runner: Job b111dba782e0: investment_brief completed: 0 holdings, 0 flags, 2558 chars
+2026-07-09 20:15:01,618 INFO skill_runner: Job b111dba782e0: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:15:01,618 INFO skill_runner: Job b111dba782e0: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10   **User:** choukalos   **Focus:** Dividend Income & Yield Optimization
+2026-07-09 20:15:01,618 INFO skill_runner: Job b111dba782e0: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-15-01_choukalos-yahoo-com_dividend.md
+2026-07-09 20:15:01,618 INFO skill_runner: Job b111dba782e0: Merged result key 'report' into job params
+2026-07-09 20:15:01,618 INFO skill_runner: Job b111dba782e0 completed successfully.
+2026-07-09 20:15:46,741 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:15:46,741 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:15:46,741 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:15:46,742 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:15:46,743 INFO skill_runner: Shutdown complete.
+2026-07-09 20:15:48,081 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:15:48,081 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:15:48,082 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:15:48,082 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:15:48,082 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:15:48,083 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:15:55,455 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:15:55,455 INFO skill_runner: Job 9aecfa667695: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:15:55,456 INFO skill_runner: Job 9aecfa667695 dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:15:55,456 INFO skill_runner: Job 9aecfa667695: Executing skill 'investment_brief'
+2026-07-09 20:15:55,457 INFO skill_runner: Job 9aecfa667695: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:15:55,458 INFO skill_runner: Job 9aecfa667695: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:15:55,476 INFO skill_runner: Job 9aecfa667695: Skill module imported successfully
+2026-07-09 20:15:55,476 INFO skill_runner: Job 9aecfa667695: Passing sync client as 'litellm_client'
+2026-07-09 20:15:55,476 INFO skill_runner: Job 9aecfa667695: Invoking skill.run()...
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: Model alias: matrix-coder
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: Max runtime: 300s
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: Database: investorhub
+2026-07-09 20:15:55,477 INFO skill_runner: Job 9aecfa667695: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:15:55,478 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:15:55,670 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,673 INFO skill_runner: MCP initialized (server: mcp_mysql, session: e3a84516dc624cf399b443e1e0cb853e)
+2026-07-09 20:15:55,676 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:15:55,678 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:15:55,681 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,683 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:15:55,688 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:15:55,689 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:15:55,691 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:15:55,691 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': 'Error executing tool run_query: 1 validation error for run_queryArguments\nsql\n  Field required [type=missing, input_value={\'query\': "SELECT * FROM ...atabase\': \'investorhub\'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing'}
+2026-07-09 20:15:55,691 INFO skill.investment_brief: Found user: unknown
+2026-07-09 20:15:55,691 INFO skill_runner: Job 9aecfa667695: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:15:55,692 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:15:55,715 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,716 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 5d9786cb6109487c887a4397eb1518ad)
+2026-07-09 20:15:55,719 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:15:55,720 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:15:55,723 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,725 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:15:55,729 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:15:55,730 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:15:55,731 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:15:55,732 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': 'Error executing tool run_query: 1 validation error for run_queryArguments\nsql\n  Field required [type=missing, input_value={\'query\': "SELECT * FROM ...atabase\': \'investorhub\'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing'}
+2026-07-09 20:15:55,732 INFO skill.investment_brief: Found 1 portfolio(s) for user 
+2026-07-09 20:15:55,732 INFO skill_runner: Job 9aecfa667695: Phase 3: Building holdings for portfolio 'Primary' ()...
+2026-07-09 20:15:55,732 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:15:55,756 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,758 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 52f1e7cdb8934978a025a52b8256a931)
+2026-07-09 20:15:55,761 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:15:55,761 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:15:55,765 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:15:55,768 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:15:55,774 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:15:55,775 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:15:55,775 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:15:55,776 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': 'Error executing tool run_query: 1 validation error for run_queryArguments\nsql\n  Field required [type=missing, input_value={\'query\': "SELECT p.ticke...atabase\': \'investorhub\'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing'}
+2026-07-09 20:15:55,776 INFO skill.investment_brief: Found 1 holdings for portfolio 
+2026-07-09 20:15:55,776 INFO skill_runner: Job 9aecfa667695: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:16:18,026 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:16:18,029 INFO skill_runner: Job 9aecfa667695: Brief generated (2246 chars)
+2026-07-09 20:16:18,030 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-16-18_choukalos-yahoo-com_dividend.md
+2026-07-09 20:16:18,030 INFO skill_runner: Job 9aecfa667695: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-16-18_choukalos-yahoo-com_dividend.md
+2026-07-09 20:16:18,031 INFO skill_runner: Job 9aecfa667695: investment_brief completed: 0 holdings, 0 flags, 2246 chars
+2026-07-09 20:16:18,031 INFO skill_runner: Job 9aecfa667695: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:16:18,031 INFO skill_runner: Job 9aecfa667695: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos (choukalos@yahoo.com) | **Focus:** Dividend Strategy  ## 1. Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:16:18,032 INFO skill_runner: Job 9aecfa667695: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-16-18_choukalos-yahoo-com_dividend.md
+2026-07-09 20:16:18,032 INFO skill_runner: Job 9aecfa667695: Merged result key 'report' into job params
+2026-07-09 20:16:18,032 INFO skill_runner: Job 9aecfa667695 completed successfully.
+2026-07-09 20:17:02,270 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:17:02,271 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:17:02,271 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:17:02,272 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:17:02,272 INFO skill_runner: Shutdown complete.
+2026-07-09 20:17:03,684 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:17:03,685 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:17:03,685 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:17:03,685 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:17:03,686 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:17:03,686 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:17:11,023 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:17:11,024 INFO skill_runner: Job d99b260162e1: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:17:11,024 INFO skill_runner: Job d99b260162e1 dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:17:11,025 INFO skill_runner: Job d99b260162e1: Executing skill 'investment_brief'
+2026-07-09 20:17:11,027 INFO skill_runner: Job d99b260162e1: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:17:11,027 INFO skill_runner: Job d99b260162e1: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:17:11,050 INFO skill_runner: Job d99b260162e1: Skill module imported successfully
+2026-07-09 20:17:11,050 INFO skill_runner: Job d99b260162e1: Passing sync client as 'litellm_client'
+2026-07-09 20:17:11,050 INFO skill_runner: Job d99b260162e1: Invoking skill.run()...
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: Model alias: matrix-coder
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: Max runtime: 300s
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: Database: investorhub
+2026-07-09 20:17:11,051 INFO skill_runner: Job d99b260162e1: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:17:11,052 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:17:11,141 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,143 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 238228fa3ae74995b6f183470126c51c)
+2026-07-09 20:17:11,147 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:17:11,148 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:17:11,152 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,225 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:17:11,229 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:17:11,230 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:17:11,231 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:17:11,231 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: CMySQLCursor.execute() got an unexpected keyword argument 'timeout'"}
+2026-07-09 20:17:11,231 INFO skill.investment_brief: Found user: unknown
+2026-07-09 20:17:11,231 INFO skill_runner: Job d99b260162e1: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:17:11,232 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:17:11,250 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,251 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 091415d229b64abba7cca3e2be091532)
+2026-07-09 20:17:11,253 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:17:11,254 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:17:11,257 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,297 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:17:11,302 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:17:11,304 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:17:11,305 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:17:11,305 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: CMySQLCursor.execute() got an unexpected keyword argument 'timeout'"}
+2026-07-09 20:17:11,306 INFO skill.investment_brief: Found 1 portfolio(s) for user 
+2026-07-09 20:17:11,306 INFO skill_runner: Job d99b260162e1: Phase 3: Building holdings for portfolio 'Primary' ()...
+2026-07-09 20:17:11,306 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:17:11,327 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,328 INFO skill_runner: MCP initialized (server: mcp_mysql, session: e260063b89964caf81f73c9864f9b883)
+2026-07-09 20:17:11,330 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:17:11,331 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:17:11,334 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:17:11,383 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:17:11,389 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:17:11,390 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:17:11,392 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:17:11,392 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: CMySQLCursor.execute() got an unexpected keyword argument 'timeout'"}
+2026-07-09 20:17:11,392 INFO skill.investment_brief: Found 1 holdings for portfolio 
+2026-07-09 20:17:11,392 INFO skill_runner: Job d99b260162e1: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:17:31,811 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:17:31,815 INFO skill_runner: Job d99b260162e1: Brief generated (1630 chars)
+2026-07-09 20:17:31,816 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-17-31_choukalos-yahoo-com_dividend.md
+2026-07-09 20:17:31,816 INFO skill_runner: Job d99b260162e1: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-17-31_choukalos-yahoo-com_dividend.md
+2026-07-09 20:17:31,816 INFO skill_runner: Job d99b260162e1: investment_brief completed: 0 holdings, 0 flags, 1630 chars
+2026-07-09 20:17:31,817 INFO skill_runner: Job d99b260162e1: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:17:31,817 INFO skill_runner: Job d99b260162e1: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos | **Focus:** Dividend Strategy  ## Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:17:31,817 INFO skill_runner: Job d99b260162e1: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-17-31_choukalos-yahoo-com_dividend.md
+2026-07-09 20:17:31,817 INFO skill_runner: Job d99b260162e1: Merged result key 'report' into job params
+2026-07-09 20:17:31,818 INFO skill_runner: Job d99b260162e1 completed successfully.
+2026-07-09 20:18:20,106 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:18:20,107 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:18:20,107 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:18:20,108 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:18:20,108 INFO skill_runner: Shutdown complete.
+2026-07-09 20:18:21,353 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:18:21,353 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:18:21,354 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:18:21,354 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:18:21,354 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:18:21,355 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:18:43,675 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:18:43,675 INFO skill_runner: Job ac8adee7b45b: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:18:43,676 INFO skill_runner: Job ac8adee7b45b dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:18:43,677 INFO skill_runner: Job ac8adee7b45b: Executing skill 'investment_brief'
+2026-07-09 20:18:43,678 INFO skill_runner: Job ac8adee7b45b: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:18:43,678 INFO skill_runner: Job ac8adee7b45b: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:18:43,701 INFO skill_runner: Job ac8adee7b45b: Skill module imported successfully
+2026-07-09 20:18:43,701 INFO skill_runner: Job ac8adee7b45b: Passing sync client as 'litellm_client'
+2026-07-09 20:18:43,701 INFO skill_runner: Job ac8adee7b45b: Invoking skill.run()...
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: Model alias: matrix-coder
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: Max runtime: 300s
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: Database: investorhub
+2026-07-09 20:18:43,702 INFO skill_runner: Job ac8adee7b45b: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:18:43,703 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:18:43,791 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:43,792 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 0ee8547846bf4fb181ead7701395c3cd)
+2026-07-09 20:18:43,795 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:18:43,796 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:18:43,800 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:43,845 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:18:43,850 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:18:43,851 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:18:43,851 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:18:43,852 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:18:43,852 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:18:43,852 INFO skill_runner: Job ac8adee7b45b: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:18:43,852 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:18:43,874 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:43,875 INFO skill_runner: MCP initialized (server: mcp_mysql, session: bf40e86b49a44223bf1298864f24e8e7)
+2026-07-09 20:18:43,878 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:18:43,879 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:18:43,884 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:43,946 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:18:43,952 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:18:43,954 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:18:43,955 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:18:43,955 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:18:43,955 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:18:43,955 INFO skill_runner: Job ac8adee7b45b: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:18:43,956 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:18:43,987 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:43,988 INFO skill_runner: MCP initialized (server: mcp_mysql, session: bd532c0aa1c94b3f980a1e795ca5fe00)
+2026-07-09 20:18:43,992 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:18:43,993 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:18:43,998 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:18:44,056 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:18:44,063 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:18:44,064 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:18:44,065 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:18:44,065 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'p.ticker' in 'field list'"}
+2026-07-09 20:18:44,065 INFO skill.investment_brief: Found 1 holdings for portfolio 7
+2026-07-09 20:18:44,066 INFO skill_runner: Job ac8adee7b45b: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:19:04,634 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:19:04,637 INFO skill_runner: Job ac8adee7b45b: Brief generated (2098 chars)
+2026-07-09 20:19:04,638 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-19-04_choukalos-yahoo-com_dividend.md
+2026-07-09 20:19:04,639 INFO skill_runner: Job ac8adee7b45b: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-19-04_choukalos-yahoo-com_dividend.md
+2026-07-09 20:19:04,639 INFO skill_runner: Job ac8adee7b45b: investment_brief completed: 0 holdings, 0 flags, 2098 chars
+2026-07-09 20:19:04,639 INFO skill_runner: Job ac8adee7b45b: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:19:04,640 INFO skill_runner: Job ac8adee7b45b: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10   **User:** choukalos@yahoo.com   **Focus:** Dividend Income & Sustainability
+2026-07-09 20:19:04,640 INFO skill_runner: Job ac8adee7b45b: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-19-04_choukalos-yahoo-com_dividend.md
+2026-07-09 20:19:04,640 INFO skill_runner: Job ac8adee7b45b: Merged result key 'report' into job params
+2026-07-09 20:19:04,640 INFO skill_runner: Job ac8adee7b45b completed successfully.
+2026-07-09 20:20:01,101 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:20:01,101 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:20:01,101 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:20:01,102 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:20:01,102 INFO skill_runner: Shutdown complete.
+2026-07-09 20:20:02,381 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:20:02,381 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:20:02,381 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:20:02,381 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:20:02,382 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:20:02,383 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:20:09,800 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:20:09,800 INFO skill_runner: Job 3d0946b0f78b: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:20:09,801 INFO skill_runner: Job 3d0946b0f78b dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:20:09,802 INFO skill_runner: Job 3d0946b0f78b: Executing skill 'investment_brief'
+2026-07-09 20:20:09,803 INFO skill_runner: Job 3d0946b0f78b: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:20:09,803 INFO skill_runner: Job 3d0946b0f78b: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:20:09,833 INFO skill_runner: Job 3d0946b0f78b: Skill module imported successfully
+2026-07-09 20:20:09,833 INFO skill_runner: Job 3d0946b0f78b: Passing sync client as 'litellm_client'
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Invoking skill.run()...
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Model alias: matrix-coder
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Max runtime: 300s
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Database: investorhub
+2026-07-09 20:20:09,834 INFO skill_runner: Job 3d0946b0f78b: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:20:09,835 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:09,921 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:09,922 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 1882f19202954f80bc7a70df430f7a43)
+2026-07-09 20:20:09,925 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:09,926 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:09,929 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:09,990 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:09,995 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:09,996 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:09,997 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:09,997 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:20:09,997 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:20:09,997 INFO skill_runner: Job 3d0946b0f78b: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:20:09,998 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:10,020 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:10,022 INFO skill_runner: MCP initialized (server: mcp_mysql, session: a5836e4d07e74092974c70551bbc7e86)
+2026-07-09 20:20:10,025 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:10,026 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:10,029 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:10,086 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:10,092 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:10,094 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:10,095 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:10,095 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:20:10,096 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:20:10,096 INFO skill_runner: Job 3d0946b0f78b: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:20:10,096 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:10,134 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:10,136 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 3610d4caf72e4b268ce6acbd0174100f)
+2026-07-09 20:20:10,140 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:10,141 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:10,146 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:10,204 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:10,210 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:10,211 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:10,212 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:10,212 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'p.ticker' in 'field list'"}
+2026-07-09 20:20:10,213 INFO skill.investment_brief: Found 1 holdings for portfolio 7
+2026-07-09 20:20:10,213 INFO skill_runner: Job 3d0946b0f78b: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:20:35,467 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:20:35,470 INFO skill_runner: Job 3d0946b0f78b: Brief generated (1594 chars)
+2026-07-09 20:20:35,471 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-20-35_choukalos-yahoo-com_dividend.md
+2026-07-09 20:20:35,472 INFO skill_runner: Job 3d0946b0f78b: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-20-35_choukalos-yahoo-com_dividend.md
+2026-07-09 20:20:35,472 INFO skill_runner: Job 3d0946b0f78b: investment_brief completed: 0 holdings, 0 flags, 1594 chars
+2026-07-09 20:20:35,472 INFO skill_runner: Job 3d0946b0f78b: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:20:35,472 INFO skill_runner: Job 3d0946b0f78b: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10   **User:** choukalos@yahoo.com   **Focus:** Dividend Strategy & Income Generation
+2026-07-09 20:20:35,473 INFO skill_runner: Job 3d0946b0f78b: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-20-35_choukalos-yahoo-com_dividend.md
+2026-07-09 20:20:35,473 INFO skill_runner: Job 3d0946b0f78b: Merged result key 'report' into job params
+2026-07-09 20:20:35,473 INFO skill_runner: Job 3d0946b0f78b completed successfully.
+2026-07-09 20:20:39,771 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:20:39,771 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:20:39,771 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:20:39,772 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:20:39,772 INFO skill_runner: Shutdown complete.
+2026-07-09 20:20:41,074 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:20:41,074 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:20:41,075 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:20:41,075 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:20:41,075 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:20:41,076 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:20:54,125 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:20:54,126 INFO skill_runner: Job 7ad8730a6797: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:20:54,126 INFO skill_runner: Job 7ad8730a6797 dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:20:54,127 INFO skill_runner: Job 7ad8730a6797: Executing skill 'investment_brief'
+2026-07-09 20:20:54,128 INFO skill_runner: Job 7ad8730a6797: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:20:54,129 INFO skill_runner: Job 7ad8730a6797: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:20:54,159 INFO skill_runner: Job 7ad8730a6797: Skill module imported successfully
+2026-07-09 20:20:54,159 INFO skill_runner: Job 7ad8730a6797: Passing sync client as 'litellm_client'
+2026-07-09 20:20:54,160 INFO skill_runner: Job 7ad8730a6797: Invoking skill.run()...
+2026-07-09 20:20:54,160 INFO skill_runner: Job 7ad8730a6797: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:20:54,160 INFO skill_runner: Job 7ad8730a6797: Model alias: matrix-coder
+2026-07-09 20:20:54,160 INFO skill_runner: Job 7ad8730a6797: Max runtime: 300s
+2026-07-09 20:20:54,161 INFO skill_runner: Job 7ad8730a6797: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:20:54,161 INFO skill_runner: Job 7ad8730a6797: Database: investorhub
+2026-07-09 20:20:54,161 INFO skill_runner: Job 7ad8730a6797: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:20:54,162 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:54,237 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,240 INFO skill_runner: MCP initialized (server: mcp_mysql, session: b092e25b85e1476284869c90c2bd150e)
+2026-07-09 20:20:54,243 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:54,244 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:54,247 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,302 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:54,308 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:54,310 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:54,310 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:54,311 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:20:54,311 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:20:54,311 INFO skill_runner: Job 7ad8730a6797: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:20:54,312 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:54,335 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,337 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 2c381df7436f422eab648f140086a784)
+2026-07-09 20:20:54,341 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:54,342 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:54,347 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,403 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:54,409 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:54,410 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:54,411 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:54,411 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:20:54,411 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:20:54,411 INFO skill_runner: Job 7ad8730a6797: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:20:54,412 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:20:54,434 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,435 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 4eb3977de04f48fc91f45b08e6ef1ac8)
+2026-07-09 20:20:54,437 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:20:54,438 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:20:54,441 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:20:54,486 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:20:54,491 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:20:54,492 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:20:54,493 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:20:54,493 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'p.shares' in 'field list'"}
+2026-07-09 20:20:54,493 INFO skill.investment_brief: Found 1 holdings for portfolio 7
+2026-07-09 20:20:54,494 INFO skill_runner: Job 7ad8730a6797: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:21:10,848 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:21:10,851 INFO skill_runner: Job 7ad8730a6797: Brief generated (1960 chars)
+2026-07-09 20:21:10,852 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-21-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:21:10,852 INFO skill_runner: Job 7ad8730a6797: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-21-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:21:10,853 INFO skill_runner: Job 7ad8730a6797: investment_brief completed: 0 holdings, 0 flags, 1960 chars
+2026-07-09 20:21:10,853 INFO skill_runner: Job 7ad8730a6797: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:21:10,853 INFO skill_runner: Job 7ad8730a6797: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos@yahoo.com | **Focus:** Dividend Income  ## Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:21:10,853 INFO skill_runner: Job 7ad8730a6797: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-21-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:21:10,853 INFO skill_runner: Job 7ad8730a6797: Merged result key 'report' into job params
+2026-07-09 20:21:10,854 INFO skill_runner: Job 7ad8730a6797 completed successfully.
+2026-07-09 20:21:24,987 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:21:24,987 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:21:24,987 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:21:24,988 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:21:24,988 INFO skill_runner: Shutdown complete.
+2026-07-09 20:21:26,431 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:21:26,431 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:21:26,431 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:21:26,432 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:21:26,432 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:21:26,432 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:22:02,719 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:22:02,719 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:22:02,719 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:22:02,720 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:22:02,720 INFO skill_runner: Shutdown complete.
+2026-07-09 20:22:04,093 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:22:04,093 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:22:04,093 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:22:04,094 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:22:04,094 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:22:04,096 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:22:16,279 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:22:16,280 INFO skill_runner: Job 2604871bb3fc: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:22:16,280 INFO skill_runner: Job 2604871bb3fc dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:22:16,281 INFO skill_runner: Job 2604871bb3fc: Executing skill 'investment_brief'
+2026-07-09 20:22:16,282 INFO skill_runner: Job 2604871bb3fc: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:22:16,282 INFO skill_runner: Job 2604871bb3fc: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Skill module imported successfully
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Passing sync client as 'litellm_client'
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Invoking skill.run()...
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Model alias: matrix-coder
+2026-07-09 20:22:16,300 INFO skill_runner: Job 2604871bb3fc: Max runtime: 300s
+2026-07-09 20:22:16,301 INFO skill_runner: Job 2604871bb3fc: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:22:16,301 INFO skill_runner: Job 2604871bb3fc: Database: investorhub
+2026-07-09 20:22:16,301 INFO skill_runner: Job 2604871bb3fc: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:22:16,302 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:22:16,389 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,390 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 80c5e077cd89484e93ed828da06ec124)
+2026-07-09 20:22:16,393 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:22:16,394 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:22:16,398 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,456 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:22:16,462 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:22:16,463 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:22:16,464 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:22:16,464 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:22:16,464 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:22:16,464 INFO skill_runner: Job 2604871bb3fc: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:22:16,465 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:22:16,484 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,485 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 69cc7d0c67234d758c15c27af0cac974)
+2026-07-09 20:22:16,488 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:22:16,490 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:22:16,494 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,557 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:22:16,562 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:22:16,564 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:22:16,565 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:22:16,566 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:22:16,566 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:22:16,566 INFO skill_runner: Job 2604871bb3fc: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:22:16,567 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:22:16,603 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,605 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 332fa665549f4ba78409405e75c57f01)
+2026-07-09 20:22:16,608 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:22:16,608 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:22:16,612 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,673 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:22:16,678 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:22:16,680 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:22:16,681 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:22:16,681 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 51, 'portfolioId': 7, 'symbolId': 39, 'quantity': 977.2726, 'costBasis': 255.63}
+2026-07-09 20:22:16,681 INFO skill.investment_brief: Position table columns: ['id', 'portfolioId', 'symbolId', 'quantity', 'costBasis']
+2026-07-09 20:22:16,682 INFO skill.investment_brief: Holdings query: SELECT s.ticker, p.quantity, p.costBasis, p.quantity, p.purchaseDate, s.name, s.exchange FROM `investorhub`.Position p JOIN `investorhub`.Symbol s ON p.symbolId = s.id WHERE p.portfolioId = '7' ORDER 
+2026-07-09 20:22:16,682 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:22:16,713 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,715 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 3f73ee0be95e4c9989b8ef6572331c94)
+2026-07-09 20:22:16,718 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:22:16,719 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:22:16,722 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:22:16,763 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:22:16,768 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:22:16,769 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:22:16,770 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:22:16,770 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'p.purchaseDate' in 'field list'"}
+2026-07-09 20:22:16,770 INFO skill.investment_brief: Found 1 holdings for portfolio 7
+2026-07-09 20:22:16,770 INFO skill_runner: Job 2604871bb3fc: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:22:36,714 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:22:36,717 INFO skill_runner: Job 2604871bb3fc: Brief generated (1192 chars)
+2026-07-09 20:22:36,717 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-22-36_choukalos-yahoo-com_dividend.md
+2026-07-09 20:22:36,718 INFO skill_runner: Job 2604871bb3fc: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-22-36_choukalos-yahoo-com_dividend.md
+2026-07-09 20:22:36,718 INFO skill_runner: Job 2604871bb3fc: investment_brief completed: 0 holdings, 0 flags, 1192 chars
+2026-07-09 20:22:36,718 INFO skill_runner: Job 2604871bb3fc: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:22:36,719 INFO skill_runner: Job 2604871bb3fc: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos@yahoo.com | **Focus:** Dividend Strategy  ## Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:22:36,719 INFO skill_runner: Job 2604871bb3fc: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-22-36_choukalos-yahoo-com_dividend.md
+2026-07-09 20:22:36,719 INFO skill_runner: Job 2604871bb3fc: Merged result key 'report' into job params
+2026-07-09 20:22:36,719 INFO skill_runner: Job 2604871bb3fc completed successfully.
+2026-07-09 20:23:06,157 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:23:06,157 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:23:06,158 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:23:06,158 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:23:06,159 INFO skill_runner: Shutdown complete.
+2026-07-09 20:23:07,476 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:23:07,476 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:23:07,477 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:23:07,477 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:23:07,477 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:23:07,478 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:23:14,878 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:23:14,879 INFO skill_runner: Job df9f82ba1d85: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:23:14,879 INFO skill_runner: Job df9f82ba1d85 dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:23:14,881 INFO skill_runner: Job df9f82ba1d85: Executing skill 'investment_brief'
+2026-07-09 20:23:14,882 INFO skill_runner: Job df9f82ba1d85: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:23:14,882 INFO skill_runner: Job df9f82ba1d85: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:23:14,905 INFO skill_runner: Job df9f82ba1d85: Skill module imported successfully
+2026-07-09 20:23:14,905 INFO skill_runner: Job df9f82ba1d85: Passing sync client as 'litellm_client'
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Invoking skill.run()...
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Model alias: matrix-coder
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Max runtime: 300s
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Database: investorhub
+2026-07-09 20:23:14,906 INFO skill_runner: Job df9f82ba1d85: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:23:14,907 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:23:14,997 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:14,999 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 912418052b614f37827779a304498d62)
+2026-07-09 20:23:15,002 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:23:15,003 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:23:15,006 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,060 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:23:15,065 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:23:15,066 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:23:15,068 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:23:15,068 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:23:15,068 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:23:15,068 INFO skill_runner: Job df9f82ba1d85: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:23:15,069 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:23:15,093 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,094 INFO skill_runner: MCP initialized (server: mcp_mysql, session: fb805d0513b547b69331e5b8795b326c)
+2026-07-09 20:23:15,097 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:23:15,098 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:23:15,102 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,152 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:23:15,158 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:23:15,160 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:23:15,161 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:23:15,161 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:23:15,161 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:23:15,162 INFO skill_runner: Job df9f82ba1d85: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:23:15,162 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:23:15,203 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,205 INFO skill_runner: MCP initialized (server: mcp_mysql, session: a5135e725dbc435f973f5250354e4164)
+2026-07-09 20:23:15,208 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:23:15,208 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:23:15,212 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,283 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:23:15,290 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:23:15,293 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:23:15,294 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:23:15,295 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 51, 'portfolioId': 7, 'symbolId': 39, 'quantity': 977.2726, 'costBasis': 255.63}
+2026-07-09 20:23:15,295 INFO skill.investment_brief: Position table columns: ['id', 'portfolioId', 'symbolId', 'quantity', 'costBasis']
+2026-07-09 20:23:15,295 INFO skill.investment_brief: Holdings query: SELECT s.ticker, p.quantity, p.costBasis, p.quantity, s.name, s.exchange FROM `investorhub`.Position p JOIN `investorhub`.Symbol s ON p.symbolId = s.id WHERE p.portfolioId = '7' ORDER BY p.quantity DE
+2026-07-09 20:23:15,296 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:23:15,331 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,332 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 5f44d4e12ea4417a8a9b0866dcb0848a)
+2026-07-09 20:23:15,335 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:23:15,336 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:23:15,338 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:23:15,383 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:23:15,392 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:23:15,394 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:23:15,395 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:23:15,395 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 's.exchange' in 'field list'"}
+2026-07-09 20:23:15,396 INFO skill.investment_brief: Found 1 holdings for portfolio 7
+2026-07-09 20:23:15,396 INFO skill_runner: Job df9f82ba1d85: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:23:37,424 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:23:37,427 INFO skill_runner: Job df9f82ba1d85: Brief generated (1341 chars)
+2026-07-09 20:23:37,427 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-23-37_choukalos-yahoo-com_dividend.md
+2026-07-09 20:23:37,428 INFO skill_runner: Job df9f82ba1d85: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-23-37_choukalos-yahoo-com_dividend.md
+2026-07-09 20:23:37,428 INFO skill_runner: Job df9f82ba1d85: investment_brief completed: 0 holdings, 0 flags, 1341 chars
+2026-07-09 20:23:37,428 INFO skill_runner: Job df9f82ba1d85: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:23:37,429 INFO skill_runner: Job df9f82ba1d85: Skill summary: # Investment Brief: Dividend Focus **Date:** 2026-07-10 | **User:** choukalos@yahoo.com | **Focus:** Dividend Strategy  ## Portfolio Summary - **Total Holdings:** 0
+2026-07-09 20:23:37,429 INFO skill_runner: Job df9f82ba1d85: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-23-37_choukalos-yahoo-com_dividend.md
+2026-07-09 20:23:37,429 INFO skill_runner: Job df9f82ba1d85: Merged result key 'report' into job params
+2026-07-09 20:23:37,429 INFO skill_runner: Job df9f82ba1d85 completed successfully.
+2026-07-09 20:24:17,252 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:24:17,252 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:24:17,252 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:24:17,253 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:24:17,253 INFO skill_runner: Shutdown complete.
+2026-07-09 20:24:18,723 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:24:18,723 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:24:18,723 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:24:18,724 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:24:18,724 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:24:18,725 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:24:26,031 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:24:26,031 INFO skill_runner: Job cc0c59d51dee: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:24:26,032 INFO skill_runner: Job cc0c59d51dee dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:24:26,033 INFO skill_runner: Job cc0c59d51dee: Executing skill 'investment_brief'
+2026-07-09 20:24:26,034 INFO skill_runner: Job cc0c59d51dee: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:24:26,034 INFO skill_runner: Job cc0c59d51dee: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:24:26,052 INFO skill_runner: Job cc0c59d51dee: Skill module imported successfully
+2026-07-09 20:24:26,052 INFO skill_runner: Job cc0c59d51dee: Passing sync client as 'litellm_client'
+2026-07-09 20:24:26,052 INFO skill_runner: Job cc0c59d51dee: Invoking skill.run()...
+2026-07-09 20:24:26,052 INFO skill_runner: Job cc0c59d51dee: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:24:26,052 INFO skill_runner: Job cc0c59d51dee: Model alias: matrix-coder
+2026-07-09 20:24:26,053 INFO skill_runner: Job cc0c59d51dee: Max runtime: 300s
+2026-07-09 20:24:26,053 INFO skill_runner: Job cc0c59d51dee: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:24:26,053 INFO skill_runner: Job cc0c59d51dee: Database: investorhub
+2026-07-09 20:24:26,053 INFO skill_runner: Job cc0c59d51dee: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:24:26,054 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,136 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,138 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 53bc9eef41d34edfa6ad27c46e671394)
+2026-07-09 20:24:26,140 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,141 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,145 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,196 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,199 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,200 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,201 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,201 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 3, 'email': 'choukalos@yahoo.com', 'password': '$2b$10$TB2nBAdQaDBpAWMP.LrX2uyXl2zQuDlrGHOJR5Y0xwaeFZwUAEtNS', 'name': 'choukalos@yahoo.com', 'createdAt': '2026-06-21T03:04:16.293000', 'role': 'ADMIN'}
+2026-07-09 20:24:26,201 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:24:26,201 INFO skill_runner: Job cc0c59d51dee: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:24:26,202 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,222 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,224 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 40b57ce4b79c401ba0ff24c33ef3abe9)
+2026-07-09 20:24:26,228 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,229 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,234 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,290 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,296 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,297 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,299 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,299 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 7, 'userId': 3, 'name': 'Brokerage', 'createdAt': '2026-07-09T19:28:17.608000'}
+2026-07-09 20:24:26,299 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:24:26,299 INFO skill_runner: Job cc0c59d51dee: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:24:26,300 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,337 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,339 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 2de818f20e0746c381b80fcd3e98a5e3)
+2026-07-09 20:24:26,342 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,343 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,347 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,384 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,391 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,399 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,400 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,401 INFO skill.investment_brief: _run_sql parsed rows[0]: {'id': 51, 'portfolioId': 7, 'symbolId': 39, 'quantity': 977.2726, 'costBasis': 255.63}
+2026-07-09 20:24:26,401 INFO skill.investment_brief: Position table columns: ['id', 'portfolioId', 'symbolId', 'quantity', 'costBasis']
+2026-07-09 20:24:26,402 INFO skill.investment_brief: Holdings query: SELECT s.ticker, p.quantity, p.costBasis, p.quantity, s.name FROM `investorhub`.Position p JOIN `investorhub`.Symbol s ON p.symbolId = s.id WHERE p.portfolioId = '7' ORDER BY p.quantity DESC LIMIT 20
+2026-07-09 20:24:26,402 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,503 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,506 INFO skill_runner: MCP initialized (server: mcp_mysql, session: b9443d52471d498eaaf6a9bda8c730b0)
+2026-07-09 20:24:26,510 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,511 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,516 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,551 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,557 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,559 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,560 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,561 INFO skill.investment_brief: _run_sql parsed rows[0]: {'ticker': 'AMZN', 'quantity': 1244.4223, 'costBasis': 210.57, 'name': 'Amazon'}
+2026-07-09 20:24:26,561 INFO skill.investment_brief: Found 6 holdings for portfolio 7
+2026-07-09 20:24:26,562 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,596 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,597 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 94fd45d362004af49080e1929c9c3930)
+2026-07-09 20:24:26,601 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,602 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,605 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,649 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,656 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,658 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,659 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,660 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'ticker' in 'field list'"}
+2026-07-09 20:24:26,660 INFO skill.investment_brief: Retrieved latest prices for 1 tickers
+2026-07-09 20:24:26,661 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,695 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,696 INFO skill_runner: MCP initialized (server: mcp_mysql, session: f17abb6b5552415fa00fb27ced10b449)
+2026-07-09 20:24:26,702 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,703 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,706 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,766 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,774 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,775 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,775 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,776 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'ticker' in 'field list'"}
+2026-07-09 20:24:26,776 INFO skill.investment_brief: Retrieved dividend history for 1 tickers
+2026-07-09 20:24:26,776 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:24:26,808 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,810 INFO skill_runner: MCP initialized (server: mcp_mysql, session: ac8c68a9e09d4ad29a5671786709df0b)
+2026-07-09 20:24:26,813 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,814 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,819 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,877 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:26,883 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:26,885 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:24:26,887 INFO skill.investment_brief: _run_sql raw result keys: ['output', 'is_error']
+2026-07-09 20:24:26,887 INFO skill.investment_brief: _run_sql parsed rows[0]: {'type': 'text', 'text': "Error executing tool run_query: Query failed: 1054 (42S22): Unknown column 'ticker' in 'field list'"}
+2026-07-09 20:24:26,887 INFO skill.investment_brief: Retrieved fundamentals for 1 tickers
+2026-07-09 20:24:26,888 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:26,924 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:26,925 INFO skill_runner: MCP initialized (server: mcp_search, session: 94162318441542d39a00097d3ce3fcb7)
+2026-07-09 20:24:26,929 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:26,929 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:26,933 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:27,972 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:27,979 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:27,980 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:27,981 INFO skill.investment_brief: News search returned 5 results for: NVDA stock news
+2026-07-09 20:24:27,982 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:28,008 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:28,010 INFO skill_runner: MCP initialized (server: mcp_search, session: 9f9324521fcd4970854f13c03a608d4a)
+2026-07-09 20:24:28,012 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:28,013 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:28,016 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:29,024 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:29,030 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:29,036 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:29,038 INFO skill.investment_brief: News search returned 5 results for: SHOP stock news
+2026-07-09 20:24:29,038 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:29,068 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:29,069 INFO skill_runner: MCP initialized (server: mcp_search, session: a2c474acea3d48e69c8da2ca6476b27b)
+2026-07-09 20:24:29,072 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:29,073 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:29,077 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:29,777 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:29,782 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:29,784 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:29,785 INFO skill.investment_brief: News search returned 5 results for: GOOGL stock news
+2026-07-09 20:24:29,786 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:29,817 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:29,819 INFO skill_runner: MCP initialized (server: mcp_search, session: 0dc4220e64c74492b43a01914fe6b154)
+2026-07-09 20:24:29,823 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:29,824 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:29,829 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:30,537 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:30,544 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:30,546 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:30,547 INFO skill.investment_brief: News search returned 5 results for: AMZN stock news
+2026-07-09 20:24:30,548 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:30,583 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:30,584 INFO skill_runner: MCP initialized (server: mcp_search, session: a7e0d2fbfddb4b34bd7497c2e3839acf)
+2026-07-09 20:24:30,587 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:30,589 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:30,592 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:31,280 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:31,286 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:31,288 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:31,289 INFO skill.investment_brief: News search returned 5 results for: TT stock news
+2026-07-09 20:24:31,290 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:24:31,332 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:31,334 INFO skill_runner: MCP initialized (server: mcp_search, session: 3cc78a2a0392431e81926a1268bf4bb7)
+2026-07-09 20:24:31,338 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:24:31,340 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:24:31,343 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:24:32,196 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:24:32,203 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:24:32,205 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:24:32,206 INFO skill.investment_brief: News search returned 5 results for: AAPL stock news
+2026-07-09 20:24:32,206 INFO skill.investment_brief: Built 6 enriched holdings
+2026-07-09 20:24:32,207 INFO skill_runner: Job cc0c59d51dee: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:25:10,065 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:25:10,068 INFO skill_runner: Job cc0c59d51dee: Brief generated (5374 chars)
+2026-07-09 20:25:10,069 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-25-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:25:10,069 INFO skill_runner: Job cc0c59d51dee: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-25-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:25:10,069 INFO skill_runner: Job cc0c59d51dee: investment_brief completed: 6 holdings, 0 flags, 5374 chars
+2026-07-09 20:25:10,069 INFO skill_runner: Job cc0c59d51dee: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:25:10,070 INFO skill_runner: Job cc0c59d51dee: Skill summary: # Investment Brief: Dividend-Focused Portfolio Review **Date:** 2026-07-10 | **User:** choukalos@yahoo.com | **Focus:** Dividend Income & Growth Alignment  ## Portfolio Summary - **Total Holdings:** 6
+2026-07-09 20:25:10,070 INFO skill_runner: Job cc0c59d51dee: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-25-10_choukalos-yahoo-com_dividend.md
+2026-07-09 20:25:10,070 INFO skill_runner: Job cc0c59d51dee: Merged result key 'report' into job params
+2026-07-09 20:25:10,070 INFO skill_runner: Job cc0c59d51dee completed successfully.
+2026-07-09 20:25:22,077 INFO skill_runner: Chat request: intent=morning-brief text=daily-brief model=matrix-gemma4-moe
+2026-07-09 20:25:22,078 INFO skill_runner: Job 6d428da93169: Dispatching job 'morning_brief' to background executor
+2026-07-09 20:25:22,078 INFO skill_runner: Job 6d428da93169 dispatched (async) for skill 'morning_brief'.
+2026-07-09 20:25:22,078 INFO skill_runner: Job 6d428da93169: Executing skill 'morning_brief'
+2026-07-09 20:25:22,079 INFO skill_runner: Job 6d428da93169: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-09 20:25:22,080 INFO skill_runner: Job 6d428da93169: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:25:22,096 INFO skill_runner: Job 6d428da93169: Skill module imported successfully
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Passing sync client as 'litellm_client'
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Invoking skill.run()...
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Model alias: matrix-coder
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: Max runtime: 180s
+2026-07-09 20:25:22,097 INFO skill_runner: Job 6d428da93169: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:25:22,098 INFO skill_runner: Job 6d428da93169: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-09 20:25:22,098 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:25:22,123 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:22,124 INFO skill_runner: MCP initialized (server: mcp_search, session: 0f945949fff04103891bdaa4044ff296)
+2026-07-09 20:25:22,127 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:25:22,128 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:25:22,133 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:23,210 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:25:23,217 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:25:23,219 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:25:23,220 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-09 20:25:23,221 INFO skill_runner: Job 6d428da93169: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-09 20:25:23,221 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:25:23,248 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:23,250 INFO skill_runner: MCP initialized (server: mcp_search, session: 8f57f91be0554fd6a12ad8fba91d96d1)
+2026-07-09 20:25:23,254 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:25:23,256 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:25:23,261 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:24,432 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:25:24,439 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:25:24,440 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:25:24,441 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-09 20:25:24,441 INFO skill_runner: Job 6d428da93169: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-09 20:25:24,442 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:25:24,484 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:24,487 INFO skill_runner: MCP initialized (server: mcp_search, session: 995bcde9d98740b4b90c2a8f2c094d16)
+2026-07-09 20:25:24,492 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:25:24,494 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:25:24,499 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:25,027 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:25:25,033 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:25:25,035 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:25:25,036 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-09 20:25:25,036 INFO skill_runner: Job 6d428da93169: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-09 20:25:25,036 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:25:25,069 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:25,071 INFO skill_runner: MCP initialized (server: mcp_search, session: b7d8275a1f1848f2b8d45a213efa4dd2)
+2026-07-09 20:25:25,076 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:25:25,078 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:25:25,084 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:25,724 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:25:25,742 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:25:25,743 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:25:25,745 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-09 20:25:25,745 INFO skill_runner: Job 6d428da93169: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-09 20:25:25,745 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:25:25,775 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:25,777 INFO skill_runner: MCP initialized (server: mcp_search, session: 8087f42ecc1d4a938abe68fcc3901aa3)
+2026-07-09 20:25:25,780 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:25:25,782 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:25:25,787 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:25:26,832 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:25:26,839 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:25:26,840 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:25:26,841 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-09 20:25:26,841 INFO skill_runner: Job 6d428da93169: Phase 1 complete: collected 25 raw items
+2026-07-09 20:25:26,842 INFO skill_runner: Job 6d428da93169: Phase 2: Deduplicating results...
+2026-07-09 20:25:26,842 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-09 20:25:26,842 INFO skill_runner: Job 6d428da93169: Phase 3: Grouping by category...
+2026-07-09 20:25:26,842 INFO skill_runner: Job 6d428da93169: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-09 20:26:01,948 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:26:01,951 INFO skill_runner: Job 6d428da93169: Brief generated (3373 chars)
+2026-07-09 20:26:01,951 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-10T01-26-01.md
+2026-07-09 20:26:01,952 INFO skill_runner: Job 6d428da93169: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-10T01-26-01.md
+2026-07-09 20:26:01,952 INFO skill_runner: Job 6d428da93169: morning_brief completed: 25 raw items, 3373 chars
+2026-07-09 20:26:01,952 INFO skill_runner: Job 6d428da93169: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-09 20:26:01,952 INFO skill_runner: Job 6d428da93169: Skill summary: # Morning Brief — 2026-07-10  ### Technology News - **UK Tech Threats Rise** — Senior officials warn hostile actors are increasingly exploiting online platforms to target the UK (MSNBC). - **Micron’s 
+2026-07-09 20:26:01,952 INFO skill_runner: Job 6d428da93169: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-10T01-26-01.md
+2026-07-09 20:26:01,953 INFO skill_runner: Job 6d428da93169: Merged result key 'report' into job params
+2026-07-09 20:26:01,953 INFO skill_runner: Job 6d428da93169 completed successfully.
+2026-07-09 20:30:49,012 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-09 20:30:49,013 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-09 20:30:49,013 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-09 20:30:49,014 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-09 20:30:49,014 INFO skill_runner: Shutdown complete.
+2026-07-09 20:30:50,309 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:30:50,309 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-09 20:30:50,309 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-09 20:30:50,309 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-09 20:30:50,310 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-09 20:30:50,310 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-09 20:30:57,710 INFO skill_runner: Chat request: intent=investment-brief text=investment brief model=matrix-gemma4-moe
+2026-07-09 20:30:57,711 INFO skill_runner: Job 9a97a590a90d: Dispatching job 'investment_brief' to background executor
+2026-07-09 20:30:57,711 INFO skill_runner: Job 9a97a590a90d dispatched (async) for skill 'investment_brief'.
+2026-07-09 20:30:57,712 INFO skill_runner: Job 9a97a590a90d: Executing skill 'investment_brief'
+2026-07-09 20:30:57,714 INFO skill_runner: Job 9a97a590a90d: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-09 20:30:57,714 INFO skill_runner: Job 9a97a590a90d: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-09 20:30:57,739 INFO skill_runner: Job 9a97a590a90d: Skill module imported successfully
+2026-07-09 20:30:57,739 INFO skill_runner: Job 9a97a590a90d: Passing sync client as 'litellm_client'
+2026-07-09 20:30:57,739 INFO skill_runner: Job 9a97a590a90d: Invoking skill.run()...
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: Model alias: matrix-coder
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: Max runtime: 300s
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: LiteLLM: http://litellm-proxy:4000
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: Database: investorhub
+2026-07-09 20:30:57,740 INFO skill_runner: Job 9a97a590a90d: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-09 20:30:57,741 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:57,820 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:57,821 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 62b0f0bac0a947ee87e92d9de8e31c3d)
+2026-07-09 20:30:57,824 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:57,825 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:57,828 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:57,882 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:57,886 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:57,887 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:57,888 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-09 20:30:57,888 INFO skill_runner: Job 9a97a590a90d: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-09 20:30:57,889 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:57,907 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:57,909 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 2b9a5d6286e346a6a5452e98d256a5d2)
+2026-07-09 20:30:57,911 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:57,913 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:57,917 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:57,970 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:57,976 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:57,977 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:57,978 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-09 20:30:57,978 INFO skill_runner: Job 9a97a590a90d: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-09 20:30:57,979 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:58,013 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,014 INFO skill_runner: MCP initialized (server: mcp_mysql, session: adc74cd695de47e886595ef5b988798b)
+2026-07-09 20:30:58,016 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,017 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,019 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,079 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:58,086 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:58,088 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:58,089 INFO skill.investment_brief: Position table columns: ['id', 'portfolioId', 'symbolId', 'quantity', 'costBasis']
+2026-07-09 20:30:58,090 INFO skill.investment_brief: Holdings query: SELECT s.ticker, p.quantity as shares, p.costBasis as avg_cost, p.quantity as qty, s.name FROM `investorhub`.Position p JOIN `investorhub`.Symbol s ON p.symbolId = s.id WHERE p.portfolioId = '7' ORDER
+2026-07-09 20:30:58,090 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:58,121 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,123 INFO skill_runner: MCP initialized (server: mcp_mysql, session: af3a309c86814009a40cdb7562b64aa2)
+2026-07-09 20:30:58,125 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,126 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,130 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,183 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:58,189 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:58,191 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:58,192 INFO skill.investment_brief: Found 6 holdings for portfolio 7
+2026-07-09 20:30:58,193 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:58,227 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,229 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 4b564dde29834adaa383a63468b95101)
+2026-07-09 20:30:58,231 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,232 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,234 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,279 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:58,283 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:58,284 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:58,284 INFO skill.investment_brief: Retrieved latest prices for 1 tickers
+2026-07-09 20:30:58,285 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:58,305 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,307 INFO skill_runner: MCP initialized (server: mcp_mysql, session: ec07973c3eae483389c0ba0a87f92059)
+2026-07-09 20:30:58,316 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,318 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,323 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,380 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:58,387 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:58,388 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:58,390 INFO skill.investment_brief: Retrieved dividend history for 1 tickers
+2026-07-09 20:30:58,390 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-09 20:30:58,421 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,423 INFO skill_runner: MCP initialized (server: mcp_mysql, session: f7d270f9c21d4eaebf94197fc67d345b)
+2026-07-09 20:30:58,427 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,428 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,432 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,475 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:58,480 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:58,481 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-09 20:30:58,483 INFO skill.investment_brief: Retrieved fundamentals for 1 tickers
+2026-07-09 20:30:58,483 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:30:58,513 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:58,516 INFO skill_runner: MCP initialized (server: mcp_search, session: d8c82bf6741145b1b2b762fd4cc6a82c)
+2026-07-09 20:30:58,519 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:58,521 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:58,525 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:59,310 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:30:59,314 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:30:59,315 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:30:59,315 INFO skill.investment_brief: News search returned 5 results for: GOOGL stock news
+2026-07-09 20:30:59,316 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:30:59,333 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:30:59,335 INFO skill_runner: MCP initialized (server: mcp_search, session: a566ce94f23e47cf87e3a00af924df50)
+2026-07-09 20:30:59,339 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:30:59,341 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:30:59,345 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:00,008 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:31:00,013 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:31:00,015 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:31:00,016 INFO skill.investment_brief: News search returned 5 results for: TT stock news
+2026-07-09 20:31:00,017 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:31:00,043 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:00,045 INFO skill_runner: MCP initialized (server: mcp_search, session: 096ded8305904147957312933fec1dee)
+2026-07-09 20:31:00,047 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:31:00,048 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:31:00,051 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:00,828 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:31:00,834 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:31:00,836 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:31:00,837 INFO skill.investment_brief: News search returned 5 results for: AMZN stock news
+2026-07-09 20:31:00,837 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:31:00,870 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:00,872 INFO skill_runner: MCP initialized (server: mcp_search, session: 62a8d8a8a01848e4a13e994fa6481792)
+2026-07-09 20:31:00,876 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:31:00,878 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:31:00,884 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:01,877 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:31:01,883 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:31:01,885 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:31:01,886 INFO skill.investment_brief: News search returned 5 results for: SHOP stock news
+2026-07-09 20:31:01,886 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:31:01,920 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:01,922 INFO skill_runner: MCP initialized (server: mcp_search, session: 21314b5d9c42404bbb5563b63291cea5)
+2026-07-09 20:31:01,927 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:31:01,928 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:31:01,934 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:02,739 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:31:02,745 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:31:02,750 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:31:02,752 INFO skill.investment_brief: News search returned 5 results for: NVDA stock news
+2026-07-09 20:31:02,752 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-09 20:31:02,784 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:02,786 INFO skill_runner: MCP initialized (server: mcp_search, session: 14710e8a61d041bf81e34419552fab24)
+2026-07-09 20:31:02,790 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-09 20:31:02,791 INFO skill_runner: MCP initialized notification sent
+2026-07-09 20:31:02,796 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-09 20:31:03,538 INFO skill_runner: tools/call POST returned status 200
+2026-07-09 20:31:03,543 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-09 20:31:03,544 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-09 20:31:03,545 INFO skill.investment_brief: News search returned 5 results for: AAPL stock news
+2026-07-09 20:31:03,545 INFO skill.investment_brief: Built 6 enriched holdings
+2026-07-09 20:31:03,545 INFO skill_runner: Job 9a97a590a90d: Phase 4: Synthesizing investment brief via LLM...
+2026-07-09 20:31:45,551 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-09 20:31:45,554 INFO skill_runner: Job 9a97a590a90d: Brief generated (5692 chars)
+2026-07-09 20:31:45,555 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-31-45_choukalos-yahoo-com_dividend.md
+2026-07-09 20:31:45,555 INFO skill_runner: Job 9a97a590a90d: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-31-45_choukalos-yahoo-com_dividend.md
+2026-07-09 20:31:45,556 INFO skill_runner: Job 9a97a590a90d: investment_brief completed: 6 holdings, 0 flags, 5692 chars
+2026-07-09 20:31:45,556 INFO skill_runner: Job 9a97a590a90d: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-09 20:31:45,556 INFO skill_runner: Job 9a97a590a90d: Skill summary: # Investment Brief: Portfolio Review **Date:** 2026-07-10   **User:** choukalos@yahoo.com   **Focus:** Dividend Strategy
+2026-07-09 20:31:45,556 INFO skill_runner: Job 9a97a590a90d: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-10T01-31-45_choukalos-yahoo-com_dividend.md
+2026-07-09 20:31:45,557 INFO skill_runner: Job 9a97a590a90d: Merged result key 'report' into job params
+2026-07-09 20:31:45,557 INFO skill_runner: Job 9a97a590a90d completed successfully.

@@ -575,7 +575,13 @@ def _synthesize_brief(
             f"# Morning Brief — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n\n"
             "**No brief generated.** LLM returned no content.\n"
         )
-    return choices[0].get("message", {}).get("content", "# Morning Brief\n\n**No content returned.**\n")
+    content = (choices[0].get("message") or {}).get("content")
+    if not content:
+        return (
+            f"# Morning Brief — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n\n"
+            "**No brief generated.** LLM returned empty content.\n"
+        )
+    return content
 
 
 # ---------------------------------------------------------------------------

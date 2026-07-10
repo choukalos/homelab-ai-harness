@@ -109,7 +109,7 @@ def _execute_read_only_sql(conn, sql: str) -> list[dict]:
 
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(sql, timeout=QUERY_TIMEOUT)
+        cursor.execute(sql)
         rows = cursor.fetchmany(MAX_ROWS + 1)
         column_names = [desc[0] for desc in cursor.description] if cursor.description else []
 
