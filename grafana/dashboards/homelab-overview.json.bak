@@ -10,7 +10,7 @@
   "timezone": "browser",
   "editable": true,
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "10s",
   "time": {
     "from": "now-3h",
@@ -333,544 +333,6 @@
       }
     },
     {
-      "id": 10,
-      "title": "LLM Metrics",
-      "type": "row",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 13
-      },
-      "collapsed": false
-    },
-    {
-      "id": 33,
-      "title": "Total Tokens",
-      "type": "stat",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 0,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(litellm_total_tokens_metric_total[$__range])) / 1000000",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "unitScale": false,
-          "thresholds": {
-            "steps": [
-              {
-                "color": "purple",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          },
-          "noValue": "0"
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      }
-    },
-    {
-      "id": 11,
-      "title": "Requests/sec",
-      "type": "stat",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 4,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(litellm_proxy_total_requests_metric_total{status_code=\"200\"}[5m]))",
-          "legendFormat": "req/s",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      }
-    },
-    {
-      "id": 12,
-      "title": "Total Tokens/sec",
-      "type": "stat",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 8,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(litellm_total_tokens_metric_total[5m]))",
-          "legendFormat": "tok/s",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      }
-    },
-    {
-      "id": 13,
-      "title": "Avg Latency",
-      "type": "stat",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 12,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "rate(litellm_request_total_latency_metric_sum[5m]) / rate(litellm_request_total_latency_metric_count[5m])",
-          "legendFormat": "avg",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      }
-    },
-    {
-      "id": 14,
-      "title": "Requests by Model",
-      "type": "bargauge",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum by (requested_model) (litellm_proxy_total_requests_metric_total{status_code=\"200\"})",
-          "legendFormat": "{{requested_model}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "custom": {
-            "showLabels": true,
-            "textMode": "value"
-          }
-        }
-      },
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 15,
-      "title": "Total Tokens by Model",
-      "type": "bargauge",
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 14
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "topk(3, litellm_total_tokens_metric_total / 1000000)",
-          "legendFormat": "{{requested_model}} M",
-          "refId": "A"
-        },
-        {
-          "expr": "(sum(litellm_total_tokens_metric_total) - sum(topk(3, litellm_total_tokens_metric_total))) / 1000000",
-          "legendFormat": "Other M",
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "unitScale": false,
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "custom": {
-            "showLabels": true,
-            "textMode": "value_and_name"
-          }
-        }
-      },
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 16,
-      "title": "Latency by Model",
-      "type": "bargauge",
-      "gridPos": {
-        "h": 5,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum by (requested_model) (rate(litellm_request_total_latency_metric_sum[5m])) / sum by (requested_model) (rate(litellm_request_total_latency_metric_count[5m]))",
-          "legendFormat": "{{requested_model}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "custom": {
-            "showLabels": true,
-            "textMode": "value"
-          }
-        }
-      },
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
-      "id": 34,
-      "title": "Token Breakdown",
-      "type": "bargauge",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 19
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(litellm_input_tokens_metric_total[$__range])) / 1000000",
-          "legendFormat": "{{value}}M - Prompt",
-          "refId": "Prompt"
-        },
-        {
-          "expr": "sum(increase(litellm_output_tokens_metric_total[$__range])) / 1000000",
-          "legendFormat": "{{value}}M - Generated",
-          "refId": "Generated"
-        },
-        {
-          "expr": "sum(increase(litellm_output_reasoning_tokens_metric_total[$__range])) / 1000000",
-          "legendFormat": "{{value}}M - Reasoning",
-          "refId": "Reasoning"
-        },
-        {
-          "expr": "sum(increase(litellm_cache_misses_metric_total[$__range]))",
-          "legendFormat": "Cache Misses",
-          "refId": "CacheMisses"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "unitScale": false,
-          "thresholds": {
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "custom": {
-            "showLabels": true,
-            "textMode": "name"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Cache Misses"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "displayName",
-                "value": "Cache Misses"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Prompt"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Generated"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Reasoning"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "super-light-purple",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "params": "Cache Misses"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      }
-    },
-    {
       "id": 7,
       "title": "Services",
       "type": "row",
@@ -878,7 +340,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 13
       },
       "collapsed": false
     },
@@ -890,7 +352,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 14
       },
       "datasource": {
         "type": "prometheus",
@@ -972,6 +434,340 @@
       }
     },
     {
+      "id": 10,
+      "title": "LLM Metrics",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "Requests/sec",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(litellm_proxy_total_requests_metric_total{status_code=\"200\"}[5m]))",
+          "legendFormat": "req/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 12,
+      "title": "Total Tokens/sec",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(litellm_total_tokens_metric_total[5m]))",
+          "legendFormat": "tok/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 13,
+      "title": "Avg Latency",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rate(litellm_request_total_latency_metric_sum[5m]) / rate(litellm_request_total_latency_metric_count[5m])",
+          "legendFormat": "avg",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 14,
+      "title": "Requests by Model",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (requested_model) (litellm_proxy_total_requests_metric_total{status_code=\"200\"})",
+          "legendFormat": "{{requested_model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "showLabels": true,
+            "textMode": "value"
+          }
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Total Tokens by Model",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "litellm_total_tokens_metric_total",
+          "legendFormat": "{{requested_model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "showLabels": true,
+            "textMode": "value"
+          }
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Latency by Model",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (requested_model) (rate(litellm_request_total_latency_metric_sum[5m])) / sum by (requested_model) (rate(litellm_request_total_latency_metric_count[5m]))",
+          "legendFormat": "{{requested_model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "custom": {
+            "showLabels": true,
+            "textMode": "value"
+          }
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
       "id": 26,
       "title": "API Keys",
       "type": "row",
@@ -979,7 +775,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 43
       },
       "collapsed": false
     },
@@ -991,7 +787,7 @@
         "h": 5,
         "w": 4,
         "x": 0,
-        "y": 39
+        "y": 44
       },
       "datasource": {
         "type": "prometheus",
@@ -1043,7 +839,7 @@
         "h": 5,
         "w": 4,
         "x": 4,
-        "y": 39
+        "y": 44
       },
       "datasource": {
         "type": "prometheus",
@@ -1095,7 +891,7 @@
         "h": 5,
         "w": 4,
         "x": 8,
-        "y": 39
+        "y": 44
       },
       "datasource": {
         "type": "prometheus",
@@ -1147,7 +943,7 @@
         "h": 5,
         "w": 4,
         "x": 12,
-        "y": 39
+        "y": 44
       },
       "datasource": {
         "type": "prometheus",
@@ -1207,7 +1003,7 @@
         "h": 5,
         "w": 4,
         "x": 16,
-        "y": 39
+        "y": 44
       },
       "datasource": {
         "type": "prometheus",
@@ -1259,7 +1055,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 49
       },
       "datasource": {
         "type": "prometheus",
@@ -1371,7 +1167,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 56
       },
       "collapsed": false
     },
@@ -1383,7 +1179,7 @@
         "h": 7,
         "w": 4,
         "x": 0,
-        "y": 52
+        "y": 57
       },
       "datasource": {
         "type": "prometheus",
@@ -1442,7 +1238,7 @@
         "h": 7,
         "w": 4,
         "x": 4,
-        "y": 52
+        "y": 57
       },
       "datasource": {
         "type": "prometheus",
@@ -1501,7 +1297,7 @@
         "h": 7,
         "w": 4,
         "x": 8,
-        "y": 52
+        "y": 57
       },
       "datasource": {
         "type": "prometheus",
@@ -1560,7 +1356,7 @@
         "h": 7,
         "w": 4,
         "x": 12,
-        "y": 52
+        "y": 57
       },
       "datasource": {
         "type": "prometheus",
@@ -1619,7 +1415,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 52
+        "y": 57
       },
       "datasource": {
         "type": "prometheus",
@@ -1660,7 +1456,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 59
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1745,7 +1541,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 59
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1791,7 +1587,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 59
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1848,5 +1644,5 @@
     }
   ],
   "links": [],
-  "description": "Comprehensive homelab overview: servers, LLM metrics, containers, API keys, and GPU performance"
+  "description": "Comprehensive homelab overview: servers, containers, LLM metrics, and GPU performance"
 }

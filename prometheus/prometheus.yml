@@ -48,3 +48,10 @@ scrape_configs:
     - athena:9080
     labels:
       instance: athena
+- job_name: node-exporter-lego
+  static_configs:
+  - targets:
+    - lego:9100
+    labels:
+      instance: lego
+
