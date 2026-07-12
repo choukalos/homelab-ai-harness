@@ -111,9 +111,7 @@ Updated to `http://skill-runner:8091` (was `http://ai-harness:8090`).
 
 ### E: Low-Priority Fixes
 
-- [ ] **Alpha Vantage stock prices showing $0.00** (from `todo.md`)
-  - Likely Alpha Vantage API rate limit or `PriceHistory` query issue
-  - Cost basis and P&L calculations work correctly despite $0.00 prices
+- [ ] ~~Alpha Vantage stock prices showing $0.00~~ — **N/A**, Alpha Vantage is not an active data provider. Price data comes from the `investorhub.PriceHistory` table instead.
 
 ---
 

@@ -26,7 +26,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_crawl` | Page fetching and content extraction | `crawl4ai:11235` |
 | `mcp_knowledge` | Knowledge base read/write via Qdrant | `qdrant:6333` |
 | `mcp_filesystem_readonly` | Read-only file access to workspace and media | `/home/chuck/workspace`, `/home/chuck/data/media` |
-| `mcp_stocks` | Stock market data and financial lookups | External APIs |
+| `mcp_stocks` | ~~Stock market data and financial lookups~~ (not implemented) | — |
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
 | `mcp_media` | Media operations: image gen via ComfyUI, file operations | `${MATRIX_IP}:8188` |
 | `mcp_home` | Home automation status (future, read-only) | Homebridge on Lego |
@@ -105,16 +105,19 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 ---
 
-### 5. `mcp_stocks`
+### 5. `mcp_stocks` — NOT IMPLEMENTED / NOT USED
+
+> This server is documented as a future possibility but has never been built.
+> Alpha Vantage and other external stock APIs are **not active providers**.
 
 | Field | Value |
 |---|---|
-| **Purpose** | Stock market data, prices, financial lookups |
+| **Purpose** | ~~Stock market data, prices, financial lookups~~ (not implemented) |
 | **Tools** | `get_price(ticker)`, `get_historical(ticker, period?)`, `get_news(ticker)`, `get_financials(ticker)` |
 | **Inputs** | Ticker symbol, optional period |
 | **Outputs** | Price data, historical series, news snippets, financial statements |
 | **Read/write** | Read-only (external APIs) |
-| **Allowed paths** | External APIs (Yahoo Finance, Alpha Vantage, or similar) |
+| **Allowed paths** | N/A — Alpha Vantage and similar APIs are **not used** |
 | **Context impact** | Low — returns compact structured data |
 | **Channel exposure** | CLI, n8n, PI (via skill runner) |
 | **Security** | Read-only. API keys stored in environment. Rate-limit per external provider limits. |
@@ -177,7 +180,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_crawl` | ✅ | ✅ | — | — | ✅ | — | — |
 | `mcp_knowledge` | ✅ | ✅ | Read | — | Ingest | — | Read |
 | `mcp_filesystem_readonly` | ✅ | ✅ | — | — | ✅ | — | — |
-| `mcp_stocks` | ✅ | — | — | — | ✅ | — | — |
+| `mcp_stocks` | ❌ | — | — | — | ❌ | — | — |
 | `mcp_homelab_status` | ✅ | — | — | — | ✅ | — | — |
 | `mcp_media` | ✅ | — | ✅ | — | ✅ | — | — |
 | `mcp_home` | ✅ | — | — | — | — | — | Read (future) |

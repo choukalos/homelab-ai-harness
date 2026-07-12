@@ -54,4 +54,11 @@ scrape_configs:
     - lego:9100
     labels:
       instance: lego
+- job_name: cadvisor-lego
+  static_configs:
+  - targets:
+    - lego:8081
+    labels:
+      instance: lego
+
 
