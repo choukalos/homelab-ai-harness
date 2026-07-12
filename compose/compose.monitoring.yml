@@ -60,6 +60,7 @@ services:
       - "host.docker.internal:host-gateway"
       - "matrix:${MATRIX_IP:-192.168.4.55}"
       - "athena:${ATHENA_IP:-192.168.5.110}"
+      - "lego:${LEGO_IP:-192.168.4.92}"
     user: "0:0"
 
   grafana:

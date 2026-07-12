@@ -1,6 +1,6 @@
 # Thor AI Platform - Status & Remaining Work
 
-> Updated: 2026-07-06
+> Updated: 2026-07-12
 > Phases A–F completed. Remaining items listed below.
 
 ---
@@ -91,6 +91,29 @@ via streamable HTTP and returns the image URL in the chat response.
 ### C8: `demo_workflow` skill HARNESS_URL ✅ FIXED
 
 Updated to `http://skill-runner:8091` (was `http://ai-harness:8090`).
+
+---
+
+### D1: Add Lego (NAS) to Monitoring Stack
+
+- [ ] **Deploy node-exporter on Lego** (`192.168.4.92`, port 9100)
+  - Ensure node-exporter is running on the NAS (systemd or Docker)
+- [ ] **Update Victoria Metrics scrape config** (`prometheus/prometheus.yml`)
+  - Add `extra_hosts` entry `lego:${LEGO_IP}` in `compose.monitoring.yml`
+  - Add new scrape job `node-exporter-lego` with `targets: [lego:9100]` and `labels: {instance: lego}`
+- [ ] **Restart Victoria Metrics** to pick up the new scrape target
+- [ ] **Verify Grafana dashboards** pick up Lego automatically
+  - *node-exporter-full.json* — `Instance` variable should now include `lego:9100`
+  - *homelab-overview.json* — `Host` variable should now include `lego`
+  - No dashboard JSON edits needed (both use dynamic template variables)
+
+---
+
+### E: Low-Priority Fixes
+
+- [ ] **Alpha Vantage stock prices showing $0.00** (from `todo.md`)
+  - Likely Alpha Vantage API rate limit or `PriceHistory` query issue
+  - Cost basis and P&L calculations work correctly despite $0.00 prices
 
 ---
 
