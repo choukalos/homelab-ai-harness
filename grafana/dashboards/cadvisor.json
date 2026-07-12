@@ -119,7 +119,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name) *100",
+          "expr": "sum(rate(label_replace(  label_replace(    container_cpu_usage_seconds_total{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\")[5m])) by (name) *100",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
@@ -237,7 +237,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(container_memory_rss{instance=~\"$host\",name=~\"$container\",name=~\".+\"}) by (name)",
+          "expr": "sum(label_replace(  label_replace(    container_memory_rss{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\")) by (name)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
@@ -341,7 +341,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(container_memory_cache{instance=~\"$host\",name=~\"$container\",name=~\".+\"}) by (name)",
+          "expr": "sum(label_replace(  label_replace(    container_memory_cache{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\")) by (name)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
@@ -462,7 +462,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_network_receive_bytes_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name)",
+          "expr": "sum(rate(label_replace(  label_replace(    container_network_receive_bytes_total{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\")[5m])) by (name)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
@@ -566,7 +566,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_network_transmit_bytes_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name)",
+          "expr": "sum(rate(label_replace(  label_replace(    container_network_transmit_bytes_total{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\")[5m])) by (name)",
           "interval": "",
           "legendFormat": "{{name}}",
           "refId": "A",
@@ -712,7 +712,7 @@
       "pluginVersion": "7.4.5",
       "targets": [
         {
-          "expr": "(time() - container_start_time_seconds{instance=~\"$host\",name=~\"$container\",name=~\".+\"})/86400",
+          "expr": "(time() - label_replace(  label_replace(    container_start_time_seconds{instance=~\"$host\",id=~\"$container\",id=~\".*/docker/.*|.*docker-.*\"},    \"name\",\"$1\",\"id\",\".*/docker/([0-9a-f]{12}).*\"  ),  \"name\",\"$1\",\"id\",\".*docker-([0-9a-f]{12}).*\"))/86400",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -737,6 +737,7 @@
                 "container_label_com_docker_compose_project_working_dir",
                 "image",
                 "instance",
+                "id",
                 "name",
                 "Value",
                 "container_label_com_docker_compose_service"
@@ -756,7 +757,8 @@
               "container_label_com_docker_compose_service": "Service",
               "image": "Registry Image",
               "instance": "Instance",
-              "name": "Name"
+              "name": "Short ID",
+              "id": "ID"
             }
           }
         }
@@ -819,7 +821,7 @@
           "value": "$__all"
         },
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values({__name__=~\"container.*\", instance=~\"$host\"},name)",
+        "definition": "label_values({__name__=~\"container_start_time_seconds\", id=~\".*/docker/.*|.*docker-.*\"},id)",
         "description": null,
         "error": null,
         "hide": 0,
@@ -829,11 +831,11 @@
         "name": "container",
         "options": [],
         "query": {
-          "query": "label_values({__name__=~\"container.*\", instance=~\"$host\"},name)",
+          "query": "label_values({__name__=~\"container_start_time_seconds\", id=~\".*/docker/.*|.*docker-.*\"},id)",
           "refId": "Prometheus-container-Variable-Query"
         },
         "refresh": 1,
-        "regex": "",
+        "regex": ".*/docker/([0-9a-f]{12}).*|.*docker-([0-9a-f]{12}).*",
         "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
