@@ -105,11 +105,7 @@ Completed manually.
 
 ---
 
-### E: Low-Priority Fixes
 
-- [ ] ~~Alpha Vantage stock prices showing $0.00~~ — **N/A**, Alpha Vantage is not an active data provider. Price data comes from the `investorhub.PriceHistory` table instead.
-
----
 
 ### F: Public API — Fix Non-Chat Intents via `siri.choukalos.com`
 
