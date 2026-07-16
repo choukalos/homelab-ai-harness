@@ -122,21 +122,21 @@ Completed manually.
 **Fixes Applied:**
 - [x] **CLI polling URL** (`cli/run-skill.sh`): changed `poll_job()` from `/skills/jobs/` → `/api/jobs/` (both endpoints exist on skill-runner)
 - [x] **Caddy reload** — `uri strip_prefix /siri` was already in Caddyfile, just needed `docker exec caddy caddy reload`
-- [ ] **Commit the CLI fix** (`git add cli/run-skill.sh && git commit`)
-- [ ] **Full end-to-end test via `--public`**: test every intent path from a remote machine:
-  - `chat` (sync) ✅ verified
-  - `deep-research` (async → poll) 
-  - `investment-brief` (async → poll)
-  - `morning-brief` (async → poll)
-  - `media-generate` (async → poll)
-  - `list-demos` (async → poll)
-  - `list-presentations` (async → poll)
-  - `list-images` (async → poll)
-  - `create-presentation` (async → poll)
-  - `update-presentation` (async → poll)
-  - `find-demos` (async → poll)
-  - `research-brief` (async → poll)
-- [ ] **Update verification checklist** to include "reload Caddy after Caddyfile changes"
+- [x] **Commit the CLI fix** (`git add cli/run-skill.sh && git commit`) — committed in `b6da011b`
+- [x] **Full end-to-end test via `--public`**: all 12 intent paths verified through `siri.choukalos.com` (2026-07-16)
+  - `chat` (sync) ✅
+  - `deep-research` (async → poll) ✅
+  - `investment-brief` (async → poll) ✅
+  - `morning-brief` (async → poll) ✅
+  - `media-generate` (async → poll) ✅
+  - `list-demos` (async → poll) ✅
+  - `list-presentations` (async → poll) ✅
+  - `list-images` (async → poll) ✅
+  - `create-presentation` (sync fallback) ✅
+  - `update-presentation` (async → poll) ✅
+  - `find-demo` (sync) ✅
+  - `research-brief` (async → poll) ✅
+- [x] **Update verification checklist** to include "reload Caddy after Caddyfile changes"
 
 ---
 
@@ -151,3 +151,4 @@ Completed manually.
 7. MCP containers: All containers `Up`
 8. Skill Runner: `GET http://thor.local:8091/health` returns `{"status": "ok"}`
 9. Skills: Test each via `POST /api/chat` with appropriate intent
+10. Caddy: After any Caddyfile changes, run `docker exec caddy caddy reload` and verify public endpoints
