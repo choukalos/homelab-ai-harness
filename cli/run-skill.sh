@@ -115,7 +115,7 @@ poll_job() {
 
     echo -e "\n${CYAN}━━━ POLLING JOB ━━━${NC}"
     echo -e "  ${BLUE}Job ID:${NC}   ${BOLD}${job_id}${NC}"
-    echo -e "  ${BLUE}Endpoint:${NC} ${BASE_SKILL_RUNNER}/skills/jobs/${job_id}"
+    echo -e "  ${BLUE}Endpoint:${NC} ${BASE_SKILL_RUNNER}/api/jobs/${job_id}"
     echo ""
 
     while [[ $attempts -lt $max_attempts ]]; do
@@ -124,7 +124,7 @@ poll_job() {
         poll_resp=$(mktemp)
         local http_code
         http_code=$(curl -sS -o "${poll_resp}" -w "%{http_code}" \
-            -X GET "${BASE_SKILL_RUNNER}/skills/jobs/${job_id}" \
+            -X GET "${BASE_SKILL_RUNNER}/api/jobs/${job_id}" \
             -H "X-API-Key: ${SIRI_API_KEY}" \
             --max-time 30 2>/dev/null) || http_code="000"
 

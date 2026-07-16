@@ -101,6 +101,7 @@
 
 		# Siri API — authenticated proxy to skill-runner
 		handle /siri/* {
+			uri strip_prefix /siri
 			@noAuth not header X-API-Key {$SIRI_API_KEY}
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
