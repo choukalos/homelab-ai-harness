@@ -94,24 +94,49 @@ Updated to `http://skill-runner:8091` (was `http://ai-harness:8090`).
 
 ---
 
-### D1: Add Lego (NAS) to Monitoring Stack
+### ✅ D1: Add Lego (NAS) to Monitoring Stack (Done 2026-07-12)
 
-- [ ] **Deploy node-exporter on Lego** (`192.168.4.92`, port 9100)
-  - Ensure node-exporter is running on the NAS (systemd or Docker)
-- [ ] **Update Victoria Metrics scrape config** (`prometheus/prometheus.yml`)
-  - Add `extra_hosts` entry `lego:${LEGO_IP}` in `compose.monitoring.yml`
-  - Add new scrape job `node-exporter-lego` with `targets: [lego:9100]` and `labels: {instance: lego}`
-- [ ] **Restart Victoria Metrics** to pick up the new scrape target
-- [ ] **Verify Grafana dashboards** pick up Lego automatically
-  - *node-exporter-full.json* — `Instance` variable should now include `lego:9100`
-  - *homelab-overview.json* — `Host` variable should now include `lego`
-  - No dashboard JSON edits needed (both use dynamic template variables)
+Completed manually.
+
+- [x] **Deploy node-exporter on Lego** (`192.168.4.92`, port 9100)
+- [x] **Update Victoria Metrics scrape config** (`prometheus/prometheus.yml`)
+- [x] **Restart Victoria Metrics** to pick up the new scrape target
+- [x] **Verify Grafana dashboards** pick up Lego automatically
 
 ---
 
 ### E: Low-Priority Fixes
 
 - [ ] ~~Alpha Vantage stock prices showing $0.00~~ — **N/A**, Alpha Vantage is not an active data provider. Price data comes from the `investorhub.PriceHistory` table instead.
+
+---
+
+### F: Public API — Fix Non-Chat Intents via `siri.choukalos.com`
+
+**Discovered:** 2026-07-15 (user reported at work: "nothing but chat worked")
+
+**Root Causes:**
+1. **CLI polled `/skills/jobs/{id}`** — Caddy only proxies `/api/*` to skill-runner. `/skills/*` hits the 404 fallback. Only `chat` worked (synchronous, no polling).
+2. **Caddy `/siri/*` strip_prefix** was in the file but Caddy hadn't reloaded.
+
+**Fixes Applied:**
+- [x] **CLI polling URL** (`cli/run-skill.sh`): changed `poll_job()` from `/skills/jobs/` → `/api/jobs/` (both endpoints exist on skill-runner)
+- [x] **Caddy reload** — `uri strip_prefix /siri` was already in Caddyfile, just needed `docker exec caddy caddy reload`
+- [ ] **Commit the CLI fix** (`git add cli/run-skill.sh && git commit`)
+- [ ] **Full end-to-end test via `--public`**: test every intent path from a remote machine:
+  - `chat` (sync) ✅ verified
+  - `deep-research` (async → poll) 
+  - `investment-brief` (async → poll)
+  - `morning-brief` (async → poll)
+  - `media-generate` (async → poll)
+  - `list-demos` (async → poll)
+  - `list-presentations` (async → poll)
+  - `list-images` (async → poll)
+  - `create-presentation` (async → poll)
+  - `update-presentation` (async → poll)
+  - `find-demos` (async → poll)
+  - `research-brief` (async → poll)
+- [ ] **Update verification checklist** to include "reload Caddy after Caddyfile changes"
 
 ---
 
