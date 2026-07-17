@@ -1890,9 +1890,12 @@ async def api_chat(
         # Unknown intent — fall back to direct chat
         return await _chat_direct(body.text, model)
 
+    # demo_workflow expects 'prompt', others expect 'query'
+    params = {"prompt": body.text} if skill_name == "demo_workflow" else {"query": body.text}
+
     job = dispatch_job(
         skill_name,
-        params={"query": body.text},
+        params=params,
     )
     jobs[job.job_id] = job
 

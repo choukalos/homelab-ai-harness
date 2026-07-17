@@ -302,6 +302,7 @@ def main():
         python skill.py --file-path /path/to/notes.txt --dry-run
         python skill.py --file-path /path/to/notes.txt --harness-url http://localhost:8090
     """
+    global HARNESS_URL
     import argparse
 
     parser = argparse.ArgumentParser(description="family_kb_ingest standalone test")
@@ -350,8 +351,6 @@ def main():
         print("    - Add multi-file batch ingestion support")
         return
 
-    # Override harness URL for CLI usage
-    global HARNESS_URL
     HARNESS_URL = args.harness_url
 
     params = {"file_path": args.file_path, "collection": args.collection}
