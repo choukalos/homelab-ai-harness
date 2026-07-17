@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-demo_workflow skill — thin wrapper for the AI Harness demo endpoint.
+demo_workflow skill — generate an interactive HTML demo from a prompt.
 
 Purpose:
-  Takes a prompt, sends it to the AI Harness demo runner, and returns
-  the harness response (thread_id, title, slug, status, html_path).
-  The Harness handles all deep-agent work (research, build, verify).
+  Takes a prompt describing a demo or interactive flow, uses the LLM to
+  generate a self-contained HTML page, saves it to the demos directory,
+  and returns the result.
 
 Workflow:
   1. Validate the prompt parameter.
-  2. POST to HARNESS_URL/demos/run with {"prompt": prompt}.
-  3. Return the harness response as-is.
-  4. Save metadata to the artifact path.
+  2. Call LiteLLM to generate a complete HTML page from the prompt.
+  3. Save the HTML to the demos artifact directory.
+  4. Return title, slug, status, and html_path.
 
 Constraints:
   - Max runtime: 600 seconds (10 minutes).
-  - No MCP tools — direct HTTP call to the AI Harness.
+  - Uses LiteLLM directly (not a separate AI Harness).
   - Stateless: no rollback needed.
 
 See skill.yml for the full manifest and README.md for usage.
@@ -31,6 +31,8 @@ import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import urllib.request
+import urllib.error
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -40,7 +42,11 @@ ARTIFACT_DIR = Path(
     os.environ.get("DEMO_WORKFLOW_ARTIFACT_DIR", "/home/chuck/data/media/presentations")
 )
 MAX_RUNTIME_SECS = int(os.environ.get("DEMO_WORKFLOW_MAX_RUNTIME", "600"))
-HARNESS_URL = os.environ.get("DEMO_WORKFLOW_HARNESS_URL", "http://skill-runner:8091")
+
+# LiteLLM endpoint (set by skill runner or environment)
+LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://litellm-proxy:4000")
+LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
+MODEL_ALIAS = os.environ.get("DEMO_WORKFLOW_MODEL_ALIAS", "matrix-coder")
 
 logger = logging.getLogger("skill.demo_workflow")
 
@@ -71,29 +77,29 @@ def _cancel_timeout():
 
 
 # ---------------------------------------------------------------------------
-# Harness HTTP call
+# LiteLLM client
 # ---------------------------------------------------------------------------
 
 
-def _call_harness(prompt: str) -> dict[str, Any]:
-    """
-    POST to the AI Harness demo endpoint with the prompt payload.
+def _llm_chat_completion(
+    model: str,
+    messages: list[dict[str, str]],
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Call LiteLLM /v1/chat/completions for LLM text generation."""
+    payload: dict[str, Any] = {"model": model, "messages": messages}
+    payload.update(kwargs)
 
-    Returns the harness response dict.
-    """
-    import urllib.request
-    import urllib.error
-
-    payload = {"prompt": prompt}
     data = json.dumps(payload).encode("utf-8")
-
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
+    if LITELLM_API_KEY:
+        headers["Authorization"] = f"Bearer {LITELLM_API_KEY}"
 
     req = urllib.request.Request(
-        f"{HARNESS_URL}/demos/run",
+        f"{LITELLM_BASE_URL}/v1/chat/completions",
         data=data,
         headers=headers,
         method="POST",
@@ -101,15 +107,89 @@ def _call_harness(prompt: str) -> dict[str, Any]:
 
     try:
         with urllib.request.urlopen(req, timeout=MAX_RUNTIME_SECS) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-            return body
+            return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-        raise RuntimeError(f"Harness HTTP error {exc.code}: {body}") from exc
+        raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"Cannot reach AI Harness at {HARNESS_URL}: {exc.reason}") from exc
+        raise RuntimeError(
+            f"Cannot reach LiteLLM at {LITELLM_BASE_URL}: {exc.reason}"
+        ) from exc
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from AI Harness: {exc}") from exc
+        raise RuntimeError(f"Invalid JSON from LiteLLM: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Demo generation
+# ---------------------------------------------------------------------------
+
+
+def _generate_demo_html(prompt: str) -> tuple[str, str]:
+    """
+    Use the LLM to generate a self-contained interactive HTML demo page.
+
+    Returns (title, html_content).
+    """
+    system_prompt = textwrap.dedent("""\
+        You are an expert frontend developer. Generate a COMPLETE, SELF-CONTAINED
+        single-page HTML demo. The HTML must be fully functional with inline CSS
+        and JavaScript — no external dependencies, no CDN links, no separate files.
+
+        Rules:
+        - Output ONLY raw HTML (no markdown, no code fences, no explanation).
+        - Use modern CSS (flexbox/grid, custom properties, smooth transitions).
+        - Include interactive elements (forms, buttons, toggles, animations).
+        - Make it mobile-responsive with a viewport meta tag.
+        - Use a clean, professional design with good typography.
+        - The page should be a complete demo that showcases the requested topic.
+        - Include a header with the title and a brief description.
+    """)
+
+    user_prompt = textwrap.dedent(f"""\
+        Create an interactive demo page for:
+
+        {prompt}
+
+        Make it visually impressive and fully functional. Return ONLY the HTML.
+    """)
+
+    resp = _llm_chat_completion(
+        MODEL_ALIAS,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+        max_tokens=16000,
+    )
+
+    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+    # Strip markdown code fences if present
+    if content.startswith("```"):
+        lines = content.split("\n")
+        # Remove first line (```html or ```)
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        # Remove last line if it's ```
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+
+    # Extract title from HTML if possible
+    title = _extract_title(content, prompt)
+
+    return title, content
+
+
+def _extract_title(html: str, fallback: str) -> str:
+    """Extract the <title> from HTML, or generate a fallback."""
+    import re
+    m = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    # Fallback: first 60 chars of prompt, cleaned up
+    return fallback[:60].strip()
 
 
 # ---------------------------------------------------------------------------
@@ -119,31 +199,28 @@ def _call_harness(prompt: str) -> dict[str, Any]:
 
 def _slugify(value: str) -> str:
     """Convert a string to a filename-safe slug."""
-    return "".join(c if c.isalnum() or c == "-" else "-" for c in value[:60]).strip("-")
+    import re
+    slug = re.sub(r"[^a-zA-Z0-9\-]+", "-", value).strip("-").lower()
+    return slug[:60]
 
 
-def _write_artifact(response: dict[str, Any], prompt: str) -> Optional[str]:
+def _save_demo_html(title: str, html_content: str, prompt: str) -> Optional[str]:
     """
-    Save the demo metadata as a JSON artifact file.
+    Save the demo HTML to the artifact directory.
     Returns the file path or None on failure.
     """
     try:
         ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-        slug = _slugify(prompt)
+        slug = _slugify(title)
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-        filename = f"demo_{ts}_{slug}.json"
+        filename = f"demo_{ts}_{slug}.html"
         path = ARTIFACT_DIR / filename
 
-        artifact = {
-            "prompt": prompt,
-            "timestamp": ts,
-            "harness_response": response,
-        }
-        path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
-        logger.info("Artifact written: %s", path)
+        path.write_text(html_content, encoding="utf-8")
+        logger.info("Demo HTML written: %s", path)
         return str(path)
     except OSError as exc:
-        logger.warning("Could not write artifact: %s", exc)
+        logger.warning("Could not write demo HTML: %s", exc)
         return None
 
 
@@ -156,15 +233,12 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
     """
     Execute the demo_workflow skill.
 
-    Thin wrapper: validates prompt, POSTs to AI Harness /demos/run,
-    returns the harness response.
-
     Args:
         params: Skill parameters (prompt).
         job: The runner Job object for logging.
 
     Returns:
-        Dict with harness response fields plus artifact_path.
+        Dict with title, slug, status, html_path, prompt.
     """
     # Validate inputs
     prompt = params.get("prompt")
@@ -179,33 +253,39 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
     # Log the invocation
     if hasattr(job, "add_log"):
         job.add_log(f"Executing demo_workflow: prompt='{prompt[:100]}...'")
-        job.add_log(f"Harness URL: {HARNESS_URL}")
+        job.add_log(f"LiteLLM URL: {LITELLM_BASE_URL}")
+        job.add_log(f"Model: {MODEL_ALIAS}")
         job.add_log(f"Max runtime: {MAX_RUNTIME_SECS}s")
 
     # Install timeout
     _install_timeout()
 
     try:
-        # Call the AI Harness demo endpoint
+        # Generate the demo via LLM
         if hasattr(job, "add_log"):
-            job.add_log("Calling AI Harness /demos/run...")
+            job.add_log("Generating demo HTML via LiteLLM...")
 
-        response = _call_harness(prompt)
-
-        if hasattr(job, "add_log"):
-            job.add_log(f"Harness responded: {json.dumps(response)[:200]}")
-
-        # Save metadata artifact
-        artifact_path = _write_artifact(response, prompt)
+        title, html_content = _generate_demo_html(prompt)
 
         if hasattr(job, "add_log"):
-            if artifact_path:
-                job.add_log(f"Artifact saved: {artifact_path}")
+            job.add_log(f"LLM responded: title='{title}', html size={len(html_content)} chars")
 
-        # Build result from harness response
-        result: dict[str, Any] = dict(response)
-        result["artifact_path"] = artifact_path
-        result["prompt"] = prompt
+        # Save the HTML artifact
+        html_path = _save_demo_html(title, html_content, prompt)
+
+        if hasattr(job, "add_log"):
+            if html_path:
+                job.add_log(f"Artifact saved: {html_path}")
+
+        slug = _slugify(title)
+
+        result: dict[str, Any] = {
+            "title": title,
+            "slug": slug,
+            "status": "completed",
+            "html_path": html_path or "",
+            "prompt": prompt,
+        }
 
         if hasattr(job, "add_log"):
             job.add_log("demo_workflow completed successfully")
@@ -268,36 +348,41 @@ def main():
     Usage:
         python skill.py --prompt "Build a solar system simulator"
         python skill.py --prompt "Test" --dry-run
-        python skill.py --prompt "Test" --harness-url http://localhost:8090
+        python skill.py --prompt "Test" --litellm-url http://localhost:4000
     """
+    global LITELLM_BASE_URL, MODEL_ALIAS
     import argparse
 
     parser = argparse.ArgumentParser(description="demo_workflow standalone test")
     parser.add_argument("--prompt", required=True, help="Demo topic/description")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Print parameters without calling the harness"
+        "--dry-run", action="store_true", help="Print parameters without calling the LLM"
     )
     parser.add_argument(
-        "--harness-url", default=HARNESS_URL, help=f"AI Harness URL (default: {HARNESS_URL})"
+        "--litellm-url",
+        default=LITELLM_BASE_URL,
+        help=f"LiteLLM base URL (default: {LITELLM_BASE_URL})",
+    )
+    parser.add_argument(
+        "--model",
+        default=MODEL_ALIAS,
+        help=f"Model alias (default: {MODEL_ALIAS})",
     )
     args = parser.parse_args()
 
     if args.dry_run:
         print("=== DRY RUN ===")
         print(f"  Prompt: {args.prompt}")
-        print(f"  Harness URL: {args.harness_url}")
-        print(f"  Endpoint: {args.harness_url}/demos/run")
+        print(f"  LiteLLM URL: {args.litellm_url}")
+        print(f"  Model: {args.model}")
         print(f"  Max runtime: {MAX_RUNTIME_SECS}s")
         print(f"  Artifact dir: {ARTIFACT_DIR}")
         print()
-        print("  Payload: {\"prompt\": \"...\"}")
-        print("  Expected response: {thread_id, title, slug, status, html_path}")
+        print("  Expected output: {title, slug, status, html_path}")
         return
 
-    # Override harness URL for CLI usage
-    global HARNESS_URL
-    HARNESS_URL = args.harness_url
-
+    LITELLM_BASE_URL = args.litellm_url
+    MODEL_ALIAS = args.model
     params = {"prompt": args.prompt}
     result = run(params, _MockJob())
 
