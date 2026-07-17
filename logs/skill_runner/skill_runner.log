@@ -3889,3 +3889,1216 @@ Quantum computing is a rapidly emerging technology that harnesses the laws of qu
 2026-07-16 19:47:06,759 INFO skill_runner: Job 7ae83d4f4af3: demo_browse completed successfully
 2026-07-16 19:47:06,759 INFO skill_runner: Job 7ae83d4f4af3: Skill.run() returned: ['query', 'demo_dir', 'total_demos', 'matched_count', 'limit', 'results']
 2026-07-16 19:47:06,760 INFO skill_runner: Job 7ae83d4f4af3 completed successfully.
+2026-07-16 19:49:48,086 INFO skill_runner: Chat request: intent=morning-brief text=give me my morning briefing model=matrix-gemma4-moe
+2026-07-16 19:49:48,086 INFO skill_runner: Job 1f96c583b537: Dispatching job 'morning_brief' to background executor
+2026-07-16 19:49:48,086 INFO skill_runner: Job 1f96c583b537 dispatched (async) for skill 'morning_brief'.
+2026-07-16 19:49:48,087 INFO skill_runner: Job 1f96c583b537: Executing skill 'morning_brief'
+2026-07-16 19:49:48,088 INFO skill_runner: Job 1f96c583b537: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-16 19:49:48,088 INFO skill_runner: Job 1f96c583b537: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 19:49:48,104 INFO skill_runner: Job 1f96c583b537: Skill module imported successfully
+2026-07-16 19:49:48,104 INFO skill_runner: Job 1f96c583b537: Passing sync client as 'litellm_client'
+2026-07-16 19:49:48,104 INFO skill_runner: Job 1f96c583b537: Invoking skill.run()...
+2026-07-16 19:49:48,104 INFO skill_runner: Job 1f96c583b537: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-16 19:49:48,105 INFO skill_runner: Job 1f96c583b537: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-16 19:49:48,105 INFO skill_runner: Job 1f96c583b537: Model alias: matrix-coder
+2026-07-16 19:49:48,105 INFO skill_runner: Job 1f96c583b537: Max runtime: 180s
+2026-07-16 19:49:48,105 INFO skill_runner: Job 1f96c583b537: LiteLLM: http://litellm-proxy:4000
+2026-07-16 19:49:48,105 INFO skill_runner: Job 1f96c583b537: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-16 19:49:48,106 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 19:49:48,189 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:48,191 INFO skill_runner: MCP initialized (server: mcp_search, session: 26ee577102134f2e9bbd2ca7b5e33273)
+2026-07-16 19:49:48,194 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 19:49:48,195 INFO skill_runner: MCP initialized notification sent
+2026-07-16 19:49:48,199 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:49,221 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 19:49:49,228 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 19:49:49,230 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 19:49:49,231 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-16 19:49:49,231 INFO skill_runner: Job 1f96c583b537: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-16 19:49:49,231 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 19:49:49,270 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:49,272 INFO skill_runner: MCP initialized (server: mcp_search, session: be692eb9831149a28527bfcb3751b0d6)
+2026-07-16 19:49:49,277 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 19:49:49,278 INFO skill_runner: MCP initialized notification sent
+2026-07-16 19:49:49,283 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:50,152 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 19:49:50,159 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 19:49:50,161 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 19:49:50,163 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-16 19:49:50,163 INFO skill_runner: Job 1f96c583b537: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-16 19:49:50,163 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 19:49:50,202 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:50,203 INFO skill_runner: MCP initialized (server: mcp_search, session: f93d353b06b6413c8f61c4e2efb6ffe4)
+2026-07-16 19:49:50,205 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 19:49:50,206 INFO skill_runner: MCP initialized notification sent
+2026-07-16 19:49:50,209 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:50,816 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 19:49:50,823 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 19:49:50,824 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 19:49:50,825 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-16 19:49:50,825 INFO skill_runner: Job 1f96c583b537: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-16 19:49:50,826 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 19:49:50,857 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:50,859 INFO skill_runner: MCP initialized (server: mcp_search, session: 3408216db09f4e6793bc382bfeac44e1)
+2026-07-16 19:49:50,863 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 19:49:50,864 INFO skill_runner: MCP initialized notification sent
+2026-07-16 19:49:50,869 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:51,549 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 19:49:51,555 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 19:49:51,557 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 19:49:51,558 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-16 19:49:51,558 INFO skill_runner: Job 1f96c583b537: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-16 19:49:51,559 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 19:49:51,588 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:51,590 INFO skill_runner: MCP initialized (server: mcp_search, session: dfc5ecf17418462999211a59871bcfba)
+2026-07-16 19:49:51,594 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 19:49:51,595 INFO skill_runner: MCP initialized notification sent
+2026-07-16 19:49:51,600 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 19:49:52,383 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 19:49:52,389 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 19:49:52,391 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 19:49:52,392 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-16 19:49:52,393 INFO skill_runner: Job 1f96c583b537: Phase 1 complete: collected 25 raw items
+2026-07-16 19:49:52,393 INFO skill_runner: Job 1f96c583b537: Phase 2: Deduplicating results...
+2026-07-16 19:49:52,393 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-16 19:49:52,393 INFO skill_runner: Job 1f96c583b537: Phase 3: Grouping by category...
+2026-07-16 19:49:52,394 INFO skill_runner: Job 1f96c583b537: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-16 19:50:28,119 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 19:50:28,122 INFO skill_runner: Job 1f96c583b537: Brief generated (4158 chars)
+2026-07-16 19:50:28,123 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T00-50-28.md
+2026-07-16 19:50:28,123 INFO skill_runner: Job 1f96c583b537: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T00-50-28.md
+2026-07-16 19:50:28,124 INFO skill_runner: Job 1f96c583b537: morning_brief completed: 25 raw items, 4158 chars
+2026-07-16 19:50:28,124 INFO skill_runner: Job 1f96c583b537: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-16 19:50:28,124 INFO skill_runner: Job 1f96c583b537: Skill summary: ## Morning Brief — 2026-07-17  ### Technology News - **Fujitsu and Leading Japanese Robotics Companies to Use Nvidia Technology in 'Physical AI'** — Fujitsu partners with robotics firms to integrate N
+2026-07-16 19:50:28,124 INFO skill_runner: Job 1f96c583b537: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T00-50-28.md
+2026-07-16 19:50:28,125 INFO skill_runner: Job 1f96c583b537: Merged result key 'report' into job params
+2026-07-16 19:50:28,125 INFO skill_runner: Job 1f96c583b537 completed successfully.
+2026-07-16 19:59:55,137 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-16 19:59:55,137 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-16 19:59:55,137 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-16 19:59:55,138 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-16 19:59:55,138 INFO skill_runner: Shutdown complete.
+2026-07-16 19:59:56,339 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 19:59:56,339 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-16 19:59:56,339 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-16 19:59:56,340 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-16 19:59:56,340 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-16 19:59:56,340 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:00:06,586 INFO skill_runner: Chat request: intent=morning-brief text=give me my morning briefing model=matrix-gemma4-moe
+2026-07-16 20:00:06,586 INFO skill_runner: Job 047c6567a537: Dispatching job 'morning_brief' to background executor
+2026-07-16 20:00:06,587 INFO skill_runner: Job 047c6567a537 dispatched (async) for skill 'morning_brief'.
+2026-07-16 20:00:06,588 INFO skill_runner: Job 047c6567a537: Executing skill 'morning_brief'
+2026-07-16 20:00:06,589 INFO skill_runner: Job 047c6567a537: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-16 20:00:06,589 INFO skill_runner: Job 047c6567a537: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:00:06,608 INFO skill_runner: Job 047c6567a537: Skill module imported successfully
+2026-07-16 20:00:06,608 INFO skill_runner: Job 047c6567a537: Passing sync client as 'litellm_client'
+2026-07-16 20:00:06,608 INFO skill_runner: Job 047c6567a537: Invoking skill.run()...
+2026-07-16 20:00:06,608 INFO skill_runner: Job 047c6567a537: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-16 20:00:06,609 INFO skill_runner: Job 047c6567a537: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-16 20:00:06,609 INFO skill_runner: Job 047c6567a537: Model alias: matrix-coder
+2026-07-16 20:00:06,609 INFO skill_runner: Job 047c6567a537: Max runtime: 180s
+2026-07-16 20:00:06,609 INFO skill_runner: Job 047c6567a537: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:00:06,609 INFO skill_runner: Job 047c6567a537: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-16 20:00:06,610 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:00:06,696 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:06,698 INFO skill_runner: MCP initialized (server: mcp_search, session: 3ef08be2d0004f418a4b1e662275b221)
+2026-07-16 20:00:06,702 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:00:06,703 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:00:06,708 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:07,658 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:00:07,663 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:00:07,665 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:00:07,666 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-16 20:00:07,666 INFO skill_runner: Job 047c6567a537: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-16 20:00:07,667 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:00:07,696 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:07,698 INFO skill_runner: MCP initialized (server: mcp_search, session: 98082279fc6f46649f249b4ecb80c05a)
+2026-07-16 20:00:07,703 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:00:07,704 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:00:07,709 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:09,115 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:00:09,121 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:00:09,122 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:00:09,123 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-16 20:00:09,123 INFO skill_runner: Job 047c6567a537: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-16 20:00:09,124 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:00:09,161 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:09,163 INFO skill_runner: MCP initialized (server: mcp_search, session: 66c2fa5bcd3d445ea060af1087353d5a)
+2026-07-16 20:00:09,167 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:00:09,168 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:00:09,172 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:09,686 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:00:09,692 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:00:09,693 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:00:09,695 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-16 20:00:09,695 INFO skill_runner: Job 047c6567a537: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-16 20:00:09,695 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:00:09,725 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:09,727 INFO skill_runner: MCP initialized (server: mcp_search, session: 1023c298e389428cafb2f73786002c52)
+2026-07-16 20:00:09,731 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:00:09,732 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:00:09,736 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:10,554 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:00:10,559 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:00:10,561 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:00:10,562 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-16 20:00:10,562 INFO skill_runner: Job 047c6567a537: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-16 20:00:10,563 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:00:10,603 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:10,605 INFO skill_runner: MCP initialized (server: mcp_search, session: 0ea51e946bfa4370b6675ed5cf4ab070)
+2026-07-16 20:00:10,608 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:00:10,610 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:00:10,614 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:00:11,802 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:00:11,809 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:00:11,810 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:00:11,811 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-16 20:00:11,812 INFO skill_runner: Job 047c6567a537: Phase 1 complete: collected 25 raw items
+2026-07-16 20:00:11,812 INFO skill_runner: Job 047c6567a537: Phase 2: Deduplicating results...
+2026-07-16 20:00:11,812 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-16 20:00:11,812 INFO skill_runner: Job 047c6567a537: Phase 3: Grouping by category...
+2026-07-16 20:00:11,813 INFO skill_runner: Job 047c6567a537: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-16 20:00:47,284 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:00:47,287 INFO skill_runner: Job 047c6567a537: Brief generated (2201 chars)
+2026-07-16 20:00:47,288 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-00-47.md
+2026-07-16 20:00:47,288 INFO skill_runner: Job 047c6567a537: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-00-47.md
+2026-07-16 20:00:47,288 INFO skill_runner: Job 047c6567a537: morning_brief completed: 25 raw items, 2201 chars
+2026-07-16 20:00:47,288 INFO skill_runner: Job 047c6567a537: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-16 20:00:47,289 INFO skill_runner: Job 047c6567a537: Skill summary: # Morning Brief — 2026-07-17  ## Technology News - **Fujitsu and leading Japanese robotics companies to use Nvidia technology in 'physical AI'** — Fujitsu partners with Japanese robotics firms to inte
+2026-07-16 20:00:47,289 INFO skill_runner: Job 047c6567a537: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-00-47.md
+2026-07-16 20:00:47,289 INFO skill_runner: Job 047c6567a537: Merged result key 'report' into job params
+2026-07-16 20:00:47,289 INFO skill_runner: Job 047c6567a537 completed successfully.
+2026-07-16 20:05:32,522 INFO skill_runner: Chat request: intent=list-images text=list my images model=matrix-gemma4-moe
+2026-07-16 20:05:32,522 INFO skill_runner: Job e8d0587e46b4 dispatched (async) for image listing.
+2026-07-16 20:05:32,522 INFO skill_runner: Job e8d0587e46b4: Scanning for generated images...
+2026-07-16 20:05:32,529 INFO skill_runner: Job e8d0587e46b4: Image scan completed: I found 30 image(s).
+2026-07-16 20:06:01,733 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for saliva gland cancers model=matrix-gemma4-moe
+2026-07-16 20:06:01,733 INFO skill_runner: Job 16d5cb20edbd: Dispatching job 'research_brief' to background executor
+2026-07-16 20:06:01,733 INFO skill_runner: Job 16d5cb20edbd dispatched (async) for skill 'research_brief'.
+2026-07-16 20:06:01,734 INFO skill_runner: Job 16d5cb20edbd: Executing skill 'research_brief'
+2026-07-16 20:06:01,735 INFO skill_runner: Job 16d5cb20edbd: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:06:01,735 INFO skill_runner: Job 16d5cb20edbd: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:06:01,750 INFO skill_runner: Job 16d5cb20edbd: Skill module imported successfully
+2026-07-16 20:06:01,750 INFO skill_runner: Job 16d5cb20edbd: Passing sync client as 'litellm_client'
+2026-07-16 20:06:01,750 INFO skill_runner: Job 16d5cb20edbd: Invoking skill.run()...
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: Executing research_brief: topic='mortality rate for saliva gland cancers'
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: Model alias: matrix-coder
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: Max runtime: 120s
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:06:01,751 INFO skill_runner: Job 16d5cb20edbd: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:06:07,743 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:06:07,745 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:06:07,746 INFO skill_runner: Job 16d5cb20edbd: Generated 3 sub-queries:
+2026-07-16 20:06:07,746 INFO skill_runner: Job 16d5cb20edbd:   [1] mortality rate for saliva gland cancers
+2026-07-16 20:06:07,746 INFO skill_runner: Job 16d5cb20edbd:   [2] mortality rate for saliva gland cancers overview
+2026-07-16 20:06:07,746 INFO skill_runner: Job 16d5cb20edbd:   [3] mortality rate for saliva gland cancers latest news
+2026-07-16 20:06:07,747 INFO skill_runner: Job 16d5cb20edbd: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:06:07,747 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:06:07,778 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:07,780 INFO skill_runner: MCP initialized (server: mcp_search, session: 6d1dbd336acd4e7da4b759766dc24021)
+2026-07-16 20:06:07,784 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:06:07,786 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:06:07,791 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:08,979 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:06:08,986 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:06:08,987 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:06:08,989 INFO skill_runner: Job 16d5cb20edbd:   Query [1] 'mortality rate for saliva gland cancers': 8 results (mcp)
+2026-07-16 20:06:08,989 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:06:09,021 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:09,023 INFO skill_runner: MCP initialized (server: mcp_search, session: 96a8277486ce4ce8853fecdf232166d8)
+2026-07-16 20:06:09,027 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:06:09,028 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:06:09,033 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:10,040 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:06:10,046 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:06:10,048 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:06:10,049 INFO skill_runner: Job 16d5cb20edbd:   Query [2] 'mortality rate for saliva gland cancers overview': 8 results (mcp)
+2026-07-16 20:06:10,050 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:06:10,082 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:10,085 INFO skill_runner: MCP initialized (server: mcp_search, session: a87c660c204b4dffb3258fa471ef3c04)
+2026-07-16 20:06:10,089 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:06:10,091 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:06:10,102 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:06:11,120 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:06:11,128 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:06:11,130 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:06:11,131 INFO skill_runner: Job 16d5cb20edbd:   Query [3] 'mortality rate for saliva gland cancers latest news': 8 results (mcp)
+2026-07-16 20:06:11,132 INFO skill_runner: Job 16d5cb20edbd: Collected 24 raw results via mcp
+2026-07-16 20:06:11,132 INFO skill_runner: Job 16d5cb20edbd: Deduplicated to 14 unique sources
+2026-07-16 20:06:11,132 INFO skill_runner: Job 16d5cb20edbd: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:06:35,470 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:06:35,473 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd: Brief generated (3205 chars)
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd: research_brief completed: 14 sources, method=mcp
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd: Merged result key 'sources' into job params
+2026-07-16 20:06:35,474 INFO skill_runner: Job 16d5cb20edbd completed successfully.
+2026-07-16 20:09:15,990 INFO skill_runner: Chat request: intent=media-generate text=picture of a dog-human with a katana and yellow pants in front of a red moon standing on a roof. model=matrix-gemma4-moe
+2026-07-16 20:09:15,990 INFO skill_runner: Streamable HTTP MCP call: server=mcp_media base_url=http://mcp_media:8000 tool=generate_image
+2026-07-16 20:09:16,026 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:09:16,028 INFO skill_runner: MCP initialized (server: mcp_media, session: 4ad1fa0e6b7147e184b736516bda06cf)
+2026-07-16 20:09:16,032 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:09:16,033 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:09:16,037 INFO httpx: HTTP Request: POST http://mcp_media:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:09:21,180 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:09:21,216 INFO httpx: HTTP Request: DELETE http://mcp_media:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:09:21,217 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_media, tool=generate_image, items=1)
+2026-07-16 20:09:21,222 INFO skill_runner: Job 1b1192c51c0f: Intent 'media-generate' dispatched to MCP server 'mcp_media'
+2026-07-16 20:09:21,222 INFO skill_runner: Job 1b1192c51c0f: Image generated: /home/chuck/data/media/generated/gen_picture of a dog-human with a katana and yellow pa.png
+2026-07-16 20:09:21,222 INFO skill_runner: Job 1b1192c51c0f completed for media generation. image=/home/chuck/data/media/generated/gen_picture of a dog-human with a katana and yellow pa.png
+2026-07-16 20:10:43,759 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-16 20:10:43,759 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-16 20:10:43,759 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-16 20:10:43,760 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-16 20:10:43,760 INFO skill_runner: Shutdown complete.
+2026-07-16 20:10:44,974 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:10:44,974 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-16 20:10:44,975 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-16 20:10:44,975 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-16 20:10:44,975 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-16 20:10:44,976 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:11:08,354 INFO skill_runner: Chat request: intent=morning-brief text=give me my morning briefing model=matrix-gemma4-moe
+2026-07-16 20:11:08,355 INFO skill_runner: Job 10ab425848c9: Dispatching job 'morning_brief' to background executor
+2026-07-16 20:11:08,355 INFO skill_runner: Job 10ab425848c9 dispatched (async) for skill 'morning_brief'.
+2026-07-16 20:11:08,356 INFO skill_runner: Job 10ab425848c9: Executing skill 'morning_brief'
+2026-07-16 20:11:08,357 INFO skill_runner: Job 10ab425848c9: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-16 20:11:08,358 INFO skill_runner: Job 10ab425848c9: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:11:08,359 INFO skill_runner: Job 10ab425848c9: Skill module imported successfully
+2026-07-16 20:11:08,360 INFO skill_runner: Job 10ab425848c9: Passing sync client as 'litellm_client'
+2026-07-16 20:11:08,360 INFO skill_runner: Job 10ab425848c9: Invoking skill.run()...
+2026-07-16 20:11:08,360 INFO skill_runner: Job 10ab425848c9: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-16 20:11:08,360 INFO skill_runner: Job 10ab425848c9: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-16 20:11:08,360 INFO skill_runner: Job 10ab425848c9: Model alias: matrix-coder
+2026-07-16 20:11:08,361 INFO skill_runner: Job 10ab425848c9: Max runtime: 180s
+2026-07-16 20:11:08,361 INFO skill_runner: Job 10ab425848c9: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:11:08,361 INFO skill_runner: Job 10ab425848c9: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-16 20:11:08,362 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:11:08,453 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:08,454 INFO skill_runner: MCP initialized (server: mcp_search, session: 41b8ebbe7d934f2bb1973980b57a63c5)
+2026-07-16 20:11:08,457 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:11:08,458 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:11:08,462 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:09,368 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:11:09,373 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:11:09,374 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:11:09,374 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-16 20:11:09,375 INFO skill_runner: Job 10ab425848c9: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-16 20:11:09,375 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:11:09,403 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:09,405 INFO skill_runner: MCP initialized (server: mcp_search, session: e483e14c529f463f97dce216ebb19b35)
+2026-07-16 20:11:09,407 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:11:09,408 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:11:09,412 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:10,420 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:11:10,427 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:11:10,428 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:11:10,430 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-16 20:11:10,430 INFO skill_runner: Job 10ab425848c9: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-16 20:11:10,431 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:11:10,468 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:10,470 INFO skill_runner: MCP initialized (server: mcp_search, session: cc092ee891b24420bea82f878dd47c0e)
+2026-07-16 20:11:10,474 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:11:10,476 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:11:10,481 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:11,028 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:11:11,034 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:11:11,036 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:11:11,037 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-16 20:11:11,038 INFO skill_runner: Job 10ab425848c9: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-16 20:11:11,038 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:11:11,071 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:11,072 INFO skill_runner: MCP initialized (server: mcp_search, session: a530089ddf834ca19854924708fa4a5f)
+2026-07-16 20:11:11,076 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:11:11,077 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:11:11,081 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:11,919 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:11:11,926 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:11:11,928 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:11:11,929 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-16 20:11:11,930 INFO skill_runner: Job 10ab425848c9: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-16 20:11:11,930 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:11:11,964 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:11,966 INFO skill_runner: MCP initialized (server: mcp_search, session: 9a2e1646c98846d2ba8879fb12c788f2)
+2026-07-16 20:11:11,971 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:11:11,972 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:11:11,977 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:11:12,872 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:11:12,879 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:11:12,880 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:11:12,881 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-16 20:11:12,882 INFO skill_runner: Job 10ab425848c9: Phase 1 complete: collected 25 raw items
+2026-07-16 20:11:12,882 INFO skill_runner: Job 10ab425848c9: Phase 2: Deduplicating results...
+2026-07-16 20:11:12,882 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-16 20:11:12,882 INFO skill_runner: Job 10ab425848c9: Phase 3: Grouping by category...
+2026-07-16 20:11:12,883 INFO skill_runner: Job 10ab425848c9: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-16 20:11:48,576 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:11:48,580 INFO skill_runner: Job 10ab425848c9: Brief generated (82 chars)
+2026-07-16 20:11:48,580 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-11-48.md
+2026-07-16 20:11:48,581 INFO skill_runner: Job 10ab425848c9: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-11-48.md
+2026-07-16 20:11:48,581 INFO skill_runner: Job 10ab425848c9: morning_brief completed: 25 raw items, 82 chars
+2026-07-16 20:11:48,581 INFO skill_runner: Job 10ab425848c9: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-16 20:11:48,581 INFO skill_runner: Job 10ab425848c9: Skill summary: # Morning Brief — 2026-07-17  **No brief generated.** LLM returned empty content.
+2026-07-16 20:11:48,582 INFO skill_runner: Job 10ab425848c9: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-11-48.md
+2026-07-16 20:11:48,582 INFO skill_runner: Job 10ab425848c9: Merged result key 'report' into job params
+2026-07-16 20:11:48,582 INFO skill_runner: Job 10ab425848c9 completed successfully.
+2026-07-16 20:15:01,589 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-16 20:15:01,590 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-16 20:15:01,590 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-16 20:15:01,591 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-16 20:15:01,591 INFO skill_runner: Shutdown complete.
+2026-07-16 20:15:02,849 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:15:02,850 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-16 20:15:02,850 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-16 20:15:02,850 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-16 20:15:02,851 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-16 20:15:02,851 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:15:10,152 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for salivary gland cancers model=matrix-gemma4-moe
+2026-07-16 20:15:10,152 INFO skill_runner: Job 0a3c263bbb2e: Dispatching job 'research_brief' to background executor
+2026-07-16 20:15:10,153 INFO skill_runner: Job 0a3c263bbb2e dispatched (async) for skill 'research_brief'.
+2026-07-16 20:15:10,153 INFO skill_runner: Job 0a3c263bbb2e: Executing skill 'research_brief'
+2026-07-16 20:15:10,155 INFO skill_runner: Job 0a3c263bbb2e: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:15:10,155 INFO skill_runner: Job 0a3c263bbb2e: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Skill module imported successfully
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Passing sync client as 'litellm_client'
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Invoking skill.run()...
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Executing research_brief: topic='mortality rate for salivary gland cancers'
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:15:10,156 INFO skill_runner: Job 0a3c263bbb2e: Model alias: matrix-coder
+2026-07-16 20:15:10,157 INFO skill_runner: Job 0a3c263bbb2e: Max runtime: 120s
+2026-07-16 20:15:10,157 INFO skill_runner: Job 0a3c263bbb2e: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:15:10,157 INFO skill_runner: Job 0a3c263bbb2e: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:15:15,676 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:15:15,679 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:15:15,679 INFO skill_runner: Job 0a3c263bbb2e: Generated 3 sub-queries:
+2026-07-16 20:15:15,679 INFO skill_runner: Job 0a3c263bbb2e:   [1] mortality rate for salivary gland cancers
+2026-07-16 20:15:15,679 INFO skill_runner: Job 0a3c263bbb2e:   [2] mortality rate for salivary gland cancers overview
+2026-07-16 20:15:15,679 INFO skill_runner: Job 0a3c263bbb2e:   [3] mortality rate for salivary gland cancers latest news
+2026-07-16 20:15:15,679 INFO skill_runner: Job 0a3c263bbb2e: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:15:15,680 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:15,709 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:15,711 INFO skill_runner: MCP initialized (server: mcp_search, session: 66484d8ba9b24feaa7b7d1d245f654a2)
+2026-07-16 20:15:15,716 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:15,717 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:15,722 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:18,751 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:18,758 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:18,759 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:18,760 INFO skill_runner: Job 0a3c263bbb2e:   Query [1] 'mortality rate for salivary gland cancers': 8 results (mcp)
+2026-07-16 20:15:18,761 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:18,794 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:18,797 INFO skill_runner: MCP initialized (server: mcp_search, session: f4ce52e7a079473481aa9d867db4ac4b)
+2026-07-16 20:15:18,800 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:18,802 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:18,806 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:19,859 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:19,866 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:19,867 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:19,868 INFO skill_runner: Job 0a3c263bbb2e:   Query [2] 'mortality rate for salivary gland cancers overview': 8 results (mcp)
+2026-07-16 20:15:19,869 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:19,907 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:19,909 INFO skill_runner: MCP initialized (server: mcp_search, session: 9c7649fd0bfd402e8fda87ff91b9939b)
+2026-07-16 20:15:19,913 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:19,915 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:19,920 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:21,176 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:21,182 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:21,184 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:21,185 INFO skill_runner: Job 0a3c263bbb2e:   Query [3] 'mortality rate for salivary gland cancers latest news': 8 results (mcp)
+2026-07-16 20:15:21,185 INFO skill_runner: Job 0a3c263bbb2e: Collected 24 raw results via mcp
+2026-07-16 20:15:21,186 INFO skill_runner: Job 0a3c263bbb2e: Deduplicated to 14 unique sources
+2026-07-16 20:15:21,186 INFO skill_runner: Job 0a3c263bbb2e: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:15:42,325 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:15:42,327 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:15:42,328 INFO skill_runner: Job 0a3c263bbb2e: Brief generated (3219 chars)
+2026-07-16 20:15:42,328 INFO skill_runner: Job 0a3c263bbb2e: research_brief completed: 14 sources, method=mcp
+2026-07-16 20:15:42,328 INFO skill_runner: Job 0a3c263bbb2e: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:15:42,329 INFO skill_runner: Job 0a3c263bbb2e: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:15:42,329 INFO skill_runner: Job 0a3c263bbb2e: Merged result key 'sources' into job params
+2026-07-16 20:15:42,329 INFO skill_runner: Job 0a3c263bbb2e completed successfully.
+2026-07-16 20:15:49,939 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for salivary gland cancers model=matrix-gemma4-moe
+2026-07-16 20:15:49,939 INFO skill_runner: Job b1b2e5869489: Dispatching job 'research_brief' to background executor
+2026-07-16 20:15:49,939 INFO skill_runner: Job b1b2e5869489 dispatched (async) for skill 'research_brief'.
+2026-07-16 20:15:49,940 INFO skill_runner: Job b1b2e5869489: Executing skill 'research_brief'
+2026-07-16 20:15:49,941 INFO skill_runner: Job b1b2e5869489: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:15:49,941 INFO skill_runner: Job b1b2e5869489: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:15:49,943 INFO skill_runner: Job b1b2e5869489: Skill module imported successfully
+2026-07-16 20:15:49,943 INFO skill_runner: Job b1b2e5869489: Passing sync client as 'litellm_client'
+2026-07-16 20:15:49,943 INFO skill_runner: Job b1b2e5869489: Invoking skill.run()...
+2026-07-16 20:15:49,943 INFO skill_runner: Job b1b2e5869489: Executing research_brief: topic='mortality rate for salivary gland cancers'
+2026-07-16 20:15:49,944 INFO skill_runner: Job b1b2e5869489: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:15:49,944 INFO skill_runner: Job b1b2e5869489: Model alias: matrix-coder
+2026-07-16 20:15:49,944 INFO skill_runner: Job b1b2e5869489: Max runtime: 120s
+2026-07-16 20:15:49,944 INFO skill_runner: Job b1b2e5869489: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:15:49,944 INFO skill_runner: Job b1b2e5869489: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:15:54,598 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:15:54,600 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:15:54,601 INFO skill_runner: Job b1b2e5869489: Generated 3 sub-queries:
+2026-07-16 20:15:54,601 INFO skill_runner: Job b1b2e5869489:   [1] mortality rate for salivary gland cancers
+2026-07-16 20:15:54,601 INFO skill_runner: Job b1b2e5869489:   [2] mortality rate for salivary gland cancers overview
+2026-07-16 20:15:54,601 INFO skill_runner: Job b1b2e5869489:   [3] mortality rate for salivary gland cancers latest news
+2026-07-16 20:15:54,602 INFO skill_runner: Job b1b2e5869489: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:15:54,602 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:54,630 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:54,632 INFO skill_runner: MCP initialized (server: mcp_search, session: b9f912b4ae6d4c65a7faca7dcacc66a8)
+2026-07-16 20:15:54,637 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:54,639 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:54,645 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:55,522 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:55,527 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:55,529 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:55,530 INFO skill_runner: Job b1b2e5869489:   Query [1] 'mortality rate for salivary gland cancers': 8 results (mcp)
+2026-07-16 20:15:55,531 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:55,564 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:55,566 INFO skill_runner: MCP initialized (server: mcp_search, session: 2041f1c8ae7b4b99b1f2caf5cd196134)
+2026-07-16 20:15:55,570 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:55,572 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:55,576 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:56,371 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:56,377 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:56,379 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:56,380 INFO skill_runner: Job b1b2e5869489:   Query [2] 'mortality rate for salivary gland cancers overview': 8 results (mcp)
+2026-07-16 20:15:56,381 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:15:56,414 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:56,416 INFO skill_runner: MCP initialized (server: mcp_search, session: 11ab7174edde45acb3caae181b45e49c)
+2026-07-16 20:15:56,420 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:15:56,422 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:15:56,427 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:15:57,301 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:15:57,314 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:15:57,316 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:15:57,317 INFO skill_runner: Job b1b2e5869489:   Query [3] 'mortality rate for salivary gland cancers latest news': 8 results (mcp)
+2026-07-16 20:15:57,317 INFO skill_runner: Job b1b2e5869489: Collected 24 raw results via mcp
+2026-07-16 20:15:57,317 INFO skill_runner: Job b1b2e5869489: Deduplicated to 14 unique sources
+2026-07-16 20:15:57,318 INFO skill_runner: Job b1b2e5869489: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:16:16,215 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:16:16,218 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:16:16,219 INFO skill_runner: Job b1b2e5869489: Brief generated (3196 chars)
+2026-07-16 20:16:16,219 INFO skill_runner: Job b1b2e5869489: research_brief completed: 14 sources, method=mcp
+2026-07-16 20:16:16,219 INFO skill_runner: Job b1b2e5869489: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:16:16,219 INFO skill_runner: Job b1b2e5869489: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:16:16,219 INFO skill_runner: Job b1b2e5869489: Merged result key 'sources' into job params
+2026-07-16 20:16:16,220 INFO skill_runner: Job b1b2e5869489 completed successfully.
+2026-07-16 20:16:24,829 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for salivary gland cancers model=matrix-gemma4-moe
+2026-07-16 20:16:24,829 INFO skill_runner: Job e514836bfaca: Dispatching job 'research_brief' to background executor
+2026-07-16 20:16:24,829 INFO skill_runner: Job e514836bfaca dispatched (async) for skill 'research_brief'.
+2026-07-16 20:16:24,830 INFO skill_runner: Job e514836bfaca: Executing skill 'research_brief'
+2026-07-16 20:16:24,831 INFO skill_runner: Job e514836bfaca: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:16:24,831 INFO skill_runner: Job e514836bfaca: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:16:24,833 INFO skill_runner: Job e514836bfaca: Skill module imported successfully
+2026-07-16 20:16:24,833 INFO skill_runner: Job e514836bfaca: Passing sync client as 'litellm_client'
+2026-07-16 20:16:24,833 INFO skill_runner: Job e514836bfaca: Invoking skill.run()...
+2026-07-16 20:16:24,833 INFO skill_runner: Job e514836bfaca: Executing research_brief: topic='mortality rate for salivary gland cancers'
+2026-07-16 20:16:24,833 INFO skill_runner: Job e514836bfaca: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:16:24,834 INFO skill_runner: Job e514836bfaca: Model alias: matrix-coder
+2026-07-16 20:16:24,834 INFO skill_runner: Job e514836bfaca: Max runtime: 120s
+2026-07-16 20:16:24,834 INFO skill_runner: Job e514836bfaca: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:16:24,834 INFO skill_runner: Job e514836bfaca: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:16:29,439 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:16:29,441 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:16:29,442 INFO skill_runner: Job e514836bfaca: Generated 3 sub-queries:
+2026-07-16 20:16:29,442 INFO skill_runner: Job e514836bfaca:   [1] mortality rate for salivary gland cancers
+2026-07-16 20:16:29,442 INFO skill_runner: Job e514836bfaca:   [2] mortality rate for salivary gland cancers overview
+2026-07-16 20:16:29,442 INFO skill_runner: Job e514836bfaca:   [3] mortality rate for salivary gland cancers latest news
+2026-07-16 20:16:29,442 INFO skill_runner: Job e514836bfaca: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:16:29,443 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:16:29,468 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:29,470 INFO skill_runner: MCP initialized (server: mcp_search, session: d8598c3eeeb841caa0d3c2bd2617f898)
+2026-07-16 20:16:29,473 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:16:29,474 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:16:29,479 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:30,420 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:16:30,426 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:16:30,428 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:16:30,429 INFO skill_runner: Job e514836bfaca:   Query [1] 'mortality rate for salivary gland cancers': 8 results (mcp)
+2026-07-16 20:16:30,430 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:16:30,464 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:30,466 INFO skill_runner: MCP initialized (server: mcp_search, session: 599ec822716e461fa9e01723a2fb4d7d)
+2026-07-16 20:16:30,468 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:16:30,469 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:16:30,473 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:31,379 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:16:31,385 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:16:31,386 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:16:31,388 INFO skill_runner: Job e514836bfaca:   Query [2] 'mortality rate for salivary gland cancers overview': 8 results (mcp)
+2026-07-16 20:16:31,388 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:16:31,420 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:31,422 INFO skill_runner: MCP initialized (server: mcp_search, session: 0f8682ed9a5246f49bf00ec2fd5a7449)
+2026-07-16 20:16:31,425 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:16:31,426 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:16:31,431 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:16:32,294 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:16:32,300 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:16:32,302 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:16:32,303 INFO skill_runner: Job e514836bfaca:   Query [3] 'mortality rate for salivary gland cancers latest news': 8 results (mcp)
+2026-07-16 20:16:32,303 INFO skill_runner: Job e514836bfaca: Collected 24 raw results via mcp
+2026-07-16 20:16:32,304 INFO skill_runner: Job e514836bfaca: Deduplicated to 15 unique sources
+2026-07-16 20:16:32,304 INFO skill_runner: Job e514836bfaca: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:16:51,225 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:16:51,228 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:16:51,228 INFO skill_runner: Job e514836bfaca: Brief generated (3191 chars)
+2026-07-16 20:16:51,229 INFO skill_runner: Job e514836bfaca: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:16:51,229 INFO skill_runner: Job e514836bfaca: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:16:51,229 INFO skill_runner: Job e514836bfaca: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:16:51,229 INFO skill_runner: Job e514836bfaca: Merged result key 'sources' into job params
+2026-07-16 20:16:51,230 INFO skill_runner: Job e514836bfaca completed successfully.
+2026-07-16 20:17:01,841 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for salivary gland cancers model=matrix-gemma4-moe
+2026-07-16 20:17:01,841 INFO skill_runner: Job 16c3185dcfc8: Dispatching job 'research_brief' to background executor
+2026-07-16 20:17:01,841 INFO skill_runner: Job 16c3185dcfc8 dispatched (async) for skill 'research_brief'.
+2026-07-16 20:17:01,842 INFO skill_runner: Job 16c3185dcfc8: Executing skill 'research_brief'
+2026-07-16 20:17:01,843 INFO skill_runner: Job 16c3185dcfc8: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:17:01,843 INFO skill_runner: Job 16c3185dcfc8: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:17:01,845 INFO skill_runner: Job 16c3185dcfc8: Skill module imported successfully
+2026-07-16 20:17:01,845 INFO skill_runner: Job 16c3185dcfc8: Passing sync client as 'litellm_client'
+2026-07-16 20:17:01,845 INFO skill_runner: Job 16c3185dcfc8: Invoking skill.run()...
+2026-07-16 20:17:01,846 INFO skill_runner: Job 16c3185dcfc8: Executing research_brief: topic='mortality rate for salivary gland cancers'
+2026-07-16 20:17:01,846 INFO skill_runner: Job 16c3185dcfc8: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:17:01,846 INFO skill_runner: Job 16c3185dcfc8: Model alias: matrix-coder
+2026-07-16 20:17:01,846 INFO skill_runner: Job 16c3185dcfc8: Max runtime: 120s
+2026-07-16 20:17:01,846 INFO skill_runner: Job 16c3185dcfc8: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:17:01,847 INFO skill_runner: Job 16c3185dcfc8: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:17:06,857 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:17:06,859 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:17:06,859 INFO skill_runner: Job 16c3185dcfc8: Generated 3 sub-queries:
+2026-07-16 20:17:06,859 INFO skill_runner: Job 16c3185dcfc8:   [1] mortality rate for salivary gland cancers
+2026-07-16 20:17:06,860 INFO skill_runner: Job 16c3185dcfc8:   [2] mortality rate for salivary gland cancers overview
+2026-07-16 20:17:06,860 INFO skill_runner: Job 16c3185dcfc8:   [3] mortality rate for salivary gland cancers latest news
+2026-07-16 20:17:06,860 INFO skill_runner: Job 16c3185dcfc8: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:17:06,860 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:17:06,883 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:06,885 INFO skill_runner: MCP initialized (server: mcp_search, session: 5a9f39d8709c4b1cb084ce07056f57c5)
+2026-07-16 20:17:06,889 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:17:06,891 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:17:06,895 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:07,802 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:17:07,808 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:17:07,809 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:17:07,811 INFO skill_runner: Job 16c3185dcfc8:   Query [1] 'mortality rate for salivary gland cancers': 8 results (mcp)
+2026-07-16 20:17:07,811 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:17:07,842 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:07,844 INFO skill_runner: MCP initialized (server: mcp_search, session: d31c6335394b4f6888c8d9de21a8eb7f)
+2026-07-16 20:17:07,848 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:17:07,849 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:17:07,854 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:08,716 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:17:08,722 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:17:08,724 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:17:08,726 INFO skill_runner: Job 16c3185dcfc8:   Query [2] 'mortality rate for salivary gland cancers overview': 8 results (mcp)
+2026-07-16 20:17:08,726 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:17:08,764 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:08,766 INFO skill_runner: MCP initialized (server: mcp_search, session: be3e830470284103b7a308784302223a)
+2026-07-16 20:17:08,776 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:17:08,777 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:17:08,781 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:17:09,618 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:17:09,624 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:17:09,626 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:17:09,627 INFO skill_runner: Job 16c3185dcfc8:   Query [3] 'mortality rate for salivary gland cancers latest news': 8 results (mcp)
+2026-07-16 20:17:09,627 INFO skill_runner: Job 16c3185dcfc8: Collected 24 raw results via mcp
+2026-07-16 20:17:09,628 INFO skill_runner: Job 16c3185dcfc8: Deduplicated to 15 unique sources
+2026-07-16 20:17:09,628 INFO skill_runner: Job 16c3185dcfc8: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:17:28,735 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:17:28,737 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:17:28,738 INFO skill_runner: Job 16c3185dcfc8: Brief generated (3206 chars)
+2026-07-16 20:17:28,738 INFO skill_runner: Job 16c3185dcfc8: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:17:28,738 INFO skill_runner: Job 16c3185dcfc8: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:17:28,739 INFO skill_runner: Job 16c3185dcfc8: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:17:28,739 INFO skill_runner: Job 16c3185dcfc8: Merged result key 'sources' into job params
+2026-07-16 20:17:28,739 INFO skill_runner: Job 16c3185dcfc8 completed successfully.
+2026-07-16 20:34:40,994 INFO skill_runner: Thor Skill Runner shutting down — stopping scheduler.
+2026-07-16 20:34:40,994 INFO skill_runner.scheduler: Stopping scheduler background thread…
+2026-07-16 20:34:40,995 INFO skill_runner.scheduler: Scheduler thread stopped.
+2026-07-16 20:34:40,996 INFO skill_runner.scheduler: Scheduler stopped.
+2026-07-16 20:34:40,996 INFO skill_runner: Shutdown complete.
+2026-07-16 20:34:42,750 INFO skill_runner.scheduler: Config file not found at /root/.thor/scheduler.json — creating default config.
+2026-07-16 20:34:42,751 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:34:42,751 INFO skill_runner: Scheduler loaded 0 schedule(s), starting background thread.
+2026-07-16 20:34:42,752 INFO skill_runner.scheduler: Scheduler thread started (check_interval=60.0s).
+2026-07-16 20:34:42,752 INFO skill_runner.scheduler: Scheduler background thread started.
+2026-07-16 20:34:42,752 INFO skill_runner: Thor Skill Runner startup complete.
+2026-07-16 20:34:42,753 INFO skill_runner.scheduler: Scheduler config loaded: 0 schedule(s).
+2026-07-16 20:40:36,428 INFO skill_runner: Chat request: intent=research-brief text=mortality rate for salivary gland cancers model=matrix-gemma4-moe
+2026-07-16 20:40:36,429 INFO skill_runner: Job 6918f8e43d74: Dispatching job 'research_brief' to background executor
+2026-07-16 20:40:36,429 INFO skill_runner: Job 6918f8e43d74 dispatched (async) for skill 'research_brief'.
+2026-07-16 20:40:36,431 INFO skill_runner: Job 6918f8e43d74: Executing skill 'research_brief'
+2026-07-16 20:40:36,432 INFO skill_runner: Job 6918f8e43d74: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:40:36,432 INFO skill_runner: Job 6918f8e43d74: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:40:36,433 INFO skill_runner: Job 6918f8e43d74: Skill module imported successfully
+2026-07-16 20:40:36,433 INFO skill_runner: Job 6918f8e43d74: Passing sync client as 'litellm_client'
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Invoking skill.run()...
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Executing research_brief: topic='mortality rate for salivary gland cancers'
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Model alias: matrix-coder
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Max runtime: 120s
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:40:36,434 INFO skill_runner: Job 6918f8e43d74: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:40:41,711 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:40:41,713 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:40:41,713 INFO skill_runner: Job 6918f8e43d74: Generated 3 sub-queries:
+2026-07-16 20:40:41,714 INFO skill_runner: Job 6918f8e43d74:   [1] mortality rate for salivary gland cancers
+2026-07-16 20:40:41,714 INFO skill_runner: Job 6918f8e43d74:   [2] mortality rate for salivary gland cancers overview
+2026-07-16 20:40:41,714 INFO skill_runner: Job 6918f8e43d74:   [3] mortality rate for salivary gland cancers latest news
+2026-07-16 20:40:41,714 INFO skill_runner: Job 6918f8e43d74: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:40:41,715 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:40:41,739 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:41,741 INFO skill_runner: MCP initialized (server: mcp_search, session: 2182237b5a6f439ba310b33d685a15f7)
+2026-07-16 20:40:41,745 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:40:41,747 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:40:41,751 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:42,792 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:40:42,800 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:40:42,802 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:40:42,803 INFO skill_runner: Job 6918f8e43d74:   Query [1] 'mortality rate for salivary gland cancers': 8 results (mcp)
+2026-07-16 20:40:42,804 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:40:42,835 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:42,837 INFO skill_runner: MCP initialized (server: mcp_search, session: 8c79a8a165db42a8989b902c2019ffe7)
+2026-07-16 20:40:42,840 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:40:42,840 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:40:42,843 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:43,672 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:40:43,677 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:40:43,678 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:40:43,679 INFO skill_runner: Job 6918f8e43d74:   Query [2] 'mortality rate for salivary gland cancers overview': 8 results (mcp)
+2026-07-16 20:40:43,680 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:40:43,711 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:43,713 INFO skill_runner: MCP initialized (server: mcp_search, session: 512ddb2e79d84dacaa85e2d862d9e59e)
+2026-07-16 20:40:43,716 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:40:43,718 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:40:43,722 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:40:44,547 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:40:44,553 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:40:44,555 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:40:44,556 INFO skill_runner: Job 6918f8e43d74:   Query [3] 'mortality rate for salivary gland cancers latest news': 8 results (mcp)
+2026-07-16 20:40:44,556 INFO skill_runner: Job 6918f8e43d74: Collected 24 raw results via mcp
+2026-07-16 20:40:44,556 INFO skill_runner: Job 6918f8e43d74: Deduplicated to 15 unique sources
+2026-07-16 20:40:44,557 INFO skill_runner: Job 6918f8e43d74: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:41:03,405 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:41:03,407 WARNING skill.research_brief: LLM summarization failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:41:03,410 INFO skill_runner: Job 6918f8e43d74: Brief generated (3220 chars)
+2026-07-16 20:41:03,410 INFO skill_runner: Job 6918f8e43d74: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:41:03,410 INFO skill_runner: Job 6918f8e43d74: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:41:03,411 INFO skill_runner: Job 6918f8e43d74: Skill summary: 1. **Survival Rates for Salivary Gland Cancer - American Cancer Society** — https://www.cancer.org/cancer/types/salivary-gland-cancer/detection-diagnosis-staging/survival-rates.html
+2026-07-16 20:41:03,411 INFO skill_runner: Job 6918f8e43d74: Merged result key 'sources' into job params
+2026-07-16 20:41:03,411 INFO skill_runner: Job 6918f8e43d74: Merged result key 'brief' into job params
+2026-07-16 20:41:03,412 INFO skill_runner: Job 6918f8e43d74 completed successfully.
+2026-07-16 20:41:43,329 INFO skill_runner: Chat request: intent=research-brief text=benefits of intermittent fasting model=matrix-gemma4-moe
+2026-07-16 20:41:43,329 INFO skill_runner: Job a86fb0f99c29: Dispatching job 'research_brief' to background executor
+2026-07-16 20:41:43,329 INFO skill_runner: Job a86fb0f99c29 dispatched (async) for skill 'research_brief'.
+2026-07-16 20:41:43,330 INFO skill_runner: Job a86fb0f99c29: Executing skill 'research_brief'
+2026-07-16 20:41:43,331 INFO skill_runner: Job a86fb0f99c29: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:41:43,331 INFO skill_runner: Job a86fb0f99c29: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:41:43,333 INFO skill_runner: Job a86fb0f99c29: Skill module imported successfully
+2026-07-16 20:41:43,333 INFO skill_runner: Job a86fb0f99c29: Passing sync client as 'litellm_client'
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: Invoking skill.run()...
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: Executing research_brief: topic='benefits of intermittent fasting'
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: Model alias: matrix-coder
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: Max runtime: 120s
+2026-07-16 20:41:43,334 INFO skill_runner: Job a86fb0f99c29: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:41:43,335 INFO skill_runner: Job a86fb0f99c29: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:41:47,989 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:41:47,992 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:41:47,992 INFO skill_runner: Job a86fb0f99c29: Generated 3 sub-queries:
+2026-07-16 20:41:47,992 INFO skill_runner: Job a86fb0f99c29:   [1] benefits of intermittent fasting
+2026-07-16 20:41:47,993 INFO skill_runner: Job a86fb0f99c29:   [2] benefits of intermittent fasting overview
+2026-07-16 20:41:47,993 INFO skill_runner: Job a86fb0f99c29:   [3] benefits of intermittent fasting latest news
+2026-07-16 20:41:47,993 INFO skill_runner: Job a86fb0f99c29: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:41:47,993 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:41:48,017 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:48,019 INFO skill_runner: MCP initialized (server: mcp_search, session: 29c078fb71c94f46b1a0ae8cc632680e)
+2026-07-16 20:41:48,023 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:41:48,024 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:41:48,028 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:48,869 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:41:48,875 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:41:48,877 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:41:48,878 INFO skill_runner: Job a86fb0f99c29:   Query [1] 'benefits of intermittent fasting': 8 results (mcp)
+2026-07-16 20:41:48,879 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:41:48,910 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:48,911 INFO skill_runner: MCP initialized (server: mcp_search, session: 65aaf154c36a402a9b45a302c4f1c6e9)
+2026-07-16 20:41:48,913 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:41:48,914 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:41:48,917 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:50,239 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:41:50,246 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:41:50,248 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:41:50,249 INFO skill_runner: Job a86fb0f99c29:   Query [2] 'benefits of intermittent fasting overview': 8 results (mcp)
+2026-07-16 20:41:50,250 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:41:50,285 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:50,287 INFO skill_runner: MCP initialized (server: mcp_search, session: 138308c609e74febb1b960d95e437196)
+2026-07-16 20:41:50,291 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:41:50,292 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:41:50,296 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:41:51,124 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:41:51,131 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:41:51,132 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:41:51,133 INFO skill_runner: Job a86fb0f99c29:   Query [3] 'benefits of intermittent fasting latest news': 8 results (mcp)
+2026-07-16 20:41:51,134 INFO skill_runner: Job a86fb0f99c29: Collected 24 raw results via mcp
+2026-07-16 20:41:51,134 INFO skill_runner: Job a86fb0f99c29: Deduplicated to 15 unique sources
+2026-07-16 20:41:51,134 INFO skill_runner: Job a86fb0f99c29: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:42:10,338 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:42:10,341 WARNING skill.research_brief: LLM summarization failed, using fallback: LLM returned empty content
+2026-07-16 20:42:10,341 INFO skill_runner: Job a86fb0f99c29: Brief generated (3429 chars)
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29: Skill summary: 1. **[Intermittent Fasting: What Is It, And How Does It Work?](https://www.hopkinsmedicine.org/health/expert-qa/intermittent-fasting-what-is-it-and-how-does-it-work)**
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29: Merged result key 'sources' into job params
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29: Merged result key 'brief' into job params
+2026-07-16 20:42:10,342 INFO skill_runner: Job a86fb0f99c29 completed successfully.
+2026-07-16 20:43:05,355 INFO skill_runner: Chat request: intent=research-brief text=benefits of intermittent fasting model=matrix-gemma4-moe
+2026-07-16 20:43:05,355 INFO skill_runner: Job 5ee3fd80ed3d: Dispatching job 'research_brief' to background executor
+2026-07-16 20:43:05,355 INFO skill_runner: Job 5ee3fd80ed3d dispatched (async) for skill 'research_brief'.
+2026-07-16 20:43:05,355 INFO skill_runner: Job 5ee3fd80ed3d: Executing skill 'research_brief'
+2026-07-16 20:43:05,356 INFO skill_runner: Job 5ee3fd80ed3d: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:43:05,356 INFO skill_runner: Job 5ee3fd80ed3d: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:43:05,357 INFO skill_runner: Job 5ee3fd80ed3d: Skill module imported successfully
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Passing sync client as 'litellm_client'
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Invoking skill.run()...
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Executing research_brief: topic='benefits of intermittent fasting'
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Model alias: matrix-coder
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: Max runtime: 120s
+2026-07-16 20:43:05,358 INFO skill_runner: Job 5ee3fd80ed3d: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:43:05,359 INFO skill_runner: Job 5ee3fd80ed3d: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:43:10,074 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:43:10,076 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:43:10,077 INFO skill_runner: Job 5ee3fd80ed3d: Generated 3 sub-queries:
+2026-07-16 20:43:10,077 INFO skill_runner: Job 5ee3fd80ed3d:   [1] benefits of intermittent fasting
+2026-07-16 20:43:10,077 INFO skill_runner: Job 5ee3fd80ed3d:   [2] benefits of intermittent fasting overview
+2026-07-16 20:43:10,077 INFO skill_runner: Job 5ee3fd80ed3d:   [3] benefits of intermittent fasting latest news
+2026-07-16 20:43:10,078 INFO skill_runner: Job 5ee3fd80ed3d: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:43:10,078 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:43:10,107 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:10,112 INFO skill_runner: MCP initialized (server: mcp_search, session: c1696ee5a0a347daa9534ece832ddfa0)
+2026-07-16 20:43:10,115 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:43:10,117 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:43:10,124 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:11,018 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:43:11,023 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:43:11,024 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:43:11,025 INFO skill_runner: Job 5ee3fd80ed3d:   Query [1] 'benefits of intermittent fasting': 8 results (mcp)
+2026-07-16 20:43:11,026 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:43:11,056 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:11,058 INFO skill_runner: MCP initialized (server: mcp_search, session: 13a3a0646dc947fb8a9f1c03d79c5bd5)
+2026-07-16 20:43:11,062 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:43:11,063 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:43:11,068 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:11,928 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:43:11,935 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:43:11,936 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:43:11,937 INFO skill_runner: Job 5ee3fd80ed3d:   Query [2] 'benefits of intermittent fasting overview': 8 results (mcp)
+2026-07-16 20:43:11,938 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:43:11,969 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:11,971 INFO skill_runner: MCP initialized (server: mcp_search, session: fe78f38da98647049cdd74ed9b23ccfb)
+2026-07-16 20:43:11,975 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:43:11,976 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:43:11,980 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:43:12,808 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:43:12,814 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:43:12,816 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:43:12,817 INFO skill_runner: Job 5ee3fd80ed3d:   Query [3] 'benefits of intermittent fasting latest news': 8 results (mcp)
+2026-07-16 20:43:12,817 INFO skill_runner: Job 5ee3fd80ed3d: Collected 24 raw results via mcp
+2026-07-16 20:43:12,817 INFO skill_runner: Job 5ee3fd80ed3d: Deduplicated to 15 unique sources
+2026-07-16 20:43:12,817 INFO skill_runner: Job 5ee3fd80ed3d: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:43:31,325 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:43:31,327 WARNING skill.research_brief: LLM summarization failed, using fallback: LLM returned empty content
+2026-07-16 20:43:31,327 INFO skill_runner: Job 5ee3fd80ed3d: Brief generated (3331 chars)
+2026-07-16 20:43:31,327 INFO skill_runner: Job 5ee3fd80ed3d: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:43:31,328 INFO skill_runner: Job 5ee3fd80ed3d: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:43:31,328 INFO skill_runner: Job 5ee3fd80ed3d: Skill summary: 1. **[Intermittent Fasting: What Is It, And How Does It Work?](https://www.hopkinsmedicine.org/health/expert-qa/intermittent-fasting-what-is-it-and-how-does-it-work)**
+2026-07-16 20:43:31,328 INFO skill_runner: Job 5ee3fd80ed3d: Merged result key 'sources' into job params
+2026-07-16 20:43:31,328 INFO skill_runner: Job 5ee3fd80ed3d: Merged result key 'brief' into job params
+2026-07-16 20:43:31,328 INFO skill_runner: Job 5ee3fd80ed3d completed successfully.
+2026-07-16 20:44:14,628 INFO skill_runner: Chat request: intent=research-brief text=benefits of intermittent fasting model=matrix-gemma4-moe
+2026-07-16 20:44:14,629 INFO skill_runner: Job 15ef9def0f8e: Dispatching job 'research_brief' to background executor
+2026-07-16 20:44:14,629 INFO skill_runner: Job 15ef9def0f8e dispatched (async) for skill 'research_brief'.
+2026-07-16 20:44:14,630 INFO skill_runner: Job 15ef9def0f8e: Executing skill 'research_brief'
+2026-07-16 20:44:14,631 INFO skill_runner: Job 15ef9def0f8e: Skill module found at: /app/skills/research_brief/skill.py
+2026-07-16 20:44:14,631 INFO skill_runner: Job 15ef9def0f8e: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:44:14,632 INFO skill_runner: Job 15ef9def0f8e: Skill module imported successfully
+2026-07-16 20:44:14,633 INFO skill_runner: Job 15ef9def0f8e: Passing sync client as 'litellm_client'
+2026-07-16 20:44:14,633 INFO skill_runner: Job 15ef9def0f8e: Invoking skill.run()...
+2026-07-16 20:44:14,633 INFO skill_runner: Job 15ef9def0f8e: Executing research_brief: topic='benefits of intermittent fasting'
+2026-07-16 20:44:14,633 INFO skill_runner: Job 15ef9def0f8e: Sub-queries: 3, max_results/query: 8
+2026-07-16 20:44:14,633 INFO skill_runner: Job 15ef9def0f8e: Model alias: matrix-coder
+2026-07-16 20:44:14,634 INFO skill_runner: Job 15ef9def0f8e: Max runtime: 120s
+2026-07-16 20:44:14,634 INFO skill_runner: Job 15ef9def0f8e: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:44:14,634 INFO skill_runner: Job 15ef9def0f8e: Step 1: Generating sub-queries via LLM...
+2026-07-16 20:44:19,477 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:44:19,480 WARNING skill.research_brief: LLM sub-query generation failed, using fallback: 'NoneType' object has no attribute 'strip'
+2026-07-16 20:44:19,480 INFO skill_runner: Job 15ef9def0f8e: Generated 3 sub-queries:
+2026-07-16 20:44:19,480 INFO skill_runner: Job 15ef9def0f8e:   [1] benefits of intermittent fasting
+2026-07-16 20:44:19,480 INFO skill_runner: Job 15ef9def0f8e:   [2] benefits of intermittent fasting overview
+2026-07-16 20:44:19,480 INFO skill_runner: Job 15ef9def0f8e:   [3] benefits of intermittent fasting latest news
+2026-07-16 20:44:19,480 INFO skill_runner: Job 15ef9def0f8e: Step 2: Searching via MCP/SearXNG (3 queries)...
+2026-07-16 20:44:19,481 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:44:19,504 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:19,506 INFO skill_runner: MCP initialized (server: mcp_search, session: 6e6b56d5ec5d46f9885e188283062907)
+2026-07-16 20:44:19,510 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:44:19,511 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:44:19,516 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:20,356 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:44:20,363 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:44:20,364 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:44:20,366 INFO skill_runner: Job 15ef9def0f8e:   Query [1] 'benefits of intermittent fasting': 8 results (mcp)
+2026-07-16 20:44:20,366 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:44:20,399 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:20,401 INFO skill_runner: MCP initialized (server: mcp_search, session: 2f26807e1d074218a3efb165b9cf5755)
+2026-07-16 20:44:20,405 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:44:20,406 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:44:20,411 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:21,226 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:44:21,232 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:44:21,234 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:44:21,235 INFO skill_runner: Job 15ef9def0f8e:   Query [2] 'benefits of intermittent fasting overview': 8 results (mcp)
+2026-07-16 20:44:21,236 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_web
+2026-07-16 20:44:21,275 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:21,276 INFO skill_runner: MCP initialized (server: mcp_search, session: 871b938580c34b29a853f9d72cc24731)
+2026-07-16 20:44:21,280 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:44:21,281 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:44:21,285 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:44:22,067 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:44:22,073 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:44:22,075 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_web, results_count=8)
+2026-07-16 20:44:22,076 INFO skill_runner: Job 15ef9def0f8e:   Query [3] 'benefits of intermittent fasting latest news': 8 results (mcp)
+2026-07-16 20:44:22,076 INFO skill_runner: Job 15ef9def0f8e: Collected 24 raw results via mcp
+2026-07-16 20:44:22,076 INFO skill_runner: Job 15ef9def0f8e: Deduplicated to 15 unique sources
+2026-07-16 20:44:22,076 INFO skill_runner: Job 15ef9def0f8e: Step 3: Synthesizing research brief via LLM...
+2026-07-16 20:44:40,408 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:44:40,411 WARNING skill.research_brief: LLM summarization failed, using fallback: LLM returned empty content
+2026-07-16 20:44:40,412 INFO skill_runner: Job 15ef9def0f8e: Brief generated (3423 chars)
+2026-07-16 20:44:40,412 INFO skill_runner: Job 15ef9def0f8e: research_brief completed: 15 sources, method=mcp
+2026-07-16 20:44:40,413 INFO skill_runner: Job 15ef9def0f8e: Skill.run() returned: ['summary', 'brief', 'sub_queries', 'sources', 'source_count', 'search_method', 'model_alias']
+2026-07-16 20:44:40,413 INFO skill_runner: Job 15ef9def0f8e: Skill summary: 1. **[Intermittent Fasting: What Is It, And How Does It Work? | Johns Hopkins Medicine](https://www.hopkinsmedicine.org/health/expert-qa/intermittent-fasting-what-is-it-and-how-does-it-work)**
+2026-07-16 20:44:40,413 INFO skill_runner: Job 15ef9def0f8e: Merged result key 'sources' into job params
+2026-07-16 20:44:40,413 INFO skill_runner: Job 15ef9def0f8e: Merged result key 'brief' into job params
+2026-07-16 20:44:40,413 INFO skill_runner: Job 15ef9def0f8e completed successfully.
+2026-07-16 20:45:24,242 INFO skill_runner: Chat request: intent=morning-brief text=AI, technology, startups model=matrix-gemma4-moe
+2026-07-16 20:45:24,242 INFO skill_runner: Job 4b03b4efe2d1: Dispatching job 'morning_brief' to background executor
+2026-07-16 20:45:24,242 INFO skill_runner: Job 4b03b4efe2d1 dispatched (async) for skill 'morning_brief'.
+2026-07-16 20:45:24,243 INFO skill_runner: Job 4b03b4efe2d1: Executing skill 'morning_brief'
+2026-07-16 20:45:24,244 INFO skill_runner: Job 4b03b4efe2d1: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-16 20:45:24,244 INFO skill_runner: Job 4b03b4efe2d1: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:45:24,246 INFO skill_runner: Job 4b03b4efe2d1: Skill module imported successfully
+2026-07-16 20:45:24,246 INFO skill_runner: Job 4b03b4efe2d1: Passing sync client as 'litellm_client'
+2026-07-16 20:45:24,246 INFO skill_runner: Job 4b03b4efe2d1: Invoking skill.run()...
+2026-07-16 20:45:24,246 INFO skill_runner: Job 4b03b4efe2d1: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-16 20:45:24,247 INFO skill_runner: Job 4b03b4efe2d1: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-16 20:45:24,247 INFO skill_runner: Job 4b03b4efe2d1: Model alias: matrix-coder
+2026-07-16 20:45:24,247 INFO skill_runner: Job 4b03b4efe2d1: Max runtime: 180s
+2026-07-16 20:45:24,247 INFO skill_runner: Job 4b03b4efe2d1: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:45:24,247 INFO skill_runner: Job 4b03b4efe2d1: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-16 20:45:24,248 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:45:24,280 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:24,281 INFO skill_runner: MCP initialized (server: mcp_search, session: 66c22f14e3e748eb91eac5ed763a6053)
+2026-07-16 20:45:24,285 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:45:24,286 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:45:24,289 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:25,296 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:45:25,302 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:45:25,304 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:45:25,305 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-16 20:45:25,305 INFO skill_runner: Job 4b03b4efe2d1: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-16 20:45:25,306 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:45:25,335 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:25,336 INFO skill_runner: MCP initialized (server: mcp_search, session: 095d2d4d44d84fb492449f0a1aeaa6b1)
+2026-07-16 20:45:25,339 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:45:25,340 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:45:25,343 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:26,134 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:45:26,140 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:45:26,141 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:45:26,142 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-16 20:45:26,143 INFO skill_runner: Job 4b03b4efe2d1: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-16 20:45:26,143 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:45:26,173 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:26,175 INFO skill_runner: MCP initialized (server: mcp_search, session: 52c99b1e8e2e421eb3840abcaeda0355)
+2026-07-16 20:45:26,180 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:45:26,181 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:45:26,187 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:26,776 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:45:26,782 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:45:26,784 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:45:26,785 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-16 20:45:26,785 INFO skill_runner: Job 4b03b4efe2d1: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-16 20:45:26,786 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:45:26,817 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:26,819 INFO skill_runner: MCP initialized (server: mcp_search, session: ff085e21e4d14a8f935ec685f82b4046)
+2026-07-16 20:45:26,823 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:45:26,824 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:45:26,828 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:27,528 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:45:27,534 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:45:27,536 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:45:27,537 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-16 20:45:27,538 INFO skill_runner: Job 4b03b4efe2d1: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-16 20:45:27,538 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:45:27,573 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:27,575 INFO skill_runner: MCP initialized (server: mcp_search, session: 0ebbcca20bdf480181b15e50aaaf8c96)
+2026-07-16 20:45:27,579 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:45:27,580 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:45:27,584 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:45:28,572 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:45:28,578 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:45:28,580 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:45:28,581 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-16 20:45:28,581 INFO skill_runner: Job 4b03b4efe2d1: Phase 1 complete: collected 25 raw items
+2026-07-16 20:45:28,582 INFO skill_runner: Job 4b03b4efe2d1: Phase 2: Deduplicating results...
+2026-07-16 20:45:28,582 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-16 20:45:28,582 INFO skill_runner: Job 4b03b4efe2d1: Phase 3: Grouping by category...
+2026-07-16 20:45:28,583 INFO skill_runner: Job 4b03b4efe2d1: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-16 20:46:04,212 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:46:04,215 INFO skill_runner: Job 4b03b4efe2d1: Brief generated (82 chars)
+2026-07-16 20:46:04,216 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-46-04.md
+2026-07-16 20:46:04,216 INFO skill_runner: Job 4b03b4efe2d1: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-46-04.md
+2026-07-16 20:46:04,216 INFO skill_runner: Job 4b03b4efe2d1: morning_brief completed: 25 raw items, 82 chars
+2026-07-16 20:46:04,216 INFO skill_runner: Job 4b03b4efe2d1: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-16 20:46:04,216 INFO skill_runner: Job 4b03b4efe2d1: Skill summary: # Morning Brief — 2026-07-17  **No brief generated.** LLM returned empty content.
+2026-07-16 20:46:04,217 INFO skill_runner: Job 4b03b4efe2d1: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-46-04.md
+2026-07-16 20:46:04,217 INFO skill_runner: Job 4b03b4efe2d1: Merged result key 'report' into job params
+2026-07-16 20:46:04,217 INFO skill_runner: Job 4b03b4efe2d1 completed successfully.
+2026-07-16 20:46:13,384 INFO skill_runner: Chat request: intent=investment-brief text=tech stocks model=matrix-gemma4-moe
+2026-07-16 20:46:13,385 INFO skill_runner: Job 4fe14ba35970: Dispatching job 'investment_brief' to background executor
+2026-07-16 20:46:13,385 INFO skill_runner: Job 4fe14ba35970 dispatched (async) for skill 'investment_brief'.
+2026-07-16 20:46:13,386 INFO skill_runner: Job 4fe14ba35970: Executing skill 'investment_brief'
+2026-07-16 20:46:13,387 INFO skill_runner: Job 4fe14ba35970: Skill module found at: /app/skills/investment_brief/skill.py
+2026-07-16 20:46:13,387 INFO skill_runner: Job 4fe14ba35970: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:46:13,389 INFO skill_runner: Job 4fe14ba35970: Skill module imported successfully
+2026-07-16 20:46:13,389 INFO skill_runner: Job 4fe14ba35970: Passing sync client as 'litellm_client'
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Invoking skill.run()...
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Executing investment_brief: user='choukalos@yahoo.com', focus='dividend', max_holdings=20
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Model alias: matrix-coder
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Max runtime: 300s
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Database: investorhub
+2026-07-16 20:46:13,390 INFO skill_runner: Job 4fe14ba35970: Phase 1: Looking up user via mcp_mysql-run_query...
+2026-07-16 20:46:13,391 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,414 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,416 INFO skill_runner: MCP initialized (server: mcp_mysql, session: c4e52e0de22a40b2985a92fcd15ac5f5)
+2026-07-16 20:46:13,419 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,420 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,423 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,474 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,478 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,479 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,480 INFO skill.investment_brief: Found user: choukalos@yahoo.com
+2026-07-16 20:46:13,480 INFO skill_runner: Job 4fe14ba35970: Phase 2: Looking up portfolios via mcp_mysql-run_query...
+2026-07-16 20:46:13,481 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,499 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,501 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 0827c82e86ed45e88fc4518888e0b93d)
+2026-07-16 20:46:13,504 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,505 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,508 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,572 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,578 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,579 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,581 INFO skill.investment_brief: Found 9 portfolio(s) for user 3
+2026-07-16 20:46:13,581 INFO skill_runner: Job 4fe14ba35970: Phase 3: Building holdings for portfolio 'Brokerage' (7)...
+2026-07-16 20:46:13,582 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,616 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,618 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 69049436b36c44908ea9d16e34406036)
+2026-07-16 20:46:13,621 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,622 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,626 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,676 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,680 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,681 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,681 INFO skill.investment_brief: Position table columns: ['id', 'portfolioId', 'symbolId', 'quantity', 'costBasis']
+2026-07-16 20:46:13,682 INFO skill.investment_brief: Holdings query: SELECT s.ticker, p.quantity as shares, p.costBasis as avg_cost, p.quantity as qty, s.name FROM `investorhub`.Position p JOIN `investorhub`.Symbol s ON p.symbolId = s.id WHERE p.portfolioId = '7' ORDER
+2026-07-16 20:46:13,682 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,712 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,713 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 4b4b3b96962244c7ae0070607dbf6634)
+2026-07-16 20:46:13,716 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,717 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,720 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,763 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,767 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,769 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,770 INFO skill.investment_brief: Found 6 holdings for portfolio 7
+2026-07-16 20:46:13,770 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,788 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,790 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 2bc69a94069e419197cedb6a52e33ad5)
+2026-07-16 20:46:13,793 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,793 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,797 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,846 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,852 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,854 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,855 INFO skill.investment_brief: Retrieved latest prices for 1 tickers
+2026-07-16 20:46:13,856 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,893 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,895 INFO skill_runner: MCP initialized (server: mcp_mysql, session: 00a3f65c4c894b2d83520c993500c630)
+2026-07-16 20:46:13,898 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,899 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:13,903 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,963 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:13,969 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:13,970 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:13,971 INFO skill.investment_brief: Retrieved dividend history for 1 tickers
+2026-07-16 20:46:13,971 INFO skill_runner: Streamable HTTP MCP call: server=mcp_mysql base_url=http://mcp_mysql:8000 tool=run_query
+2026-07-16 20:46:13,992 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:13,994 INFO skill_runner: MCP initialized (server: mcp_mysql, session: b300a1028ba34c28b4e73134c2f74a4c)
+2026-07-16 20:46:13,998 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:13,999 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:14,005 INFO httpx: HTTP Request: POST http://mcp_mysql:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:14,062 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:14,068 INFO httpx: HTTP Request: DELETE http://mcp_mysql:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:14,069 INFO skill_runner: Streamable HTTP call returning content result (server=mcp_mysql, tool=run_query, items=1)
+2026-07-16 20:46:14,070 INFO skill.investment_brief: Retrieved fundamentals for 1 tickers
+2026-07-16 20:46:14,071 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:14,103 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:14,105 INFO skill_runner: MCP initialized (server: mcp_search, session: 215417423f1d493089255409bf1a036f)
+2026-07-16 20:46:14,109 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:14,110 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:14,114 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:14,779 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:14,785 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:14,787 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:14,789 INFO skill.investment_brief: News search returned 5 results for: TT stock news
+2026-07-16 20:46:14,789 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:14,820 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:14,822 INFO skill_runner: MCP initialized (server: mcp_search, session: 6f8049bcbafa4f1c88602006f579b83a)
+2026-07-16 20:46:14,826 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:14,827 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:14,832 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:15,570 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:15,577 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:15,578 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:15,580 INFO skill.investment_brief: News search returned 5 results for: GOOGL stock news
+2026-07-16 20:46:15,580 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:15,613 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:15,615 INFO skill_runner: MCP initialized (server: mcp_search, session: ba67ee3899aa4f11a50408384b397158)
+2026-07-16 20:46:15,619 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:15,621 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:15,626 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:16,325 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:16,332 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:16,334 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:16,336 INFO skill.investment_brief: News search returned 5 results for: AAPL stock news
+2026-07-16 20:46:16,336 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:16,371 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:16,372 INFO skill_runner: MCP initialized (server: mcp_search, session: 2f679fae0a5e4ce685f9590b03301fec)
+2026-07-16 20:46:16,376 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:16,377 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:16,381 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:17,196 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:17,202 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:17,204 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:17,206 INFO skill.investment_brief: News search returned 5 results for: SHOP stock news
+2026-07-16 20:46:17,206 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:17,228 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:17,230 INFO skill_runner: MCP initialized (server: mcp_search, session: 6db1ba41a26e4a9ab00226c7fe535353)
+2026-07-16 20:46:17,234 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:17,235 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:17,239 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:18,170 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:18,176 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:18,178 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:18,179 INFO skill.investment_brief: News search returned 5 results for: NVDA stock news
+2026-07-16 20:46:18,180 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:46:18,220 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:18,221 INFO skill_runner: MCP initialized (server: mcp_search, session: 1ff3ae15f7a94cbf8dfb8c26a78e4191)
+2026-07-16 20:46:18,224 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:46:18,226 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:46:18,230 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:46:18,887 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:46:18,893 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:46:18,895 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:46:18,896 INFO skill.investment_brief: News search returned 5 results for: AMZN stock news
+2026-07-16 20:46:18,896 INFO skill.investment_brief: Built 6 enriched holdings
+2026-07-16 20:46:18,896 INFO skill_runner: Job 4fe14ba35970: Phase 4: Synthesizing investment brief via LLM...
+2026-07-16 20:47:13,129 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:47:13,133 INFO skill_runner: Job 4fe14ba35970: Brief generated (5558 chars)
+2026-07-16 20:47:13,134 INFO skill.investment_brief: Artifact written: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-17T01-47-13_choukalos-yahoo-com_dividend.md
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: Artifact saved: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-17T01-47-13_choukalos-yahoo-com_dividend.md
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: investment_brief completed: 6 holdings, 0 flags, 5558 chars
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: Skill.run() returned: ['summary', 'report', 'artifact_path', 'user_email', 'focus', 'holdings_count', 'flags_count', 'model_alias']
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: Skill summary: # Investment Brief: Portfolio Review & Dividend Focus **Date:** 2026-07-17 | **User:** choukalos@yahoo.com | **Focus:** Dividend Strategy  ## Portfolio Summary - **Total Holdings:** 6
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: Artifact path from skill: /home/chuck/data/media/investment_briefs/investment_brief_2026-07-17T01-47-13_choukalos-yahoo-com_dividend.md
+2026-07-16 20:47:13,135 INFO skill_runner: Job 4fe14ba35970: Merged result key 'report' into job params
+2026-07-16 20:47:13,136 INFO skill_runner: Job 4fe14ba35970 completed successfully.
+2026-07-16 20:47:36,894 INFO skill_runner: Chat request: intent=morning-brief text=AI, technology, startups model=matrix-gemma4-moe
+2026-07-16 20:47:36,894 INFO skill_runner: Job 5b9edf2ff4b5: Dispatching job 'morning_brief' to background executor
+2026-07-16 20:47:36,894 INFO skill_runner: Job 5b9edf2ff4b5 dispatched (async) for skill 'morning_brief'.
+2026-07-16 20:47:36,895 INFO skill_runner: Job 5b9edf2ff4b5: Executing skill 'morning_brief'
+2026-07-16 20:47:36,896 INFO skill_runner: Job 5b9edf2ff4b5: Skill module found at: /app/skills/morning_brief/skill.py
+2026-07-16 20:47:36,896 INFO skill_runner: Job 5b9edf2ff4b5: LiteLLM client initialised: base_url=http://litellm-proxy:4000
+2026-07-16 20:47:36,898 INFO skill_runner: Job 5b9edf2ff4b5: Skill module imported successfully
+2026-07-16 20:47:36,898 INFO skill_runner: Job 5b9edf2ff4b5: Passing sync client as 'litellm_client'
+2026-07-16 20:47:36,898 INFO skill_runner: Job 5b9edf2ff4b5: Invoking skill.run()...
+2026-07-16 20:47:36,898 INFO skill_runner: Job 5b9edf2ff4b5: Executing morning_brief: 5 interest topic(s), max_items=5
+2026-07-16 20:47:36,898 INFO skill_runner: Job 5b9edf2ff4b5: Interests: technology news, smart home security, Ring SimpliSafe Nest Arlo ADT news, Xfinity press release, artificial intelligence news
+2026-07-16 20:47:36,899 INFO skill_runner: Job 5b9edf2ff4b5: Model alias: matrix-coder
+2026-07-16 20:47:36,899 INFO skill_runner: Job 5b9edf2ff4b5: Max runtime: 180s
+2026-07-16 20:47:36,899 INFO skill_runner: Job 5b9edf2ff4b5: LiteLLM: http://litellm-proxy:4000
+2026-07-16 20:47:36,899 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1: Searching news for 'technology news' via mcp_search...
+2026-07-16 20:47:36,900 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:47:36,926 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:36,927 INFO skill_runner: MCP initialized (server: mcp_search, session: c0edfa7a1d454898bfbc2a15cb78212f)
+2026-07-16 20:47:36,930 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:47:36,932 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:47:36,935 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:37,738 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:47:37,745 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:47:37,746 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:47:37,747 INFO skill.morning_brief: News search returned 5 results for: technology news
+2026-07-16 20:47:37,747 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1: Searching news for 'smart home security' via mcp_search...
+2026-07-16 20:47:37,748 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:47:37,769 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:37,772 INFO skill_runner: MCP initialized (server: mcp_search, session: 36bc59a1a0a440a19e445db61a75c03c)
+2026-07-16 20:47:37,776 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:47:37,778 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:47:37,789 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:38,393 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:47:38,399 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:47:38,401 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:47:38,402 INFO skill.morning_brief: News search returned 5 results for: smart home security
+2026-07-16 20:47:38,402 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1: Searching news for 'Ring SimpliSafe Nest Arlo ADT news' via mcp_search...
+2026-07-16 20:47:38,403 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:47:38,439 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:38,441 INFO skill_runner: MCP initialized (server: mcp_search, session: 936198b28ff04fcf9b3bd384db9300cd)
+2026-07-16 20:47:38,445 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:47:38,446 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:47:38,450 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:38,856 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:47:38,864 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:47:38,866 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:47:38,867 INFO skill.morning_brief: News search returned 5 results for: Ring SimpliSafe Nest Arlo ADT news
+2026-07-16 20:47:38,868 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1: Searching news for 'Xfinity press release' via mcp_search...
+2026-07-16 20:47:38,868 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:47:38,906 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:38,908 INFO skill_runner: MCP initialized (server: mcp_search, session: 8e0985299b0746cca0badf93a17d6b9c)
+2026-07-16 20:47:38,913 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:47:38,914 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:47:38,919 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:39,450 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:47:39,456 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:47:39,458 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:47:39,459 INFO skill.morning_brief: News search returned 5 results for: Xfinity press release
+2026-07-16 20:47:39,459 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1: Searching news for 'artificial intelligence news' via mcp_search...
+2026-07-16 20:47:39,460 INFO skill_runner: Streamable HTTP MCP call: server=mcp_search base_url=http://mcp_search:8000 tool=search_news
+2026-07-16 20:47:39,489 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:39,491 INFO skill_runner: MCP initialized (server: mcp_search, session: de7bb336b4584622b3f083bd41d4b6ce)
+2026-07-16 20:47:39,495 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 202 Accepted"
+2026-07-16 20:47:39,497 INFO skill_runner: MCP initialized notification sent
+2026-07-16 20:47:39,502 INFO httpx: HTTP Request: POST http://mcp_search:8000/mcp "HTTP/1.1 200 OK"
+2026-07-16 20:47:40,091 INFO skill_runner: tools/call POST returned status 200
+2026-07-16 20:47:40,097 INFO httpx: HTTP Request: DELETE http://mcp_search:8000/mcp "HTTP/1.1 400 Bad Request"
+2026-07-16 20:47:40,099 INFO skill_runner: Streamable HTTP call returning structured result (server=mcp_search, tool=search_news, results_count=5)
+2026-07-16 20:47:40,100 INFO skill.morning_brief: News search returned 5 results for: artificial intelligence news
+2026-07-16 20:47:40,100 INFO skill_runner: Job 5b9edf2ff4b5: Phase 1 complete: collected 25 raw items
+2026-07-16 20:47:40,101 INFO skill_runner: Job 5b9edf2ff4b5: Phase 2: Deduplicating results...
+2026-07-16 20:47:40,101 INFO skill.morning_brief: Deduplicated: 25 → 25 unique items
+2026-07-16 20:47:40,101 INFO skill_runner: Job 5b9edf2ff4b5: Phase 3: Grouping by category...
+2026-07-16 20:47:40,101 INFO skill_runner: Job 5b9edf2ff4b5: Phase 4: Synthesizing brief from 25 items via LLM...
+2026-07-16 20:48:16,775 INFO httpx: HTTP Request: POST http://litellm-proxy:4000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-16 20:48:16,778 INFO skill_runner: Job 5b9edf2ff4b5: Brief generated (2766 chars)
+2026-07-16 20:48:16,779 INFO skill.morning_brief: Artifact written: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-48-16.md
+2026-07-16 20:48:16,779 INFO skill_runner: Job 5b9edf2ff4b5: Artifact saved: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-48-16.md
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5: morning_brief completed: 25 raw items, 2766 chars
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5: Skill.run() returned: ['summary', 'report', 'artifact_path', 'categories', 'item_count', 'model_alias']
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5: Skill summary: # Morning Brief — 2026-07-17  ## Technology News - **Fujitsu Partners with Japanese Robotics Firms on Nvidia 'Physical AI'** — Fujitsu leads a major AI push integrating Nvidia’s technology into roboti
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5: Artifact path from skill: /home/chuck/data/media/homelab_reports/morning_brief_2026-07-17T01-48-16.md
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5: Merged result key 'report' into job params
+2026-07-16 20:48:16,780 INFO skill_runner: Job 5b9edf2ff4b5 completed successfully.

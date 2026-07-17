@@ -482,14 +482,17 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     2. **Per-category sections**: Each interest topic gets its own section with
        bullet-point summaries.
     3. **Bullet format**: Each item is ONE bullet point, 1-2 lines maximum.
-       Format: "- **Headline** — brief one-line summary"
+       Format: "- **Headline** — brief one-line summary [source](URL)"
+       **Every bullet MUST end with a clickable markdown link to the source.**
     4. **Max items per category**: Do not exceed the specified max_items count.
     5. **Tone**: Informative, concise, no fluff.
 
     Rules:
     - Each bullet is 1-2 lines ONLY — no paragraphs.
     - Use the headline as the bold lead, then a brief summary.
-    - Include the source if notable (e.g., "- **Headline** — summary (source)").
+    - **ALWAYS include a clickable link at the end of each bullet**:
+      format `[source_name](https://example.com/...)` or `[link](https://...)`.
+      The user needs to be able to click through to the original article.
     - Omit duplicate or redundant items.
     - Keep the entire brief scannable in under 30 seconds.
     - Output ONLY the markdown brief — no preamble, no wrapping JSON.
@@ -532,7 +535,8 @@ def _build_brief_context(
                 bullet += f" — {one_liner}"
             if source:
                 bullet += f" ({source})"
-            bullet += f" [{item.url}]"
+            # Always append a clickable markdown link to the URL
+            bullet += f" [{source or 'link'}]({item.url})"
             lines.append(bullet)
 
         lines.append("")

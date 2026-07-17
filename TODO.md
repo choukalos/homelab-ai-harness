@@ -88,9 +88,49 @@ for reference if needed.
 The `media-generate` intent handler in `main.py` calls `mcp_media.generate_image`
 via streamable HTTP and returns the image URL in the chat response.
 
-### C8: `demo_workflow` skill HARNESS_URL ✅ FIXED
+### C8: `demo_workflow` skill HARNESS_URL ⚠️ NOT WORKING
 
-Updated to `http://skill-runner:8091` (was `http://ai-harness:8090`).
+Rewrote skill to use LiteLLM directly (replaced non-existent `/demos/run` harness call).
+Still failing via `--public create-demo`. **Needs investigation:**
+- Verify the skill loads the right env vars (`LITELLM_BASE_URL`, `LITELLM_API_KEY`) at runtime
+- Check whether the LLM response parsing works with the chosen model
+- Consider whether `matrix-coder` is the right model for HTML generation or if another model is needed
+- Full end-to-end test of the skill from prompt → LLM → saved HTML → job result
+
+---
+
+### ✅ G1: Morning Brief — Clickable Source URLs (Done 2026-07-17)
+
+- [x] Updated `morning_brief` system prompt to require `[source](URL)` markdown links on every bullet
+- [x] Updated context builder to format bullets as `[source_name](url)` instead of `[url]`
+- [x] Compiled & verified
+- [x] **TESTED**: `--public morning-brief "AI, technology, startups"` — full brief with clickable links ✅
+
+### ✅ G2: Investment Brief — Clickable Source URLs (Done 2026-07-17)
+
+- [x] Updated `investment_brief` system prompt to require `[source](URL)` links on news items
+- [x] Added **Key Sources** section to the output structure
+- [x] Updated per-holding news context to use `[headline](url)` markdown links
+- [x] Updated general news section to use `[title](url)` markdown links
+- [x] Compiled & verified
+- [x] **TESTED**: `--public investment-brief "tech stocks"` — full LLM-synthesized brief with clickable links ✅
+
+### ✅ G3: Research Brief — Clickable Source URLs & Full Output (Done 2026-07-17)
+
+**Problem:** `--public research-brief` returned only a truncated "speak" with 1 URL,
+not the full brief. The LLM synthesis prompt didn't require clickable links.
+
+- [x] Updated `SUMMARY_SYNTHESIS_PROMPT`: every key finding must end with `[read more](url)` or `[source](url)`
+- [x] Added **Key Sources** section to the prompt output structure
+- [x] Updated `_build_sources_text` to use `[title](url)` markdown links (was bare `URL: ...`)
+- [x] Added `sub_query` field to source context for better traceability
+- [x] Updated `_fallback_summary` to use `[title](url)` markdown links
+- [x] Fixed `_synthesize_brief` to handle `None` content gracefully
+- [x] **Runner fix**: Added `brief` to `extra_keys` in `_execute_skill` (was only `report`/`sources`)
+- [x] **CLI fix**: Updated `poll_job()` to display `_result_brief` as plain markdown (not JSON-wrapped)
+- [x] **Runner rebuild**: Rebuilt skill-runner image to pick up main.py changes (was baked at build time)
+- [x] **TESTED**: `--public research-brief "mortality rate for salivary gland cancers"` — full brief with clickable links ✅
+- [x] **TESTED**: `--public research-brief "benefits of intermittent fasting"` — full brief with clickable links ✅
 
 ---
 
