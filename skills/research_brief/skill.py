@@ -100,12 +100,16 @@ SUMMARY_SYNTHESIS_PROMPT = textwrap.dedent("""\
     Produce:
     1. A 2-3 sentence executive summary.
     2. 3-5 key findings as bullet points.
+       **Each key finding MUST end with a clickable source link**: `[read more](url)` or `[source](url)`.
     3. A short "What to watch" or "Next steps" note if applicable.
+    4. **Key Sources**: A section at the end listing all source URLs as clickable markdown links.
 
     Rules:
     - Use ONLY the provided results. Do not fabricate information.
     - If results are thin, acknowledge that honestly.
     - Cite sources with [N] numbers where relevant.
+    - **ALWAYS include clickable markdown links** in the output: `[title or source](url)`.
+      The user needs to be able to click through to the original articles.
     - Keep it concise: max 500 words total.
     - Output ONLY the brief — no preamble, no wrapping JSON.
 """)
@@ -504,12 +508,24 @@ def _deduplicate_sources(sources: list[dict], max_sources: int) -> list[dict]:
 
 
 def _build_sources_text(sources: list[dict]) -> str:
-    """Build a numbered sources text for the summarization prompt."""
+    """Build a numbered sources text for the summarization prompt.
+    Each source is formatted as a clickable markdown link."""
     lines: list[str] = []
     for i, src in enumerate(sources, 1):
-        lines.append(f"[{i}] {src.get('title', 'Untitled')}")
-        lines.append(f"    URL: {src.get('url', '')}")
+        title = src.get('title', 'Untitled')
+        url = src.get('url', '')
         snippet = src.get('snippet', '')
+        source = src.get('source', '')
+        sub_query = src.get('sub_query', '')
+        # Use markdown link format for the title
+        if url:
+            lines.append(f"[{i}] [{title}]({url})")
+        else:
+            lines.append(f"[{i}] {title}")
+        if source:
+            lines.append(f"    Source: {source}")
+        if sub_query:
+            lines.append(f"    Query: {sub_query}")
         if snippet:
             lines.append(f"    {snippet[:200]}")
         lines.append("")
@@ -559,7 +575,11 @@ def _synthesize_brief(
         if not choices:
             raise RuntimeError("LLM returned no choices")
 
-        return choices[0].get("message", {}).get("content", "").strip()
+        content = choices[0].get("message", {}).get("content") or ""
+        content = content.strip()
+        if content:
+            return content
+        raise RuntimeError("LLM returned empty content")
 
     except Exception as exc:
         logger.warning("LLM summarization failed, using fallback: %s", exc)
@@ -570,6 +590,7 @@ def _synthesize_brief(
 def _fallback_summary(topic: str, sub_queries: list[str], sources: list[dict]) -> str:
     """
     Generate a basic text summary without LLM when summarization fails.
+    Uses markdown links for all sources so the user can click through.
     """
     lines = [f"# Research Brief: {topic}\n"]
     lines.append(f"**Date:** {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n")
@@ -579,11 +600,19 @@ def _fallback_summary(topic: str, sub_queries: list[str], sources: list[dict]) -
     if sources:
         lines.append("## Key Results\n")
         for i, src in enumerate(sources[:10], 1):
-            lines.append(f"{i}. **{src.get('title', 'Untitled')}** — {src.get('url', '')}")
+            title = src.get('title', 'Untitled')
+            url = src.get('url', '')
             snippet = src.get('snippet', '')[:150]
+            source = src.get('source', 'web')
+            if url:
+                lines.append(f"{i}. **[{title}]({url})**")
+            else:
+                lines.append(f"{i}. **{title}**")
+            if source and source != "web":
+                lines.append(f"   Source: {source}")
             if snippet:
                 lines.append(f"   {snippet}")
-        lines.append("")
+            lines.append("")
     else:
         lines.append("No results found.\n")
 

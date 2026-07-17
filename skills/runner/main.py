@@ -1056,8 +1056,8 @@ def _execute_skill(job: Job) -> None:
             job.artifact_path = result["artifact_path"]
             job.add_log(f"Artifact path from skill: {job.artifact_path}")
 
-        # Merge extra result keys (report, sources, etc.) into job params for retrieval
-        extra_keys = {"report", "sources", "answer"}
+        # Merge extra result keys (report, brief, sources, etc.) into job params for retrieval
+        extra_keys = {"report", "brief", "sources", "answer"}
         for key in extra_keys:
             if key in result and key != "summary":
                 job.params[f"_result_{key}"] = result[key]

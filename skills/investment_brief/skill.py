@@ -738,7 +738,7 @@ def _build_fallback_brief(client: Any, focus: str) -> str:
             if item.get("snippet"):
                 lines.append(f"   {item['snippet'][:200]}")
             if item.get("url"):
-                lines.append(f"   - {item['url']}")
+                lines.append(f"   - [{item['title']}]({item['url']})")
             lines.append("")
     else:
         lines.append("_No recent news found for the current focus topic._\n")
@@ -763,7 +763,10 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     3. **Key Flags**: Notable price changes, dividend changes, negative news.
     4. **Holding Details**: Per-holding summary with ticker, price, change, key fundamentals, dividend info.
     5. **News Summary**: Top relevant news items.
-    6. **Action Items**: Concise bullet-point recommendations.
+       **Each news item MUST include a clickable link**: `[source](url)` or `[read more](url)`.
+    6. **Key Sources**: A section at the end listing all source URLs with clickable links
+       so the user can click through to the original articles.
+    7. **Action Items**: Concise bullet-point recommendations.
 
     Rules:
     - Use bullet points for readability.
@@ -771,6 +774,9 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - Be factual, use the data provided, do not fabricate numbers.
     - Highlight items with flags prominently.
     - Format numbers with 2 decimal places for currency.
+    - **ALWAYS include clickable markdown links for news items and in the Key Sources section**:
+      format `[headline or source](https://example.com/...)`.
+      The user needs to be able to click through to the original articles.
     - Output ONLY the markdown brief — no preamble, no wrapping JSON.
 """)
 
@@ -829,7 +835,13 @@ def _build_brief_context(
         if h.news:
             holding_lines.append(f"  - News:")
             for n in h.news[:3]:
-                holding_lines.append(f"    - {n.get('title', 'N/A')}: {n.get('snippet', '')[:100]}")
+                title = n.get('title', 'N/A')
+                snippet = n.get('snippet', '')[:100]
+                url = n.get('url', '')
+                if url:
+                    holding_lines.append(f"    - [{title}]({url}): {snippet}")
+                else:
+                    holding_lines.append(f"    - {title}: {snippet}")
         holding_lines.append("")
 
     return textwrap.dedent(f"""\

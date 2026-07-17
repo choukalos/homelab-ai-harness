@@ -156,47 +156,85 @@ if not s:
 print(s)
 " 2>/dev/null) || speak=""
 
-            # For async-dispatched jobs, results are in params['_result_data']
+            # For async-dispatched jobs, check for full report/brief first, then _result_data
             data_json=$(python3 -c "
 import json
-d = json.load(open('${poll_resp}'))
+import sys
+d = json.load(open(sys.argv[1]))
 params = d.get('params', {})
-data = params.get('_result_data', None)
-if data:
-    print(json.dumps(data, indent=2, default=str))
+
+# Check for full brief/report content (brief skills)
+brief = params.get('_result_brief', '')
+report = params.get('_result_report', '')
+sources = params.get('_result_sources', '')
+
+if brief:
+    # Output the brief as plain markdown (not JSON-wrapped)
+    print('BRIEF_START')
+    print(brief)
+    print('BRIEF_END')
+    if sources:
+        print('SOURCES_START')
+        for i, s in enumerate(sources[:10], 1):
+            title = s.get('title', 'Untitled')
+            url = s.get('url', '')
+            snippet = s.get('snippet', '')[:100]
+            print(f'{i}. **[{title}]({url})**')
+            if snippet:
+                print(f'   {snippet}')
+        print('SOURCES_END')
+elif report:
+    # Output the report as plain markdown
+    print('BRIEF_START')
+    print(report)
+    print('BRIEF_END')
+    if sources:
+        print('SOURCES_START')
+        for i, s in enumerate(sources[:10], 1):
+            title = s.get('title', 'Untitled')
+            url = s.get('url', '')
+            snippet = s.get('snippet', '')[:100]
+            print(f'{i}. **[{title}]({url})**')
+            if snippet:
+                print(f'   {snippet}')
+        print('SOURCES_END')
 else:
+    # Fallback to _result_data or display
+    data = params.get('_result_data', None)
+    if data:
+        print(json.dumps(data, indent=2, default=str))
+        sys.exit(0)
     speak_val = d.get('speak', '')
     display_val = d.get('display', '')
     if display_val and display_val != speak_val:
         print(json.dumps({'display': display_val}, indent=2))
-" 2>/dev/null) || data_json=""
+        sys.exit(0)
+" "${poll_resp}" 2>/dev/null) || data_json=""
 
-            display=$(python3 -c "
-import json
-d = json.load(open('${poll_resp}'))
-params = d.get('params', {})
-result_display = params.get('_result_display', '')
-if not result_display:
-    result_display = d.get('display', '')
-if result_display and isinstance(result_display, str):
-    if len(result_display) > 500:
-        result_display = result_display[:497] + '...'
-    print(result_display)
-" 2>/dev/null) || display=""
+            display=""
 
             echo -e "${GREEN}━━━ RESULT ━━━${NC}"
             if [[ -n "$speak" ]]; then
                 echo -e "  ${BOLD}Speak:${NC} ${speak}"
             fi
-            if [[ -n "$display" ]] && [[ "$display" != "$speak" ]]; then
-                echo ""
-                echo -e "  ${BOLD}Display:${NC}"
-                echo "$display" | sed 's/^/  /'
-            fi
             if [[ -n "$data_json" ]]; then
-                echo ""
-                echo -e "  ${BOLD}Data:${NC}"
-                echo "$data_json" | sed 's/^/  /'
+                # Check if this is a formatted brief output (with markers)
+                if echo "$data_json" | grep -q "BRIEF_START"; then
+                    echo ""
+                    echo -e "${GREEN}━━━ BRIEF ━━━${NC}"
+                    # Extract and display brief content
+                    echo "$data_json" | sed -n '/BRIEF_START/,/BRIEF_END/p' | grep -v 'BRIEF_START\|BRIEF_END' | sed 's/^/  /'
+                    # Extract and display sources if present
+                    if echo "$data_json" | grep -q "SOURCES_START"; then
+                        echo ""
+                        echo -e "${GREEN}━━━ SOURCES ━━━${NC}"
+                        echo "$data_json" | sed -n '/SOURCES_START/,/SOURCES_END/p' | grep -v 'SOURCES_START\|SOURCES_END' | sed 's/^/  /'
+                    fi
+                else
+                    echo ""
+                    echo -e "  ${BOLD}Result:${NC}"
+                    echo "$data_json" | sed 's/^/  /'
+                fi
             fi
             rm -f "$poll_resp"
             return 0
