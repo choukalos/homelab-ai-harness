@@ -6,7 +6,7 @@
 # returned on creation and is not retrievable afterwards.
 
 LITELLM_PROXY="${LITELLM_PROXY:-http://127.0.0.1:4000}"
-LITELLM_MASTER="${LITELLM_MASTER:-}"
+LITELLM_MASTER="${LITELLM_MASTER_KEY:-${LITELLM_MASTER:-}}"
 LAN_BASE="http://192.168.4.54:4000/v1"
 EXT_BASE="https://llm.choukalos.com/v1"
 LITELLM_PUBLIC="${LITELLM_PUBLIC_API_KEY:-}"
@@ -241,7 +241,7 @@ print(json.dumps(d))
   echo ""
   echo "  ┌─ From outside (remote) ────────────────────────────┐"
   echo "  │  Base URL:  ${EXT_BASE}"
-  echo "  │  API Key:   ${LITELLM_PUBLIC}"
+  echo "  │  API Key:   ${key}"
   echo "  └─────────────────────────────────────────────────────┘"
   echo ""
   echo "  ┌─ For Cursor / Windsurf / IDEs ─────────────────────┐"

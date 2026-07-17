@@ -120,9 +120,6 @@
 
 	@llm host llm.choukalos.com
 	handle @llm {
-		@noAuth not header X-API-Key {$LITELLM_PUBLIC_API_KEY}
-		respond @noAuth "Unauthorized" 401
-
 		reverse_proxy http://litellm-proxy:4000
 	}
 
