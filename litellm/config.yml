@@ -102,6 +102,11 @@ model_list:
       api_base: http://matrix:11434
       api_key: "unused"
       num_retries: 2
+      # mem0's OpenAI embedder always sends encoding_format=float; the ollama
+      # adapter rejects it. drop_params strips it before forwarding (LiteLLM's
+      # own suggested fix). Scoped to this alias only — other models keep
+      # strict param validation.
+      drop_params: true
 
   - model_name: hf-sd3
     litellm_params:
