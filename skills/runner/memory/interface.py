@@ -49,9 +49,15 @@ def _get_config() -> MemoryConfig:
 def _get_client() -> MemoryClient:
     global _client
     if _client is None:
+        # Resolve the config OUTSIDE the lock: _get_config() acquires the
+        # same non-reentrant _lock, so calling it from inside `with _lock:`
+        # self-deadlocks the first caller in a process (e.g. is_healthy()
+        # before any search/learn ran). Config load is pure/idempotent, so
+        # concurrent double-compute is harmless.
+        cfg = _get_config()
         with _lock:
             if _client is None:
-                _client = MemoryClient(_get_config())
+                _client = MemoryClient(cfg)
     return _client
 
 

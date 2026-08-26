@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 
 # Ensure the runner root is importable (memory is a package under it).
@@ -182,6 +183,37 @@ def test_unknown_user():
         interface._reset_singleton()
 
 
+def test_singleton_first_call():
+    print("singleton first-call (regression: self-deadlock in _get_client):")
+    interface._reset_singleton()
+    # is_healthy() as the FIRST interface call in process state: _get_client()
+    # used to call _get_config() while holding the non-reentrant _lock and
+    # deadlock forever. Run in a worker thread so a regression hangs the
+    # check (5s join) instead of the whole suite.
+    result = {}
+
+    def _call():
+        result["ok"] = interface.is_healthy()
+
+    t = threading.Thread(target=_call, daemon=True)
+    t0 = time.time()
+    t.start()
+    t.join(5.0)
+    elapsed_ms = (time.time() - t0) * 1000
+    check(
+        "first is_healthy() returns promptly (no deadlock)",
+        not t.is_alive() and "ok" in result,
+        f"{elapsed_ms:.0f}ms" if not t.is_alive() else "HANG >5s (deadlock regression)",
+    )
+    # Second call (cached client) also returns promptly.
+    result.clear()
+    t2 = threading.Thread(target=_call, daemon=True)
+    t2.start()
+    t2.join(5.0)
+    check("second is_healthy() returns promptly", not t2.is_alive() and "ok" in result)
+    interface._reset_singleton()
+
+
 def test_timeout_degradation():
     print("timeout -> graceful degradation:")
     cfg = memconfig.MemoryConfig(timeout_ms=200)  # 200ms budget
@@ -209,6 +241,7 @@ def main():
     test_config_env()
     test_flag_off_path()
     test_unknown_user()
+    test_singleton_first_call()
     test_timeout_degradation()
     print()
     if FAILURES:
