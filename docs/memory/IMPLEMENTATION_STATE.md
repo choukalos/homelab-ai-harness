@@ -10,12 +10,12 @@
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
 - **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
 - **Phase 2: IN PROGRESS** (2026-08-26) — `memory/` package built + unit +
-  integration tests ALL PASS standalone. First MANUAL STEP B run (image
-  rebuilt 02:27Z, post-checks green); live verification found a
-  **self-deadlock** in the interface singleton (first `is_healthy()` in a
-  process hung forever) — fixed (`f592da2d`, regression test, 45/45 unit).
-  Awaiting SECOND MANUAL STEP B to bake the fix into the image, then full
-  live verification (is_healthy + round-trip + flag-off).
+  integration tests ALL PASS standalone. Second MANUAL STEP B run (image
+  12:23Z, post-checks green, deadlock fix verified live). Live integration
+  suite 14/15: `delete_memory` exceeded the 1.5s retrieval budget (a single
+  mem0 delete measures ~2.3s) → admin ops (update/delete/delete_user) now
+  get their own `MEMORY_ADMIN_TIMEOUT_MS=10000` budget. Awaiting THIRD
+  MANUAL STEP B to bake that in, then re-run live suite (expect 15/15).
 - Last updated: 2026-08-26.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -229,10 +229,24 @@ via LiteLLM (dedicated model-restricted key). Graceful degradation throughout.
    comment (invalid in gitignore) → logs were never actually ignored; two
    tracked log files untracked. (Was tripping the backup script's git-clean
    check.)
+9. ✅ **Admin timeout budget** (this commit): second live rebuild verified
+   the deadlock fix (`is_healthy` → True promptly) and the full live
+   integration suite ran in-container: **14/15 PASS** (learn private +
+   household, search merged, list, update, isolation, degradation,
+   cleanup). The one FAIL: `delete_memory` returned False because a single
+   mem0 `delete` measures **~2.3s** (probe: add 10s/5.2s cold/warm, get_all
+   6ms, delete 2.3s, delete_all 0.4s) — over the 1.5s retrieval budget, so
+   the op succeeded in the background but the caller got False. Fix: admin
+   ops (`update_memory`/`delete_memory`/`delete_user_memories`) use a new
+   `MEMORY_ADMIN_TIMEOUT_MS=10000` budget (store ops, no LLM, non-hot-path).
+   Integration degradation test also fixed to pass a dummy api_key so it
+   exercises the real unreachable-Qdrant path (was testing missing-creds).
+   Unit tests **47/47 PASS**. `mem0_memories` empty + `family_kb` untouched
+   after the run.
 
-**Gate to Phase 3:** module passes tests standalone (MET); manual step B done
-with post-checks green (first B run green, but second B needed for the
-deadlock fix — PENDING); one env switch disables it (MET — unit + live
+**Gate to Phase 3:** module passes tests standalone (MET); manual step B
+done with post-checks green (B#1 + B#2 green; B#3 needed for the admin
+budget fix — PENDING); one env switch disables it (MET — unit + live
 container flag-off check).
 
 **Phase 2 gotchas (Phase 3+ must know):**
@@ -295,6 +309,12 @@ container flag-off check).
   same thread. Fixed in `f592da2d` (config resolved outside the lock) +
   regression test (45/45 unit). Also fixed `.gitignore` logs pattern
   (`91d5ee91`). Backup re-run (env-20260826-1154 + snapshot).
-  **Next: SECOND MANUAL STEP B** (`./homelab.sh rebuild skill-only`) to bake
-  the fix, then full live verification (is_healthy, round-trip, flag-off) →
-  Phase 2 gate → Phase 3.
+  **Second MANUAL STEP B** (image 12:23Z) — post-checks green; fix verified
+  baked in. Live integration suite in-container: 14/15 (delete_memory
+  budget FAIL — mem0 delete ~2.3s > 1.5s retrieval budget). Latency probe
+  (warm client): add 10.0s/5.2s, get_all 6ms, delete 2.3s, delete_all 0.4s.
+  Fix: `MEMORY_ADMIN_TIMEOUT_MS=10000` budget for update/delete/delete_user
+  (config/interface/compose/.env) + degradation test now uses dummy api_key
+  (real network-failure path). Unit 47/47. `mem0_memories` empty, `family_kb`
+  untouched (18 pts). **Next: THIRD MANUAL STEP B** → re-run live suite
+  (expect 15/15) → Phase 2 gate → Phase 3.

@@ -280,7 +280,11 @@ def list_memories(user_id: str, limit: int = 20) -> List[dict]:
 
 
 def update_memory(memory_id: str, text: str) -> bool:
-    """Update a memory's text. Returns False on error/timeout."""
+    """Update a memory's text. Returns False on error/timeout.
+
+    Uses the admin budget (MEMORY_ADMIN_TIMEOUT_MS) — store ops, not the
+    hot retrieval path (a single mem0 delete/update can take >1.5s).
+    """
     cfg = _get_config()
     if not cfg.enabled or not memory_id or not text:
         return False
@@ -289,7 +293,7 @@ def update_memory(memory_id: str, text: str) -> bool:
         client._ensure_client().update(memory_id, text)
 
     try:
-        client._with_timeout(_update_op)
+        client._with_timeout(_update_op, timeout_s=cfg.admin_timeout_s)
         return True
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("update_memory failed for %s: %s", memory_id, e)
@@ -297,7 +301,12 @@ def update_memory(memory_id: str, text: str) -> bool:
 
 
 def delete_memory(memory_id: str) -> bool:
-    """Delete a single memory. Returns False on error/timeout."""
+    """Delete a single memory. Returns False on error/timeout.
+
+    Uses the admin budget (MEMORY_ADMIN_TIMEOUT_MS): a single mem0 delete
+    was measured at ~2.3s live — over the 1.5s retrieval budget, so the
+    op would succeed in the background but the caller would get False.
+    """
     cfg = _get_config()
     if not cfg.enabled or not memory_id:
         return False
@@ -306,7 +315,7 @@ def delete_memory(memory_id: str) -> bool:
         client._ensure_client().delete(memory_id)
 
     try:
-        client._with_timeout(_delete_op)
+        client._with_timeout(_delete_op, timeout_s=cfg.admin_timeout_s)
         return True
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("delete_memory failed for %s: %s", memory_id, e)
@@ -328,7 +337,7 @@ def delete_user_memories(user_id: str) -> int:
         def _delete_all_op():
             client._ensure_client().delete_all(user_id=user_id)
 
-        client._with_timeout(_delete_all_op)
+        client._with_timeout(_delete_all_op, timeout_s=cfg.admin_timeout_s)
         return count
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("delete_user_memories failed for %s: %s", user_id, e)
