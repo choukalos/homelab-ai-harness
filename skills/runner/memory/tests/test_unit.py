@@ -100,7 +100,7 @@ def test_config_env():
     print("config:")
     saved = {k: os.environ.get(k) for k in (
         "MEMORY_ENABLED", "MEMORY_RETRIEVAL_ENABLED", "MEMORY_WRITEBACK_ENABLED",
-        "MEMORY_TOP_K", "MEMORY_TIMEOUT_MS",
+        "MEMORY_TOP_K", "MEMORY_TIMEOUT_MS", "MEMORY_ADMIN_TIMEOUT_MS",
     )}
     try:
         os.environ["MEMORY_ENABLED"] = "false"
@@ -108,10 +108,13 @@ def test_config_env():
         os.environ["MEMORY_WRITEBACK_ENABLED"] = "true"
         os.environ["MEMORY_TOP_K"] = "9"
         os.environ["MEMORY_TIMEOUT_MS"] = "2500"
+        os.environ["MEMORY_ADMIN_TIMEOUT_MS"] = "12345"
         cfg = memconfig.load_config()
         check("enabled=false parsed", cfg.enabled is False)
         check("top_k=9 parsed", cfg.top_k == 9)
         check("timeout_ms=2500 parsed", cfg.timeout_ms == 2500)
+        check("admin_timeout_ms=12345 parsed", cfg.admin_timeout_ms == 12345)
+        check("admin_timeout_s property", cfg.admin_timeout_s == 12.345)
         check("retrieval_allowed off when disabled", cfg.retrieval_allowed is False)
         check("writeback_allowed off when disabled", cfg.writeback_allowed is False)
         os.environ["MEMORY_ENABLED"] = "true"

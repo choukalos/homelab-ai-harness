@@ -63,6 +63,10 @@ class MemoryConfig:
     # Writeback timeout (LLM extraction is slow; runs as a background task
     # in Phase 4/5, so it can be generous).
     writeback_timeout_ms: int = 30000
+    # Admin timeout for update/delete/delete_user ops (non-hot-path, no LLM,
+    # but a single mem0 delete was measured at ~2.3s — well over the 1.5s
+    # retrieval budget). 10s is generous headroom for store ops.
+    admin_timeout_ms: int = 10000
     max_context_tokens: int = 1500
 
     # Virtual user_id used to scope household (explicitly shared) facts.
@@ -75,6 +79,10 @@ class MemoryConfig:
     @property
     def writeback_timeout_s(self) -> float:
         return self.writeback_timeout_ms / 1000.0
+
+    @property
+    def admin_timeout_s(self) -> float:
+        return self.admin_timeout_ms / 1000.0
 
     @property
     def retrieval_allowed(self) -> bool:
@@ -105,5 +113,6 @@ def load_config() -> MemoryConfig:
         top_k=_env_int("MEMORY_TOP_K", 6),
         timeout_ms=_env_int("MEMORY_TIMEOUT_MS", 1500),
         writeback_timeout_ms=_env_int("MEMORY_WRITEBACK_TIMEOUT_MS", 30000),
+        admin_timeout_ms=_env_int("MEMORY_ADMIN_TIMEOUT_MS", 10000),
         max_context_tokens=_env_int("MEMORY_MAX_CONTEXT_TOKENS", 1500),
     )

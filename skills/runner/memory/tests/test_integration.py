@@ -142,9 +142,12 @@ def main():
 
     print("timeout -> graceful degradation (unreachable qdrant)...")
     # Point a fresh client at an unreachable Qdrant with a short timeout.
+    # Dummy api_key so mem0 init succeeds and the test exercises the real
+    # network-failure path (not the missing-credentials init failure).
     badcfg = memconfig.MemoryConfig(
         enabled=True, retrieval_enabled=True,
         qdrant_url="http://nonexistent-host:6333", timeout_ms=800,
+        litellm_api_key="test-dummy-key",
     )
     from memory.client import MemoryClient
     badclient = MemoryClient(badcfg)
