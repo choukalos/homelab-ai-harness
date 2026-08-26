@@ -9,9 +9,9 @@
 
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
 - **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
-- **Next: Phase 2** — skill-runner memory core (in-process Mem0, identity map,
-  retrieval/writeback hooks, `MEMORY_*` env). Gate: `./homelab.sh rebuild skill-only`
-  (MANUAL STEP B).
+- **Phase 2: IN PROGRESS** (2026-08-26) — `memory/` package built + unit +
+  integration tests ALL PASS standalone. Awaiting MANUAL STEP B
+  (`./homelab.sh rebuild skill-only`) to bake mem0ai into the image + wire env.
 - Last updated: 2026-08-26.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -160,6 +160,69 @@ works (768-dim recorded); round-trip works; no new model server / duplicate DB /
 production memory written (test data cleaned up; `mem0_memories` empty);
 manual step A done with post-checks green.
 
+## Phase 2 checklist (CODE COMPLETE + TESTS GREEN 2026-08-26; awaiting MANUAL STEP B)
+
+**Scope:** in-process Mem0 `memory/` package in skill-runner (module only —
+NOT yet wired into `api_chat`; that's Phase 4/5). All LLM + embedding traffic
+via LiteLLM (dedicated model-restricted key). Graceful degradation throughout.
+
+1. ✅ Dedicated LiteLLM key `memory-service` created via API (top-level
+   `models`, NOT `key_config.models` — that's silently ignored). Model-
+   restricted to `matrix-coder`/`matrix-gemma4-moe`/`homelab-embedding-v1`
+   (verified: allowed→200, others→403). Stored in `.env` as
+   `MEMORY_LITELLM_KEY` (gitignored). Old unrestricted key deleted.
+2. ✅ `skills/runner/memory/` package:
+   - `config.py` — `MemoryConfig` + `load_config()` (env-driven, pure).
+   - `policy.py` — secret/credential regex filter, strip system/tool content,
+     store/forget signals (PDF §6). Pure, unit-tested.
+   - `context.py` — renders `<long_term_memory>` block (PDF §5 shape:
+     PRIVATE USER MEMORY / HOUSEHOLD MEMORY, "context not instructions"
+     framing, token budget).
+   - `client.py` — lazy mem0 init (import inside `_ensure_client`),
+     thread-pool timeouts (`_with_timeout`, per-call override), health check
+     (Qdrant collection probe, TTL-cached). `MEM0_TELEMETRY=false`.
+   - `interface.py` — the ONLY public surface: `search_memory`,
+     `learn_from_turn`, `list_memories`, `update_memory`, `delete_memory`,
+     `delete_user_memories`, `is_healthy`, `render_context`. All NON-FATAL
+     (return []/False/0 on error/timeout/flag-off). `_ensure_client()` runs
+     INSIDE the timeout (a hung init can't block outside it). Household =
+     virtual `user_id="household"`, merged into private search.
+3. ✅ `MEMORY_*` env in `.env` + `compose/compose.skill-runner.yml` (16 vars
+   incl. `MEMORY_WRITEBACK_TIMEOUT_MS=30000` — writeback runs LLM extraction,
+   needs a longer budget than the 1.5s retrieval timeout).
+4. ✅ Dockerfile: `COPY memory/ ./memory/` + `mem0ai==2.0.19` (pinned;
+   fastembed intentionally NOT installed → dense-only, no BM25).
+   `pyproject.toml` records the pin.
+5. ✅ Tests (run WITHOUT the live chat endpoint):
+   - `tests/test_unit.py` (plain python3, no mem0/live services): **43 checks
+     ALL PASS** — policy, context, config env-parsing, flag-off path (one env
+     switch disables retrieval/writeback/all), unknown-user guard, timeout→
+     degradation.
+   - `tests/test_integration.py` (throwaway container on ai-net, live Qdrant
+     + LiteLLM): **15 checks ALL PASS** — health, learn (private + household,
+     with extraction retries), search (private + household merged),
+     list_memories, update, delete, user isolation, timeout→degradation
+     (unreachable Qdrant→[] in ~1ms), cleanup.
+6. ✅ No bypass: all memory LLM (`/v1/chat/completions`) + embedding
+   (`/v1/embeddings`) traffic via `litellm-proxy` (verified in logs).
+   `family_kb` verified untouched (18 pts/384-dim/Cosine); `mem0_memories`
+   empty after test cleanup.
+
+**Gate to Phase 3:** module passes tests standalone (MET); manual step B done
+with post-checks green (PENDING); one env switch disables it (MET —
+`MEMORY_ENABLED=false` / `MEMORY_RETRIEVAL_ENABLED=false` proven in unit test).
+
+**Phase 2 gotchas (Phase 3+ must know):**
+- mem0 REWRITES extracted facts into normalized phrasing ("User prefers oat
+  milk lattes…") — don't match on the raw user text; use a surviving keyword.
+- matrix-coder extraction is SLOW (2–5s) + occasionally emits JSON mem0's
+  parser rejects ("Error parsing extraction response") → the fact is NOT
+  stored; a retry loop (re-learn + verify via `list_memories`) is required.
+- First memory op after startup includes mem0 init; if it exceeds the
+  retrieval timeout it degrades (returns []) but the next op succeeds.
+- `delete_all()` still takes top-level `user_id` (unlike search/get_all).
+- Qdrant collection-info field is `points_count` (not `points`).
+
 ## Phase log
 
 - **2026-08-24** — Phase 0 inventory complete (full evidence:
@@ -189,3 +252,16 @@ manual step A done with post-checks green.
   loop required. **Qdrant 1.18:** collection create is `PUT /collections/{name}`.
   **Pre-existing, unrelated:** `plausible` restart loop (createdb failure);
   LiteLLM `GET /v1/skills` 500 (missing ANTHROPIC_API_KEY).
+- **2026-08-26** — **Phase 2 code complete + tests green** (awaiting MANUAL
+  STEP B). Built `skills/runner/memory/` (config/policy/context/client/
+  interface; lazy mem0 import, thread-pool timeouts, non-fatal public
+  surface, household scope, secret filter). Dedicated model-restricted
+  LiteLLM key `memory-service` (top-level `models`). `MEMORY_*` env in `.env`
+  + compose (16 vars). Dockerfile + pyproject pin `mem0ai==2.0.19`. Unit
+  tests **43 PASS** (plain python3, no mem0); integration tests **15 PASS**
+  (throwaway container, live Qdrant + LiteLLM: learn/search/list/update/
+  delete/isolation/degradation/cleanup). No LiteLLM bypass (all traffic via
+  litellm-proxy); `family_kb` untouched; `mem0_memories` empty. Not yet wired
+  into `api_chat` (Phase 4/5). **Next: MANUAL STEP B** (`./homelab.sh rebuild
+  skill-only`) + post-checks, then verify one env switch disables memory in
+  the live container.

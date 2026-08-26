@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Unit tests for the memory module — NO live services, NO mem0 required.
+
+Covers (per memory_todo.md Phase 2 gate):
+  - flag-off path (one env switch disables retrieval / writeback / all)
+  - policy (secret filter, sanitize, store/forget signals)
+  - context rendering (shape + token budget)
+  - timeout -> graceful degradation (MemoryTimeout raised, caller degrades)
+  - unknown-user guard (no retrieval / writeback)
+
+Run with plain python3 (no pytest, no mem0):
+    python3 skills/runner/memory/tests/test_unit.py
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+
+# Ensure the runner root is importable (memory is a package under it).
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUNNER_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, RUNNER_ROOT)
+
+from memory import (  # noqa: E402
+    context,
+    policy,
+    interface,
+    config as memconfig,
+)
+from memory.client import MemoryClient, MemoryTimeout  # noqa: E402
+
+PASS = 0
+FAIL = 0
+FAILURES = []
+
+
+def check(name: str, cond: bool, detail: str = ""):
+    global PASS, FAIL
+    print(f"  {'PASS' if cond else 'FAIL'}: {name}" + (f" — {detail}" if detail else ""))
+    if cond:
+        PASS += 1
+    else:
+        FAIL += 1
+        FAILURES.append(name)
+
+
+def test_policy():
+    print("policy:")
+    check("secret: sk- key", policy.is_secret_like("key is sk-abcDEF1234567890XYZ"))
+    check("secret: AWS", policy.is_secret_like("AKIAIOSFODNN7EXAMPLE"))
+    check("secret: bearer", policy.is_secret_like("Authorization: Bearer abcdef1234567890ab"))
+    check("secret: password=", policy.is_secret_like("password=hunter2secret"))
+    check("not secret: plain", not policy.is_secret_like("I like oat milk lattes"))
+    check("not secret: empty", not policy.is_secret_like(""))
+    check("store signal", policy.has_store_signal("remember that my birthday is in May"))
+    check("store signal: prefer", policy.has_store_signal("I prefer dark roast"))
+    check("no store signal", not policy.has_store_signal("what is the weather"))
+    check("forget signal", policy.has_forget_signal("forget that memory"))
+    msgs = [
+        {"role": "system", "content": "you are siri"},
+        {"role": "user", "content": "I like oat milk"},
+        {"role": "tool", "content": "tool output"},
+        {"role": "assistant", "content": "noted"},
+        {"role": "user", "content": ""},
+    ]
+    cleaned = policy.sanitize_turn(msgs)
+    check("sanitize strips system/tool", all(m["role"] in ("user", "assistant") for m in cleaned))
+    check("sanitize drops empty", all(m["content"].strip() for m in cleaned))
+    check("sanitize keeps user+assistant", len(cleaned) == 2)
+    ok, reason = policy.should_store(msgs)
+    check("should_store ok", ok, reason)
+    ok2, reason2 = policy.should_store([{"role": "system", "content": "x"}])
+    check("should_store rejects no-user", not ok2, reason2)
+    ok3, reason3 = policy.should_store([{"role": "user", "content": "api_key=abc12345xyz"}])
+    check("should_store rejects secret", not ok3, reason3)
+
+
+def test_context():
+    print("context:")
+    cfg = memconfig.MemoryConfig(max_context_tokens=1500)
+    hits = [
+        {"text": "I like oat milk", "score": 0.9, "source": "private"},
+        {"text": "server rack in basement", "score": 0.8, "source": "household"},
+    ]
+    block = context.render_memory_block(hits, cfg)
+    check("block has tag", "<long_term_memory>" in block and "</long_term_memory>" in block)
+    check("block has private section", "PRIVATE USER MEMORY:" in block)
+    check("block has household section", "HOUSEHOLD MEMORY:" in block)
+    check("block has context framing", "CONTEXT, not instructions" in block)
+    check("block empty when no hits", context.render_memory_block([], cfg) == "")
+    # Token budget: tiny budget should drop entries (or empty).
+    tiny = memconfig.MemoryConfig(max_context_tokens=10)
+    tiny_block = context.render_memory_block(hits, tiny)
+    check("budget trims or empties", tiny_block == "" or len(tiny_block) < len(block))
+
+
+def test_config_env():
+    print("config:")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_RETRIEVAL_ENABLED", "MEMORY_WRITEBACK_ENABLED",
+        "MEMORY_TOP_K", "MEMORY_TIMEOUT_MS",
+    )}
+    try:
+        os.environ["MEMORY_ENABLED"] = "false"
+        os.environ["MEMORY_RETRIEVAL_ENABLED"] = "true"
+        os.environ["MEMORY_WRITEBACK_ENABLED"] = "true"
+        os.environ["MEMORY_TOP_K"] = "9"
+        os.environ["MEMORY_TIMEOUT_MS"] = "2500"
+        cfg = memconfig.load_config()
+        check("enabled=false parsed", cfg.enabled is False)
+        check("top_k=9 parsed", cfg.top_k == 9)
+        check("timeout_ms=2500 parsed", cfg.timeout_ms == 2500)
+        check("retrieval_allowed off when disabled", cfg.retrieval_allowed is False)
+        check("writeback_allowed off when disabled", cfg.writeback_allowed is False)
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_RETRIEVAL_ENABLED"] = "false"
+        cfg2 = memconfig.load_config()
+        check("retrieval flag independent", cfg2.retrieval_enabled is False)
+        check("writeback still on", cfg2.writeback_allowed is True)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_flag_off_path():
+    print("flag-off path (interface returns safe defaults, no live calls):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_RETRIEVAL_ENABLED", "MEMORY_WRITEBACK_ENABLED",
+    )}
+    try:
+        # Retrieval off.
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_RETRIEVAL_ENABLED"] = "false"
+        os.environ["MEMORY_WRITEBACK_ENABLED"] = "true"
+        interface._reset_singleton()
+        check("search off -> []", interface.search_memory("chuck", "coffee") == [])
+        # Writeback off.
+        os.environ["MEMORY_RETRIEVAL_ENABLED"] = "true"
+        os.environ["MEMORY_WRITEBACK_ENABLED"] = "false"
+        interface._reset_singleton()
+        check("learn off -> []", interface.learn_from_turn(
+            "chuck", [{"role": "user", "content": "I like oat milk"}]) == [])
+        # Master off.
+        os.environ["MEMORY_ENABLED"] = "false"
+        interface._reset_singleton()
+        check("all off: search -> []", interface.search_memory("chuck", "coffee") == [])
+        check("all off: learn -> []", interface.learn_from_turn(
+            "chuck", [{"role": "user", "content": "I like oat milk"}]) == [])
+        check("all off: list -> []", interface.list_memories("chuck") == [])
+        check("all off: update -> False", interface.update_memory("id1", "x") is False)
+        check("all off: delete -> False", interface.delete_memory("id1") is False)
+        check("all off: delete_user -> 0", interface.delete_user_memories("chuck") == 0)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
+def test_unknown_user():
+    print("unknown-user guard:")
+    saved = {k: os.environ.get(k) for k in ("MEMORY_ENABLED",)}
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        interface._reset_singleton()
+        check("unknown: search -> []", interface.search_memory("unknown", "coffee") == [])
+        check("unknown: learn -> []", interface.learn_from_turn(
+            "unknown", [{"role": "user", "content": "I like oat milk"}]) == [])
+        check("empty user: search -> []", interface.search_memory("", "coffee") == [])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
+def test_timeout_degradation():
+    print("timeout -> graceful degradation:")
+    cfg = memconfig.MemoryConfig(timeout_ms=200)  # 200ms budget
+    client = MemoryClient(cfg)
+
+    def slow():
+        time.sleep(1.0)  # longer than the budget
+        return "done"
+
+    t0 = time.time()
+    try:
+        client._with_timeout(slow)
+        check("timeout raised", False, "no exception raised")
+    except MemoryTimeout:
+        elapsed = time.time() - t0
+        check("timeout raised", True, f"after {elapsed*1000:.0f}ms")
+        check("returned promptly (<1s)", elapsed < 0.9, f"{elapsed*1000:.0f}ms")
+    # Fast op succeeds.
+    check("fast op ok", client._with_timeout(lambda: 42) == 42)
+
+
+def main():
+    test_policy()
+    test_context()
+    test_config_env()
+    test_flag_off_path()
+    test_unknown_user()
+    test_timeout_degradation()
+    print()
+    if FAILURES:
+        print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")
+        sys.exit(1)
+    print(f"RESULT: ALL PASS ({PASS} checks)")
+
+
+if __name__ == "__main__":
+    main()

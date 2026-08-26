@@ -19,6 +19,11 @@ logs/  # Skill runner logs — auto-rotating, 10MB max
 .env.*.local
 .env.*.production
 
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+
 # Private keys and certificates
 *.key
 *.pem
