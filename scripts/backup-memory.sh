@@ -59,15 +59,23 @@ else
     cat /tmp/qdrant-snap-resp.json >&2
     exit 1
   fi
-  SNAP_REL="$(jq -r '.result // empty' /tmp/qdrant-snap-resp.json)"
-  if [[ -z "$SNAP_REL" || ! -f "${QDRANT_DATA}/${SNAP_REL}" ]]; then
-    echo "ERROR: snapshot response did not yield a readable file: ${SNAP_REL}" >&2
+  # Qdrant >= 1.18: {"result": {"name": "...", ...}}; older versions:
+  # {"result": "<relative path>"}. Handle both.
+  SNAP_NAME="$(jq -r '.result.name // empty' /tmp/qdrant-snap-resp.json)"
+  if [[ -n "$SNAP_NAME" ]]; then
+    SNAP_SRC="${QDRANT_DATA}/snapshots/${COLLECTION}/${SNAP_NAME}"
+  else
+    SNAP_SRC="${QDRANT_DATA}/$(jq -r '.result | select(type == "string")' /tmp/qdrant-snap-resp.json)"
+  fi
+  if [[ -z "${SNAP_SRC:-}" || ! -f "$SNAP_SRC" ]]; then
+    echo "ERROR: snapshot response did not yield a readable file" >&2
+    cat /tmp/qdrant-snap-resp.json >&2
     exit 1
   fi
   SNAP_DEST="${BACKUP_DIR}/${COLLECTION}-${STAMP}.snapshot"
-  cp "${QDRANT_DATA}/${SNAP_REL}" "$SNAP_DEST"
+  cp "$SNAP_SRC" "$SNAP_DEST"
   chmod 600 "$SNAP_DEST"
-  echo "    wrote $(stat -c%s "$SNAP_DEST") bytes (${SNAP_REL})"
+  echo "    wrote $(stat -c%s "$SNAP_DEST") bytes ($(basename "$SNAP_SRC"))"
 fi
 rm -f /tmp/qdrant-snap-resp.json
 
