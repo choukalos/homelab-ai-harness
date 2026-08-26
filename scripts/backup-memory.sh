@@ -14,12 +14,16 @@
 # phase gate (~10s).
 #
 # Restore (see docs/memory/IMPLEMENTATION_STATE.md phase log):
-#   docker run --rm -d --name qdrant-restore-test -p 16333:6333 \
+#   docker run -d --name qdrant-restore-test -p 16333:6333 \
 #     -v /home/chuck/data/backups/mem0_memories-<stamp>.snapshot:/qdrant/snapshots/restore.snapshot:ro \
 #     qdrant/qdrant:latest
-#   curl -X POST http://localhost:16333/collections/mem0_memories/snapshots/restore \
-#     -H 'Content-Type: application/json' -d '{"location":"/qdrant/snapshots/restore.snapshot"}'
+#   curl -s -X PUT http://localhost:16333/collections/mem0_memories/snapshots/recover \
+#     -H 'Content-Type: application/json' \
+#     -d '{"location":"file:///qdrant/snapshots/restore.snapshot","priority":"snapshot"}'
 #   docker rm -f qdrant-restore-test
+#   (Qdrant >= 1.18: the endpoint is PUT .../snapshots/recover with a file:
+#   URI, NOT POST .../snapshots/restore. priority MUST be "snapshot" on an
+#   empty node — the default "replica" priority restores an EMPTY collection.)
 #
 # NOTE: Qdrant writes snapshots to /qdrant/snapshots/ INSIDE the container
 # (workdir /qdrant), NOT on the mounted volume (/qdrant/storage) — they are
