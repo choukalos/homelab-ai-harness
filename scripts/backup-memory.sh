@@ -15,10 +15,16 @@
 #
 # Restore (see docs/memory/IMPLEMENTATION_STATE.md phase log):
 #   docker run --rm -d --name qdrant-restore-test -p 16333:6333 \
-#     -v <snapshot>:/snapshots/restore.snapshot:ro qdrant/qdrant:latest
+#     -v /home/chuck/data/backups/mem0_memories-<stamp>.snapshot:/qdrant/snapshots/restore.snapshot:ro \
+#     qdrant/qdrant:latest
 #   curl -X POST http://localhost:16333/collections/mem0_memories/snapshots/restore \
-#     -H 'Content-Type: application/json' -d '{"location":"/snapshots/restore.snapshot"}'
+#     -H 'Content-Type: application/json' -d '{"location":"/qdrant/snapshots/restore.snapshot"}'
 #   docker rm -f qdrant-restore-test
+#
+# NOTE: Qdrant writes snapshots to /qdrant/snapshots/ INSIDE the container
+# (workdir /qdrant), NOT on the mounted volume (/qdrant/storage) — they are
+# ephemeral. This script extracts the fresh snapshot via read-only
+# `docker exec qdrant cat`.
 #
 # Usage: scripts/backup-memory.sh
 # Exit codes: 0 = ok, 1 = backup failed or git tree dirty (backup incomplete)
@@ -62,20 +68,29 @@ else
   # Qdrant >= 1.18: {"result": {"name": "...", ...}}; older versions:
   # {"result": "<relative path>"}. Handle both.
   SNAP_NAME="$(jq -r '.result.name // empty' /tmp/qdrant-snap-resp.json)"
-  if [[ -n "$SNAP_NAME" ]]; then
-    SNAP_SRC="${QDRANT_DATA}/snapshots/${COLLECTION}/${SNAP_NAME}"
-  else
-    SNAP_SRC="${QDRANT_DATA}/$(jq -r '.result | select(type == "string")' /tmp/qdrant-snap-resp.json)"
+  if [[ -z "$SNAP_NAME" ]]; then
+    SNAP_NAME="$(basename "$(jq -r '.result | select(type == "string")' /tmp/qdrant-snap-resp.json)")"
   fi
-  if [[ -z "${SNAP_SRC:-}" || ! -f "$SNAP_SRC" ]]; then
-    echo "ERROR: snapshot response did not yield a readable file" >&2
+  if [[ -z "$SNAP_NAME" ]]; then
+    echo "ERROR: could not parse snapshot name from response" >&2
     cat /tmp/qdrant-snap-resp.json >&2
     exit 1
   fi
+  # Snapshot lives inside the container at /qdrant/snapshots/<coll>/<name>
+  # (NOT on the mounted volume) — extract via read-only exec.
   SNAP_DEST="${BACKUP_DIR}/${COLLECTION}-${STAMP}.snapshot"
-  cp "$SNAP_SRC" "$SNAP_DEST"
+  if ! docker exec qdrant cat "/qdrant/snapshots/${COLLECTION}/${SNAP_NAME}" > "$SNAP_DEST"; then
+    echo "ERROR: docker exec qdrant cat failed for ${SNAP_NAME}" >&2
+    rm -f "$SNAP_DEST"
+    exit 1
+  fi
   chmod 600 "$SNAP_DEST"
-  echo "    wrote $(stat -c%s "$SNAP_DEST") bytes ($(basename "$SNAP_SRC"))"
+  if [[ ! -s "$SNAP_DEST" ]]; then
+    echo "ERROR: extracted snapshot is empty" >&2
+    rm -f "$SNAP_DEST"
+    exit 1
+  fi
+  echo "    wrote $(stat -c%s "$SNAP_DEST") bytes (${SNAP_NAME})"
 fi
 rm -f /tmp/qdrant-snap-resp.json
 
