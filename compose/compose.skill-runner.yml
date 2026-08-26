@@ -30,6 +30,26 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
       - HARNESS_URL=http://skill-runner:8091
+      # ── Long-term memory (memory_todo.md Phase 2) ──────────────
+      # In-process Mem0. Dedicated, model-restricted LiteLLM key (least
+      # privilege). All values sourced from .env (gitignored).
+      - MEMORY_ENABLED=${MEMORY_ENABLED}
+      - MEMORY_RETRIEVAL_ENABLED=${MEMORY_RETRIEVAL_ENABLED}
+      - MEMORY_WRITEBACK_ENABLED=${MEMORY_WRITEBACK_ENABLED}
+      - MEMORY_MCP_ENABLED=${MEMORY_MCP_ENABLED}
+      - MEMORY_HOUSEHOLD_ENABLED=${MEMORY_HOUSEHOLD_ENABLED}
+      - MEMORY_DEBUG_LOGGING=${MEMORY_DEBUG_LOGGING}
+      - MEMORY_LITELLM_BASE_URL=${MEMORY_LITELLM_BASE_URL}
+      - MEMORY_LITELLM_KEY=${MEMORY_LITELLM_KEY}
+      - MEMORY_QDRANT_URL=${MEMORY_QDRANT_URL}
+      - MEMORY_COLLECTION=${MEMORY_COLLECTION}
+      - MEMORY_EMBED_DIM=${MEMORY_EMBED_DIM}
+      - MEMORY_TOP_K=${MEMORY_TOP_K}
+      - MEMORY_TIMEOUT_MS=${MEMORY_TIMEOUT_MS}
+      - MEMORY_WRITEBACK_TIMEOUT_MS=${MEMORY_WRITEBACK_TIMEOUT_MS}
+      - MEMORY_MAX_CONTEXT_TOKENS=${MEMORY_MAX_CONTEXT_TOKENS}
+      - MEMORY_EXTRACTION_MODEL=${MEMORY_EXTRACTION_MODEL}
+      - MEM0_TELEMETRY=false
     volumes:
       - ../skills:/app/skills:ro
       - /home/chuck/data/media:/home/chuck/data/media

@@ -9,13 +9,18 @@ WORKDIR /app
 COPY main.py .
 COPY scheduler.py .
 COPY pyproject.toml .
+COPY memory/ ./memory/
 
 # Install runtime dependencies directly (single-file app, no package distribution needed)
+# mem0ai pinned to the version verified in Phase 1 (round-trip + restore).
+# fastembed intentionally NOT installed: BM25/hybrid keyword search disabled
+# (dense-only semantic search is the v1 design; see Phase 1 gotchas).
 RUN pip install --no-cache-dir \
     "fastapi>=0.110.0" \
     "uvicorn[standard]>=0.27.0" \
     "pydantic>=2.0.0" \
-    "httpx>=0.27.0"
+    "httpx>=0.27.0" \
+    "mem0ai==2.0.19"
 
 # Runtime config
 ENV SKILL_RUNNER_PORT=8091
