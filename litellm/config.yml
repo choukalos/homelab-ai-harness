@@ -91,6 +91,9 @@ model_list:
   # Same backend as `embeddings`; versioned so a future re-embedding
   # migration (homelab-embedding-v2) can cut over cleanly without
   # silently repointing the alias in use (memory_todo.md Phase 1/9).
+  # drop_params: mem0's OpenAI embedder hardcodes encoding_format=float,
+  # which LiteLLM rejects for the ollama backend; dropping it is safe
+  # (default response is a float list). Verified Phase 1 round-trip.
   - model_name: homelab-embedding-v1
     model_info:
       input_cost_per_token: 0.0000001
