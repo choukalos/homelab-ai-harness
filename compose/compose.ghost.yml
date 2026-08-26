@@ -14,6 +14,8 @@ services:
     environment:
       - url=https://choukalos.com
       - server__trustProxy=true
+      - server__cookieSecure=false
+      - server__cookieSameSite=lax
       - NODE_ENV=production
       - database__client=mysql
       - database__connection__host=host.docker.internal

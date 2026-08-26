@@ -60,7 +60,7 @@ services:
       - "host.docker.internal:host-gateway"
       - "matrix:${MATRIX_IP:-192.168.4.55}"
       - "athena:${ATHENA_IP:-192.168.5.110}"
-      - "lego:${LEGO_IP:-192.168.4.92}"
+      - "lego:${LEGO_IP:-192.168.5.100}"
     user: "0:0"
 
   grafana:
@@ -79,6 +79,8 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SERVER_ROOT_URL=http://localhost:3001
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     depends_on:
