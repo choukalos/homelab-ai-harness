@@ -10,8 +10,12 @@
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
 - **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
 - **Phase 2: IN PROGRESS** (2026-08-26) — `memory/` package built + unit +
-  integration tests ALL PASS standalone. Awaiting MANUAL STEP B
-  (`./homelab.sh rebuild skill-only`) to bake mem0ai into the image + wire env.
+  integration tests ALL PASS standalone. First MANUAL STEP B run (image
+  rebuilt 02:27Z, post-checks green); live verification found a
+  **self-deadlock** in the interface singleton (first `is_healthy()` in a
+  process hung forever) — fixed (`f592da2d`, regression test, 45/45 unit).
+  Awaiting SECOND MANUAL STEP B to bake the fix into the image, then full
+  live verification (is_healthy + round-trip + flag-off).
 - Last updated: 2026-08-26.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -207,10 +211,29 @@ via LiteLLM (dedicated model-restricted key). Graceful degradation throughout.
    (`/v1/embeddings`) traffic via `litellm-proxy` (verified in logs).
    `family_kb` verified untouched (18 pts/384-dim/Cosine); `mem0_memories`
    empty after test cleanup.
+7. ✅ **Self-deadlock found + fixed** (commit `f592da2d`): `_get_client()`
+   held the non-reentrant module `_lock` while calling `_get_config()`
+   (which re-acquires the same lock) → the FIRST memory call in a process
+   (e.g. `is_healthy()` before any search/learn) hung forever. Found during
+   post-rebuild live verification (`faulthandler` traceback: main thread
+   blocked in `_get_config`'s `with _lock:` while `_get_client` held it).
+   Chat-path functions were immune only because they call `_get_config()`
+   first — latent for Phase 4/8 (`/api/memory/health`). Fix: resolve config
+   outside the lock. Regression test: first `is_healthy()` after
+   `_reset_singleton()` must return <5s (worker-thread join so a regression
+   hangs the check, not the suite). Unit tests **45/45 PASS** (was 43).
+   Fixed code verified vs live Qdrant (host, `localhost:6333`): `is_healthy()`
+   → True, no hang. Live-container flag-off check (old image, safe path):
+   `MEMORY_ENABLED=false` → search/learn/list all `[]` in 0ms.
+8. ✅ Side fix (commit `91d5ee91`): `.gitignore` `logs/` line had an inline
+   comment (invalid in gitignore) → logs were never actually ignored; two
+   tracked log files untracked. (Was tripping the backup script's git-clean
+   check.)
 
 **Gate to Phase 3:** module passes tests standalone (MET); manual step B done
-with post-checks green (PENDING); one env switch disables it (MET —
-`MEMORY_ENABLED=false` / `MEMORY_RETRIEVAL_ENABLED=false` proven in unit test).
+with post-checks green (first B run green, but second B needed for the
+deadlock fix — PENDING); one env switch disables it (MET — unit + live
+container flag-off check).
 
 **Phase 2 gotchas (Phase 3+ must know):**
 - mem0 REWRITES extracted facts into normalized phrasing ("User prefers oat
@@ -262,6 +285,16 @@ with post-checks green (PENDING); one env switch disables it (MET —
   (throwaway container, live Qdrant + LiteLLM: learn/search/list/update/
   delete/isolation/degradation/cleanup). No LiteLLM bypass (all traffic via
   litellm-proxy); `family_kb` untouched; `mem0_memories` empty. Not yet wired
-  into `api_chat` (Phase 4/5). **Next: MANUAL STEP B** (`./homelab.sh rebuild
-  skill-only`) + post-checks, then verify one env switch disables memory in
-  the live container.
+  into `api_chat` (Phase 4/5). **2026-08-26 (later)** — First MANUAL STEP B
+  run by Chuck (image rebuilt 02:27Z). Post-checks green: litellm
+  `"I'm alive!"`, skill-runner `{"status":"ok"}`, clean startup logs, no
+  restart loops. Live verification (`docker exec -i skill-runner python3`)
+  found the singleton **self-deadlock**: `iface.is_healthy()` as first call
+  hung >60s (faulthandler: blocked in `_get_config` `with _lock:` while
+  `_get_client` held it). Root cause: non-reentrant lock re-acquired by the
+  same thread. Fixed in `f592da2d` (config resolved outside the lock) +
+  regression test (45/45 unit). Also fixed `.gitignore` logs pattern
+  (`91d5ee91`). Backup re-run (env-20260826-1154 + snapshot).
+  **Next: SECOND MANUAL STEP B** (`./homelab.sh rebuild skill-only`) to bake
+  the fix, then full live verification (is_healthy, round-trip, flag-off) →
+  Phase 2 gate → Phase 3.
