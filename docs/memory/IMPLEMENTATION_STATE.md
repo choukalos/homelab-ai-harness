@@ -8,8 +8,11 @@
 ## Status
 
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
-- **Next: Phase 1** — backup script + storage/LiteLLM proof (no request-path changes).
-- Last updated: 2026-08-25.
+- **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
+- **Next: Phase 2** — skill-runner memory core (in-process Mem0, identity map,
+  retrieval/writeback hooks, `MEMORY_*` env). Gate: `./homelab.sh rebuild skill-only`
+  (MANUAL STEP B).
+- Last updated: 2026-08-26.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -127,38 +130,35 @@ keep-alive in skill-runner's pool) — re-send the prompt if so.
 | `scripts/backup-memory.sh` | NEW in Phase 1 |
 | `.env` | `MEMORY_*` vars (gitignored) |
 
-## Phase 1 checklist (next)
+## Phase 1 checklist (COMPLETE 2026-08-26)
 
-1. `mkdir -p /home/chuck/data/backups` (chmod 700).
-2. Create `scripts/backup-memory.sh`: copy `homelab/.env` →
-   `/home/chuck/data/backups/env-YYYYmmdd-HHMM.env` (chmod 600); Qdrant snapshot
-   of `mem0_memories` (`curl -X POST http://localhost:6333/collections/mem0_memories/snapshots`
-   + copy snapshot file); verify git working tree clean. Run it; test restore
-   with a **throwaway** container: `docker run --rm -d --name
-   qdrant-restore-test -p 16333:6333 qdrant/qdrant:latest` → restore snapshot
-   via `http://localhost:16333` → search `memory_test` facts →
-   `docker rm -f qdrant-restore-test`.
-3. Add `homelab-embedding-v1` alias to `litellm/config.yml` (→
-   `ollama/nomic-embed-text`, same as `embeddings`); commit; run
-   `scripts/backup-memory.sh`; **MANUAL STEP A (Chuck):** `docker restart
-   litellm-proxy`. Then `POST /v1/embeddings` with both aliases → record HTTP
-   status, **vector length (expect 768)**, latency in the phase log. Do NOT
-   record vectors.
-4. `matrix-coder` structured-output probe: 3-turn sample conversation → JSON
-   durable-facts; confirm reliable structured output.
-5. Create Qdrant collection `mem0_memories` (768-dim, Cosine) via API; Mem0
-   round-trip with disposable user `memory_test` (add/search/update/delete) in
-   a **throwaway** container: `docker run --rm --network ai-net -v
-   /tmp/memtest:/work python:3.12-slim bash -c "pip install -q mem0ai && python
-   /work/roundtrip.py"` (script uses `http://qdrant:6333` +
-   `http://litellm-proxy:4000`); verify `family_kb` untouched.
-6. Confirm no bypass: Mem0's LLM/embedder calls traverse `litellm-proxy`
-   (check LiteLLM logs), never `matrix:11434`/`matrix:8000` directly.
+1. ✅ `mkdir -p /home/chuck/data/backups` (chmod 700).
+2. ✅ `scripts/backup-memory.sh` (commit `0429d5eb`, fixes `ec5966a8`/`0bacd50e`):
+   .env copy (600) + Qdrant snapshot extraction + git-clean check. Snapshot
+   extraction is via read-only `docker exec qdrant cat` — Qdrant 1.18 writes
+   snapshots to `/qdrant/snapshots/` INSIDE the container (not the mounted
+   volume). Restore tested (see phase log).
+3. ✅ `homelab-embedding-v1` alias (commit `0429d5eb`); MANUAL STEP A run
+   (twice: alias add, then `drop_params` fix `14c9a4ff`). Both aliases proven:
+   `embeddings` 200/768-dim ~4.7s cold; `homelab-embedding-v1` 200/768-dim
+   ~44ms warm. Post-checks green both times.
+4. ✅ `matrix-coder` structured-output probe: valid JSON facts; 1/3 runs
+   markdown-fenced the JSON → **Phase 2 parser must strip fences + retry on
+   parse failure** (re-observed in round-trip: 1 of 2 adds failed extraction,
+   retry succeeded).
+5. ✅ Qdrant collection `mem0_memories` (created BY MEM0 itself — dense 768
+   Cosine; no BM25 slot, fastembed not installed → semantic search only,
+   fine for v1). Mem0 round-trip **ALL PASS** in throwaway container
+   (add×2/search/get_all/update/delete/user isolation), disposable user
+   `memory_test`. `family_kb` verified untouched (18 pts/384-dim/Cosine).
+6. ✅ No bypass: all LLM/embedding traffic via `litellm-proxy` in LiteLLM
+   logs; throwaway container referenced only `litellm-proxy:4000` +
+   `qdrant:6333`.
 
-**Gate to Phase 2** (see `memory_todo.md`): backup script runs + restore tested;
-`homelab-embedding-v1` works (dim recorded); `memory_test` round-trip works; no
-new model server / duplicate DB / production memory written; manual step A done
-with post-checks green. Then update this file.
+**Gate to Phase 2: MET.** Backup script runs + restore tested; embedding alias
+works (768-dim recorded); round-trip works; no new model server / duplicate DB /
+production memory written (test data cleaned up; `mem0_memories` empty);
+manual step A done with post-checks green.
 
 ## Phase log
 
@@ -169,3 +169,23 @@ with post-checks green. Then update this file.
   this file created. Operational constraint added: all container lifecycle
   steps (restarts/rebuilds) are manual, run by Chuck between model turns
   (`memory_todo.md` §3.0). Ready for Phase 1.
+- **2026-08-26** — **Phase 1 complete.** Commits: `0429d5eb` (backup script +
+  embedding alias), `14c9a4ff`+`ec5966a8`+`0bacd50e` (`drop_params` fix +
+  snapshot-parsing fixes). Manual step A run twice (both post-check sets
+  green). Restore test: throwaway qdrant on 16333 with snapshot mounted ro —
+  Qdrant 1.18 endpoint is `PUT /collections/{name}/snapshots/recover` with a
+  `file://` URI and `priority:"snapshot"` (old `POST .../restore` is gone;
+  default `replica` priority restores EMPTY). Verified restored `memory_test`
+  point (id 5dc6a78f…, payload `data` field) + vector search score 0.82.
+  Cleanup: `memory_test` points deleted from live collection (empty, ready
+  for Phase 2); throwaway containers removed.
+  **mem0 2.0.19 gotchas (Phase 2 must know):** `search()`/`get_all()` take
+  `filters={"user_id":…}` + `top_k` (no top-level `user_id`/`limit`); OpenAI
+  embedder hardcodes `encoding_format=float` → `drop_params: true` on
+  `homelab-embedding-v1` (done); set `MEM0_TELEMETRY=false` in compose env
+  (PostHog telemetry ON by default); mem0 auto-creates `mem0migrations`
+  collection (recreated on init — no backup needed); payload text field is
+  `data`; extraction parse failures are silent (memory NOT stored) → retry
+  loop required. **Qdrant 1.18:** collection create is `PUT /collections/{name}`.
+  **Pre-existing, unrelated:** `plausible` restart loop (createdb failure);
+  LiteLLM `GET /v1/skills` 500 (missing ANTHROPIC_API_KEY).
