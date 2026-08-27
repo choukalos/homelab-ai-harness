@@ -30,8 +30,8 @@
   verified: learned preference changed a live `/api/chat` answer; `memory.
   enabled=false` → zero retrieval (no embeddings/Qdrant); cold-start
   degradation → chat still answers. Unit tests 59/59.
-- **Phase 5: CODE COMPLETE** (2026-08-27; awaiting MANUAL STEP B + live
-  verification) — post-turn writeback into the chat loop. Writeback after
+- **Phase 5: GATE MET** (2026-08-27) — post-turn writeback into the chat
+  loop, live-verified post-rebuild. Writeback after
   SUCCESSFUL responses only, at both call sites (`_chat_direct` success path
   + `siri_chat` final answer), synchronous for v1, non-fatal, budgeted
   (`MEMORY_WRITEBACK_TIMEOUT_MS`), gated by the request-level memory switch.
@@ -48,7 +48,13 @@
   self-contained supersede statement; the context block carries both and
   sorts score-desc then recency-desc. Startup warmup thread (`interface.
   warmup()`) moves the one-time mem0 init out of the first turn's writeback
-  budget. Unit tests 83/83; identity 29/29.
+  budget. Unit tests 93/93; identity 29/29. **Live e2e (post-rebuild):**
+  preference stated in chat → stored (`source=chat`) → follow-up used it;
+  `remember` intent → stored verbatim in 4.1s (`infer=False`, no LLM,
+  prefix stripped: "my favorite hiking trail is Eagle Creek.") →
+  retrieved (hits=1, 218ms) → `forget` intent → deleted (0.44s);
+  counts back to 0 / 18. Cold-start writeback ~6s warm (warmup thread);
+  synchronous v1 latency acceptable so far (note for Phase 9).
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -82,11 +88,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** MANUAL STEP B (Phase 5) — `./homelab.sh rebuild skill-only`
-(skill-runner code changed since last rebuild: `remember` now stores
-verbatim via `infer=False` — no LLM extraction, imperative prefix
-stripped; unit 93/93). After rebuild: post-checks → remember e2e re-test
-→ Phase 5 gate.
+**PENDING:** Phase 5 gate MET — next step is a decision: **Phase 6**
+(optional MCP memory tools; plan gates it on "memory count stays small
+after a week of use") or **Phase 7** (jobs/agents/skills identity
+propagation — no such gate). Awaiting Chuck's direction.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -374,7 +379,7 @@ the run. Backup taken at the gate.
   (observed: `memory: hits=0 latency_ms=3291` on the first post-rebuild
   request; warm requests are ~110ms).
 
-## Phase 5 checklist (CODE COMPLETE 2026-08-27; awaiting MANUAL STEP B + live verification)
+## Phase 5 checklist (GATE MET 2026-08-27)
 
 **Scope:** post-turn learning — writeback into the chat loop (plan Phase 5).
 
@@ -440,15 +445,19 @@ the run. Backup taken at the gate.
    startup (lifespan hook in main.py), so the one-time init cost is NOT
    paid inside the first chat turn's 30s writeback budget (a cold first
    turn otherwise timed out the writeback and silently lost its facts).
-9. ⬜ **Live verification (post-rebuild)** — extended suite (long timeout /
-   background) + end-to-end: chat with a preference statement → memory
-   stored (check collection) → next chat uses it; `remember` intent →
-   stored + retrieved; `forget` intent → deleted; writeback latency
-   acceptable (note for Phase 9 if not).
-10. ⬜ Cleanup: `mem0_memories` back to 0, `family_kb` 18. Commit + backup.
+10. ✅ **Live verification (post-rebuild)** — extended suite 48/48 (host
+   code, pre-fix rebuild) + post-rebuild e2e on the final image: chat
+   preference → stored (`source=chat`) → next chat uses it; `remember`
+   intent → stored verbatim (4.1s, `infer=False`) + retrieved (hits=1,
+   218ms); `forget` intent → deleted (0.44s); writeback latency ~6s
+   warm (acceptable; note for Phase 9).
+11. ✅ Cleanup: `mem0_memories` back to 0, `family_kb` 18. Commit +
+    backup.
 
-**Gate to Phase 6:** test matrix green (post-rebuild); memory count stays
-small.
+**Gate to Phase 6: MET (2026-08-27).** Phase 6 (optional MCP memory
+tools) is additionally gated by the plan on "memory count stays small
+after a week of use" — Phase 7 (jobs/agents/skills identity propagation)
+has no such gate and can start immediately if preferred.
 
 **Phase 5 gotchas (Phase 6+ must know):**
 - mem0 2.0.19 strips the identity keys (`user_id`/`agent_id`/`run_id`/
@@ -484,6 +493,17 @@ small.
   background) in Phase 9 if latency proves unacceptable.
 
 ## Phase log
+
+- **2026-08-27** — **Phase 5 gate MET.** Second rebuild (deterministic
+  `remember` fix, `a28cc639`). Post-checks green (warmup thread at boot,
+  mem0 client warm in ~6s; `infer=False` + `strip_remember_prefix`
+  baked in). Live e2e full cycle: `remember` intent → stored verbatim
+  "my favorite hiking trail is Eagle Creek." in 4.1s (`infer=False`,
+  no LLM in the loop — the earlier malformed-JSON failure class is
+  gone); a follow-up chat turn retrieved it (hits=1, 218ms); `forget`
+  intent → deleted (0.44s). Counts back to 0 / 18. Phase 5 complete.
+  Next: Phase 6 (optional MCP; plan-gated on a week of use) or Phase 7
+  (jobs/agents/skills identity propagation) — awaiting direction.
 
 - **2026-08-27** — **Phase 5: deterministic `remember` fix** (post-
   rebuild e2e). Post-rebuild checks green (warmup thread started at boot,
