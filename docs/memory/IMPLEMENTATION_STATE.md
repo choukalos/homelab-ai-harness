@@ -9,14 +9,18 @@
 
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
 - **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
-- **Phase 2: IN PROGRESS** (2026-08-26) — `memory/` package built + unit +
-  integration tests ALL PASS standalone. Second MANUAL STEP B run (image
-  12:23Z, post-checks green, deadlock fix verified live). Live integration
-  suite 14/15: `delete_memory` exceeded the 1.5s retrieval budget (a single
-  mem0 delete measures ~2.3s) → admin ops (update/delete/delete_user) now
-  get their own `MEMORY_ADMIN_TIMEOUT_MS=10000` budget. Awaiting THIRD
-  MANUAL STEP B to bake that in, then re-run live suite (expect 15/15).
-- Last updated: 2026-08-26.
+- **Phase 2: CODE COMPLETE** (2026-08-26) — module + unit + integration tests
+  green; admin-timeout budget fix committed (`7c83c310`). Gate pending the
+  THIRD MANUAL STEP B (bakes in admin budget + Phase 3 code) + extended live
+  suite re-run.
+- **Phase 3: CODE COMPLETE** (2026-08-27, commit `9ded3a1c`) — identity
+  resolver (`memory/identity.py`, `MEMORY_USER_KEYS=chuck=SKILL_RUNNER_API_KEY,
+  service=SIRI_KEY_SERVICE` — env var NAMES only), per-request contextvar,
+  job identity (D10: scheduler/launch_skill/run-now → `service`), api_chat
+  wiring. Unit tests green (identity 29/29). Live isolation checks added to
+  the integration suite (chuck vs memory_test, household visibility, unknown
+  principal, secret filter, direct Qdrant payload scan).
+- Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -262,6 +266,24 @@ container flag-off check).
 
 ## Phase log
 
+- **2026-08-27** — **"memory_test_other 1 memory" mystery resolved: no ghost
+  write.** The extended live suite run (chuck isolation section) was killed
+  mid-run; manual cleanup loop printed pre-delete counts via
+  `delete_user_memories()` — which returned `len(list_memories(user))`, and
+  `list_memories` MERGES the household scope into EVERY user's view. So
+  `memory_test_other` (0 private) reported 1 = the shared household
+  "basement" fact; `chuck 2` = 1 private (black coffee) + 1 household;
+  `household 1` = basement; `memory_test 0` = degraded count (cold-client
+  get_all exceeded the 1.5s retrieval budget → []). `delete_all(user_id=…)`
+  only removes that user's own points, so the household fact survived until
+  the 4th delete; post-delete leftovers read 0. Collection verified empty
+  (0 points), `family_kb` untouched (18 pts). **Fix (`9ded3a1c`):**
+  `delete_user_memories` now counts only the user's OWN points (direct
+  `get_all` with the user filter, admin budget) so the count matches what is
+  actually deleted; +5 unit regression checks (52/52). Phase 3 identity code
+  committed in the same commit (see Status). Backup `env-20260827-0122` +
+  snapshot taken. **Next: THIRD MANUAL STEP B** → extended live suite →
+  Phase 2 + Phase 3 gates.
 - **2026-08-24** — Phase 0 inventory complete (full evidence:
   `memory_todo.md` Appendix A). 768-dim embedding verified live. 10 deltas
   vs. the source PDF identified (`memory_todo.md` §1.2).
