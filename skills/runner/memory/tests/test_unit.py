@@ -281,6 +281,83 @@ def test_delete_user_count():
         interface._reset_singleton()
 
 
+def test_score_threshold():
+    print("score threshold (relevance gate for injected memories):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_SCORE_THRESHOLD",
+    )}
+
+    class _FakeMem0:
+        def __init__(self, data):
+            self._data = data  # user_id -> list of raw hits
+
+        def search(self, query, filters=None, top_k=10):
+            uid = (filters or {}).get("user_id")
+            return [dict(h) for h in self._data.get(uid, [])]
+
+    class _FakeClient:
+        def __init__(self, data):
+            self._mem = _FakeMem0(data)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0.5"
+        interface._reset_singleton()
+        fake = _FakeClient({
+            "chuck": [
+                {"id": "a", "memory": "oat milk latte", "score": 0.9},
+                {"id": "b", "memory": "unrelated fact", "score": 0.3},
+            ],
+            "household": [
+                {"id": "c", "memory": "server rack in basement", "score": 0.55},
+            ],
+        })
+        interface._client = fake
+        hits = interface.search_memory("chuck", "coffee")
+        ids = [h["id"] for h in hits]
+        check("high-score hit kept", "a" in ids, str(ids))
+        check("below-threshold hit dropped", "b" not in ids, str(ids))
+        check("household hit at/above threshold kept", "c" in ids, str(ids))
+
+        # Threshold 0 disables the gate.
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0"
+        interface._reset_singleton()
+        interface._client = fake
+        hits0 = interface.search_memory("chuck", "coffee")
+        check("threshold=0 keeps low-score hits",
+              any(h["id"] == "b" for h in hits0))
+
+        # render_context: nothing above threshold -> no block.
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0.99"
+        interface._reset_singleton()
+        interface._client = fake
+        check("render_context empty when all below threshold",
+              interface.render_context("chuck", "coffee") == "")
+
+        # Config parsing.
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0.7"
+        check("threshold 0.7 parsed", memconfig.load_config().score_threshold == 0.7)
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "abc"
+        check("invalid threshold -> default 0.5",
+              memconfig.load_config().score_threshold == 0.5)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def test_timeout_degradation():
     print("timeout -> graceful degradation:")
     cfg = memconfig.MemoryConfig(timeout_ms=200)  # 200ms budget
@@ -309,6 +386,7 @@ def main():
     test_flag_off_path()
     test_unknown_user()
     test_delete_user_count()
+    test_score_threshold()
     test_singleton_first_call()
     test_timeout_degradation()
     print()

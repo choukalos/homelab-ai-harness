@@ -209,6 +209,42 @@ def main():
     if real_key:
         check("no real API key in any Qdrant payload", real_key not in _all_payloads)
 
+    # Phase 4: render_context — the ONE render path both chat call sites use.
+    print("render_context (Phase 4 injection path)...")
+    blk_chuck = interface.render_context("chuck", "what do I drink in the morning?")
+    check("chuck block has tag + coffee fact",
+          "<long_term_memory>" in blk_chuck and "coffee" in blk_chuck.lower(),
+          f"len={len(blk_chuck)}")
+    # Unrelated query: the relevance gate (MEMORY_SCORE_THRESHOLD=0.5) must
+    # keep unrelated memories out of an unrelated task's context.
+    blk_unrelated = interface.render_context(
+        "chuck", "how do I configure an nginx reverse proxy?")
+    check("unrelated task: coffee fact NOT injected",
+          "coffee" not in blk_unrelated.lower(),
+          f"len={len(blk_unrelated)}")
+    # Identity isolation in the rendered block (not just raw search).
+    blk_test = interface.render_context(user, "what do I drink in the morning?")
+    check("memory_test block has own tea fact",
+          "tea" in blk_test.lower(), f"len={len(blk_test)}")
+    check("memory_test block does NOT contain chuck's coffee",
+          "coffee" not in blk_test.lower())
+    # Unknown principal: no block at all.
+    check("unknown principal: empty block",
+          interface.render_context("unknown", "anything") == "")
+    # Retrieval flag off: empty block (baseline behavior).
+    _saved_flag = os.environ.get("MEMORY_RETRIEVAL_ENABLED")
+    try:
+        os.environ["MEMORY_RETRIEVAL_ENABLED"] = "false"
+        interface._reset_singleton()
+        check("retrieval off: empty block",
+              interface.render_context("chuck", "what do I drink in the morning?") == "")
+    finally:
+        if _saved_flag is None:
+            os.environ.pop("MEMORY_RETRIEVAL_ENABLED", None)
+        else:
+            os.environ["MEMORY_RETRIEVAL_ENABLED"] = _saved_flag
+        interface._reset_singleton()
+
     print("timeout -> graceful degradation (unreachable qdrant)...")
     # Point a fresh client at an unreachable Qdrant with a short timeout.
     # Dummy api_key so mem0 init succeeds and the test exercises the real

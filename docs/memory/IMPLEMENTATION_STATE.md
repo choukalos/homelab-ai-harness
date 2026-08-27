@@ -19,9 +19,18 @@
   wiring. Unit tests green (identity 29/29). Live isolation checks green in
   the extended suite (chuck vs memory_test, household visibility, unknown
   principal, secret filter, direct Qdrant payload scan).
-- **Next: Phase 4** (automatic pre-request retrieval — middleware injection
-  in `_chat_direct` + `siri_chat`, ONE render path, request-level switch,
-  instrumentation). Not yet started.
+- **Phase 4: CODE COMPLETE 2026-08-27** (awaiting MANUAL STEP B + live
+  verification) — automatic pre-request retrieval. ONE render path
+  (`interface.render_context`) injected at both chat call sites
+  (`_chat_direct` in main.py + `siri_chat` skill); `MEMORY_SCORE_THRESHOLD=0.5`
+  relevance gate; `ChatRequest.memory={"enabled": false}` per-request switch
+  (flows to `Job.memory_enabled` → skill); structured per-request
+  instrumentation log (user_id/hits/chars/latency_ms, no secrets). Unit
+  tests 59/59 (incl. 7 new score-threshold checks); extended live suite has
+  +8 `render_context` checks (run after rebuild).
+- **Next: MANUAL STEP B** (`./homelab.sh rebuild skill-only`) → post-checks →
+  extended live suite (long timeout / background) → Phase 4 gate → Phase 5
+  (writeback).
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -54,6 +63,12 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
+
+**PENDING NOW:** MANUAL STEP B — skill-runner code changed (Phase 4 retrieval
+wiring + `MEMORY_SCORE_THRESHOLD` env var). Chuck runs
+`./homelab.sh rebuild skill-only`; then the model runs the post-checks + the
+extended live suite (long timeout / background — a 600s foreground run was
+killed mid-suite once).
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -130,7 +145,7 @@ keep-alive in skill-runner's pool) — re-send the prompt if so.
 | File | Why |
 |---|---|
 | `memory_todo.md` | The plan: phases 0–9, gates, tests, non-negotiables |
-| `skills/runner/main.py` | `api_chat` (~1790), `_chat_direct` (~1912), `ChatRequest` (~1211), `dispatch_job` (233), `LiteLLMClient` (391) |
+| `skills/runner/main.py` | `api_chat` (~1893), `_chat_direct` (~1986, memory injection), `ChatRequest` (~1251, `memory` switch), `dispatch_job` (~254, `memory_enabled`) |
 | `skills/siri_chat/skill.py` | `SYSTEM_PROMPT` (~99) — second injection point |
 | `skills/runner/scheduler.py` | jobs (service identity) |
 | `litellm/config.yml` | `model_list` (add `homelab-embedding-v1`), `mcp_servers` |
@@ -270,8 +285,61 @@ master-key traffic never reaches skill-runner (D5); unmapped keys → `unknown`
 - `delete_all()` still takes top-level `user_id` (unlike search/get_all).
 - Qdrant collection-info field is `points_count` (not `points`).
 
+## Phase 4 checklist (CODE COMPLETE 2026-08-27; awaiting MANUAL STEP B + live verification)
+
+**Scope:** automatic pre-request retrieval — relevant memory injected into
+the system prompt before the LLM call, at BOTH chat call sites, non-fatal.
+
+1. ✅ **ONE render path** — `interface.render_context(user_id, query) -> str`
+   (search private + household → dedupe → threshold → budgeted
+   `<long_term_memory>` block). Returns "" on error/timeout/flag-off/unknown
+   user. Both call sites use it, so behavior stays identical:
+   - `main.py::_chat_direct` — identity from the request contextvar
+     (`get_current_context()`); block injected between system prompt and
+     user message; wrapped in try/except (chat never breaks on memory).
+   - `siri_chat/skill.py::_memory_block` — lazy `from memory import interface`
+     (skill stays stdlib-importable standalone, loaded via importlib);
+     identity from `job.user_id` (Phase 3); block injected into SYSTEM_PROMPT.
+2. ✅ **Relevance gate** — `MEMORY_SCORE_THRESHOLD` (default 0.5; 0 disables)
+   in `config.py` (`_env_float`) + applied in `search_memory` (both private
+   and household branches) — unrelated memories are dropped before they can
+   enter an unrelated task's context. `.env` + compose passthrough added.
+3. ✅ **Request-level switch** — `ChatRequest.memory: Optional[dict]`;
+   `{"enabled": false}` → `mem_on=False` in `api_chat` → `_chat_direct(...,
+   memory_enabled=False)` (no search at all) + `dispatch_job(...,
+   memory_enabled=False)` → `Job.memory_enabled` → skill skips injection.
+4. ✅ **Instrumentation** — structured log per request, no secrets:
+   `memory: user_id=… hits=… chars=… latency_ms=…` (main.py INFO) and
+   `Memory: user_id=… block_chars=… latency_ms=…` (siri_chat job log).
+5. ✅ **Unit tests +7** (`test_score_threshold`, fake client): high-score
+   kept, below-threshold dropped, household at threshold kept, threshold=0
+   keeps low scores, `render_context` empty when all below threshold, config
+   parsing (0.7 parsed, invalid → default 0.5). **59/59 unit + 29/29
+   identity pass.**
+6. ✅ **Import/degradation smoke** (throwaway container, new code mounted
+   ro): `main` + `siri_chat` import OK; `_memory_block` with no creds
+   degrades to "" (search timeout → empty block, chat unaffected);
+   `score_threshold` default 0.5.
+7. ⬜ **Live verification (after MANUAL STEP B)** — extended suite now
+   includes 8 `render_context` checks: relevant query injects the learned
+   fact; unrelated nginx query does NOT inject the coffee fact (threshold);
+   memory_test block never contains chuck's coffee; unknown principal →
+   empty block; retrieval flag off → empty block. Plus end-to-end: learn a
+   preference → later "what should I…" chat uses it; `memory.enabled=false`
+   request → baseline; degraded Qdrant → chat still answers.
+
 ## Phase log
 
+- **2026-08-27** — **Phase 4 code complete** (automatic pre-request
+  retrieval). ONE render path `interface.render_context` injected at both
+  chat call sites (`_chat_direct` + `siri_chat` `_memory_block`, lazy
+  import, identity from `job.user_id`). `MEMORY_SCORE_THRESHOLD=0.5`
+  relevance gate (config/interface/.env/compose). `ChatRequest.memory`
+  per-request switch → `Job.memory_enabled`. Structured instrumentation log
+  (no secrets). Unit 59/59 (+7 threshold checks); identity 29/29; import +
+  degradation smoke in throwaway container (no creds → empty block, chat
+  unaffected). Extended live suite +8 `render_context` checks. **Awaiting
+  MANUAL STEP B** (rebuild) + live verification. Backup pending at gate.
 - **2026-08-27** — **THIRD MANUAL STEP B + extended live suite 28/28 →
   Phase 2 AND Phase 3 gates MET.** Post-checks green (litellm alive,
   skill-runner ok, clean startup; litellm/qdrant untouched). Baked-in code

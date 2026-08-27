@@ -19,6 +19,7 @@ import os
 import re
 import signal
 import sys
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -34,10 +35,12 @@ from pydantic import BaseModel, Field
 from memory.identity import (
     RequestContext,
     USER_SERVICE,
+    USER_UNKNOWN,
     get_current_context,
     resolve_user_id,
     set_current_context,
 )
+from memory import interface
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -191,6 +194,10 @@ class Job(BaseModel):
     # the job with the request that triggered it.
     user_id: str = USER_SERVICE
     run_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    # Memory retrieval switch for this job (Phase 4): per-request override
+    # from ChatRequest.memory; default on (the memory module's own flags +
+    # identity still apply — 'service'/'unknown' never get memory).
+    memory_enabled: bool = True
     params: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
     tool_bundle: Optional[str] = None
@@ -250,6 +257,7 @@ def dispatch_job(
     requester: str = "siri",
     channel: str = "siri",
     context: Optional[RequestContext] = None,
+    memory_enabled: bool = True,
 ) -> Job:
     """
     Create a job for the given skill and dispatch it to a background thread.
@@ -271,6 +279,7 @@ def dispatch_job(
         channel=channel,
         user_id=context.user_id if context is not None else USER_SERVICE,
         run_id=context.run_id if context is not None else uuid.uuid4().hex,
+        memory_enabled=memory_enabled,
     )
     job.add_log(f"Dispatching job '{skill}' to background executor")
 
@@ -1243,6 +1252,14 @@ class ChatRequest(BaseModel):
     text: str = Field(..., description="User query or command")
     intent: Optional[str] = Field(None, description="Override intent detection")
     model: Optional[str] = Field(None, description="Model alias override (default: matrix-gemma4-moe).")
+    memory: Optional[dict] = Field(
+        None,
+        description=(
+            "Optional per-request memory controls, e.g. "
+            "{'enabled': false} disables retrieval/writeback for this "
+            "request (debugging/privacy)."
+        ),
+    )
 
 
 class ChatResponse(BaseModel):
@@ -1903,6 +1920,12 @@ async def api_chat(
     intent = _detect_intent(body.text, body.intent)
     model = body.model or "matrix-gemma4-moe"
 
+    # Per-request memory switch (Phase 4): {"memory": {"enabled": false}}
+    # disables retrieval for this request only.
+    mem_on = not (
+        isinstance(body.memory, dict) and body.memory.get("enabled") is False
+    )
+
     logger.info(
         "Chat request: intent=%s user_id=%s text=%s model=%s",
         intent, user_id, body.text[:100], model,
@@ -1910,7 +1933,7 @@ async def api_chat(
 
     # --- Direct chat (no tools) ---
     if intent == "chat":
-        return await _chat_direct(body.text, model)
+        return await _chat_direct(body.text, model, memory_enabled=mem_on)
 
     # --- Siri chat with tool calling (async skill dispatch) ---
     if intent in ("siri-chat", "ask-siri"):
@@ -1938,7 +1961,7 @@ async def api_chat(
     skill_name = _INTENT_SKILL_MAP.get(intent)
     if not skill_name:
         # Unknown intent — fall back to direct chat
-        return await _chat_direct(body.text, model)
+        return await _chat_direct(body.text, model, memory_enabled=mem_on)
 
     # demo_workflow expects 'prompt', others expect 'query'
     params = {"prompt": body.text} if skill_name == "demo_workflow" else {"query": body.text}
@@ -1946,6 +1969,7 @@ async def api_chat(
     job = dispatch_job(
         skill_name,
         params=params,
+        memory_enabled=mem_on,
     )
     jobs[job.job_id] = job
 
@@ -1959,20 +1983,47 @@ async def api_chat(
     )
 
 
-async def _chat_direct(text: str, model: str) -> ChatResponse:
-    """Simple direct chat via LiteLLM (no tool calling)."""
+async def _chat_direct(text: str, model: str, memory_enabled: bool = True) -> ChatResponse:
+    """Simple direct chat via LiteLLM (no tool calling).
+
+    Phase 4: long-term memory block is injected between the system prompt
+    and the user message (ONE render path: ``interface.render_context``).
+    Non-fatal: on error/timeout/flag-off/unknown user the block is empty and
+    the chat proceeds normally (graceful degradation).
+    """
+    # Memory retrieval (Phase 4) — non-fatal, budgeted, instrumented.
+    mem_block = ""
+    mem_hits = 0
+    mem_ms = 0
+    user_id = "unknown"
+    if memory_enabled:
+        _ctx = get_current_context()
+        user_id = _ctx.user_id if _ctx else USER_UNKNOWN
+        t0 = time.time()
+        try:
+            mem_block = interface.render_context(user_id, text)
+            mem_hits = mem_block.count("- ") if mem_block else 0
+        except Exception as exc:  # noqa: BLE001 — never take chat down
+            logger.warning("memory context build failed: %s", exc)
+            mem_block = ""
+        mem_ms = int((time.time() - t0) * 1000)
+        logger.info(
+            "memory: user_id=%s hits=%d chars=%d latency_ms=%d",
+            user_id, mem_hits, len(mem_block), mem_ms,
+        )
+
     client = LiteLLMClient()
     try:
+        system_prompt = (
+            "You are a helpful AI assistant optimised for voice and mobile delivery. "
+            "Give SHORT, DIRECT answers. Use plain language suitable for spoken playback."
+        )
+        if mem_block:
+            system_prompt = system_prompt + "\n\n" + mem_block
         resp = await client.chat_completion(
             model=model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant optimised for voice and mobile delivery. "
-                        "Give SHORT, DIRECT answers. Use plain language suitable for spoken playback."
-                    ),
-                },
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text},
             ],
             temperature=0.3,

@@ -121,8 +121,10 @@ def search_memory(
     """Search the user's private + household memories for ``query``.
 
     Returns a list of normalized hits (private + household merged, deduped,
-    sorted by score desc, truncated to ``top_k``). Returns ``[]`` on error,
-    timeout, or when retrieval is disabled / the user is unknown.
+    sorted by score desc, truncated to ``top_k``). Hits scoring below
+    ``cfg.score_threshold`` are dropped (conservative relevance gate — an
+    unrelated memory is worse than none). Returns ``[]`` on error, timeout,
+    or when retrieval is disabled / the user is unknown.
     """
     cfg = _get_config()
     if not cfg.retrieval_allowed:
@@ -131,6 +133,7 @@ def search_memory(
         return []
 
     k = top_k or cfg.top_k
+    threshold = cfg.score_threshold or 0.0
     client = _get_client()
     hits: List[dict] = []
     seen_ids = set()
@@ -145,7 +148,7 @@ def search_memory(
         raw = client._with_timeout(_private_op)
         for h in _as_list(raw):
             nh = _normalize_hit(h, "private")
-            if nh["id"] not in seen_ids:
+            if nh["id"] not in seen_ids and nh["score"] >= threshold:
                 seen_ids.add(nh["id"])
                 hits.append(nh)
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
@@ -162,7 +165,7 @@ def search_memory(
             raw = client._with_timeout(_household_op)
             for h in _as_list(raw):
                 nh = _normalize_hit(h, "household")
-                if nh["id"] not in seen_ids:
+                if nh["id"] not in seen_ids and nh["score"] >= threshold:
                     seen_ids.add(nh["id"])
                     hits.append(nh)
         except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
@@ -372,8 +375,11 @@ def is_healthy() -> bool:
 def render_context(user_id: str, query: str) -> str:
     """Convenience: search + render the ``<long_term_memory>`` block.
 
-    Returns ``""`` when there is nothing to inject. Intended for the system
-    prompt injection path (Phase 4).
+    Returns ``""`` when there is nothing to inject (no hits, below the
+    score threshold, error, timeout, disabled, or unknown user). Intended
+    for the system-prompt injection path (Phase 4) — the ONE place both
+    call sites (``_chat_direct`` and the ``siri_chat`` skill) use, so the
+    retrieval + rendering behavior stays identical.
     """
     cfg = _get_config()
     hits = search_memory(user_id, query)
