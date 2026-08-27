@@ -61,6 +61,8 @@ class MemoryClient:
             try:
                 from mem0 import Memory  # lazy import
 
+                from . import policy as _policy  # lazy: keep client pure-ish
+
                 config = {
                     "llm": {
                         "provider": "openai",
@@ -88,6 +90,15 @@ class MemoryClient:
                         },
                     },
                 }
+                # Phase 5 (PDF §6): inclusion/exclusion instructions for the
+                # extraction LLM (highest priority in mem0's prompt). Env
+                # override wins; otherwise the built-in policy default.
+                instructions = (
+                    self.cfg.extraction_instructions
+                    or _policy.DEFAULT_EXTRACTION_INSTRUCTIONS
+                )
+                if instructions:
+                    config["custom_instructions"] = instructions
                 self._mem = Memory.from_config(config)
                 logger.info(
                     "mem0 Memory initialized (collection=%s, llm=%s, embed=%s)",

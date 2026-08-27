@@ -181,6 +181,8 @@ def learn_from_turn(
     source: str = "chat",
     agent_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    importance: str = "normal",
+    confidence: str = "normal",
 ) -> List[str]:
     """Extract + store durable facts from a conversation turn.
 
@@ -189,6 +191,11 @@ def learn_from_turn(
     added memory IDs (best-effort; may be ``[]`` even on success if mem0's
     response shape omits IDs). Returns ``[]`` on error, timeout, or when
     writeback is disabled / the user is unknown / the turn is not storeable.
+
+    Phase 5 (PDF §6): provenance metadata on every stored fact —
+    ``source`` (chat / direct_user / ...), ``importance`` (normal / high),
+    ``confidence`` (normal / high — direct user statements are highest
+    trust), ``agent_id``, ``run_id``.
     """
     cfg = _get_config()
     if not cfg.writeback_allowed:
@@ -207,7 +214,11 @@ def learn_from_turn(
         return []
 
     client = _get_client()
-    metadata = {"source": source}
+    metadata = {
+        "source": source,
+        "importance": importance,
+        "confidence": confidence,
+    }
     if agent_id:
         metadata["agent_id"] = agent_id
     if run_id:
@@ -232,6 +243,71 @@ def learn_from_turn(
         return []
     except Exception as e:  # noqa: BLE001 - degrade
         logger.warning("learn_from_turn failed for %s: %s", user_id, e)
+        return []
+
+
+def remember_direct(
+    user_id: str,
+    text: str,
+    run_id: Optional[str] = None,
+) -> List[str]:
+    """Explicit "remember this" command (Phase 5 item 5).
+
+    Stores the user's direct statement with ``source=direct_user``,
+    ``importance=high``, ``confidence=high`` (PDF §6: direct user
+    statements = highest trust). Returns the stored memory IDs (``[]``
+    if nothing was stored / writeback disabled / unknown user).
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    return learn_from_turn(
+        user_id,
+        [{"role": "user", "content": text}],
+        source="direct_user",
+        run_id=run_id,
+        importance="high",
+        confidence="high",
+    )
+
+
+def forget_matching(
+    user_id: str,
+    query: str,
+    top_k: int = 3,
+) -> List[dict]:
+    """Explicit "forget that" command (Phase 5 item 5): targeted delete.
+
+    Searches the user's memories for ``query`` and deletes the hits that
+    clear the relevance threshold (default ``MEMORY_SCORE_THRESHOLD``).
+    Returns the deleted memories as ``[{"id", "text", "score"}, ...]``
+    (empty list if nothing matched or on any error — non-fatal).
+    """
+    query = (query or "").strip()
+    if not query or not _valid_user(user_id):
+        return []
+    cfg = _get_config()
+    try:
+        hits = search_memory(user_id, query, top_k=top_k)
+        if not hits:
+            return []
+        deleted: List[dict] = []
+        for h in hits:
+            mid = h.get("id")
+            if not mid:
+                continue
+            if delete_memory(mid):
+                deleted.append(
+                    {"id": mid, "text": h.get("text", ""), "score": h.get("score")}
+                )
+        if deleted and cfg.debug_logging:
+            logger.info(
+                "forget_matching: deleted %d memor(y/ies) for %s: %s",
+                len(deleted), user_id, [d["id"] for d in deleted],
+            )
+        return deleted
+    except Exception as e:  # noqa: BLE001 - degrade
+        logger.warning("forget_matching failed for %s: %s", user_id, e)
         return []
 
 

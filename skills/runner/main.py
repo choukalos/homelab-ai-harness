@@ -1297,6 +1297,14 @@ def _detect_intent(text: str, override: Optional[str]) -> str:
     if override:
         return override
     text_lower = text.lower()
+    # --- explicit memory commands (Phase 5 item 5) ---
+    # Imperative only (sentence start or 'please ...') to avoid matching
+    # questions like "do you remember when we ...".
+    if re.search(r"(?:^|please\s+)remember\b", text_lower) or \
+       re.search(r"(?:^|please\s+)(?:note|keep in mind)\b", text_lower):
+        return "remember"
+    if re.search(r"(?:^|please\s+)forget\b", text_lower):
+        return "forget"
     # --- update-presentation: match 'update' + 'presentation' anywhere (not just adjacent) ---
     if "update" in text_lower and any(k in text_lower for k in ("presentation", "deck", "slides")):
         return "update-presentation"
@@ -1931,6 +1939,14 @@ async def api_chat(
         intent, user_id, body.text[:100], model,
     )
 
+    # --- Explicit memory commands (Phase 5 item 5) ---
+    # "remember this" → learn_from_turn(source=direct_user, importance=high)
+    # "forget that"   → targeted delete of matching memories
+    if intent == "remember":
+        return await _handle_remember(user_id, body.text, mem_on)
+    if intent == "forget":
+        return await _handle_forget(user_id, body.text, mem_on)
+
     # --- Direct chat (no tools) ---
     if intent == "chat":
         return await _chat_direct(body.text, model, memory_enabled=mem_on)
@@ -1983,6 +1999,80 @@ async def api_chat(
     )
 
 
+# ── Explicit memory commands (Phase 5 item 5) ─────────────────────────
+
+async def _handle_remember(user_id: str, text: str, mem_on: bool) -> ChatResponse:
+    """'remember this' → learn_from_turn(source=direct_user, importance=high).
+
+    Non-fatal: writeback failures still return a ChatResponse.
+    """
+    if not mem_on:
+        return ChatResponse(
+            speak="Memory is disabled for this request, so I can't save that.",
+            display="Memory is disabled for this request (memory.enabled=false).",
+            data={"memory_command": "remember", "stored": False},
+        )
+    try:
+        ids = await asyncio.to_thread(interface.remember_direct, user_id, text)
+    except Exception as exc:  # noqa: BLE001 - non-fatal
+        logger.warning("memory remember failed: %s", exc)
+        ids = []
+    if ids:
+        logger.info("memory remember: user_id=%s stored=%s", user_id, ids)
+        return ChatResponse(
+            speak="Got it — I'll remember that.",
+            display=f"Remembered: {text}",
+            data={"memory_command": "remember", "stored": True, "memory_ids": ids},
+        )
+    return ChatResponse(
+        speak="I couldn't save that right now.",
+        display=(
+            "Nothing was stored — memory writeback is unavailable, the user "
+            "identity is unmapped, or no durable fact was found in that text."
+        ),
+        data={"memory_command": "remember", "stored": False},
+    )
+
+
+async def _handle_forget(user_id: str, text: str, mem_on: bool) -> ChatResponse:
+    """'forget that' → targeted delete of matching memories (non-fatal)."""
+    if not mem_on:
+        return ChatResponse(
+            speak="Memory is disabled for this request, so I can't forget that.",
+            display="Memory is disabled for this request (memory.enabled=false).",
+            data={"memory_command": "forget", "deleted": []},
+        )
+    # Strip the command phrasing to get the target description
+    # ("forget that oat milk thing" → "oat milk thing").
+    target = re.sub(
+        r"^(?:please\s+)?forget\s+(?:that|this|it|everything|all)\b", "", text,
+        flags=re.IGNORECASE,
+    ).strip(" .,!?:")
+    if not target:
+        target = text.strip()
+    try:
+        deleted = await asyncio.to_thread(interface.forget_matching, user_id, target)
+    except Exception as exc:  # noqa: BLE001 - non-fatal
+        logger.warning("memory forget failed: %s", exc)
+        deleted = []
+    if deleted:
+        texts = "; ".join(d["text"][:80] for d in deleted if d.get("text"))
+        logger.info(
+            "memory forget: user_id=%s deleted=%s",
+            user_id, [d["id"] for d in deleted],
+        )
+        return ChatResponse(
+            speak="Done — I've forgotten that.",
+            display=f"Forgotten: {texts or '(matched memories)'}",
+            data={"memory_command": "forget", "deleted": [d["id"] for d in deleted]},
+        )
+    return ChatResponse(
+        speak="I didn't find a matching memory to forget.",
+        display="No memory matched that description.",
+        data={"memory_command": "forget", "deleted": []},
+    )
+
+
 async def _chat_direct(text: str, model: str, memory_enabled: bool = True) -> ChatResponse:
     """Simple direct chat via LiteLLM (no tool calling).
 
@@ -2032,6 +2122,29 @@ async def _chat_direct(text: str, model: str, memory_enabled: bool = True) -> Ch
         choice = resp.get("choices", [{}])[0]
         msg = choice.get("message", {})
         answer = (msg.get("content") or "").strip() or "I don't have enough information to answer that."
+
+        # Phase 5 writeback — after a SUCCESSFUL response, extract + store
+        # durable facts from this turn. Non-fatal (write failures never
+        # break chat), budgeted (MEMORY_WRITEBACK_TIMEOUT_MS), policy-
+        # filtered (secrets rejected, system/tool content stripped, mem0
+        # extraction prompt enforces durable-facts-only). Gated by the
+        # request-level memory switch (privacy: enabled=false means no
+        # retrieval AND no writeback). Synchronous for v1 (plan §Phase 5.1).
+        if memory_enabled:
+            try:
+                await asyncio.to_thread(
+                    interface.learn_from_turn,
+                    user_id,
+                    [
+                        {"role": "user", "content": text},
+                        {"role": "assistant", "content": answer},
+                    ],
+                    source="chat",
+                    run_id=_ctx.run_id if _ctx else None,
+                )
+            except Exception as exc:  # noqa: BLE001 — writeback must never break chat
+                logger.warning("memory writeback failed: %s", exc)
+
         return ChatResponse(
             speak=_truncate_for_speak(answer),
             display=answer,

@@ -82,6 +82,10 @@ class MemoryConfig:
     # retrieval budget). 10s is generous headroom for store ops.
     admin_timeout_ms: int = 10000
     max_context_tokens: int = 1500
+    # Phase 5: custom instructions appended to mem0's fact-extraction
+    # prompt (inclusion/exclusion + trust rules, PDF §6). Empty string =
+    # use policy.DEFAULT_EXTRACTION_INSTRUCTIONS.
+    extraction_instructions: str = ""
 
     # Virtual user_id used to scope household (explicitly shared) facts.
     household_user_id: str = "household"
@@ -130,4 +134,7 @@ def load_config() -> MemoryConfig:
         writeback_timeout_ms=_env_int("MEMORY_WRITEBACK_TIMEOUT_MS", 30000),
         admin_timeout_ms=_env_int("MEMORY_ADMIN_TIMEOUT_MS", 10000),
         max_context_tokens=_env_int("MEMORY_MAX_CONTEXT_TOKENS", 1500),
+        extraction_instructions=os.environ.get(
+            "MEMORY_EXTRACTION_INSTRUCTIONS", ""
+        ).strip(),
     )
