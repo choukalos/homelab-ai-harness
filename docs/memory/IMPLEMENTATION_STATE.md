@@ -36,12 +36,19 @@
   + `siri_chat` final answer), synchronous for v1, non-fatal, budgeted
   (`MEMORY_WRITEBACK_TIMEOUT_MS`), gated by the request-level memory switch.
   Provenance metadata on every stored fact (`source`/`importance`/
-  `confidence`/`agent_id`/`run_id`); built-in extraction instructions
-  (inclusion/exclusion + prompt-injection exclusion, PDF §6) via mem0
-  `custom_instructions` (env override `MEMORY_EXTRACTION_INSTRUCTIONS`).
-  Explicit commands: `remember`/`forget` intents in `/api/chat` →
-  `remember_direct` (source=direct_user, importance=high) / `forget_matching`
-  (targeted delete). Unit tests 83/83.
+  `confidence`/`agent`/`turn_id` — mem0 2.0.19 strips the identity keys
+  `user_id`/`agent_id`/`run_id` from `add(metadata=...)`, so provenance uses
+  the free-form keys `agent`/`turn_id`); built-in extraction instructions
+  (inclusion/exclusion + prompt-injection exclusion + JSON-validity rule,
+  PDF §6) via mem0 `custom_instructions` (env override
+  `MEMORY_EXTRACTION_INSTRUCTIONS`). Explicit commands: `remember`/`forget`
+  intents in `/api/chat` → `remember_direct` (source=direct_user,
+  importance=high) / `forget_matching` (targeted delete). mem0 2.0.19 OSS is
+  ADD-only (no in-place update): changed preferences are stored as a
+  self-contained supersede statement; the context block carries both and
+  sorts score-desc then recency-desc. Startup warmup thread (`interface.
+  warmup()`) moves the one-time mem0 init out of the first turn's writeback
+  budget. Unit tests 83/83; identity 29/29.
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -77,9 +84,10 @@ keep-alive in skill-runner's pool) — re-send the prompt if so.
 
 **PENDING:** MANUAL STEP B (Phase 5) — `./homelab.sh rebuild skill-only`
 (skill-runner code changed: writeback wiring, remember/forget intents,
-`MEMORY_EXTRACTION_INSTRUCTIONS` env). After rebuild: post-checks → extended
-live suite (long timeout / background, now incl. 8 Phase 5 checks) →
-end-to-end writeback checks → Phase 5 gate.
+`MEMORY_EXTRACTION_INSTRUCTIONS` env, provenance key fix `agent`/`turn_id`,
+startup `warmup()` thread, additive-semantics extraction rules). After
+rebuild: post-checks → extended live suite (long timeout / background, now
+incl. 9 Phase 5 checks) → end-to-end writeback checks → Phase 5 gate.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -390,10 +398,19 @@ the run. Backup taken at the gate.
    `custom_instructions` (highest priority in mem0's prompt). Env override
    `MEMORY_EXTRACTION_INSTRUCTIONS` (empty = built-in). Provenance metadata
    on every stored fact: `source` (chat/direct_user), `importance`
-   (normal/high), `confidence` (normal/high), `agent_id`, `run_id`.
-4. ✅ **Conflict handling** (plan item 4) — mem0's native update pass
-   (UPDATE old fact on correction). Live test: oat-milk → almond-milk
-   correction must leave no contradictory duplicate.
+   (normal/high), `confidence` (normal/high), `agent`, `turn_id` — mem0
+   2.0.19 strips identity keys (`user_id`/`agent_id`/`run_id`/`actor_id`)
+   from `add(metadata=...)` and treats top-level `agent_id`/`run_id` kwargs
+   as *scope* keys (which would also scope mem0's internal dedup search
+   per-turn, breaking cross-turn dedup), so provenance uses the free-form
+   keys `agent`/`turn_id`.
+4. ✅ **Conflict handling** (plan item 4) — mem0 2.0.19 OSS is ADD-only
+   (no in-place update; supersede semantics live in the hosted v3 API):
+   the extraction prompt instructs the LLM to emit changed preferences as a
+   self-contained supersede statement ("User switched from X to Y"); the
+   old fact is NOT duplicated; the context block carries both and sorts
+   score-desc then recency-desc so the newer statement leads. Revisit:
+   nightly LLM consolidation job (Phase 9).
 5. ✅ **Explicit commands** (plan item 5) — `remember`/`forget` intents in
    `/api/chat` (imperative-only patterns: sentence-start or "please …";
    "do you remember …" stays chat). `remember` → `remember_direct`
@@ -404,13 +421,20 @@ the run. Backup taken at the gate.
    []/False + log; verified degraded in throwaway container (no creds →
    [] promptly, no raise).
 7. ✅ **Tests** — unit +24 (83/83: provenance metadata, remember_direct,
-   forget_matching, extraction-instruction config); extended live suite +8
+   forget_matching, extraction-instruction config); extended live suite +9
    (secret turn not stored; remember_direct persists + retrievable +
-   metadata; changed preference consolidates; prompt-injection directive
-   not stored). Identity 29/29.
+   `turn_id` metadata; changed preference → supersede statement stored,
+   old fact not duplicated, rendered block carries the new fact;
+   prompt-injection directive not stored). Identity 29/29.
 8. ✅ **Smoke** (throwaway container, host code ro) — main + siri_chat
    import OK; intent detection correct (incl. no false positive on
-   questions); flag-off writeback clean no-op.
+   questions); flag-off writeback clean no-op; `warmup()` + first-turn
+   writeback verified in a warm process (warmup ~3s; learn ~6s).
+9. ✅ **Cold-start fix** — `interface.warmup()` (eager mem0 init,
+   idempotent, non-fatal) runs in a background thread at skill-runner
+   startup (lifespan hook in main.py), so the one-time init cost is NOT
+   paid inside the first chat turn's 30s writeback budget (a cold first
+   turn otherwise timed out the writeback and silently lost its facts).
 9. ⬜ **Live verification (post-rebuild)** — extended suite (long timeout /
    background) + end-to-end: chat with a preference statement → memory
    stored (check collection) → next chat uses it; `remember` intent →
@@ -421,7 +445,63 @@ the run. Backup taken at the gate.
 **Gate to Phase 6:** test matrix green (post-rebuild); memory count stays
 small.
 
+**Phase 5 gotchas (Phase 6+ must know):**
+- mem0 2.0.19 strips the identity keys (`user_id`/`agent_id`/`run_id`/
+  `actor_id`) from `add(metadata=...)` and treats top-level `agent_id`/
+  `run_id` kwargs as *scope* keys — a scope key also scopes mem0's internal
+  existing-memories search, so a per-turn `run_id` scope would break
+  cross-turn dedup. Provenance is stored under the free-form keys `agent` /
+  `turn_id` (mem0 result conversion puts free-form payload keys under
+  `metadata`; the four identity keys are promoted to top-level result
+  fields).
+- mem0 2.0.19 OSS is ADD-only: the extraction prompt is additive
+  ("sole operation is ADD"); changed preferences are stored as a new
+  self-contained supersede statement (the prompt instructs the LLM to emit
+  "User switched from X to Y"), the old fact remains, and `linked_memory_ids`
+  is unreliable (observed null). Supersede semantics exist only in the
+  hosted v3 API. Context rendering sorts score-desc then recency-desc so the
+  newer statement leads. Revisit: nightly LLM consolidation job (Phase 9).
+- Cold start: the first mem0 op in a fresh process pays the one-time init
+  (lazy import + Qdrant connect, ~3s) inside the 30s writeback budget;
+  with a slow LLM round-trip the first turn's writeback can time out and
+  silently lose its facts. `interface.warmup()` runs at skill-runner
+  startup (background thread, non-fatal) to move the init cost out of the
+  first turn's budget.
+- The extraction LLM (matrix-coder) occasionally returns malformed JSON
+  ("Error parsing extraction response"); mem0 treats a parse failure as
+  "nothing extracted" and returns `[]` — indistinguishable from a genuine
+  empty extraction. A JSON-validity rule was added to the custom
+  instructions; occasional writeback loss remains a known v1 degradation
+  (non-fatal by design).
+- Writeback is synchronous in v1 (plan decision): every successful chat
+  turn runs an extraction LLM call (2–10s) before the response returns;
+  budgeted at 30s (`MEMORY_WRITEBACK_TIMEOUT_MS`); revisit (queue/
+  background) in Phase 9 if latency proves unacceptable.
+
 ## Phase log
+
+- **2026-08-27** — **Phase 5 live-suite fixes** (pre-rebuild). First live
+  suite run 41/43: (1) `run_id` missing from stored metadata — mem0 2.0.19
+  strips identity keys from `add(metadata=...)` and treats top-level
+  `agent_id`/`run_id` kwargs as scope keys (which would also scope mem0's
+  internal dedup search per-turn, breaking cross-turn dedup); provenance
+  now stored under free-form keys `agent`/`turn_id`. (2) Consolidation
+  check failed — mem0 2.0.19 OSS is ADD-only (additive extraction prompt,
+  no in-place update; supersede semantics live in the hosted v3 API):
+  changed preferences are stored as a self-contained supersede statement,
+  old fact remains, `linked_memory_ids` unreliable (observed null). Live
+  test now asserts: supersede statement stored, old fact not duplicated,
+  rendered block carries the new fact; context rendering sorts score-desc
+  then recency-desc; extraction prompt gained a supersede-statement rule +
+  JSON-validity rule (matrix-coder occasionally returned malformed JSON —
+  mem0 treats a parse failure as "nothing extracted"). (3) Cold-start
+  writeback: first mem0 op in a fresh process exceeded the 30s writeback
+  budget (init + first embed + LLM); added `interface.warmup()` + a
+  background warmup thread at skill-runner startup (lifespan hook) so the
+  one-time init cost is paid at boot, not in the first turn's budget
+  (verified: warmup ~3s, first learn ~6s warm). Unit 83/83; identity
+  29/29; main import + lifespan hook smoke green. Extended live suite
+  re-running (43 checks).
 
 - **2026-08-27** — **Phase 5 code complete** (post-turn writeback). Both
   chat call sites write back after successful responses only (non-fatal,

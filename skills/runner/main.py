@@ -19,6 +19,7 @@ import os
 import re
 import signal
 import sys
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -1186,6 +1187,23 @@ async def lifespan(app: FastAPI):
         num_loaded,
     )
     scheduler.start()
+
+    # Memory warmup (Phase 5): initialize the mem0 client in a background
+    # thread so the one-time init cost (lazy import, Qdrant connect) is NOT
+    # paid inside the first chat turn's writeback budget. Non-fatal: memory
+    # degrades gracefully if this fails; the assistant never blocks on it.
+    try:
+        _mem_cfg = interface._get_config()
+        if _mem_cfg.enabled:
+            threading.Thread(
+                target=interface.warmup,
+                name="memory-warmup",
+                daemon=True,
+            ).start()
+            logger.info("Memory warmup thread started (background).")
+    except Exception as e:  # noqa: BLE001 - memory must never break startup
+        logger.warning("Memory warmup not started (non-fatal): %s", e)
+
     logger.info("Thor Skill Runner startup complete.")
 
     yield

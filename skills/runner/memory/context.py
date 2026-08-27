@@ -36,14 +36,25 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+def _sort_key(hit: Dict) -> tuple:
+    """Sort key: score desc, then recency desc (ISO timestamps sort
+    lexicographically). Recency tiebreak puts a newer preference first when
+    an old and a superseding fact score similarly (mem0 2.0.19 is additive:
+    changed preferences are stored as a new linked/self-contained fact; the
+    old fact remains)."""
+    meta = hit.get("metadata") or {}
+    recency = str(meta.get("updated_at") or meta.get("created_at") or "")
+    return (float(hit.get("score", 0.0) or 0.0), recency)
+
+
 def _render(hits: List[Dict]) -> str:
     """Render the raw block from an already-ordered list of hits."""
     if not hits:
         return ""
     private = [h for h in hits if h.get("source") != "household"]
     household = [h for h in hits if h.get("source") == "household"]
-    private.sort(key=lambda h: h.get("score", 0.0), reverse=True)
-    household.sort(key=lambda h: h.get("score", 0.0), reverse=True)
+    private.sort(key=_sort_key, reverse=True)
+    household.sort(key=_sort_key, reverse=True)
 
     lines = ["<long_term_memory>", _PREAMBLE, ""]
     if private:

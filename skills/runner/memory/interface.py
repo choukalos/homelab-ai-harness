@@ -195,7 +195,13 @@ def learn_from_turn(
     Phase 5 (PDF §6): provenance metadata on every stored fact —
     ``source`` (chat / direct_user / ...), ``importance`` (normal / high),
     ``confidence`` (normal / high — direct user statements are highest
-    trust), ``agent_id``, ``run_id``.
+    trust), ``agent``, ``turn_id``.
+
+    NOTE: mem0 2.0.19 strips the identity keys (user_id/agent_id/run_id/
+    actor_id) from ``metadata`` and treats top-level agent_id/run_id kwargs
+    as *scope* keys (which would also scope mem0's internal dedup search
+    per-turn, breaking cross-turn dedup). Provenance is therefore stored
+    under the free-form keys ``agent`` / ``turn_id``.
     """
     cfg = _get_config()
     if not cfg.writeback_allowed:
@@ -220,9 +226,9 @@ def learn_from_turn(
         "confidence": confidence,
     }
     if agent_id:
-        metadata["agent_id"] = agent_id
+        metadata["agent"] = agent_id
     if run_id:
-        metadata["run_id"] = run_id
+        metadata["turn_id"] = run_id
 
     def _add_op():
         return client._ensure_client().add(
@@ -445,6 +451,25 @@ def is_healthy() -> bool:
     try:
         return _get_client().is_healthy()
     except Exception:  # noqa: BLE001 - health must never raise
+        return False
+
+
+def warmup() -> bool:
+    """Initialize the mem0 client eagerly (idempotent, non-fatal).
+
+    The first mem0 init (lazy import, Qdrant connect, client construction)
+    takes several seconds. Called at skill-runner startup in a background
+    thread so the one-time cost is NOT paid inside the first chat turn's
+    writeback budget (a cold first turn otherwise times out the 30s
+    writeback budget and silently loses its facts).
+
+    Returns True when the client is ready, False otherwise (never raises).
+    """
+    try:
+        _get_client()._ensure_client()
+        return True
+    except Exception as e:  # noqa: BLE001 - warmup must never raise
+        logger.warning("memory warmup failed (non-fatal): %s", e)
         return False
 
 
