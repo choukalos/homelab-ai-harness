@@ -531,6 +531,180 @@ def test_phase5_writeback():
         interface._reset_singleton()
 
 
+def test_phase7_jobctx():
+    print("Phase 7 jobctx (identity propagation, gated retrieve/writeback, agent outcomes):")
+    saved = {k: os.environ.get(k) for k in ("MEMORY_ENABLED",)}
+
+    class _FakeJob:
+        def __init__(self, user_id="chuck", run_id="r1", memory_enabled=True,
+                     has_switch=True):
+            self.user_id = user_id
+            self.run_id = run_id
+            if has_switch:
+                self.memory_enabled = memory_enabled
+            self.logs = []
+
+        def add_log(self, msg):
+            self.logs.append(msg)
+
+    class _NoSwitchJob:
+        """A Job object from before the memory_enabled field existed."""
+        user_id = "chuck"
+        run_id = "r-old"
+
+    class _FakeMem0:
+        def __init__(self, hits):
+            self._hits = hits
+            self.added = []     # (user_id, metadata, infer)
+            self.searched = []  # user_id
+            self.fail = False
+
+        def add(self, messages, user_id=None, metadata=None, infer=True):
+            if self.fail:
+                raise RuntimeError("boom")
+            self.added.append((user_id, dict(metadata or {}), infer))
+            return {"results": [{"id": f"new{len(self.added)}"}]}
+
+        def search(self, query, filters=None, top_k=10):
+            if self.fail:
+                raise RuntimeError("boom")
+            uid = (filters or {}).get("user_id")
+            self.searched.append(uid)
+            return [dict(h) for h in self._hits.get(uid, [])]
+
+    class _FakeClient:
+        def __init__(self, hits):
+            self._mem = _FakeMem0(hits)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    from memory import jobctx
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        interface._reset_singleton()
+
+        # ── job_identity: safe extraction ──────────────────────────
+        check("identity: None job -> unknown",
+              jobctx.job_identity(None) == ("unknown", None, True),
+              str(jobctx.job_identity(None)))
+        check("identity: full job",
+              jobctx.job_identity(_FakeJob("chuck", "r1", True))
+              == ("chuck", "r1", True))
+        check("identity: service job",
+              jobctx.job_identity(_FakeJob("service", "r2", True))[0] == "service")
+        check("identity: switch off propagates",
+              jobctx.job_identity(_FakeJob("chuck", "r1", False))[2] is False)
+        check("identity: legacy job (no switch) defaults on",
+              jobctx.job_identity(_NoSwitchJob()) == ("chuck", "r-old", True),
+              str(jobctx.job_identity(_NoSwitchJob())))
+
+        # ── retrieve: gated, non-fatal ────────────────────────────
+        fake = _FakeClient({"chuck": [{"id": "m1", "memory": "oat milk", "score": 0.9}]})
+        interface._client = fake
+
+        check("retrieve: switch off -> no block, no search",
+              jobctx.retrieve(_FakeJob("chuck", "r", False), "coffee") == ""
+              and fake._mem.searched == [],
+              str(fake._mem.searched))
+        check("retrieve: service -> no personal memory",
+              jobctx.retrieve(_FakeJob("service", "r", True), "coffee") == "")
+        check("retrieve: unknown -> no personal memory",
+              jobctx.retrieve(_FakeJob("unknown", "r", True), "coffee") == "")
+        block = jobctx.retrieve(_FakeJob("chuck", "r", True), "coffee")
+        check("retrieve: user -> block rendered",
+              "oat milk" in block, repr(block))
+
+        fake._mem.fail = True
+        check("retrieve: error -> non-fatal empty",
+              jobctx.retrieve(_FakeJob("chuck", "r", True), "coffee") == "")
+        fake._mem.fail = False
+
+        # ── writeback_turn: gated, non-fatal, provenance ───────────
+        fake2 = _FakeClient({})
+        interface._client = fake2
+        check("writeback: switch off -> no store",
+              jobctx.writeback_turn(_FakeJob("chuck", "r", False),
+                                    [{"role": "user", "content": "x"}]) == []
+              and fake2._mem.added == [])
+        check("writeback: service -> no store",
+              jobctx.writeback_turn(_FakeJob("service", "r", True),
+                                    [{"role": "user", "content": "x"}]) == []
+              and fake2._mem.added == [])
+        ids = jobctx.writeback_turn(
+            _FakeJob("chuck", "r77", True),
+            [{"role": "user", "content": "I like oat milk"}],
+            source="chat",
+        )
+        check("writeback: user -> stored", len(ids) == 1, str(ids))
+        uid, meta, infer = fake2._mem.added[-1]
+        check("writeback: user routed", uid == "chuck", uid)
+        check("writeback: source=chat", meta.get("source") == "chat", str(meta))
+        check("writeback: turn_id=run_id", meta.get("turn_id") == "r77", str(meta))
+
+        fake2._mem.fail = True
+        check("writeback: error -> non-fatal []",
+              jobctx.writeback_turn(_FakeJob("chuck", "r", True),
+                                    [{"role": "user", "content": "x"}]) == [])
+        fake2._mem.fail = False
+
+        # ── writeback_outcome: agent_result provenance ─────────────
+        fake3 = _FakeClient({})
+        interface._client = fake3
+        check("outcome: service -> no store",
+              jobctx.writeback_outcome(_FakeJob("service", "r", True),
+                                       "resolved the issue") == []
+              and fake3._mem.added == [])
+        check("outcome: empty text -> no store",
+              jobctx.writeback_outcome(_FakeJob("chuck", "r", True), "   ") == [])
+        ids = jobctx.writeback_outcome(
+            _FakeJob("chuck", "run-9", True),
+            "User's router issue was resolved by resetting the DHCP lease.",
+            agent="deep_research",
+        )
+        check("outcome: user -> stored", len(ids) == 1, str(ids))
+        uid, meta, infer = fake3._mem.added[-1]
+        check("outcome: source=agent_result",
+              meta.get("source") == "agent_result", str(meta))
+        check("outcome: confidence=normal (lower trust)",
+              meta.get("confidence") == "normal", str(meta))
+        check("outcome: agent provenance tag",
+              meta.get("agent") == "deep_research", str(meta))
+        check("outcome: run_id correlated",
+              meta.get("turn_id") == "run-9", str(meta))
+
+        # ── skill content is never stored (procedural memory) ──────
+        # A turn that is ONLY system/skill-instruction content must not
+        # be stored (skills stay procedural — PDF §2).
+        skill_turn = [
+            {"role": "system", "content": "You are the morning brief generator. "
+                                           "Follow these instructions: ..."},
+            {"role": "tool", "content": "search results ..."},
+        ]
+        ok, reason = policy.should_store(skill_turn)
+        check("skill content: system-only turn not stored",
+              ok is False, reason)
+        check("skill content: sanitize drops system/tool",
+              policy.sanitize_turn(skill_turn) == [])
+        check("skill content: learn_from_turn no-op on system-only",
+              interface.learn_from_turn("chuck", skill_turn) == [])
+
+    finally:
+        for k in saved:
+            if saved[k] is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = saved[k]
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -542,6 +716,7 @@ def main():
     test_singleton_first_call()
     test_timeout_degradation()
     test_phase5_writeback()
+    test_phase7_jobctx()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")
