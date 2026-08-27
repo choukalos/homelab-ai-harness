@@ -115,6 +115,26 @@ def should_store(messages: Iterable[dict]) -> Tuple[bool, str]:
     return True, "ok"
 
 
+# ── Explicit remember command (Phase 5 item 5) ────────────────────────
+# ``remember_direct`` stores the user's statement verbatim (infer=False,
+# no LLM extraction) — an explicit "remember this" must not depend on the
+# extraction LLM (which can fail / paraphrase / drop content). The
+# imperative prefix is stripped so the stored fact reads as a statement.
+_REMEMBER_PREFIX_RE = re.compile(
+    r"^\s*(please\s+)?(remember|note|keep\s+in\s+mind)\b\s*(that\b\s*|:\s*)?",
+    re.IGNORECASE,
+)
+
+
+def strip_remember_prefix(text: str) -> str:
+    """Strip the imperative prefix from an explicit remember command.
+
+    "Remember that my dog is Biscuit" -> "my dog is Biscuit".
+    Returns the stripped text (may be empty when nothing remains).
+    """
+    return _REMEMBER_PREFIX_RE.sub("", (text or "").strip(), count=1).strip()
+
+
 # ── Extraction guidance (mem0 ``custom_instructions``) ───────────────
 # Appended to mem0's fact-extraction prompt (highest priority). Phase 5
 # item 3: inclusion/exclusion instructions + trust/provenance rules

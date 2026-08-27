@@ -183,6 +183,7 @@ def learn_from_turn(
     run_id: Optional[str] = None,
     importance: str = "normal",
     confidence: str = "normal",
+    infer: bool = True,
 ) -> List[str]:
     """Extract + store durable facts from a conversation turn.
 
@@ -232,7 +233,7 @@ def learn_from_turn(
 
     def _add_op():
         return client._ensure_client().add(
-            cleaned, user_id=user_id, metadata=metadata
+            cleaned, user_id=user_id, metadata=metadata, infer=infer
         )
 
     try:
@@ -263,8 +264,14 @@ def remember_direct(
     ``importance=high``, ``confidence=high`` (PDF §6: direct user
     statements = highest trust). Returns the stored memory IDs (``[]``
     if nothing was stored / writeback disabled / unknown user).
+
+    Deterministic: stored with ``infer=False`` (raw text, no LLM
+    extraction) — an explicit remember command must not silently fail
+    because the extraction LLM returned malformed JSON or paraphrased
+    the statement. The imperative prefix ("remember that ...") is
+    stripped first; the policy pre-filter (secret reject) still applies.
     """
-    text = (text or "").strip()
+    text = _policy.strip_remember_prefix(text)
     if not text:
         return []
     return learn_from_turn(
@@ -274,6 +281,7 @@ def remember_direct(
         run_id=run_id,
         importance="high",
         confidence="high",
+        infer=False,
     )
 
 
