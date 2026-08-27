@@ -83,11 +83,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
 **PENDING:** MANUAL STEP B (Phase 5) — `./homelab.sh rebuild skill-only`
-(skill-runner code changed: writeback wiring, remember/forget intents,
-`MEMORY_EXTRACTION_INSTRUCTIONS` env, provenance key fix `agent`/`turn_id`,
-startup `warmup()` thread, additive-semantics extraction rules). After
-rebuild: post-checks → extended live suite (long timeout / background, now
-incl. 9 Phase 5 checks) → end-to-end writeback checks → Phase 5 gate.
+(skill-runner code changed since last rebuild: `remember` now stores
+verbatim via `infer=False` — no LLM extraction, imperative prefix
+stripped; unit 93/93). After rebuild: post-checks → remember e2e re-test
+→ Phase 5 gate.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -416,7 +415,13 @@ the run. Backup taken at the gate.
    "do you remember …" stays chat). `remember` → `remember_direct`
    (source=direct_user, importance=high, confidence=high); `forget` →
    `forget_matching` (targeted delete of above-threshold hits; returns
-   deleted texts). Admin REST endpoints stay in Phase 8.
+   deleted texts). Admin REST endpoints stay in Phase 8. **Deterministic
+   remember (post-rebuild fix):** `remember_direct` stores with
+   `infer=False` (raw text, no LLM extraction) after stripping the
+   imperative prefix (`policy.strip_remember_prefix`) — an explicit
+   "remember this" must not silently fail on extraction-LLM flakiness
+   (observed live: malformed JSON → stored=false). Policy pre-filter
+   (secret reject) still applies.
 6. ✅ **Write failures non-fatal** (plan item 6) — all new paths return
    []/False + log; verified degraded in throwaway container (no creds →
    [] promptly, no raise).
@@ -479,6 +484,22 @@ small.
   background) in Phase 9 if latency proves unacceptable.
 
 ## Phase log
+
+- **2026-08-27** — **Phase 5: deterministic `remember` fix** (post-
+  rebuild e2e). Post-rebuild checks green (warmup thread started at boot,
+  mem0 client warm; baked-in code verified). E2E: preference stated in
+  chat → stored (`source=chat`) → follow-up used it; `forget` intent →
+  deleted (0.5s). But the `remember` intent failed live (`stored=false`):
+  `remember_direct` routed through the extraction LLM, which returned
+  malformed JSON ("Error parsing extraction response") — mem0 treats a
+  parse failure as "nothing extracted". Fix: `remember_direct` now stores
+  verbatim with `infer=False` (no LLM in the loop) after stripping the
+  imperative prefix (`policy.strip_remember_prefix`: "remember that …" /
+  "please remember …" / "note that …" / "keep in mind …"; word-boundary
+  safe — "Remembering …" untouched); `learn_from_turn` gained an `infer`
+  param (chat writeback stays `infer=True`). Live probe: stored verbatim
+  with full provenance in ~9.5s (embed only). Unit 93/93 (+10). Awaiting
+  MANUAL STEP B (rebuild) + remember e2e re-test.
 
 - **2026-08-27** — **Phase 5 live-suite fixes** (pre-rebuild). First live
   suite run 41/43: (1) `run_id` missing from stored metadata — mem0 2.0.19

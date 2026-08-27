@@ -388,11 +388,16 @@ def test_phase5_writeback():
     class _FakeMem0:
         def __init__(self, hits):
             self._hits = hits  # user_id -> list of raw search hits
-            self.added = []    # (user_id, metadata)
+            self.added = []    # (user_id, metadata, infer)
+            self.last_text = ""  # last user message content passed to add()
             self.deleted = []  # memory ids
 
-        def add(self, messages, user_id=None, metadata=None):
-            self.added.append((user_id, dict(metadata or {})))
+        def add(self, messages, user_id=None, metadata=None, infer=True):
+            self.last_text = next(
+                (m.get("content") for m in messages if m.get("role") == "user"),
+                "",
+            )
+            self.added.append((user_id, dict(metadata or {}), infer))
             return {"results": [{"id": f"new{len(self.added)}"}]}
 
         def search(self, query, filters=None, top_k=10):
@@ -439,18 +444,25 @@ def test_phase5_writeback():
             [{"role": "user", "content": "I switched to oat milk flat whites"}],
             source="chat", agent_id="siri_chat", run_id="run123",
         )
-        uid, meta = fake._mem.added[-1]
+        uid, meta, infer = fake._mem.added[-1]
         check("learn: user routed", uid == "chuck", uid)
+        check("learn: infer default", infer is True, str(infer))
         check("learn: source metadata", meta.get("source") == "chat", str(meta))
         check("learn: importance default", meta.get("importance") == "normal", str(meta))
         check("learn: confidence default", meta.get("confidence") == "normal", str(meta))
         check("learn: agent metadata", meta.get("agent") == "siri_chat", str(meta))
         check("learn: turn_id metadata", meta.get("turn_id") == "run123", str(meta))
 
-        # remember_direct: direct_user + high importance/confidence.
-        ids = interface.remember_direct("chuck", "My birthday is June 4th", run_id="r9")
+        # remember_direct: direct_user + high importance/confidence,
+        # deterministic (infer=False), imperative prefix stripped.
+        ids = interface.remember_direct(
+            "chuck", "Remember that my birthday is June 4th", run_id="r9")
         check("remember: stored", len(ids) == 1, str(ids))
-        uid, meta = fake._mem.added[-1]
+        uid, meta, infer = fake._mem.added[-1]
+        check("remember: infer=False (no LLM)", infer is False, str(infer))
+        check("remember: prefix stripped",
+              fake._mem.last_text == "my birthday is June 4th",
+              repr(fake._mem.last_text))
         check("remember: source=direct_user", meta.get("source") == "direct_user", str(meta))
         check("remember: importance=high", meta.get("importance") == "high", str(meta))
         check("remember: confidence=high", meta.get("confidence") == "high", str(meta))
@@ -483,6 +495,27 @@ def test_phase5_writeback():
         check("extract: excludes prompt-injection",
               "instructions" in default.lower())
         check("extract: supersede rule", "supersed" in default.lower())
+        # remember prefix stripping (explicit remember is stored verbatim).
+        check("remember prefix: basic",
+              _policy.strip_remember_prefix("Remember that my dog is Biscuit")
+              == "my dog is Biscuit",
+              _policy.strip_remember_prefix("Remember that my dog is Biscuit"))
+        check("remember prefix: please + no that",
+              _policy.strip_remember_prefix("Please remember my dog is Biscuit")
+              == "my dog is Biscuit")
+        check("remember prefix: note that",
+              _policy.strip_remember_prefix("Note that I work nights")
+              == "I work nights")
+        check("remember prefix: keep in mind",
+              _policy.strip_remember_prefix("Keep in mind that I am vegan")
+              == "I am vegan")
+        check("remember prefix: plain statement untouched",
+              _policy.strip_remember_prefix("My dog is Biscuit") == "My dog is Biscuit")
+        check("remember prefix: empty -> empty",
+              _policy.strip_remember_prefix("Remember that") == "")
+        check("remember prefix: 'Remembering' untouched",
+              _policy.strip_remember_prefix("Remembering my dog")
+              == "Remembering my dog")
         os.environ["MEMORY_EXTRACTION_INSTRUCTIONS"] = "custom rules here"
         check("extract: env override parsed",
               memconfig.load_config().extraction_instructions == "custom rules here")
