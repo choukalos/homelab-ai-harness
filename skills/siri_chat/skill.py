@@ -552,6 +552,29 @@ def run(
             if sources:
                 job.add_log(f"Sources: {len(sources)} found")
 
+        # Phase 5 writeback — after a SUCCESSFUL response, extract + store
+        # durable facts from this turn. Non-fatal (a writeback failure never
+        # breaks the answer), budgeted (MEMORY_WRITEBACK_TIMEOUT_MS), policy-
+        # filtered. Identity comes from the Job (Phase 3); the per-request
+        # switch (ChatRequest.memory) is carried as job.memory_enabled.
+        if getattr(job, "memory_enabled", True):
+            try:
+                from memory import interface as _mem_iface  # lazy (standalone import)
+                _wb_ids = _mem_iface.learn_from_turn(
+                    getattr(job, "user_id", None) or "unknown",
+                    [
+                        {"role": "user", "content": query},
+                        {"role": "assistant", "content": answer},
+                    ],
+                    source="chat",
+                    run_id=getattr(job, "run_id", None),
+                )
+                if hasattr(job, "add_log"):
+                    job.add_log(f"Memory writeback: stored={len(_wb_ids)}")
+            except Exception as exc:  # noqa: BLE001 — never break chat
+                if hasattr(job, "add_log"):
+                    job.add_log(f"Memory writeback failed (non-fatal): {exc}")
+
         return {
             "answer": answer,
             "sources": sources,

@@ -379,6 +379,125 @@ def test_timeout_degradation():
     check("fast op ok", client._with_timeout(lambda: 42) == 42)
 
 
+def test_phase5_writeback():
+    print("Phase 5 writeback (provenance metadata, remember/forget, extraction instructions):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_EXTRACTION_INSTRUCTIONS",
+    )}
+
+    class _FakeMem0:
+        def __init__(self, hits):
+            self._hits = hits  # user_id -> list of raw search hits
+            self.added = []    # (user_id, metadata)
+            self.deleted = []  # memory ids
+
+        def add(self, messages, user_id=None, metadata=None):
+            self.added.append((user_id, dict(metadata or {})))
+            return {"results": [{"id": f"new{len(self.added)}"}]}
+
+        def search(self, query, filters=None, top_k=10):
+            uid = (filters or {}).get("user_id")
+            q = [w for w in (query or "").lower().split() if w]
+            out = []
+            for h in self._hits.get(uid, []):
+                mem = h["memory"].lower()
+                if any(w in mem for w in q):
+                    out.append(dict(h))
+            return out
+
+        def delete(self, memory_id):
+            self.deleted.append(memory_id)
+
+    class _FakeClient:
+        def __init__(self, hits):
+            self._mem = _FakeMem0(hits)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ.pop("MEMORY_EXTRACTION_INSTRUCTIONS", None)
+        interface._reset_singleton()
+        fake = _FakeClient({
+            "chuck": [
+                {"id": "m1", "memory": "oat milk flat white", "score": 0.9},
+                {"id": "m2", "memory": "unrelated fact", "score": 0.2},
+            ],
+        })
+        interface._client = fake
+
+        # learn_from_turn: provenance metadata on every stored fact.
+        interface.learn_from_turn(
+            "chuck",
+            [{"role": "user", "content": "I switched to oat milk flat whites"}],
+            source="chat", agent_id="siri_chat", run_id="run123",
+        )
+        uid, meta = fake._mem.added[-1]
+        check("learn: user routed", uid == "chuck", uid)
+        check("learn: source metadata", meta.get("source") == "chat", str(meta))
+        check("learn: importance default", meta.get("importance") == "normal", str(meta))
+        check("learn: confidence default", meta.get("confidence") == "normal", str(meta))
+        check("learn: agent_id metadata", meta.get("agent_id") == "siri_chat", str(meta))
+        check("learn: run_id metadata", meta.get("run_id") == "run123", str(meta))
+
+        # remember_direct: direct_user + high importance/confidence.
+        ids = interface.remember_direct("chuck", "My birthday is June 4th", run_id="r9")
+        check("remember: stored", len(ids) == 1, str(ids))
+        uid, meta = fake._mem.added[-1]
+        check("remember: source=direct_user", meta.get("source") == "direct_user", str(meta))
+        check("remember: importance=high", meta.get("importance") == "high", str(meta))
+        check("remember: confidence=high", meta.get("confidence") == "high", str(meta))
+        check("remember: run_id", meta.get("run_id") == "r9", str(meta))
+
+        # Empty text → no-op.
+        check("remember: empty text no-op", interface.remember_direct("chuck", "   ") == [])
+
+        # forget_matching: deletes only the above-threshold hit.
+        deleted = interface.forget_matching("chuck", "oat milk coffee")
+        check("forget: one hit deleted", len(deleted) == 1, str(deleted))
+        check("forget: right id", deleted[0]["id"] == "m1", str(deleted))
+        check("forget: text returned", "oat milk" in deleted[0]["text"], str(deleted))
+        check("forget: low-score hit kept", "m2" not in fake._mem.deleted,
+              str(fake._mem.deleted))
+
+        # forget_matching: no match → [].
+        check("forget: no match empty", interface.forget_matching("chuck", "zzz nothing") == [])
+
+        # forget_matching: unknown user → [] (no writeback for unmapped).
+        check("forget: unknown user no-op",
+              interface.forget_matching("unknown", "oat milk") == [])
+
+        # Extraction instructions: built-in default + env override.
+        from memory import policy as _policy
+        default = _policy.DEFAULT_EXTRACTION_INSTRUCTIONS
+        check("extract: default instructions non-empty", len(default) > 200, str(len(default)))
+        check("extract: excludes secrets",
+              "secret" in default.lower() and "credential" in default.lower())
+        check("extract: excludes prompt-injection",
+              "instructions" in default.lower())
+        check("extract: consolidation rule", "consolidat" in default.lower())
+        os.environ["MEMORY_EXTRACTION_INSTRUCTIONS"] = "custom rules here"
+        check("extract: env override parsed",
+              memconfig.load_config().extraction_instructions == "custom rules here")
+        os.environ.pop("MEMORY_EXTRACTION_INSTRUCTIONS", None)
+        check("extract: empty default = use built-in",
+              memconfig.load_config().extraction_instructions == "")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -389,6 +508,7 @@ def main():
     test_score_threshold()
     test_singleton_first_call()
     test_timeout_degradation()
+    test_phase5_writeback()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")

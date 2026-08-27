@@ -30,8 +30,18 @@
   verified: learned preference changed a live `/api/chat` answer; `memory.
   enabled=false` → zero retrieval (no embeddings/Qdrant); cold-start
   degradation → chat still answers. Unit tests 59/59.
-- **Next: Phase 5** (writeback into the chat loop — `learn_from_turn` after
-  successful turns; non-fatal, budgeted, secret-filtered).
+- **Phase 5: CODE COMPLETE** (2026-08-27; awaiting MANUAL STEP B + live
+  verification) — post-turn writeback into the chat loop. Writeback after
+  SUCCESSFUL responses only, at both call sites (`_chat_direct` success path
+  + `siri_chat` final answer), synchronous for v1, non-fatal, budgeted
+  (`MEMORY_WRITEBACK_TIMEOUT_MS`), gated by the request-level memory switch.
+  Provenance metadata on every stored fact (`source`/`importance`/
+  `confidence`/`agent_id`/`run_id`); built-in extraction instructions
+  (inclusion/exclusion + prompt-injection exclusion, PDF §6) via mem0
+  `custom_instructions` (env override `MEMORY_EXTRACTION_INSTRUCTIONS`).
+  Explicit commands: `remember`/`forget` intents in `/api/chat` →
+  `remember_direct` (source=direct_user, importance=high) / `forget_matching`
+  (targeted delete). Unit tests 83/83.
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -65,10 +75,11 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** none — MANUAL STEP B (Phase 4) was run by Chuck 2026-08-27 and
-verified (baked-in code confirmed in-container; post-checks green; extended
-live suite 35/35; end-to-end chat verified). Next manual step only if
-Phase 5+ changes skill-runner code/env.
+**PENDING:** MANUAL STEP B (Phase 5) — `./homelab.sh rebuild skill-only`
+(skill-runner code changed: writeback wiring, remember/forget intents,
+`MEMORY_EXTRACTION_INSTRUCTIONS` env). After rebuild: post-checks → extended
+live suite (long timeout / background, now incl. 8 Phase 5 checks) →
+end-to-end writeback checks → Phase 5 gate.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -356,7 +367,73 @@ the run. Backup taken at the gate.
   (observed: `memory: hits=0 latency_ms=3291` on the first post-rebuild
   request; warm requests are ~110ms).
 
+## Phase 5 checklist (CODE COMPLETE 2026-08-27; awaiting MANUAL STEP B + live verification)
+
+**Scope:** post-turn learning — writeback into the chat loop (plan Phase 5).
+
+1. ✅ **Writeback after successful response only** (plan item 1) —
+   `_chat_direct` success path (main.py) + `siri_chat` final answer
+   (skill.py). Synchronous for v1. Non-fatal (try/except; a writeback
+   failure never breaks the answer). Budgeted via `MEMORY_WRITEBACK_TIMEOUT_MS`
+   (30s — extraction runs an LLM). Gated by the request-level memory switch
+   (`memory.enabled=false` → no retrieval AND no writeback; privacy).
+   Identity: `_chat_direct` from the request contextvar; siri_chat from
+   `job.user_id` (Phase 3). `unknown`/`service` → no writeback
+   (`_valid_user` guard).
+2. ✅ **Pre-filter** (plan item 2) — existing `policy.py` on the real
+   writeback path: secret/credential regex reject, system/tool content
+   stripped, no-user-content reject. (Unit + live checks.)
+3. ✅ **Extraction instructions** (plan item 3) —
+   `policy.DEFAULT_EXTRACTION_INSTRUCTIONS` (durable-facts-only inclusion
+   list; NEVER-store list incl. secrets + prompt-injection directives;
+   consolidation rule; direct-user = highest trust) passed to mem0 as
+   `custom_instructions` (highest priority in mem0's prompt). Env override
+   `MEMORY_EXTRACTION_INSTRUCTIONS` (empty = built-in). Provenance metadata
+   on every stored fact: `source` (chat/direct_user), `importance`
+   (normal/high), `confidence` (normal/high), `agent_id`, `run_id`.
+4. ✅ **Conflict handling** (plan item 4) — mem0's native update pass
+   (UPDATE old fact on correction). Live test: oat-milk → almond-milk
+   correction must leave no contradictory duplicate.
+5. ✅ **Explicit commands** (plan item 5) — `remember`/`forget` intents in
+   `/api/chat` (imperative-only patterns: sentence-start or "please …";
+   "do you remember …" stays chat). `remember` → `remember_direct`
+   (source=direct_user, importance=high, confidence=high); `forget` →
+   `forget_matching` (targeted delete of above-threshold hits; returns
+   deleted texts). Admin REST endpoints stay in Phase 8.
+6. ✅ **Write failures non-fatal** (plan item 6) — all new paths return
+   []/False + log; verified degraded in throwaway container (no creds →
+   [] promptly, no raise).
+7. ✅ **Tests** — unit +24 (83/83: provenance metadata, remember_direct,
+   forget_matching, extraction-instruction config); extended live suite +8
+   (secret turn not stored; remember_direct persists + retrievable +
+   metadata; changed preference consolidates; prompt-injection directive
+   not stored). Identity 29/29.
+8. ✅ **Smoke** (throwaway container, host code ro) — main + siri_chat
+   import OK; intent detection correct (incl. no false positive on
+   questions); flag-off writeback clean no-op.
+9. ⬜ **Live verification (post-rebuild)** — extended suite (long timeout /
+   background) + end-to-end: chat with a preference statement → memory
+   stored (check collection) → next chat uses it; `remember` intent →
+   stored + retrieved; `forget` intent → deleted; writeback latency
+   acceptable (note for Phase 9 if not).
+10. ⬜ Cleanup: `mem0_memories` back to 0, `family_kb` 18. Commit + backup.
+
+**Gate to Phase 6:** test matrix green (post-rebuild); memory count stays
+small.
+
 ## Phase log
+
+- **2026-08-27** — **Phase 5 code complete** (post-turn writeback). Both
+  chat call sites write back after successful responses only (non-fatal,
+  budgeted, switch-gated). Provenance metadata (source/importance/
+  confidence/agent_id/run_id) on every stored fact. Built-in extraction
+  instructions (durable-facts-only; secrets + prompt-injection excluded)
+  via mem0 `custom_instructions` + `MEMORY_EXTRACTION_INSTRUCTIONS` env.
+  New `remember`/`forget` intents + `remember_direct`/`forget_matching`.
+  Unit 83/83 (+24); identity 29/29; import/intent/degradation smoke green
+  in throwaway container. Extended live suite +8 Phase 5 checks. **Awaiting
+  MANUAL STEP B** (rebuild) + live verification + end-to-end writeback
+  checks. Backup pending at gate.
 
 - **2026-08-27** — **Phase 4 gate MET.** MANUAL STEP B run by Chuck;
   post-checks green; baked-in code verified (render_context/_memory_block/
