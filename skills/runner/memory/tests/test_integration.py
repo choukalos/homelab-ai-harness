@@ -76,6 +76,7 @@ def main():
     print("cleanup (idempotent)...")
     interface.delete_user_memories(user)
     interface.delete_user_memories(other)
+    interface.delete_user_memories("chuck")
     interface.delete_user_memories(cfg.household_user_id)
 
     print("learn (private, with retries)...")
@@ -140,6 +141,68 @@ def main():
     check("other user sees no private facts", len(private_iso) == 0,
           f"private_hits={len(private_iso)}")
 
+    # ── Phase 3: identity isolation (chuck vs memory_test) ─────────────
+    # The real "chuck" principal is used (per memory_todo.md Phase 3 tests);
+    # its memories are cleaned up at the end of the run.
+    print("identity isolation (chuck vs memory_test)...")
+    okc, tries_c = learn_with_retry(
+        "chuck",
+        [{"role": "user", "content": "I switched to black coffee in the mornings now."}],
+        "black coffee",
+    )
+    check("chuck stores own preference", okc, f"tries={tries_c}")
+    okt, tries_t = learn_with_retry(
+        user,
+        [{"role": "user", "content": "I prefer green tea with honey in the mornings."}],
+        "green tea",
+    )
+    check("memory_test stores own preference", okt, f"tries={tries_t}")
+
+    hits_chuck = interface.search_memory("chuck", "what do I drink in the morning?")
+    hits_test = interface.search_memory(user, "what do I drink in the morning?")
+    check("chuck finds own coffee fact",
+          any("coffee" in h["text"].lower() for h in hits_chuck),
+          f"top={hits_chuck[0]['text'][:60] if hits_chuck else 'none'}")
+    check("chuck does NOT see memory_test's tea",
+          not any("green tea" in h["text"].lower() for h in hits_chuck))
+    check("memory_test finds own tea fact",
+          any("tea" in h["text"].lower() for h in hits_test),
+          f"top={hits_test[0]['text'][:60] if hits_test else 'none'}")
+    check("memory_test does NOT see chuck's coffee",
+          not any("black coffee" in h["text"].lower() for h in hits_test))
+
+    # Household-scoped fact (learned above under cfg.household_user_id) is
+    # visible to chuck, not just to the user who learned it.
+    hits_chuck_hh = interface.search_memory("chuck", "where is the server rack?")
+    check("household fact visible to chuck",
+          any("basement" in h["text"].lower() for h in hits_chuck_hh),
+          f"top={hits_chuck_hh[0]['text'][:60] if hits_chuck_hh else 'none'}")
+
+    # Unknown principal: no retrieval, no writeback.
+    check("unknown user search -> []", interface.search_memory("unknown", "anything") == [])
+    check("unknown user learn -> []",
+          interface.learn_from_turn("unknown", [{"role": "user", "content": "x"}]) == [])
+
+    # Raw key values never stored: secret-like content is filtered by policy.
+    fake_key = "sk-test-identity-9f8e7d6c5b4a"
+    secret_res = interface.learn_from_turn(
+        "chuck", [{"role": "user", "content": f"please remember my api_key={fake_key}"}])
+    check("secret-like content not stored", secret_res == [], f"res={secret_res}")
+
+    # Direct Qdrant scan: no payload contains the fake key or the real key.
+    import json as _json
+    import urllib.request as _urlreq
+    real_key = os.environ.get("SKILL_RUNNER_API_KEY", "")
+    with _urlreq.urlopen(
+        f"{cfg.qdrant_url}/collections/{cfg.collection}/points?limit=256", timeout=10
+    ) as _resp:
+        _points = _json.loads(_resp.read()).get("result", {}).get("points", [])
+    _all_payloads = _json.dumps([p.get("payload", {}) for p in _points])
+    check("no fake key in any Qdrant payload", fake_key not in _all_payloads,
+          f"points={len(_points)}")
+    if real_key:
+        check("no real API key in any Qdrant payload", real_key not in _all_payloads)
+
     print("timeout -> graceful degradation (unreachable qdrant)...")
     # Point a fresh client at an unreachable Qdrant with a short timeout.
     # Dummy api_key so mem0 init succeeds and the test exercises the real
@@ -167,9 +230,11 @@ def main():
     print("cleanup...")
     interface.delete_user_memories(user)
     interface.delete_user_memories(other)
+    interface.delete_user_memories("chuck")
     interface.delete_user_memories(cfg.household_user_id)
     time.sleep(1.0)
     check("cleanup: user empty", len(interface.list_memories(user, limit=50)) == 0)
+    check("cleanup: chuck empty", len(interface.list_memories("chuck", limit=50)) == 0)
 
     print()
     if FAILURES:

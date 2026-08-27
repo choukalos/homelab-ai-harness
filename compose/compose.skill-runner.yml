@@ -50,6 +50,9 @@ services:
       - MEMORY_ADMIN_TIMEOUT_MS=${MEMORY_ADMIN_TIMEOUT_MS}
       - MEMORY_MAX_CONTEXT_TOKENS=${MEMORY_MAX_CONTEXT_TOKENS}
       - MEMORY_EXTRACTION_MODEL=${MEMORY_EXTRACTION_MODEL}
+      # Identity (Phase 3): key -> user_id map (env var NAMES, not values)
+      - SIRI_KEY_SERVICE=${SIRI_KEY_SERVICE}
+      - MEMORY_USER_KEYS=${MEMORY_USER_KEYS}
       - MEM0_TELEMETRY=false
     volumes:
       - ../skills:/app/skills:ro
