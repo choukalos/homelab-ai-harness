@@ -32,9 +32,6 @@
   degradation → chat still answers. Unit tests 59/59.
 - **Next: Phase 5** (writeback into the chat loop — `learn_from_turn` after
   successful turns; non-fatal, budgeted, secret-filtered).
-- **Next: MANUAL STEP B** (`./homelab.sh rebuild skill-only`) → post-checks →
-  extended live suite (long timeout / background) → Phase 4 gate → Phase 5
-  (writeback).
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
