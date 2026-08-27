@@ -9,17 +9,19 @@
 
 - **Phase 0: COMPLETE** (2026-08-24 inventory; 2026-08-25 decisions locked).
 - **Phase 1: COMPLETE** (2026-08-26; all gates green — see phase log).
-- **Phase 2: CODE COMPLETE** (2026-08-26) — module + unit + integration tests
-  green; admin-timeout budget fix committed (`7c83c310`). Gate pending the
-  THIRD MANUAL STEP B (bakes in admin budget + Phase 3 code) + extended live
-  suite re-run.
-- **Phase 3: CODE COMPLETE** (2026-08-27, commit `9ded3a1c`) — identity
+- **Phase 2: COMPLETE** (gate MET 2026-08-27) — module + unit +
+  integration tests green; admin-timeout budget fix verified live; extended
+  live suite 28/28 in the rebuilt image (THIRD MANUAL STEP B, 2026-08-27).
+- **Phase 3: COMPLETE** (gate MET 2026-08-27, commit `9ded3a1c`) — identity
   resolver (`memory/identity.py`, `MEMORY_USER_KEYS=chuck=SKILL_RUNNER_API_KEY,
   service=SIRI_KEY_SERVICE` — env var NAMES only), per-request contextvar,
   job identity (D10: scheduler/launch_skill/run-now → `service`), api_chat
-  wiring. Unit tests green (identity 29/29). Live isolation checks added to
-  the integration suite (chuck vs memory_test, household visibility, unknown
+  wiring. Unit tests green (identity 29/29). Live isolation checks green in
+  the extended suite (chuck vs memory_test, household visibility, unknown
   principal, secret filter, direct Qdrant payload scan).
+- **Next: Phase 4** (automatic pre-request retrieval — middleware injection
+  in `_chat_direct` + `siri_chat`, ONE render path, request-level switch,
+  instrumentation). Not yet started.
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -248,10 +250,14 @@ via LiteLLM (dedicated model-restricted key). Graceful degradation throughout.
    Unit tests **47/47 PASS**. `mem0_memories` empty + `family_kb` untouched
    after the run.
 
-**Gate to Phase 3:** module passes tests standalone (MET); manual step B
-done with post-checks green (B#1 + B#2 green; B#3 needed for the admin
-budget fix — PENDING); one env switch disables it (MET — unit + live
-container flag-off check).
+**Gate to Phase 3: MET (2026-08-27).** Module passes tests standalone; manual
+step B#3 done with post-checks green; one env switch disables it (unit + live
+container flag-off check). **Phase 3 gate also MET (2026-08-27):** extended
+live suite 28/28 — isolation (chuck vs memory_test, both directions),
+household fact visible to chuck, unknown principal → no retrieval/writeback,
+secret-like content not stored, no raw keys in any Qdrant payload. OWUI/
+master-key traffic never reaches skill-runner (D5); unmapped keys → `unknown`
+(no memory access).
 
 **Phase 2 gotchas (Phase 3+ must know):**
 - mem0 REWRITES extracted facts into normalized phrasing ("User prefers oat
@@ -266,6 +272,22 @@ container flag-off check).
 
 ## Phase log
 
+- **2026-08-27** — **THIRD MANUAL STEP B + extended live suite 28/28 →
+  Phase 2 AND Phase 3 gates MET.** Post-checks green (litellm alive,
+  skill-runner ok, clean startup; litellm/qdrant untouched). Baked-in code
+  verified in-container (`identity.py` present, new count logic present,
+  mem0 2.0.19). Full extended suite (in-container, long timeout): health,
+  learn private (tries=3) + household (tries=2), search private + household
+  merged, list, **update True + reflected**, **delete True + removed**
+  (admin budget fix verified live — the 14/15 blocker is gone), user
+  isolation, chuck-vs-memory_test isolation (both directions), household
+  visible to chuck, unknown principal → []/[], secret filtered, no fake/real
+  key in any Qdrant payload, timeout→degradation, cleanup. One test bug
+  fixed: the direct Qdrant payload scan used `GET /collections/{name}/points`
+  (404 — removed in Qdrant 1.18) → now `POST /collections/{name}/points/scroll`
+  (same gotcha class as the Phase 1 snapshot endpoint). Collection verified
+  empty (0 pts) after the run; `family_kb` untouched (18 pts). Backup taken
+  at the gate. **Next: Phase 4** (pre-request retrieval middleware).
 - **2026-08-27** — **"memory_test_other 1 memory" mystery resolved: no ghost
   write.** The extended live suite run (chuck isolation section) was killed
   mid-run; manual cleanup loop printed pre-delete counts via

@@ -190,12 +190,18 @@ def main():
     check("secret-like content not stored", secret_res == [], f"res={secret_res}")
 
     # Direct Qdrant scan: no payload contains the fake key or the real key.
+    # Qdrant 1.18: the old GET /collections/{name}/points endpoint is gone —
+    # use POST /collections/{name}/points/scroll instead.
     import json as _json
     import urllib.request as _urlreq
     real_key = os.environ.get("SKILL_RUNNER_API_KEY", "")
-    with _urlreq.urlopen(
-        f"{cfg.qdrant_url}/collections/{cfg.collection}/points?limit=256", timeout=10
-    ) as _resp:
+    _req = _urlreq.Request(
+        f"{cfg.qdrant_url}/collections/{cfg.collection}/points/scroll",
+        data=_json.dumps({"limit": 256}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with _urlreq.urlopen(_req, timeout=10) as _resp:
         _points = _json.loads(_resp.read()).get("result", {}).get("points", [])
     _all_payloads = _json.dumps([p.get("payload", {}) for p in _points])
     check("no fake key in any Qdrant payload", fake_key not in _all_payloads,
