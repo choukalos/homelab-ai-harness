@@ -55,8 +55,8 @@
   retrieved (hits=1, 218ms) → `forget` intent → deleted (0.44s);
   counts back to 0 / 18. Cold-start writeback ~6s warm (warmup thread);
   synchronous v1 latency acceptable so far (note for Phase 9).
-- **Phase 7: CODE COMPLETE** (2026-08-27; awaiting MANUAL STEP B + live
-  verification) — jobs/agents/skills identity propagation. New
+- **Phase 7: GATE MET** (2026-08-27) — jobs/agents/skills identity
+  propagation, live-verified post-rebuild. New
   `memory/jobctx.py` is the single propagation path: `dispatch_job()`
   resolves identity into the `Job` (user_id/run_id/memory_enabled);
   `_execute_skill` hands the `Job` to `skill.run(params, job)`; jobctx
@@ -72,7 +72,11 @@
   content so skill prompts are never stored (unit-tested). Unit tests
   120/120 (+27); identity 29/29. Integration suite +5 live checks
   (scheduled/service writes nothing + no leak; user job inherits user +
-  provenance).
+  provenance). **Live e2e (post-rebuild):** user-triggered `morning_brief`
+  via `/api/chat` (chuck's key) → job log `Identity: user_id=chuck`;
+  `siri_ask` via `/skills/siri_ask` (no user context) → job log
+  `Identity: user_id=service`, Qdrant counts stayed 0/0 (no leak, no
+  service memory). Counts back to 0 / 18.
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -106,13 +110,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** MANUAL STEP B (Phase 7) — `./homelab.sh rebuild skill-only`
-(skill-runner code changed: new `memory/jobctx.py` + siri_ask /
-morning_brief / deep_research now propagate job identity to memory).
-After rebuild: post-checks → live integration suite (now incl. 6 Phase 7
-checks) → scheduled-job (service, no personal memory) + user-job
-(inherits user) verification → Phase 7 gate. (Phase 5 gate MET; Phase 6
-— optional MCP — remains deferred, plan-gated on a week of use.)
+**PENDING:** Phase 7 gate MET — next step is **Phase 8** (admin REST
+endpoints: list/update/delete/delete_user over HTTP with the admin
+identity) or **Phase 6** (optional MCP memory tools; plan-gated on a
+week of use). Awaiting Chuck's direction.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -542,17 +543,34 @@ has no such gate and can start immediately if preferred.
 - [x] Smoke (throwaway container): jobctx API + job_identity; all three
   modified skills import + memory hooks present; no-creds degradation is
   a clean no-op (no raise).
-- [ ] **MANUAL STEP B** — `./homelab.sh rebuild skill-only`.
-- [ ] Post-rebuild: post-checks → live integration suite (incl. Phase 7)
-  → scheduled-job (service, no personal memory) + user-job (inherits
-  user) verification → cleanup.
-- [ ] Phase 7 gate: identity propagates dispatch → skill → sub-agent;
+- [x] **MANUAL STEP B** — `./homelab.sh rebuild skill-only` (done 2026-08-27;
+  image `6a8e759f`).
+- [x] Post-rebuild: post-checks green (warmup thread at boot, jobctx baked
+  in, health ok) → live integration suite 52/52 (incl. Phase 7) → live
+  identity verification (user job → chuck; service job → service, no leak)
+  → cleanup (counts 0 / 18).
+- [x] Phase 7 gate: identity propagates dispatch → skill → sub-agent;
   scheduled jobs create no personal memory; user jobs inherit the user;
   agent outcomes tagged source=agent_result; skills not copied into Mem0.
 
-**Gate to Phase 8: PENDING** (Phase 7 live verification post-rebuild).
+**Gate to Phase 8: MET (2026-08-27).** Live identity verified post-
+rebuild (user job → chuck; service job → service, no personal memory).
 
 ## Phase log
+
+- **2026-08-27** — **Phase 7 gate MET.** Rebuild (`6a8e759f`). Post-
+  checks green (warmup thread at boot, mem0 client warm; `jobctx.py`
+  baked in with all 4 helpers). Live integration suite 52/52 (incl. 5
+  Phase 7 checks; fixed a flaky count-comparison check that hit the 1.5s
+  retrieval-timeout degradation — now asserts on the specific service
+  content + retries the read). Live identity verification (real dispatch
+  path): user-triggered `morning_brief` via `/api/chat` (chuck's key) →
+  job log `Identity: user_id=chuck`, memory retrieve `user_id=chuck
+  block_chars=0`; service `siri_ask` via `/skills/siri_ask` (no context)
+  → job log `Identity: user_id=service`, Qdrant counts stayed 0/0 (no
+  leak, no service memory). Counts back to 0 / 18. Phase 7 complete.
+  Next: Phase 8 (admin REST endpoints) or Phase 6 (optional MCP) —
+  awaiting direction.
 
 - **2026-08-27** — **Phase 7: CODE COMPLETE** (jobs/agents/skills
   identity propagation; awaiting MANUAL STEP B). New `memory/jobctx.py`
