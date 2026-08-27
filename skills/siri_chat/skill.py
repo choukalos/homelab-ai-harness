@@ -35,6 +35,7 @@ import os
 import signal
 import threading
 import sys
+import time
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
@@ -443,6 +444,29 @@ def _chat_with_tools(
 # ---------------------------------------------------------------------------
 
 
+def _memory_block(user_id: Optional[str], query: str) -> str:
+    """Build the ``<long_term_memory>`` block for the siri_chat system prompt.
+
+    Phase 4 — same render path as ``_chat_direct`` (``memory.interface.
+    render_context``), so both call sites stay identical. The skill is
+    loaded standalone (importlib, stdlib-only by design), so the memory
+    package is imported lazily and any failure degrades to no block —
+    chat must never break because of memory (non-negotiable #7).
+
+    ``user_id`` comes from the Job (Phase 3 identity); 'service'/'unknown'/
+    None resolve to no retrieval inside the interface.
+    """
+    if not user_id or not query:
+        return ""
+    try:
+        from memory import interface  # lazy: keep the skill importable standalone
+        block = interface.render_context(user_id, query)
+        return block or ""
+    except Exception as exc:  # noqa: BLE001 — degrade, never break chat
+        logger.warning("memory context unavailable for siri_chat: %s", exc)
+        return ""
+
+
 def run(
     params: dict[str, Any],
     job,
@@ -487,6 +511,27 @@ def run(
     try:
         # Build conversation messages
         messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+        # Long-term memory (Phase 4): inject the memory block into the
+        # system prompt. Identity comes from the Job (user_id/run_id);
+        # the per-request switch (ChatRequest.memory) is carried as
+        # job.memory_enabled. Non-fatal: on error the block is empty.
+        mem_block = ""
+        if getattr(job, "memory_enabled", True):
+            mem_user = getattr(job, "user_id", None)
+            t0 = time.time()
+            mem_block = _memory_block(mem_user, query)
+            mem_ms = int((time.time() - t0) * 1000)
+            if hasattr(job, "add_log"):
+                job.add_log(
+                    f"Memory: user_id={mem_user or 'unknown'} "
+                    f"block_chars={len(mem_block)} latency_ms={mem_ms}"
+                )
+        if mem_block:
+            messages[0] = {
+                "role": "system",
+                "content": SYSTEM_PROMPT + "\n\n" + mem_block,
+            }
 
         if context:
             messages.append({"role": "user", "content": context})

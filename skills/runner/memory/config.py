@@ -31,6 +31,16 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError:
+        return default
+
+
 @dataclass
 class MemoryConfig:
     """Runtime settings for the memory module."""
@@ -58,6 +68,10 @@ class MemoryConfig:
 
     # Tuning.
     top_k: int = 6
+    # Relevance gate for injected memories: hits scoring below this cosine
+    # similarity are dropped (conservative — an unrelated memory injected
+    # into an unrelated task is worse than none). 0 disables the gate.
+    score_threshold: float = 0.5
     # Retrieval timeout (blocks the chat response — must stay fast).
     timeout_ms: int = 1500
     # Writeback timeout (LLM extraction is slow; runs as a background task
@@ -111,6 +125,7 @@ def load_config() -> MemoryConfig:
         collection=os.environ.get("MEMORY_COLLECTION", "mem0_memories"),
         embed_dim=_env_int("MEMORY_EMBED_DIM", 768),
         top_k=_env_int("MEMORY_TOP_K", 6),
+        score_threshold=_env_float("MEMORY_SCORE_THRESHOLD", 0.5),
         timeout_ms=_env_int("MEMORY_TIMEOUT_MS", 1500),
         writeback_timeout_ms=_env_int("MEMORY_WRITEBACK_TIMEOUT_MS", 30000),
         admin_timeout_ms=_env_int("MEMORY_ADMIN_TIMEOUT_MS", 10000),
