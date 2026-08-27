@@ -19,15 +19,19 @@
   wiring. Unit tests green (identity 29/29). Live isolation checks green in
   the extended suite (chuck vs memory_test, household visibility, unknown
   principal, secret filter, direct Qdrant payload scan).
-- **Phase 4: CODE COMPLETE 2026-08-27** (awaiting MANUAL STEP B + live
-  verification) — automatic pre-request retrieval. ONE render path
+- **Phase 4: COMPLETE** (gate MET 2026-08-27, commits `1985641a` +
+  `a350a899`) — automatic pre-request retrieval. ONE render path
   (`interface.render_context`) injected at both chat call sites
   (`_chat_direct` in main.py + `siri_chat` skill); `MEMORY_SCORE_THRESHOLD=0.5`
   relevance gate; `ChatRequest.memory={"enabled": false}` per-request switch
   (flows to `Job.memory_enabled` → skill); structured per-request
-  instrumentation log (user_id/hits/chars/latency_ms, no secrets). Unit
-  tests 59/59 (incl. 7 new score-threshold checks); extended live suite has
-  +8 `render_context` checks (run after rebuild).
+  instrumentation log (user_id/hits/chars/latency_ms, no secrets). Extended
+  live suite **35/35 ALL PASS** (incl. 8 render_context checks). End-to-end
+  verified: learned preference changed a live `/api/chat` answer; `memory.
+  enabled=false` → zero retrieval (no embeddings/Qdrant); cold-start
+  degradation → chat still answers. Unit tests 59/59.
+- **Next: Phase 5** (writeback into the chat loop — `learn_from_turn` after
+  successful turns; non-fatal, budgeted, secret-filtered).
 - **Next: MANUAL STEP B** (`./homelab.sh rebuild skill-only`) → post-checks →
   extended live suite (long timeout / background) → Phase 4 gate → Phase 5
   (writeback).
@@ -64,11 +68,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING NOW:** MANUAL STEP B — skill-runner code changed (Phase 4 retrieval
-wiring + `MEMORY_SCORE_THRESHOLD` env var). Chuck runs
-`./homelab.sh rebuild skill-only`; then the model runs the post-checks + the
-extended live suite (long timeout / background — a 600s foreground run was
-killed mid-suite once).
+**PENDING:** none — MANUAL STEP B (Phase 4) was run by Chuck 2026-08-27 and
+verified (baked-in code confirmed in-container; post-checks green; extended
+live suite 35/35; end-to-end chat verified). Next manual step only if
+Phase 5+ changes skill-runner code/env.
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -320,16 +323,57 @@ the system prompt before the LLM call, at BOTH chat call sites, non-fatal.
    ro): `main` + `siri_chat` import OK; `_memory_block` with no creds
    degrades to "" (search timeout → empty block, chat unaffected);
    `score_threshold` default 0.5.
-7. ⬜ **Live verification (after MANUAL STEP B)** — extended suite now
-   includes 8 `render_context` checks: relevant query injects the learned
-   fact; unrelated nginx query does NOT inject the coffee fact (threshold);
-   memory_test block never contains chuck's coffee; unknown principal →
-   empty block; retrieval flag off → empty block. Plus end-to-end: learn a
-   preference → later "what should I…" chat uses it; `memory.enabled=false`
-   request → baseline; degraded Qdrant → chat still answers.
+7. ✅ **Live verification (post-rebuild, 2026-08-27)** — extended suite
+   **35/35 ALL PASS** (throwaway container, live Qdrant/LiteLLM): relevant
+   query injects the learned fact (len=388); unrelated nginx query → no
+   coffee fact (threshold — genuine, no timeout); memory_test block has own
+   tea, never chuck's coffee; unknown principal → empty block; retrieval
+   flag off → empty block. End-to-end over HTTP (baked image): learned
+   "oat milk flat whites" → `/api/chat` "What milk should I use…?" →
+   "You should use oat milk, as you've recently switched to drinking oat
+   milk flat whites in the morning" (preference used, not restated);
+   `memory.enabled=false` → no embeddings/Qdrant/memory line (zero
+   retrieval); cold start → `memory: hits=0 latency_ms=3291` (budget
+   exceeded → degraded, chat still answered); warm → `hits=1 chars=377
+   latency_ms=110`. Test fix: mem0 `update()` stores RAW text (no LLM
+   re-extraction) → verify via list + matching query (old natural-question
+   probe scored 0.45 < 0.5 gate — correct gate behavior, wrong probe).
+
+**Gate to Phase 5: MET (2026-08-27).** Retrieval is live at both call sites,
+non-fatal, budgeted, identity-scoped, switchable per request, instrumented,
+and verified end-to-end. `mem0_memories` 0 pts + `family_kb` 18 pts after
+the run. Backup taken at the gate.
+
+**Phase 4 gotchas (Phase 5+ must know):**
+- **mem0 `update()` stores the RAW text** (no LLM re-extraction; it only
+  re-embeds). A raw one-liner scores ~0.45 against a natural question —
+  below the 0.5 relevance gate (correct: weak matches aren't injected).
+  Verify updates via `list_memories` + a query that matches the raw text.
+  (Bite: the Phase 4 update-verification test failed on exactly this.)
+- **Cold embedding calls** (first op after a restart, ~4.7s) can exceed the
+  1.5s retrieval budget → that one search degrades to [] (chat proceeds);
+  the next op succeeds (warm, ~44ms). Positive live checks retry up to 3x;
+  negative checks stay single-shot (empty block is a valid "no injection").
+- **First memory op in a fresh process** includes mem0 init inside the
+  timeout budget → expect one degraded retrieval right after a rebuild
+  (observed: `memory: hits=0 latency_ms=3291` on the first post-rebuild
+  request; warm requests are ~110ms).
 
 ## Phase log
 
+- **2026-08-27** — **Phase 4 gate MET.** MANUAL STEP B run by Chuck;
+  post-checks green; baked-in code verified (render_context/_memory_block/
+  score_threshold/MEMORY_SCORE_THRESHOLD=0.5 in the image). Extended live
+  suite **35/35 ALL PASS** (was 28; +8 render_context, update verification
+  split into 3). One test bug found + fixed (`a350a899`): the update
+  verification searched a natural question that scores ~0.45 against the
+  RAW updated text (mem0 update stores raw text, no re-extraction) — below
+  the new 0.5 gate, so the check failed despite a working update. Correct
+  behavior, wrong test → now verifies via list + matching query. End-to-end
+  over live /api/chat: learned preference changed the answer (oat milk),
+  memory.enabled=false → zero retrieval (verified in logs), instrumentation
+  line clean. Collections clean after (0 / 18). **Next: Phase 5**
+  (writeback into the chat loop).
 - **2026-08-27** — **Phase 4 code complete** (automatic pre-request
   retrieval). ONE render path `interface.render_context` injected at both
   chat call sites (`_chat_direct` + `siri_chat` `_memory_block`, lazy
