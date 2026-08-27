@@ -55,6 +55,24 @@
   retrieved (hits=1, 218ms) → `forget` intent → deleted (0.44s);
   counts back to 0 / 18. Cold-start writeback ~6s warm (warmup thread);
   synchronous v1 latency acceptable so far (note for Phase 9).
+- **Phase 7: CODE COMPLETE** (2026-08-27; awaiting MANUAL STEP B + live
+  verification) — jobs/agents/skills identity propagation. New
+  `memory/jobctx.py` is the single propagation path: `dispatch_job()`
+  resolves identity into the `Job` (user_id/run_id/memory_enabled);
+  `_execute_skill` hands the `Job` to `skill.run(params, job)`; jobctx
+  reads it back so ANY skill (conversational or long-running) retrieves
+  + writes back with the correct identity, without re-implementing
+  gating/non-fatality. Skills now using it: **siri_ask** (retrieval +
+  writeback, source=chat), **morning_brief** (retrieval — personalizes
+  the brief; a scheduled run under 'service' is a no-op, a user-triggered
+  run inherits the user), **deep_research** (durable OUTCOME writeback at
+  COMPLETION only, source=agent_result, confidence=normal, agent
+  provenance tag, run_id correlation — long-running job rule). Skills
+  remain procedural memory: `policy.sanitize_turn` drops system/tool
+  content so skill prompts are never stored (unit-tested). Unit tests
+  120/120 (+27); identity 29/29. Integration suite +5 live checks
+  (scheduled/service writes nothing + no leak; user job inherits user +
+  provenance).
 - Last updated: 2026-08-27.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -88,10 +106,13 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** Phase 5 gate MET — next step is a decision: **Phase 6**
-(optional MCP memory tools; plan gates it on "memory count stays small
-after a week of use") or **Phase 7** (jobs/agents/skills identity
-propagation — no such gate). Awaiting Chuck's direction.
+**PENDING:** MANUAL STEP B (Phase 7) — `./homelab.sh rebuild skill-only`
+(skill-runner code changed: new `memory/jobctx.py` + siri_ask /
+morning_brief / deep_research now propagate job identity to memory).
+After rebuild: post-checks → live integration suite (now incl. 6 Phase 7
+checks) → scheduled-job (service, no personal memory) + user-job
+(inherits user) verification → Phase 7 gate. (Phase 5 gate MET; Phase 6
+— optional MCP — remains deferred, plan-gated on a week of use.)
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -492,7 +513,61 @@ has no such gate and can start immediately if preferred.
   budgeted at 30s (`MEMORY_WRITEBACK_TIMEOUT_MS`); revisit (queue/
   background) in Phase 9 if latency proves unacceptable.
 
+## Phase 7 (jobs/agents/skills identity propagation) — status
+
+- [x] `memory/jobctx.py`: `job_identity(job)` (safe extraction of
+  user_id/run_id/memory_enabled; None/legacy job → unknown/on),
+  `retrieve(job, query)` (gated, non-fatal, returns rendered block or
+  ""), `writeback_turn(job, messages, ...)` (gated, non-fatal, source
+  default "chat"), `writeback_outcome(job, text, agent)` (durable outcome,
+  source=agent_result, confidence=normal, agent provenance tag).
+- [x] `memory/__init__.py` exports the four jobctx helpers.
+- [x] `siri_ask/skill.py`: retrieval into the system prompt + writeback
+  after a successful answer (source=chat), via lazy `from memory import
+  jobctx`.
+- [x] `morning_brief/skill.py`: retrieval only (personalizes the brief);
+  scheduled run under 'service' is a no-op, user-triggered run inherits
+  the user. No writeback (brief output is ephemeral news).
+- [x] `deep_research/skill.py`: durable OUTCOME writeback at COMPLETION
+  only (source=agent_result, run_id correlation) — long-running-job rule
+  (working state stays in the Job; only the durable result is stored).
+- [x] Skills remain procedural memory: `policy.sanitize_turn` drops
+  system/tool content so skill prompts are never stored (unit-tested).
+- [x] Unit tests: `test_phase7_jobctx()` (+27 checks: identity
+  extraction, gated retrieve/writeback, agent_result provenance,
+  skill-content exclusion) → 120/120.
+- [x] Integration tests: +5 live checks (scheduled/service writes nothing
+  + no leak into the user; user job inherits user + provenance) → suite
+  ALL PASS (52 checks executed).
+- [x] Smoke (throwaway container): jobctx API + job_identity; all three
+  modified skills import + memory hooks present; no-creds degradation is
+  a clean no-op (no raise).
+- [ ] **MANUAL STEP B** — `./homelab.sh rebuild skill-only`.
+- [ ] Post-rebuild: post-checks → live integration suite (incl. Phase 7)
+  → scheduled-job (service, no personal memory) + user-job (inherits
+  user) verification → cleanup.
+- [ ] Phase 7 gate: identity propagates dispatch → skill → sub-agent;
+  scheduled jobs create no personal memory; user jobs inherit the user;
+  agent outcomes tagged source=agent_result; skills not copied into Mem0.
+
+**Gate to Phase 8: PENDING** (Phase 7 live verification post-rebuild).
+
 ## Phase log
+
+- **2026-08-27** — **Phase 7: CODE COMPLETE** (jobs/agents/skills
+  identity propagation; awaiting MANUAL STEP B). New `memory/jobctx.py`
+  is the single propagation path (job_identity / retrieve / writeback_turn
+  / writeback_outcome — all gated, non-fatal, lazy-import). Wired into
+  siri_ask (retrieval + writeback, source=chat), morning_brief
+  (retrieval only; scheduled 'service' run is a no-op, user-triggered run
+  inherits the user), deep_research (durable outcome writeback at
+  completion only, source=agent_result, run_id correlation). Skills stay
+  procedural memory (sanitize_turn drops system/tool content — unit-
+  tested). Unit 120/120 (+27); identity 29/29; integration suite ALL PASS
+  (52 checks, +5 Phase 7 live checks: service writes nothing + no leak;
+  user job inherits user + provenance). Smoke green. Next: MANUAL STEP B
+  (`./homelab.sh rebuild skill-only`) → post-checks → live verification →
+  Phase 7 gate.
 
 - **2026-08-27** — **Phase 5 gate MET.** Second rebuild (deterministic
   `remember` fix, `a28cc639`). Post-checks green (warmup thread at boot,

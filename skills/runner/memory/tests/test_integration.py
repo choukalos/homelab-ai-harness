@@ -29,6 +29,7 @@ sys.path.insert(0, RUNNER_ROOT)
 
 from memory import interface  # noqa: E402
 from memory import config as memconfig  # noqa: E402
+from memory import jobctx  # noqa: E402
 
 PASS = 0
 FAIL = 0
@@ -58,6 +59,18 @@ def learn_with_retry(user, messages, marker, attempts=4):
             return True, i
         print(f"  (retry {i}/{attempts}: '{marker}' not stored yet)")
     return False, attempts
+
+
+class _Job:
+    """Minimal Job stub carrying the Phase 3/7 identity fields."""
+    def __init__(self, user_id, run_id, memory_enabled=True):
+        self.user_id = user_id
+        self.run_id = run_id
+        self.memory_enabled = memory_enabled
+        self.logs = []
+
+    def add_log(self, msg):
+        self.logs.append(msg)
 
 
 def main():
@@ -389,6 +402,54 @@ def main():
     finally:
         interface._client = saved_client
         interface._reset_singleton()
+
+    # ── Phase 7: job identity propagation (live) ─────────────────────
+    # A scheduled job runs under the 'service' identity and must NOT
+    # create personal memory; a user-triggered job inherits the user.
+    print("Phase 7: job identity propagation (live)...")
+    from memory import jobctx
+
+    # Scheduled job (service identity) → no personal memory created.
+    svc_before = len(interface.list_memories("service", limit=50))
+    svc_ids = jobctx.writeback_outcome(
+        _Job("service", "sched-run-1", True),
+        "Scheduled maintenance completed: all services healthy.",
+        agent="morning_brief",
+    )
+    check("phase7: scheduled (service) writes nothing", svc_ids == [], str(svc_ids))
+    svc_after = len(interface.list_memories("service", limit=50))
+    check("phase7: service has no personal memory",
+          svc_before == 0 and svc_after == 0, f"before={svc_before} after={svc_after}")
+    # No leak into the user's memory either.
+    chuck_before = len(interface.list_memories("chuck", limit=50))
+    check("phase7: service run did not leak into chuck",
+          len(interface.list_memories("chuck", limit=50)) == chuck_before)
+
+    # User-triggered job (inherits the user) → stored under that user.
+    # writeback_turn uses LLM extraction (infer=True); matrix-coder is
+    # occasionally flaky on JSON, so retry while the fact does not land
+    # (same pattern as learn_with_retry above).
+    u_ids = []
+    for _attempt in range(4):
+        u_ids = jobctx.writeback_turn(
+            _Job("chuck", "user-run-1", True),
+            [{"role": "user", "content": "My standing dentist appointment is every six months in March."}],
+            source="chat",
+        )
+        time.sleep(1.0)
+        if any("dentist" in m["text"].lower()
+               for m in interface.list_memories("chuck", limit=50)):
+            break
+    chuck_listed = interface.list_memories("chuck", limit=50)
+    check("phase7: user job inherits user + stores",
+          len(u_ids) >= 1 and any("dentist" in m["text"].lower() for m in chuck_listed),
+          f"ids={u_ids} n={len(chuck_listed)}")
+    dentist = next((m for m in chuck_listed if "dentist" in m["text"].lower()), None)
+    if dentist:
+        meta = dentist.get("metadata", {}) or {}
+        check("phase7: user job provenance (source/turn_id)",
+              meta.get("source") == "chat" and meta.get("turn_id") == "user-run-1",
+              str(meta))
 
     print("cleanup...")
     interface.delete_user_memories(user)

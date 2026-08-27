@@ -865,6 +865,21 @@ def run(
         if hasattr(job, "add_log"):
             job.add_log(f"deep_research completed: {len(source_list)} sources, {len(report)} chars")
 
+        # Phase 7 — durable outcome writeback at COMPLETION only (long-
+        # running job: run_id correlates the run; the outcome is written
+        # once, at the end — never mid-run). Agent-generated facts are
+        # stored with source=agent_result, confidence=normal (lower trust
+        # than a direct user statement), and the skill name as the agent
+        # provenance tag. Non-fatal; identity from the Job (a scheduled
+        # run under 'service' never creates personal memory).
+        if summary:
+            try:
+                from memory import jobctx  # lazy: keep the skill importable standalone
+                jobctx.writeback_outcome(job, summary, agent="deep_research")
+            except Exception as exc:  # noqa: BLE001 — never break the skill
+                if hasattr(job, "add_log"):
+                    job.add_log(f"Memory outcome writeback failed (non-fatal): {exc}")
+
         return {
             "summary": summary,
             "report": report,

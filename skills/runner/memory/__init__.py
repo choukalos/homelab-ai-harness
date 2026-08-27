@@ -30,6 +30,12 @@ from .interface import (
     is_healthy,
     warmup,
 )
+from .jobctx import (
+    job_identity,
+    retrieve,
+    writeback_turn,
+    writeback_outcome,
+)
 
 __all__ = [
     "MemoryConfig",
@@ -44,4 +50,9 @@ __all__ = [
     "delete_user_memories",
     "is_healthy",
     "warmup",
+    # Phase 7 — job-aware helpers (identity propagation for skills)
+    "job_identity",
+    "retrieve",
+    "writeback_turn",
+    "writeback_outcome",
 ]

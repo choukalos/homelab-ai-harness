@@ -121,6 +121,46 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return " ".join(words[:max_words]) + " [truncated]"
 
 
+def _memory_block(job, query: str) -> str:
+    """Build the ``<long_term_memory>`` block for siri_ask (Phase 7).
+
+    Same render path as ``siri_chat`` / ``_chat_direct`` (via
+    ``memory.jobctx.retrieve``), so all call sites stay identical.
+    Identity comes from the Job; the per-request switch is
+    ``job.memory_enabled``. Non-fatal: any failure degrades to "" so the
+    answer is never broken by memory (skills are loaded standalone via
+    importlib, so the memory package is imported lazily).
+    """
+    try:
+        from memory import jobctx  # lazy: keep the skill importable standalone
+        return jobctx.retrieve(job, query)
+    except Exception as exc:  # noqa: BLE001 — never break the skill
+        if hasattr(job, "add_log"):
+            job.add_log(f"Memory context unavailable (non-fatal): {exc}")
+        return ""
+
+
+def _writeback_turn(job, query: str, answer: str) -> None:
+    """Write back a successful siri_ask turn (Phase 7).
+
+    Non-fatal: a writeback failure never breaks the answer. Identity and
+    the per-request switch come from the Job.
+    """
+    try:
+        from memory import jobctx  # lazy
+        jobctx.writeback_turn(
+            job,
+            [
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": answer},
+            ],
+            source="chat",
+        )
+    except Exception as exc:  # noqa: BLE001 — never break the skill
+        if hasattr(job, "add_log"):
+            job.add_log(f"Memory writeback failed (non-fatal): {exc}")
+
+
 def _call_litellm(messages: list[dict[str, str]]) -> str:
     """
     Call LiteLLM with the model alias. Uses the OpenAI-compatible
@@ -235,6 +275,18 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
 
     try:
         messages = _build_messages({"query": query, "context": context})
+
+        # Phase 7 — memory retrieval: inject the <long_term_memory> block
+        # into the system prompt so the answer can use the caller's
+        # durable facts. Identity comes from the Job (user_id/run_id);
+        # gated by job.memory_enabled; non-fatal (empty block on error).
+        mem_block = _memory_block(job, query)
+        if mem_block and messages and messages[0].get("role") == "system":
+            messages[0] = {
+                "role": "system",
+                "content": messages[0]["content"] + "\n\n" + mem_block,
+            }
+
         response = _call_litellm(messages)
         response = _truncate_to_tokens(response, MAX_OUTPUT_TOKENS)
 
@@ -245,6 +297,11 @@ def run(params: dict[str, Any], job) -> dict[str, Any]:
             job.add_log(f"Response generated ({len(response)} chars)")
             if artifact_path:
                 job.add_log(f"Artifact logged: {artifact_path}")
+
+        # Phase 7 — memory writeback: after a SUCCESSFUL answer, extract
+        # + store durable facts from this turn. Non-fatal, budgeted,
+        # policy-filtered; identity from the Job.
+        _writeback_turn(job, query, response)
 
         return {
             "answer": response,

@@ -551,11 +551,35 @@ def _build_brief_context(
     return "\n".join(lines)
 
 
+def _memory_block(job, interests: list[str]) -> str:
+    """Build the ``<long_term_memory>`` block for the morning brief
+    (Phase 7).
+
+    Retrieves the caller's durable facts relevant to personalizing the
+    brief (preferences, schedule, standing interests). Identity comes
+    from the Job; the per-request switch is ``job.memory_enabled``.
+    Non-fatal: any failure degrades to "" so the brief is never broken
+    by memory. The memory package is imported lazily so the skill stays
+    importable standalone (importlib, stdlib-only by design).
+    """
+    if not interests:
+        return ""
+    try:
+        from memory import jobctx  # lazy
+        query = "personalize morning brief for interests: " + ", ".join(interests)
+        return jobctx.retrieve(job, query)
+    except Exception as exc:  # noqa: BLE001 — never break the skill
+        if hasattr(job, "add_log"):
+            job.add_log(f"Memory context unavailable (non-fatal): {exc}")
+        return ""
+
+
 def _synthesize_brief(
     client: Any,
     interests: list[str],
     categorized: dict[str, list[NewsItem]],
     max_items: int,
+    job=None,
 ) -> str:
     """Synthesize the morning brief via LLM chat completion through LiteLLM."""
     context = _build_brief_context(interests, categorized, max_items)
@@ -564,6 +588,19 @@ def _synthesize_brief(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": context},
     ]
+
+    # Phase 7 — memory retrieval: personalize the brief with the caller's
+    # durable facts (preferences, schedule, standing interests). Identity
+    # comes from the Job (user_id/run_id); gated by job.memory_enabled;
+    # non-fatal (no block on error). A scheduled job runs under the
+    # 'service' identity, which has no personal memory, so this is a
+    # no-op there — a user-triggered brief inherits the user.
+    mem_block = _memory_block(job, interests)
+    if mem_block:
+        messages[0] = {
+            "role": "system",
+            "content": messages[0]["content"] + "\n\n" + mem_block,
+        }
 
     result = client.chat_completion(
         MODEL_ALIAS,
@@ -707,7 +744,7 @@ def run(
             if hasattr(job, "add_log"):
                 job.add_log(f"Phase 4: Synthesizing brief from {len(unique_items)} items via LLM...")
 
-            report = _synthesize_brief(client, interests, categorized, max_items)
+            report = _synthesize_brief(client, interests, categorized, max_items, job)
 
             if hasattr(job, "add_log"):
                 job.add_log(f"Brief generated ({len(report)} chars)")
