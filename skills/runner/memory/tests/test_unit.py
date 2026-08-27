@@ -217,6 +217,70 @@ def test_singleton_first_call():
     interface._reset_singleton()
 
 
+def test_delete_user_count():
+    print("delete_user_memories count semantics (regression: household over-count):")
+    # Regression for the 2026-08-26 "memory_test_other mystery": the old
+    # implementation counted via the merged list_memories() view (private +
+    # household), so a user with 0 private memories reported 1 whenever a
+    # household fact existed — even though delete_all only removes the
+    # user's own points. The count must reflect only the user's own points.
+    saved = {k: os.environ.get(k) for k in ("MEMORY_ENABLED", "MEMORY_TIMEOUT_MS")}
+
+    class _FakeMem0:
+        def __init__(self, data):
+            self._data = data  # user_id -> list of point dicts
+            self.deleted = []
+
+        def get_all(self, filters=None, top_k=20):
+            uid = (filters or {}).get("user_id")
+            return [dict(p) for p in self._data.get(uid, [])]
+
+        def delete_all(self, user_id=None):
+            self.deleted.append(user_id)
+            self._data.pop(user_id, None)
+
+    class _FakeClient:
+        def __init__(self, data):
+            self._mem = _FakeMem0(data)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_TIMEOUT_MS"] = "1500"
+        interface._reset_singleton()
+        # memory_test_other: 0 private; household: 1 (basement).
+        fake = _FakeClient({
+            "memory_test_other": [],
+            "household": [{"id": "hh1", "memory": "server rack in basement"}],
+        })
+        interface._client = fake
+        n = interface.delete_user_memories("memory_test_other")
+        check("count excludes household view", n == 0, f"count={n}")
+        check("household point untouched",
+              len(fake._mem._data.get("household", [])) == 1)
+        check("delete_all called for the user",
+              fake._mem.deleted == ["memory_test_other"])
+        # The household user's own count is unaffected by the fix.
+        n2 = interface.delete_user_memories("household")
+        check("household user counts own points", n2 == 1, f"count={n2}")
+        check("household point removed", fake._mem.deleted.count("household") == 1)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def test_timeout_degradation():
     print("timeout -> graceful degradation:")
     cfg = memconfig.MemoryConfig(timeout_ms=200)  # 200ms budget
@@ -244,6 +308,7 @@ def main():
     test_config_env()
     test_flag_off_path()
     test_unknown_user()
+    test_delete_user_count()
     test_singleton_first_call()
     test_timeout_degradation()
     print()

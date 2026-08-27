@@ -31,6 +31,14 @@ from fastapi.responses import JSONResponse
 from httpx import AsyncClient, Timeout
 from pydantic import BaseModel, Field
 
+from memory.identity import (
+    RequestContext,
+    USER_SERVICE,
+    get_current_context,
+    resolve_user_id,
+    set_current_context,
+)
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -177,6 +185,12 @@ class Job(BaseModel):
     artifact_path: Optional[str] = None
     requester: Optional[str] = None
     channel: Optional[str] = None
+    # Memory identity (Phase 3): the memory principal for this job. The
+    # default is the safe "service" identity (D10) — jobs that do not inherit
+    # a user request context never touch personal memory. run_id correlates
+    # the job with the request that triggered it.
+    user_id: str = USER_SERVICE
+    run_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     params: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
     tool_bundle: Optional[str] = None
@@ -230,19 +244,33 @@ _SKILL_TIMEOUTS = {
 _DEFAULT_TIMEOUT = 120  # fallback
 
 
-def dispatch_job(skill: str, params: dict[str, Any], requester: str = "siri", channel: str = "siri") -> Job:
+def dispatch_job(
+    skill: str,
+    params: dict[str, Any],
+    requester: str = "siri",
+    channel: str = "siri",
+    context: Optional[RequestContext] = None,
+) -> Job:
     """
     Create a job for the given skill and dispatch it to a background thread.
 
     Returns the Job object IMMEDIATELY (execution happens in background).
     The caller should store this in `jobs[]` and return the job_id to the client.
     Timeout is enforced: if the skill exceeds its limit, the job is marked failed.
+
+    Memory identity (Phase 3): the job inherits ``context`` when given,
+    otherwise the current request context (if any), otherwise the safe
+    "service" identity (D10 — jobs never default to a personal user).
     """
+    if context is None:
+        context = get_current_context()
     job = Job(
         skill=skill,
         params=params,
         requester=requester,
         channel=channel,
+        user_id=context.user_id if context is not None else USER_SERVICE,
+        run_id=context.run_id if context is not None else uuid.uuid4().hex,
     )
     job.add_log(f"Dispatching job '{skill}' to background executor")
 
@@ -954,6 +982,9 @@ def _execute_skill(job: Job) -> None:
     """
     job.status = JobStatus.running
     job.add_log(f"Executing skill '{job.skill}'")
+    # Memory identity (Phase 3): log the principal + request correlation.
+    # user_id only — raw API key values are never logged.
+    job.add_log(f"Identity: user_id={job.user_id} run_id={job.run_id}")
 
     if job.dry_run:
         job.add_log("DRY RUN — skipping actual execution")
@@ -1478,11 +1509,14 @@ async def _handle_media_generate(text: str) -> ChatResponse:
                             image_url = text_val
                         break
 
+        _ctx = get_current_context()
         job = Job(
             skill="mcp_media",
             params={"query": text, "prompt": text},
             requester="siri",
             channel="siri",
+            user_id=_ctx.user_id if _ctx else USER_SERVICE,
+            run_id=_ctx.run_id if _ctx else uuid.uuid4().hex,
         )
         job.add_log("Intent 'media-generate' dispatched to MCP server 'mcp_media'")
         if image_url:
@@ -1684,11 +1718,14 @@ def _handle_list_presentations(text: str) -> ChatResponse:
     Handler for 'list-presentations' intent.
     Dispatches _scan_presentations in a background thread and returns job_id for polling.
     """
+    _ctx = get_current_context()
     job = Job(
         skill="list_presentations",
         params={"query": text},
         requester="siri",
         channel="siri",
+        user_id=_ctx.user_id if _ctx else USER_SERVICE,
+        run_id=_ctx.run_id if _ctx else uuid.uuid4().hex,
     )
 
     def _run_scan():
@@ -1787,11 +1824,14 @@ def _handle_list_images(text: str) -> ChatResponse:
     Handler for 'list-images' intent.
     Dispatches _scan_images in a background thread and returns job_id for polling.
     """
+    _ctx = get_current_context()
     job = Job(
         skill="list_images",
         params={"query": text},
         requester="siri",
         channel="siri",
+        user_id=_ctx.user_id if _ctx else USER_SERVICE,
+        run_id=_ctx.run_id if _ctx else uuid.uuid4().hex,
     )
 
     def _run_scan():
@@ -1853,10 +1893,20 @@ async def api_chat(
         if allowed and x_api_key not in allowed:
             raise HTTPException(status_code=403, detail="Invalid API key")
 
+    # Memory identity (Phase 3): resolve X-API-Key -> user_id. Unmapped or
+    # missing keys resolve to "unknown" (no retrieval, no writeback). The
+    # contextvar is task-scoped: visible to inline handlers and _chat_direct;
+    # Job objects carry the identity into background execution.
+    user_id = resolve_user_id(x_api_key)
+    set_current_context(RequestContext(user_id=user_id, source="web"))
+
     intent = _detect_intent(body.text, body.intent)
     model = body.model or "matrix-gemma4-moe"
 
-    logger.info("Chat request: intent=%s text=%s model=%s", intent, body.text[:100], model)
+    logger.info(
+        "Chat request: intent=%s user_id=%s text=%s model=%s",
+        intent, user_id, body.text[:100], model,
+    )
 
     # --- Direct chat (no tools) ---
     if intent == "chat":
@@ -1955,11 +2005,15 @@ async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobRes
     - **skill_name**: The skill to execute (e.g. `deep_research`, `siri_ask`).
     - **body**: JSON with `params`, `requester`, `channel`, `dry_run`, `tool_bundle`, `model_alias`.
     """
+    # Memory identity (Phase 3): inherit the request context, else service.
+    _ctx = get_current_context()
     job = Job(
         skill=skill_name,
         params=body.params,
         requester=body.requester,
         channel=body.channel,
+        user_id=_ctx.user_id if _ctx else USER_SERVICE,
+        run_id=_ctx.run_id if _ctx else uuid.uuid4().hex,
         dry_run=body.dry_run,
         tool_bundle=body.tool_bundle,
         model_alias=body.model_alias,
@@ -2182,11 +2236,14 @@ def run_schedule_now(schedule_id: str) -> dict[str, Any]:
             status_code=400, detail=f"Schedule '{schedule_id}' is disabled"
         )
 
+    # Memory identity (Phase 3): run-now is a scheduler-style trigger —
+    # the safe "service" principal (D10), not the calling user's.
     job = Job(
         skill=sched.skill,
         params=sched.params,
         requester="scheduler",
         channel="scheduler",
+        user_id=USER_SERVICE,
     )
     job.add_log(f"Run-now trigger for schedule '{schedule_id}' ({sched.name})")
     _execute_skill(job)

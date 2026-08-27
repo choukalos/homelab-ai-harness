@@ -325,6 +325,17 @@ def delete_memory(memory_id: str) -> bool:
 def delete_user_memories(user_id: str) -> int:
     """Delete ALL memories for a user. Returns count deleted (best-effort).
 
+    The count reflects only this user's OWN (private) memories — the
+    household view is excluded, so it matches what ``delete_all`` actually
+    removes. (The merged ``list_memories`` view would over-count for
+    non-household users whenever household facts exist: every user's list
+    includes the household scope, but ``delete_all(user_id=...)`` only
+    removes that user's own points.)
+
+    Both the count and the delete use the admin budget
+    (MEMORY_ADMIN_TIMEOUT_MS) — a cold-client get_all can exceed the 1.5s
+    retrieval budget, which would degrade the count to 0.
+
     Returns 0 on error/timeout or when the user is unknown.
     """
     cfg = _get_config()
@@ -332,8 +343,14 @@ def delete_user_memories(user_id: str) -> int:
         return 0
     client = _get_client()
     try:
-        before = list_memories(user_id, limit=1000)
-        count = len(before)
+        def _count_op():
+            return client._ensure_client().get_all(
+                filters={"user_id": user_id}, top_k=1000
+            )
+
+        raw = client._with_timeout(_count_op, timeout_s=cfg.admin_timeout_s)
+        count = len(_as_list(raw))
+
         def _delete_all_op():
             client._ensure_client().delete_all(user_id=user_id)
 
