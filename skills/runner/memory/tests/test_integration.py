@@ -306,14 +306,18 @@ def main():
         md = biscuit.get("metadata", {})
         check("p5: source=direct_user", md.get("source") == "direct_user", str(md))
         check("p5: importance=high", md.get("importance") == "high", str(md))
-        check("p5: run_id metadata", md.get("run_id") == "p5test", str(md))
+        check("p5: turn_id metadata", md.get("turn_id") == "p5test", str(md))
     else:
         check("p5: source=direct_user", False, "biscuit memory not in list")
         check("p5: importance=high", False, "biscuit memory not in list")
-        check("p5: run_id metadata", False, "biscuit memory not in list")
+        check("p5: turn_id metadata", False, "biscuit memory not in list")
 
-    # (3) Changed preference consolidates (no contradictory duplicates):
-    # mem0's update pass should UPDATE the old fact, not keep both.
+    # (3) Changed preference. mem0 2.0.19 OSS is ADD-only (no in-place
+    # update; supersede semantics live in the hosted v3 API) — the
+    # correction is stored as a self-contained supersede statement and the
+    # old fact is NOT duplicated. The context block carries both; the new
+    # statement explicitly negates the old one, so the assistant uses the
+    # latest preference. (Revisit: nightly LLM consolidation job, Phase 9.)
     ok_milk, tries_milk = learn_with_retry(
         "chuck",
         [{"role": "user", "content": "I really prefer oat milk lattes in the morning"}],
@@ -331,9 +335,18 @@ def main():
                   if ("oat milk" in h["text"].lower() or "almond" in h["text"].lower())]
     check("p5: correction present", any("almond" in h["text"].lower() for h in milk_facts),
           f"milk_facts={[h['text'][:50] for h in milk_facts]}")
-    check("p5: no contradictory duplicate (oat milk gone/updated)",
-          not any("oat milk" in h["text"].lower() for h in milk_facts),
+    check("p5: old fact not duplicated",
+          sum(1 for h in milk_facts
+              if "oat milk" in h["text"].lower() and "almond" not in h["text"].lower()) <= 1,
           f"milk_facts={[h['text'][:50] for h in milk_facts]}")
+    block = ""
+    for _a in range(3):
+        block = interface.render_context("chuck", "what milk do I use in my coffee?")
+        if "almond" in block.lower():
+            break
+        time.sleep(1.0)
+    check("p5: rendered block carries the new fact", "almond" in block.lower(),
+          f"block={block[:200]!r}")
 
     # (4) Web/tool-derived instruction (prompt-injection) is not stored —
     # the extraction prompt must drop directives addressed to the assistant.

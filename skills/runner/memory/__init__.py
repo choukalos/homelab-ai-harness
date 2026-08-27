@@ -28,6 +28,7 @@ from .interface import (
     search_memory,
     update_memory,
     is_healthy,
+    warmup,
 )
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     "delete_memory",
     "delete_user_memories",
     "is_healthy",
+    "warmup",
 ]

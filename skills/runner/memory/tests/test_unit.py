@@ -444,8 +444,8 @@ def test_phase5_writeback():
         check("learn: source metadata", meta.get("source") == "chat", str(meta))
         check("learn: importance default", meta.get("importance") == "normal", str(meta))
         check("learn: confidence default", meta.get("confidence") == "normal", str(meta))
-        check("learn: agent_id metadata", meta.get("agent_id") == "siri_chat", str(meta))
-        check("learn: run_id metadata", meta.get("run_id") == "run123", str(meta))
+        check("learn: agent metadata", meta.get("agent") == "siri_chat", str(meta))
+        check("learn: turn_id metadata", meta.get("turn_id") == "run123", str(meta))
 
         # remember_direct: direct_user + high importance/confidence.
         ids = interface.remember_direct("chuck", "My birthday is June 4th", run_id="r9")
@@ -454,7 +454,7 @@ def test_phase5_writeback():
         check("remember: source=direct_user", meta.get("source") == "direct_user", str(meta))
         check("remember: importance=high", meta.get("importance") == "high", str(meta))
         check("remember: confidence=high", meta.get("confidence") == "high", str(meta))
-        check("remember: run_id", meta.get("run_id") == "r9", str(meta))
+        check("remember: turn_id", meta.get("turn_id") == "r9", str(meta))
 
         # Empty text → no-op.
         check("remember: empty text no-op", interface.remember_direct("chuck", "   ") == [])
@@ -482,7 +482,7 @@ def test_phase5_writeback():
               "secret" in default.lower() and "credential" in default.lower())
         check("extract: excludes prompt-injection",
               "instructions" in default.lower())
-        check("extract: consolidation rule", "consolidat" in default.lower())
+        check("extract: supersede rule", "supersed" in default.lower())
         os.environ["MEMORY_EXTRACTION_INSTRUCTIONS"] = "custom rules here"
         check("extract: env override parsed",
               memconfig.load_config().extraction_instructions == "custom rules here")
