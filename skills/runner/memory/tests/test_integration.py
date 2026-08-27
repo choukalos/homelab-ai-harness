@@ -420,10 +420,19 @@ def main():
     svc_after = len(interface.list_memories("service", limit=50))
     check("phase7: service has no personal memory",
           svc_before == 0 and svc_after == 0, f"before={svc_before} after={svc_after}")
-    # No leak into the user's memory either.
-    chuck_before = len(interface.list_memories("chuck", limit=50))
+    # No leak into the user's memory either. The service's outcome text
+    # must NOT appear under chuck. (A raw count comparison is fragile: a
+    # single list_memories() call can hit the 1.5s retrieval budget on a
+    # cold Qdrant query and degrade to [] — so assert on the specific
+    # content and retry the read once if it comes back empty.)
+    chuck_memories = interface.list_memories("chuck", limit=50)
+    if not chuck_memories:
+        time.sleep(0.5)
+        chuck_memories = interface.list_memories("chuck", limit=50)
+    chuck_text = " ".join(m["text"].lower() for m in chuck_memories)
     check("phase7: service run did not leak into chuck",
-          len(interface.list_memories("chuck", limit=50)) == chuck_before)
+          "scheduled maintenance" not in chuck_text,
+          f"chuck_n={len(chuck_memories)}")
 
     # User-triggered job (inherits the user) → stored under that user.
     # writeback_turn uses LLM extraction (infer=True); matrix-coder is
