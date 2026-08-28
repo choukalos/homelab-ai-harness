@@ -195,7 +195,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `POST /storyboard` | `media_storyboard` | VLLM (shot-list JSON) | ~30s |
 | `POST /images` | `media_generate_image` | ComfyUI (SD3 keyframes) | 30–60s |
 | `POST /images/edit` | `media_edit_image` | ComfyUI (img2img edit) | ~30s |
-| `POST /shots` | `media_generate_shot` | LTXV I2V (~4s clips) | 10–30 min |
+| `POST /shots` | `media_generate_shot` | LTXV I2V (~4s clips) | ~10–60s (measured 10s, 97f @ 768×512) |
 | `POST /tts` | `media_text_to_speech` | TTS worker (default voice: movie-trailer) | 15–60s |
 | `POST /music` | `media_generate_music` | ACE-Step | 10–30 min |
 | `POST /sfx` | `media_sfx` | MMAudio (synced to a clip) | 10–30 min |
