@@ -52,6 +52,10 @@ services:
       - /home/chuck/data/victoria-metrics:/victoria-metrics/data
     command:
       - '--promscrape.config=/etc/victoria-metrics/prometheus.yml'
+      # Hot-reload the promscrape config when prometheus/prometheus.yml changes
+      # (disabled by default in VictoriaMetrics). memory_todo.md Phase 8:
+      # skill-runner /metrics job added to the scrape config.
+      - '--promscrape.configCheckInterval=30s'
       - '--storageDataPath=/victoria-metrics/data'
       - '--retentionPeriod=1y'
       - '--dedup.minScrapeInterval=15s'
