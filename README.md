@@ -36,7 +36,7 @@ Runs:
 - LiteLLM
 - Open Web UI
 - AI Harness APIs
-- Ghost blog
+- Hugo Portal (blog)
 - Invest Hub
 - Qdrant
 - Redis
@@ -130,7 +130,7 @@ NOT committed to GitHub.
   compose/
     compose.core.yml
     compose.edge.yml
-    compose.ghost.yml
+    compose.portal.yml   # Hugo portal (git-sync + static server), choukalos.com
     compose.ai-core.yml
     compose.mcp.yml          # MCP server containers (6 active)
     compose.skill-runner.yml # Skill orchestration API (port 8091)
@@ -207,7 +207,7 @@ NOT committed to GitHub.
 
   crawl4ai/
 
-  ghost/
+  portal/
 
   grafana/
 
@@ -321,7 +321,7 @@ Config:
 
 | Hostname | Service | Auth |
 |---|---|---|
-| `choukalos.com` | Ghost blog | None |
+| `choukalos.com` | Hugo Portal (blog) | None |
 | `invest.choukalos.com` | Invest Hub (client + API) | None |
 | `api.choukalos.com` | Invest Hub backend API | None |
 | `siri.choukalos.com` | AI Harness Siri API | `X-API-Key` |
@@ -720,9 +720,13 @@ Public ingress:
 
 ---
 
-## compose.ghost.yml
+## compose.portal.yml
 
-Stable public blog stack.
+Public Hugo portal (blog): git-sync pulls the `deploy` branch of the
+homelab-blog repo into /home/chuck/data/portal/git (atomic `current`
+symlink); the portal container (stdlib-only static server) serves the
+site, the /files/ public drop zone, and /status/ runtime artifacts.
+Replaced the Ghost stack 2026-08-28 (see blog-todo.md).
 
 Rarely changes.
 
@@ -884,7 +888,7 @@ restart litellm or other ai-core services — your LLM connection stays alive.
 Manually managed:
 - Caddy
 - Cloudflare Tunnel
-- Ghost
+- Hugo Portal (blog)
 - databases
 - Redis
 - Qdrant
@@ -939,7 +943,7 @@ DATABASE_URL=mysql://investor:***@thor.local:3306/investorhub
 ## Public Exposure
 
 Only expose:
-- Ghost
+- Hugo Portal (blog)
 - Siri endpoint
 - Invest Hub
 - specific AI APIs if needed
@@ -970,7 +974,7 @@ Never committed to GitHub.
 Critical backups:
 - MySQL
 - ai-kb repo
-- Ghost content
+- homelab-blog repo (GitHub) + /home/chuck/data/portal/git mirror
 - Open Web UI DB
 - Qdrant data
 - LiteLLM Postgres

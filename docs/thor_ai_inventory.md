@@ -64,9 +64,9 @@
 | **Victoria Metrics** | `compose/compose.monitoring.yml` | Metrics backend on :9090, scrapes LiteLLM prometheus + node/cadvisor | **As-is** — observability backend; will add skill runner + MCP metrics later | Low | Already scraping LiteLLM. Extend scrape config for new services. |
 | **Grafana** | `compose/compose.monitoring.yml` | Dashboards on :3001, provisioned datasources/dashboards | **As-is** — observability UI; will add skill runner/MCP dashboards later | Low | Provisioned config stays. New dashboards added, not edited. |
 | **Invest Hub** | `compose/compose.invest-hub.yml` | Client + server on public-net, GitHub runner for CI/CD | **Not Thor** — separate project (invest-hub), not part of AI platform refactor | N/A | Out of scope. Leave untouched. |
-| **Ghost Blog** | `compose/compose.ghost.yml` | Blog on public-net, MySQL on host | **Not Thor** — content site, not AI platform | N/A | Out of scope. Leave untouched. |
+| **Hugo Portal** | `compose/compose.portal.yml` | Static blog portal (git-sync + portal) on public-net, serves choukalos.com; replaced Ghost 2026-08-28 (blog-todo.md) | **Not Thor** — content site, not AI platform | N/A | Out of scope. Leave untouched. |
 | **Plausible** | `compose/compose.monitoring.yml` | Analytics (postgres + clickhouse), admin on LAN :8082, narrow public routes | **Not Thor** — analytics, not AI platform | N/A | Out of scope. Leave untouched. |
-| **MySQL (bare-metal)** | Host docker, not in Docker | Database for Ghost, invest-hub, AI harness (AI_DB_*) | **As-is** — shared database on host | Low | Not managed by Thor. Used by multiple services. |
+| **MySQL (bare-metal)** | Host docker, not in Docker | Database for invest-hub, AI harness (AI_DB_*) | **As-is** — shared database on host | Low | Not managed by Thor. Used by multiple services. |
 
 ---
 
@@ -129,7 +129,7 @@ The current AI Harness is too monolithic. It becomes a thin gateway that routes 
 | Capability | Reason |
 |---|---|
 | Invest Hub | Separate project, not AI platform |
-| Ghost Blog | Content site, not AI platform |
+| Hugo Portal | Content site, not AI platform |
 | Plausible | Analytics, not AI platform |
 
 ---

@@ -44,7 +44,7 @@ Channels are thin adapters on top. They connect users to capabilities but do not
 
 **Users:** Chuck, wife, daughter, son
 
-**Access path:** `choukalos.com` → Cloudflare Tunnel → Caddy → `ghost-blog:2368`
+**Access path:** `choukalos.com` → Cloudflare Tunnel → Caddy → `portal:8080` (Hugo portal container; `/media/files/*` → `skill-runner:8091`)
 
 **Public/LAN:** Public via Cloudflare (blog content). LAN-only features TBD.
 
@@ -57,7 +57,7 @@ Channels are thin adapters on top. They connect users to capabilities but do not
 
 **Tool bundle:** `{ blog-read, service-links, status-summary }`
 
-**Key decision:** The portal is a separate project tracked in `portal_todo.md`. Thor exposes capabilities that the portal can link to or summarize, but Thor does not own the portal UI project. Currently served by Ghost blog.
+**Key decision:** The portal is a separate project tracked in `portal_todo.md` / `blog-todo.md`. Thor exposes capabilities that the portal can link to or summarize, but Thor does not own the portal UI project. Served by the Hugo portal container (`compose/compose.portal.yml`, git-sync + static server) since the 2026-08-28 cutover (Ghost removed).
 
 ---
 
@@ -258,7 +258,7 @@ When re-enabled, n8n will use a dedicated `automation` LiteLLM key.
 
 | App | Domain | Caddy Route | Backend | Auth |
 |---|---|---|---|---|
-| Ghost blog | `choukalos.com` | `host choukalos.com` | `ghost-blog:2368` | None |
+| Hugo portal | `choukalos.com` | `host choukalos.com` | `portal:8080` (+ `/media/files/*` → `skill-runner:8091`) | None |
 | Invest Hub (UI) | `invest.choukalos.com` | `host invest.choukalos.com` → client `/*` | `invest-hub-client:80` | App-level |
 | Invest Hub (API) | `invest.choukalos.com/api/*` or `api.choukalos.com` | `host invest.choukalos.com` → server `/api/*` or `host api.choukalos.com` | `invest-hub-server:4000` | App-level |
 | Plausible | `plausible.choukalos.com` | `/js/*` and `/api/event` only | `plausible:8000` | None (narrow) |
@@ -313,7 +313,7 @@ Remote users (Chuck/Son away):
   → Cloudflare Tunnel → Caddy :80
     → siri.choukalos.com    → ai-harness:8090   (X-API-Key)
     → llm.choukalos.com     → litellm:4000       (X-API-Key)
-    → choukalos.com         → ghost-blog:2368    (public)
+    → choukalos.com         → portal:8080        (public)
     → invest.choukalos.com  → invest-hub         (app auth)
     → api.choukalos.com     → invest-hub-server  (app auth)
     → plausible.choukalos.com → plausible        (narrow paths)

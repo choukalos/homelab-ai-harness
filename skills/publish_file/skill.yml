@@ -1,0 +1,29 @@
+name: publish_file
+version: "1.0"
+description: "Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped."
+inputs:
+  - name: source_path
+    type: string
+    required: true
+    description: "Absolute path to the file to publish (must be under /home/chuck/data/media/ or /home/chuck/workspace/)."
+  - name: destination_name
+    type: string
+    required: false
+    description: "Optional target filename (defaults to the source basename)."
+  - name: subdirectory
+    type: string
+    required: false
+    enum: [ai, files, images, audio, video]
+    default: ai
+    description: "Drop-zone subdirectory to publish into."
+  - name: overwrite
+    type: boolean
+    required: false
+    default: false
+    description: "Replace an existing file with the same name (default: fail on collision)."
+tools: []
+model_alias:
+artifact_path: /home/chuck/data/media/public/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 60  # seconds — local copy, even at the 500MB cap

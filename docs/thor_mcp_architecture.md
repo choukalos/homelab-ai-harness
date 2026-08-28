@@ -210,7 +210,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 | Field | Value |
 |---|---|
-| **Purpose** | MySQL introspection + guarded query execution for the host MySQL (Ghost, InvestorHub, homelab) |
+| **Purpose** | MySQL introspection + guarded query execution for the host MySQL (InvestorHub, homelab) |
 | **Tools (live)** | `list_databases`, `list_tables`, `describe_table`, `sample_table`, `schema_overview`, `run_query`, `run_query_to_csv`, `nl_to_sql_then_run`, `explain_sql`, `list_indexes`, `foreign_keys` (11 tools) |
 | **Schema intelligence (2026-08-28)** | `schema_overview` returns full per-database intelligence: every table with **all** columns + indexes + row counts, declared FKs, **inferred soft relations** (ORM-style `xxxId` reference columns without declared FKs — the join graph works even for FK-less databases), the join graph, curated domain hints, and sample rows. NL-to-SQL receives this as prompt context. |
 | **NL-to-SQL** | `matrix-coder` (Qwen3.6-27B via vLLM) with thinking disabled (`LITELLM_DISABLE_THINKING`, Qwen thinking models otherwise burn the token budget on reasoning and return empty content). 2000-token budget. |

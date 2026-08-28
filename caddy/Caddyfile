@@ -14,9 +14,18 @@
 	@www host www.choukalos.com
 	redir @www https://choukalos.com{uri} permanent
 
-	@ghost host choukalos.com
-	handle @ghost {
-		reverse_proxy http://ghost-blog:2368 {
+	@blog host choukalos.com
+	handle @blog {
+		# Same-origin media access (blog-todo.md B3) — mirrors the siri route so
+		# blog posts can embed generated artifacts (charts/demos/videos) on
+		# choukalos.com.
+		handle /media/files/* {
+			reverse_proxy http://skill-runner:8091
+		}
+		# Hugo portal (blog-todo.md B4 cutover, 2026-08-28): static site +
+		# /files/ public drop zone + /status/. Served by the portal container
+		# (compose/compose.portal.yml: git-sync + portal).
+		reverse_proxy http://portal:8080 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-Host {host}
