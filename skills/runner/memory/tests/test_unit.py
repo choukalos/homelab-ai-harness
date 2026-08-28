@@ -705,6 +705,152 @@ def test_phase7_jobctx():
         interface._reset_singleton()
 
 
+def test_phase8_admin():
+    print("Phase 8 admin + metrics (admin-key ops bypass _valid_user, metrics exposition):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_HOUSEHOLD_ENABLED", "MEMORY_TIMEOUT_MS",
+    )}
+
+    class _FakeMem0:
+        def __init__(self, data):
+            self._data = data          # user_id -> list of point dicts
+            self.deleted_users = []    # delete_all(user_id)
+            self.deleted_ids = []      # delete(memory_id)
+            self.updated = []          # (memory_id, text)
+            self.searched = []         # (query, user_id)
+
+        def get_all(self, filters=None, top_k=20):
+            uid = (filters or {}).get("user_id")
+            return [dict(p) for p in self._data.get(uid, [])][:top_k]
+
+        def search(self, query, filters=None, top_k=10):
+            uid = (filters or {}).get("user_id")
+            self.searched.append((query, uid))
+            return [dict(p) for p in self._data.get(uid, [])][:top_k]
+
+        def update(self, memory_id, text):
+            self.updated.append((memory_id, text))
+
+        def delete(self, memory_id):
+            self.deleted_ids.append(memory_id)
+
+        def delete_all(self, user_id=None):
+            self.deleted_users.append(user_id)
+            self._data.pop(user_id, None)
+
+    class _FakeClient:
+        def __init__(self, data):
+            self._mem = _FakeMem0(data)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    from memory import admin, metrics
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_HOUSEHOLD_ENABLED"] = "true"
+        os.environ["MEMORY_TIMEOUT_MS"] = "1500"
+        interface._reset_singleton()
+        fake = _FakeClient({
+            "chuck": [
+                {"id": "c1", "memory": "chuck likes oat milk", "score": 0.9},
+                {"id": "c2", "memory": "chuck's birthday is June 4", "score": 0.8},
+            ],
+            "service": [{"id": "s1", "memory": "service note", "score": 0.7}],
+            "household": [{"id": "h1", "memory": "server rack in basement", "score": 0.6}],
+        })
+        interface._client = fake
+
+        # ── list_user bypasses _valid_user (service is rejected by the chat path) ──
+        check("admin list: service (bypass _valid_user)",
+              {h["id"] for h in admin.list_user("service", scope="private")} == {"s1"},
+              str([h["id"] for h in admin.list_user("service", scope="private")]))
+        check("chat path: service rejected (contrast)",
+              interface.list_memories("service") == [])
+
+        hits_all = admin.list_user("chuck", scope="all")
+        check("admin list: chuck private + household",
+              {h["id"] for h in hits_all} == {"c1", "c2", "h1"},
+              str([h["id"] for h in hits_all]))
+        hits_priv = admin.list_user("chuck", scope="private")
+        check("admin list: scope=private excludes household",
+              {h["id"] for h in hits_priv} == {"c1", "c2"},
+              str([h["id"] for h in hits_priv]))
+
+        # ── list_user with query (semantic search) ──
+        fake._mem.searched.clear()
+        hits_q = admin.list_user("chuck", query="oat milk", scope="private")
+        check("admin search: query triggers search",
+              len(fake._mem.searched) >= 1 and hits_q, str(fake._mem.searched))
+
+        # ── update / delete delegate to the interface ──
+        check("admin update: ok", admin.update("c1", "chuck likes almond milk") is True)
+        check("admin update: routed",
+              fake._mem.updated == [("c1", "chuck likes almond milk")])
+        check("admin delete: ok", admin.delete("c2") is True)
+        check("admin delete: routed", fake._mem.deleted_ids == ["c2"])
+
+        # ── delete_user bypasses _valid_user ──
+        n = admin.delete_user("service")
+        check("admin delete_user: service (bypass)", n == 1, f"n={n}")
+        check("admin delete_user: routed", fake._mem.deleted_users == ["service"])
+
+        # ── health ──
+        h = admin.health()
+        check("admin health: keys",
+              {"healthy", "enabled", "counters", "user_counts"} <= set(h.keys()),
+              str(sorted(h.keys())))
+        check("admin health: enabled", h["enabled"] is True)
+
+        # ── non-fatal: a failing client degrades to [] / 0 ──
+        class _Boom:
+            def _ensure_client(self):
+                raise RuntimeError("boom")
+
+            def reset(self):
+                pass
+        interface._client = _Boom()
+        check("admin list: error -> non-fatal []", admin.list_user("chuck") == [])
+        check("admin delete_user: error -> non-fatal 0", admin.delete_user("chuck") == 0)
+
+        # ── metrics recording + exposition ──
+        metrics._metrics = metrics._Metrics()  # fresh registry
+        m2 = metrics.get_metrics()
+        m2.record_search("ok", 0.12, 3)
+        m2.record_search("error", 1.5, 0)
+        m2.record_writeback("ok", 5.2, 2)
+        m2.record_error("update")
+        m2.set_user_count("chuck", 7)
+        out = m2.exposition()
+        check("metrics: search counter", 'memory_search_total{status="ok"} 1' in out, out[:200])
+        check("metrics: search hits", "memory_search_hits_total 3" in out)
+        check("metrics: writeback stored", "memory_writeback_stored_total 2" in out)
+        check("metrics: error counter", 'memory_errors_total{op="update"} 1' in out)
+        check("metrics: user gauge", 'memory_user_count{user_id="chuck"} 7' in out)
+        check("metrics: histogram +Inf",
+              'memory_search_latency_seconds_bucket{status="ok",le="+Inf"} 1' in out)
+        check("metrics: histogram cumulative (le=2.5 covers 1.5)",
+              'memory_search_latency_seconds_bucket{status="error",le="2.5"} 1' in out)
+        check("metrics: no double braces", '{status="ok"}{le' not in out)
+        check("metrics: no secrets in exposition", "oat milk" not in out and "chuck's birthday" not in out)
+        check("metrics: exposition is str", isinstance(out, str) and out)
+
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -717,6 +863,7 @@ def main():
     test_timeout_degradation()
     test_phase5_writeback()
     test_phase7_jobctx()
+    test_phase8_admin()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")

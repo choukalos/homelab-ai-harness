@@ -77,7 +77,28 @@
   `siri_ask` via `/skills/siri_ask` (no user context) → job log
   `Identity: user_id=service`, Qdrant counts stayed 0/0 (no leak, no
   service memory). Counts back to 0 / 18.
-- Last updated: 2026-08-27.
+- **Phase 8: CODE COMPLETE** (2026-08-28) — administration, observability,
+  backups. (1) **Admin REST endpoints** on skill-runner, admin-key protected
+  (`MEMORY_ADMIN_API_KEY`, distinct from user keys; unset → 503, bad key →
+  403): `GET /api/memory/users/{user_id}` (list/search by scope/query/limit),
+  `PATCH /api/memory/{memory_id}`, `DELETE /api/memory/{memory_id}`,
+  `DELETE /api/memory/users/{user_id}` (`?export=true` returns memories
+  before deletion), `GET /api/memory/health` (health + counters). Backed by
+  new `memory/admin.py` which BYPASSES the `_valid_user` gate (admin may
+  inspect/manage any user incl. service/household); all ops non-fatal,
+  admin timeout budget. (2) **CLI wrapper** `cli/memory-admin.sh` (health /
+  list / search / update / delete / delete-user). (3) **Observability**:
+  new dependency-free `memory/metrics.py` (thread-safe counters + histograms
+  + per-user gauge, Prometheus text exposition, no secrets) wired into the
+  interface (search/writeback latency+status, hit/stored counts, errors by
+  op); `GET /metrics` endpoint; skill-runner added to the Prometheus scrape
+  config. (4) **Backups:** `scripts/backup-memory.sh` kept current; restore
+  tested end-to-end with a non-production user (`restore_test`): stored →
+  snapshot → deleted live → restored into a throwaway Qdrant (port 16333)
+  → full text + metadata recovered (text under `data` key). Unit tests
+  145/145 (+25 Phase 8); live integration 60/60 (+8 Phase 8). REST smoke
+  15/15 (auth 403/503/200, /metrics Prometheus text). Counts back to 0 / 18.
+- Last updated: 2026-08-28.
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -110,10 +131,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** Phase 7 gate MET — next step is **Phase 8** (admin REST
-endpoints: list/update/delete/delete_user over HTTP with the admin
-identity) or **Phase 6** (optional MCP memory tools; plan-gated on a
-week of use). Awaiting Chuck's direction.
+**PENDING:** Phase 8 code complete (admin REST + CLI + metrics + restore
+verified). Awaiting **MANUAL STEP B** (`./homelab.sh rebuild skill-only`) to
+bake in the admin endpoints, then live admin e2e + gate. Next after Phase 8:
+Phase 6 (optional MCP) or Phase 9 (hardening).
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -197,6 +218,10 @@ week of use). Awaiting Chuck's direction.
 | `compose/compose.skill-runner.yml` | add `MEMORY_*` env |
 | `compose/compose.ai-core.yml` | qdrant/litellm/open-webui services |
 | `skills/runner/pyproject.toml` + `Dockerfile` | add `mem0ai` (pinned) |
+| `memory/admin.py` | NEW in Phase 8 — admin ops (bypass `_valid_user`, non-fatal) |
+| `memory/metrics.py` | NEW in Phase 8 — dependency-free Prometheus metrics |
+| `cli/memory-admin.sh` | NEW in Phase 8 — admin CLI wrapper |
+| `prometheus/prometheus.yml` | skill-runner scrape job (Phase 8) |
 | `scripts/backup-memory.sh` | NEW in Phase 1 |
 | `.env` | `MEMORY_*` vars (gitignored) |
 
@@ -556,7 +581,90 @@ has no such gate and can start immediately if preferred.
 **Gate to Phase 8: MET (2026-08-27).** Live identity verified post-
 rebuild (user job → chuck; service job → service, no personal memory).
 
+## Phase 8 (administration, observability, backups) — status
+
+**CODE COMPLETE (2026-08-28; awaiting MANUAL STEP B + live admin e2e).**
+
+- [x] Admin REST endpoints (admin-key protected, `MEMORY_ADMIN_API_KEY`):
+  `GET /api/memory/users/{user_id}` (list/search: `q`, `scope`, `limit`),
+  `PATCH /api/memory/{memory_id}`, `DELETE /api/memory/{memory_id}`,
+  `DELETE /api/memory/users/{user_id}` (`?export=true`),
+  `GET /api/memory/health`. New `memory/admin.py` bypasses `_valid_user`
+  (admin may manage any user incl. service/household); all ops non-fatal,
+  admin timeout budget. Auth: unset key → 503, bad/missing → 403, never
+  logs the key.
+- [x] CLI wrapper `cli/memory-admin.sh` (health / list / search / update /
+  delete / delete-user). Reads the admin key from `MEMORY_ADMIN_API_KEY` or
+  `MEMORY_ADMIN_KEY_FILE`; base URL from `SKILL_RUNNER_URL`.
+- [x] Observability: dependency-free `memory/metrics.py` (thread-safe
+  counters + histograms + per-user gauge; Prometheus text exposition; no
+  secrets). Wired into the interface: search/writeback latency + status,
+  hit/stored counts, errors by op. `GET /metrics` endpoint (unauthenticated,
+  Prometheus-scraped). skill-runner added to `prometheus/prometheus.yml`
+  (scrape `host.docker.internal:8091/metrics`). Structured logs already carry
+  memory_id / user_id (never secrets).
+- [x] Backups: `scripts/backup-memory.sh` kept current (.env + Qdrant
+  snapshot + git-clean check). **Restore tested end-to-end** with a
+  non-production user (`restore_test`): stored → snapshot → deleted live →
+  restored into a throwaway Qdrant (port 16333) → full text + metadata
+  recovered (text under the `data` payload key; provenance intact).
+- [x] `.env` + compose passthrough: `MEMORY_ADMIN_API_KEY` (safe default
+  empty = admin disabled / 503).
+- [x] Tests: unit 145/145 (+25 Phase 8: admin bypass/scope/search/
+  non-fatal + metrics exposition); live integration 60/60 (+8 Phase 8:
+  admin list/search/health + metrics no-secrets); REST smoke 15/15 (auth
+  403/503/200, /metrics Prometheus text, response shapes).
+- [ ] MANUAL STEP B: `./homelab.sh rebuild skill-only` (bakes in the admin
+  endpoints + metrics + CLI).
+- [ ] Post-rebuild: live admin e2e (CLI + curl against the rebuilt
+  skill-runner), verify `/metrics` is scraped by Prometheus, verify the
+  admin key is not in logs.
+- [ ] Phase 8 gate: admin ops exercised manually; restore test current.
+
+**Gate to Phase 9: PENDING** (admin ops exercised manually after manual
+step B; restore test current — restore verified 2026-08-28).
+
+**Phase 8 gotchas:**
+- **Admin key ≠ user keys.** `MEMORY_ADMIN_API_KEY` is a SEPARATE secret from
+  `SKILL_RUNNER_API_KEY` (the user key). `_require_admin()` only accepts the
+  admin key; a valid user key is NOT admin. Unset admin key → 503 (admin
+  disabled, fail-safe); bad/missing → 403. The key value is never logged.
+- **Admin bypasses `_valid_user` by design.** The chat path rejects
+  `unknown`/`service`/`household` (no personal memory), but the admin path
+  must be able to inspect/manage ANY user (including service + household)
+  for administration. `admin.list_user`/`delete_user` call the interface
+  primitives directly (which do NOT apply `_valid_user`), so the admin
+  identity is the trust boundary — hence the admin-key gate.
+- **Qdrant payload text key is `data`, not `memory`/`text`.** When inspecting
+  raw Qdrant points (restore verification, debugging), the stored text is
+  under the `data` payload key; `text_lemmatized` is the lemmatized copy.
+  mem0's `list`/`search` normalize it to a `memory`/`text` field, but raw
+  Qdrant scroll shows `data`.
+- **Restore is to a throwaway Qdrant, never the live one.** The restore test
+  spins up a throwaway `qdrant/qdrant` on port 16333 (never 6333) and
+  recovers the collection there. The live Qdrant is never overwritten by a
+  restore test.
+- **Metrics are process-local.** `memory/metrics.py` is an in-process
+  singleton; counters reset on skill-runner restart. That's fine for
+  Prometheus (it scrapes current values + computes rates). No persistence.
+
 ## Phase log
+
+- **2026-08-28** — **Phase 8: CODE COMPLETE** (administration,
+  observability, backups). New `memory/admin.py` (admin ops that bypass the
+  `_valid_user` gate; non-fatal, admin timeout budget) + `memory/metrics.py`
+  (dependency-free Prometheus counters/histograms/gauge, no secrets) +
+  `cli/memory-admin.sh` (health/list/search/update/delete/delete-user).
+  `main.py`: admin-key protected REST endpoints (`MEMORY_ADMIN_API_KEY`,
+  distinct from user keys; unset → 503, bad → 403) + `GET /metrics`.
+  Interface instrumented (search/writeback latency+status, hit/stored,
+  errors by op). skill-runner added to the Prometheus scrape config. `.env`
+  + compose passthrough for `MEMORY_ADMIN_API_KEY`. **Restore tested
+  end-to-end** (non-production user `restore_test`): stored → snapshot →
+  deleted live → restored into a throwaway Qdrant (port 16333) → full text
+  + metadata recovered. Unit 145/145 (+25); live integration 60/60 (+8);
+  REST smoke 15/15. Counts back to 0 / 18. Next: MANUAL STEP B
+  (`./homelab.sh rebuild skill-only`) + live admin e2e + gate.
 
 - **2026-08-27** — **Phase 7 gate MET.** Rebuild (`6a8e759f`). Post-
   checks green (warmup thread at boot, mem0 client warm; `jobctx.py`

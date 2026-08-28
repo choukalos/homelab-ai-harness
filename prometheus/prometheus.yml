@@ -24,6 +24,13 @@ scrape_configs:
     - host.docker.internal:4000
     labels:
       instance: litellm
+- job_name: skill-runner
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - host.docker.internal:8091
+    labels:
+      instance: skill-runner
 - job_name: node-exporter-matrix
   static_configs:
   - targets:

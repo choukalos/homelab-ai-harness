@@ -138,6 +138,10 @@ LITELLM_BASE_URL = os.environ.get(
 )
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
 SKILL_RUNNER_API_KEY = os.environ.get("SKILL_RUNNER_API_KEY", "")
+# Phase 8: admin key(s) for the /api/memory/* management endpoints
+# (comma-separated). Distinct from the user keys — the admin key is the
+# authorization boundary for inspecting/managing ANY user's memories.
+MEMORY_ADMIN_API_KEY = os.environ.get("MEMORY_ADMIN_API_KEY", "")
 HARNESS_URL = os.environ.get("HARNESS_URL", "http://skill-runner:8091")
 
 # MCP server base URLs — parsed from env vars, stored for skill dispatch
@@ -1225,6 +1229,125 @@ app = FastAPI(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "port": APP_PORT, "jobs_total": len(jobs)}
+
+
+# ---------------------------------------------------------------------------
+# Memory admin endpoints (Phase 8) — admin-key protected
+# ---------------------------------------------------------------------------
+# These manage long-term memory. They are authorized by MEMORY_ADMIN_API_KEY
+# (distinct from the user keys) and may inspect/manage ANY user (incl.
+# service/household). All ops are non-fatal; the memory package degrades
+# gracefully on error/timeout.
+
+class MemoryUpdateRequest(BaseModel):
+    text: str
+
+
+def _require_admin(x_api_key: Optional[str]) -> None:
+    """Admin-key guard for /api/memory/* (Phase 8).
+
+    Raises 503 when the admin key is unset (admin not configured) and 403 on
+    a bad/missing key. Never logs the key itself.
+    """
+    if not MEMORY_ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="Memory admin not configured")
+    allowed = [k.strip() for k in MEMORY_ADMIN_API_KEY.split(",") if k.strip()]
+    if x_api_key not in allowed:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+
+@app.get("/api/memory/health")
+def memory_health(x_api_key: Optional[str] = Header(None)) -> dict:
+    """Memory service health + counters (admin)."""
+    _require_admin(x_api_key)
+    from memory import admin
+    return admin.health()
+
+
+@app.get("/api/memory/users/{user_id}")
+def memory_list_user(
+    user_id: str,
+    q: Optional[str] = None,
+    scope: str = "all",
+    limit: int = 50,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List or search a user's memories (admin).
+
+    ``q`` triggers a semantic search; omit it to list. ``scope`` selects
+    private/household/all. ``limit`` caps the results.
+    """
+    _require_admin(x_api_key)
+    from memory import admin
+    hits = admin.list_user(user_id, limit=limit, query=q, scope=scope)
+    return {"user_id": user_id, "count": len(hits), "memories": hits}
+
+
+@app.patch("/api/memory/{memory_id}")
+def memory_update(
+    memory_id: str,
+    body: MemoryUpdateRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Update a memory's text (admin)."""
+    _require_admin(x_api_key)
+    from memory import admin
+    ok = admin.update(memory_id, body.text)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Update failed (timeout/error)")
+    return {"memory_id": memory_id, "updated": True}
+
+
+@app.delete("/api/memory/{memory_id}")
+def memory_delete(
+    memory_id: str,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Delete a single memory (admin)."""
+    _require_admin(x_api_key)
+    from memory import admin
+    ok = admin.delete(memory_id)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Delete failed (timeout/error)")
+    return {"memory_id": memory_id, "deleted": True}
+
+
+@app.delete("/api/memory/users/{user_id}")
+def memory_delete_user(
+    user_id: str,
+    export: bool = False,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Delete ALL of a user's private memories (admin).
+
+    With ``?export=true`` the memories are returned (exported) before
+    deletion.
+    """
+    _require_admin(x_api_key)
+    from memory import admin
+    exported = None
+    if export:
+        exported = admin.list_user(user_id, limit=1000, scope="private")
+    deleted = admin.delete_user(user_id)
+    return {
+        "user_id": user_id,
+        "deleted": deleted,
+        "exported": exported if export else None,
+    }
+
+
+@app.get("/metrics")
+def memory_metrics() -> Response:
+    """Prometheus metrics for the memory module (Phase 8).
+
+    Unauthenticated (Prometheus scrapes it internally); exposes counters /
+    latencies / per-user counts only — never secrets or memory text.
+    """
+    from memory import metrics
+    return Response(
+        content=metrics.exposition(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------

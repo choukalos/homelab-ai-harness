@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any, Dict, List, Optional
 
 from . import context as _context
 from . import policy as _policy
+from . import metrics as _metrics
 from .client import MemoryClient, MemoryTimeout
 from .config import MemoryConfig, load_config
 
@@ -137,6 +139,8 @@ def search_memory(
     client = _get_client()
     hits: List[dict] = []
     seen_ids = set()
+    degraded = False
+    t0 = time.monotonic()
 
     # Private memories.
     try:
@@ -153,6 +157,8 @@ def search_memory(
                 hits.append(nh)
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("memory search (private) failed for %s: %s", user_id, e)
+        degraded = True
+        _metrics.get_metrics().record_error("search")
 
     # Household memories (explicitly shared facts), if enabled.
     if cfg.household_enabled:
@@ -170,9 +176,17 @@ def search_memory(
                     hits.append(nh)
         except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
             logger.warning("memory search (household) failed: %s", e)
+            degraded = True
+            _metrics.get_metrics().record_error("search")
 
     hits.sort(key=lambda h: h["score"], reverse=True)
-    return hits[:k]
+    result = hits[:k]
+    _metrics.get_metrics().record_search(
+        "degraded" if degraded else "ok",
+        time.monotonic() - t0,
+        len(result),
+    )
+    return result
 
 
 def learn_from_turn(
@@ -236,20 +250,28 @@ def learn_from_turn(
             cleaned, user_id=user_id, metadata=metadata, infer=infer
         )
 
+    t0 = time.monotonic()
     try:
         res = client._with_timeout(
             _add_op, timeout_s=cfg.writeback_timeout_s
         )
         ids = _extract_ids(res)
+        _metrics.get_metrics().record_writeback(
+            "ok", time.monotonic() - t0, len(ids)
+        )
         if cfg.debug_logging:
             logger.debug("learn_from_turn stored %d fact(s) for %s: %s",
                          len(ids), user_id, ids)
         return ids
     except MemoryTimeout as e:
         logger.warning("learn_from_turn timed out for %s: %s", user_id, e)
+        _metrics.get_metrics().record_writeback("timeout", time.monotonic() - t0, 0)
+        _metrics.get_metrics().record_error("writeback")
         return []
     except Exception as e:  # noqa: BLE001 - degrade
         logger.warning("learn_from_turn failed for %s: %s", user_id, e)
+        _metrics.get_metrics().record_writeback("error", time.monotonic() - t0, 0)
+        _metrics.get_metrics().record_error("writeback")
         return []
 
 
@@ -390,6 +412,7 @@ def update_memory(memory_id: str, text: str) -> bool:
         return True
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("update_memory failed for %s: %s", memory_id, e)
+        _metrics.get_metrics().record_error("update")
         return False
 
 
@@ -412,6 +435,7 @@ def delete_memory(memory_id: str) -> bool:
         return True
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("delete_memory failed for %s: %s", memory_id, e)
+        _metrics.get_metrics().record_error("delete")
         return False
 
 
@@ -451,6 +475,7 @@ def delete_user_memories(user_id: str) -> int:
         return count
     except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
         logger.warning("delete_user_memories failed for %s: %s", user_id, e)
+        _metrics.get_metrics().record_error("delete_user")
         return 0
 
 

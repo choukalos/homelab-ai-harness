@@ -36,6 +36,9 @@ from .jobctx import (
     writeback_turn,
     writeback_outcome,
 )
+# Phase 8 — admin + observability (importable submodules).
+from . import admin  # noqa: F401
+from . import metrics  # noqa: F401
 
 __all__ = [
     "MemoryConfig",
@@ -55,4 +58,7 @@ __all__ = [
     "retrieve",
     "writeback_turn",
     "writeback_outcome",
+    # Phase 8 — admin + observability
+    "admin",
+    "metrics",
 ]
