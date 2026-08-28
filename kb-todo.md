@@ -312,12 +312,12 @@ hardening item (not a K-phase).
 
 ## 4. Phased plan
 
-> **Ordering (owner, 2026-08-28):** the **image/video analysis MCP tool**
-> (N2 — separate workstream, based on the owner's existing pi
-> image/video-analysis skill; planning doc TBD, e.g. `avmcp-todo.md`) is
-> built **before** KB K1 starts. Rationale: it validates the
-> `matrix-coder` vision path end-to-end (the Q1 "≤5 images/turn" probe)
-> and K4 reuses the proven pattern/client.
+> **Ordering (owner, 2026-08-28):** the **`mcp_vision` image/video
+> analysis MCP tool** (N2 — separate workstream, built from the owner's
+> `video-analyze` pi skill; planning doc `mcp-vision-todo.md`) is built
+> **before** KB K1 starts. Rationale: it validates the `matrix-coder`
+> vision path end-to-end (the Q1 "≤5 images/turn" probe) and K4 reuses
+> the proven pattern/client.
 
 ### K0. Discovery + decisions — **DONE (2026-08-28)**
 - [x] Inventory memory state (Phase 9 complete, RBAC live)
@@ -424,7 +424,7 @@ hardening item (not a K-phase).
 | # | Decision |
 |---|---|
 | N1 | **`kb_<slug>` naming: yes.** No KB rename/merge in v1 (re-ingest into a new name): **yes, acceptable.** |
-| N2 | **Video files: NOT a KB ingest format.** Handled by a **separate image/video analysis MCP tool** (new workstream) — owner's existing pi image/video-analysis skill is the base. Owner wants that MCP tool built **before** the KB update (it also de-risks K4's vision path). See §4 note. |
+| N2 | **Video files: NOT a KB ingest format.** Handled by the **`mcp_vision` MCP tool** (separate workstream, `mcp-vision-todo.md`) built from the owner's `video-analyze` pi skill. Owner wants it built **before** the KB update (it also de-risks K4's vision path). See §4 note. |
 | N3 | **Default stands:** v1 requires files readable on Thor (`ai-kb/raw/`, media/, workspace/). |
 | N4 | **New-KB creation requires context:** the user or the LLM provides the KB name context + a collection summary (manifest description) when a new `kb_<slug>` is created; `description` is mandatory on first write to a new KB. |
 
@@ -462,7 +462,7 @@ not owner decisions)
 - Hybrid memory+KB retrieval (future workstream).
 - Multi-user KB scoping (household-shared by design).
 - **Video file ingestion into the KB** (N2: out — video/image *analysis*
-  is the separate image/video analysis MCP tool workstream, built first).
+  is the `mcp_vision` workstream, built first).
 - KB rename/merge/repurpose tools (re-ingest into a new name; v1).
 - OCR quality tuning beyond the vision fallback.
 - KB ingestion of URLs/web content (files + facts only; crawl4ai stays
