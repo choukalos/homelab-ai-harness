@@ -193,10 +193,13 @@ mcp_servers:
     url: http://mcp_filesystem:8000/mcp
     allow_all_keys: true
 
-  # ── Media (Image Generation/Editing via LiteLLM proxy) ──────────
+  # ── Media (image gen via GPU-host media-pipeline + legacy ComfyUI/HF) ──
   mcp_media:
     transport: http
     url: http://mcp_media:8000/mcp
     allow_all_keys: true
+    # Pipeline flows block up to 2h (video upscale); LiteLLM's default MCP
+    # client timeout is 60s (LITELLM_MCP_CLIENT_TIMEOUT).
+    timeout: 7200
 
 

@@ -3,22 +3,24 @@
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
 > Status: **Implemented** — all 8 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 34 tools as of 2026-08-28). This doc is the design baseline; the
+> `ai-net`, 44 tools as of 2026-08-28 — 34 + 10 media-pipeline tools). This doc is the design baseline; the
 > "Current state" notes reflect the live system.
 
 **Current state (2026-08-28)**
 - 8 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (4), `mcp_mysql` (10) — 34 tools total via `GET /v1/mcp/tools`.
+  `mcp_media` (14), `mcp_mysql` (10) — 44 tools total via `GET /v1/mcp/tools`.
 - **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
   `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
   (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
   → 403). The admin key (`QDRANT_ADMIN_API_KEY`) is OPS-only (backups, ops
   scripts) and is NOT held by any runtime service. Qdrant is pinned
   `qdrant/qdrant:v1.18.1`.
-- `mcp_media` is mid-workstream: ComfyUI image gen on Matrix (192.168.4.55:8188)
-  is live; a GPU-host **media-pipeline** (:8189) integration (9 new tools) is
-  planned — see `media_mcp_tool_todo.md` (repo root).
+- `mcp_media` now runs the **GPU-host media-pipeline** (192.168.4.55:8189) —
+  10 new `media_*` tools (storyboard, image gen/edit, I2V shots, TTS, music, SFX,
+  upscale, assemble, fetch) live 2026-08-28. Legacy ComfyUI image gen (:8188) +
+  HF tools kept until the old flows are decommissioned. See
+  `mcp/servers/media/README.md` and `media_mcp_tool_todo.md` (repo root).
 
 ---
 
@@ -45,7 +47,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_filesystem` | Writable file ops (workspace/media) — 5 tools | same mounts |
 | `mcp_mysql` | Read-mostly MySQL introspection + guarded queries — 10 tools | host MySQL |
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
-| `mcp_media` | Media ops: ComfyUI image gen (Matrix) + GPU media-pipeline (planned) | `${MATRIX_IP}:8188`, GPU host `:8189` |
+| `mcp_media` | Media ops: **GPU media-pipeline (10 tools, live 2026-08-28)** + legacy ComfyUI/HF (4 tools) | GPU host `:8189`, legacy `${MATRIX_IP}:8188` |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
@@ -173,11 +175,13 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 | Field | Value |
 |---|---|
-| **Purpose** | Media operations: image generation + file serving |
-| **Tools (live)** | `generate_image(prompt, width?, height?, steps?)`, `edit_image(image, prompt, ...)`, `list_images(directory?)`, `image_info(path)` |
-| **Backends** | ComfyUI on Matrix `192.168.4.55:8188` (live); **GPU-host media-pipeline `:8189` (planned workstream — 9 new tools: storyboard, shot gen, TTS, music, SFX, upscale, assemble; see `media_mcp_tool_todo.md`)** |
-| **Read/write** | Read (list/info) + Write (generate/edit to `/home/chuck/data/media`) |
-| **Security** | ComfyUI over LAN. Output write-scoped to the media dir. |
+| **Purpose** | Media operations: GPU-host media-pipeline (preferred) + legacy image tools |
+| **Tools (live)** | **14** — pipeline: `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch`; legacy (decommission pending): `generate_image`, `edit_image`, `image_info`, `list_images` |
+| **Backends** | **GPU-host media-pipeline `192.168.4.55:8189` (live 2026-08-28)** — ComfyUI + VLLM + TTS/music/SFX workers on Matrix; legacy ComfyUI `:8188` + HF Inference (old flows) |
+| **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
+| **Read/write** | Read (list/info) + Write (generate/edit/fetch to `/home/chuck/data/media`) |
+| **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. |
+| **Notes** | Old 4 tools kept until the old ComfyUI flows are decommissioned (then delete their code paths). Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. |
 
 ### 7b. `mcp_mysql` (added after the July design)
 

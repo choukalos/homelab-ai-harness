@@ -24,7 +24,7 @@
   2026-08-28). Admin endpoints use the `X-Api-Key` header.
 - **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
   `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
-  `hf-sd3`. 8 MCP servers / **34 tools** registered (was 4 servers / 11 in July).
+  `hf-sd3`. 8 MCP servers / **44 tools** registered (was 4 servers / 11 in July; 34 → 44 on 2026-08-28 with the media-pipeline tools).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
 - **Observability:** VictoriaMetrics now scrapes skill-runner `/metrics`
   (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
