@@ -1,6 +1,6 @@
 # Never commit private content
 tmp/
-media/
+/media/
 outputs/
 # Skill runner logs — auto-rotating, 10MB max
 logs/
