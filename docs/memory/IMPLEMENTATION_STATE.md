@@ -770,6 +770,28 @@ Old LiteLLM key `sk-vodi_Fd…` (hash `a881a217…`) **deleted** via
 exactly `[matrix-coder, homelab-embedding-v1]`; registry 7→6). (6)
 Report + commit — this entry.
 
+**Ops gotchas found during verification (for future sessions):**
+- skill-runner is `THOR_IP:8091` (compose has always said 8091 —
+  nothing memory-related listens on 8001; a transient 8001 instance
+  from the parallel media-MCP workstream was up briefly during
+  verification and is gone). Admin endpoints `/api/memory/*` take the
+  key in the **`X-Api-Key` header** (NOT `Authorization: Bearer`);
+  user endpoints likewise (`x_api_key: Header(None)`). Current
+  `/api/memory/health` shape: `{healthy, enabled, retrieval_enabled,
+  writeback_enabled, household_enabled, counters, user_counts,
+  last_writeback_timestamp}` (no `status`/`embed_dim` fields).
+- Qdrant 1.18 `GET /collections` returned a names-only list during
+  verification; use `GET /collections/{name}` for points/status.
+
+**Ops gotchas (learned the hard way, 2026-08-28):** skill-runner is on
+`${THOR_IP}:8091` (NOT 8001 — 8001 was a transient dev instance from a
+parallel workstream during the rebuild window). Admin endpoints
+`/api/memory/*` authenticate via the **`X-Api-Key`** header
+(`Authorization: Bearer` is NOT read by them — 403 "Invalid admin
+key"). Qdrant 1.18 REST shapes: `GET /collections` returns names only;
+`GET /collections/{name}` → `result.points_count` (int, not
+`points.count`); collection CREATE is `PUT /collections/{name}`.
+
 **Gate to Phase 9: MET (2026-08-28).** Admin ops exercised manually
 (post-rebuild e2e on `memory_test`); restore test current (verified
 2026-08-28); scrape verified — `up{job="skill-runner"}=1`, all 12
