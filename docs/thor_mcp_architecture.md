@@ -3,13 +3,13 @@
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
 > Status: **Implemented** — all 8 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 44 tools as of 2026-08-28 — 34 + 10 media-pipeline tools). This doc is the design baseline; the
+> `ai-net`, 40 tools as of 2026-08-28 — 34 + 10 media-pipeline tools, legacy media tools removed). This doc is the design baseline; the
 > "Current state" notes reflect the live system.
 
 **Current state (2026-08-28)**
 - 8 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (14), `mcp_mysql` (10) — 44 tools total via `GET /v1/mcp/tools`.
+  `mcp_media` (10), `mcp_mysql` (10) — 40 tools total via `GET /v1/mcp/tools`.
 - **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
   `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
   (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
@@ -175,13 +175,13 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 | Field | Value |
 |---|---|
-| **Purpose** | Media operations: GPU-host media-pipeline (preferred) + legacy image tools |
-| **Tools (live)** | **14** — pipeline: `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch`; legacy (decommission pending): `generate_image`, `edit_image`, `image_info`, `list_images` |
-| **Backends** | **GPU-host media-pipeline `192.168.4.55:8189` (live 2026-08-28)** — ComfyUI + VLLM + TTS/music/SFX workers on Matrix; legacy ComfyUI `:8188` + HF Inference (old flows) |
+| **Purpose** | Media operations via the GPU-host media-pipeline |
+| **Tools (live)** | **10** — `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch` |
+| **Backends** | **GPU-host media-pipeline `192.168.4.55:8189` (live 2026-08-28)** — ComfyUI + VLLM + TTS/music/SFX workers on Matrix |
 | **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
 | **Read/write** | Read (list/info) + Write (generate/edit/fetch to `/home/chuck/data/media`) |
 | **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. |
-| **Notes** | Old 4 tools kept until the old ComfyUI flows are decommissioned (then delete their code paths). Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. |
+| **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. |
 
 ### 7b. `mcp_mysql` (added after the July design)
 

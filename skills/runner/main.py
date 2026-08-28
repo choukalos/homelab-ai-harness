@@ -238,7 +238,7 @@ _SKILL_TIMEOUTS = {
     "list_images": 30,
     "list_presentations": 30,
     "deep_research": 180,
-    "media_generate": 120,
+    "media_generate": 300,
     "siri_chat": 60,
     "siri_ask": 30,
     "demo_browse": 30,
@@ -1577,103 +1577,95 @@ def _handle_research_brief(text: str) -> ChatResponse:
     )
 
 
+def _parse_tool_json(result: dict) -> dict:
+    """Extract the JSON payload from an MCP tool-call result.
+
+    Handles both the structured ``result`` shape and the text-content shape
+    (the MCP library may stringify the tool result dict).
+    """
+    if result.get("result"):
+        structured = result["result"]
+        tool_result = structured.get("results", structured)
+        if isinstance(tool_result, dict) and not isinstance(tool_result, list):
+            if any(k in tool_result for k in ("path", "local_path", "error")):
+                return tool_result
+    for item in result.get("output", []):
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        val = item.get("text", "")
+        if isinstance(val, str) and val.strip().startswith("{"):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return {}
+
+
 async def _handle_media_generate(text: str) -> ChatResponse:
     """
     Handler for 'media-generate' intent.
-    Calls mcp_media.generate_image directly via the MCP streamable-http transport
-    and returns a structured response containing the generated image path.
+    Calls mcp_media.media_generate_image (GPU-host media-pipeline), then
+    media_fetch to download the result locally, and returns a structured
+    response containing the image URL.
     """
     client = LiteLLMClient()
+
     try:
+        # 1) Generate on the GPU host (blocks until the job finishes)
         result = await client.mcp_call(
-            tool_name="generate_image",
+            tool_name="media_generate_image",
             arguments={"prompt": text},
             server_id="mcp_media",
         )
-
-        # Extract the image path from the MCP response
-        image_url = None
-        error_msg = None
         if result.get("is_error"):
-            error_msg = "Image generation failed."
+            msg = "Image generation failed."
             for item in result.get("output", []):
                 if isinstance(item, dict) and item.get("type") == "text":
-                    error_msg = item.get("text", error_msg)
+                    msg = item.get("text", msg)
                     break
-            logger.error("media-generate error: %s", error_msg)
+            logger.error("media-generate error: %s", msg)
             return ChatResponse(
                 speak="I couldn't generate an image. Please try again.",
-                display=f"Error: {error_msg}",
-                data={"skill": "mcp_media", "intent": "media-generate", "error": error_msg},
+                display=f"Error: {msg}",
+                data={"skill": "mcp_media", "intent": "media-generate", "error": msg},
             )
 
-        # Try structured result first, then output content
-        if result.get("result"):
-            structured = result["result"]
-            # The _build_result wrapper nests the actual tool result under "results"
-            tool_result = structured.get("results", structured)
-            if isinstance(tool_result, dict):
-                # mcp_media.generate_image returns saved_paths (list of file paths)
-                saved_paths = tool_result.get("saved_paths", [])
-                if saved_paths:
-                    # Filter out error paths
-                    for p in saved_paths:
-                        if p and not p.startswith("ERROR"):
-                            image_url = p
-                            break
-                    else:
-                        image_url = None
-                if not image_url:
-                    image_url = (
-                        tool_result.get("file_path")
-                        or tool_result.get("path")
-                        or tool_result.get("output_path")
-                        or tool_result.get("url")
-                    )
-            elif not image_url:
-                image_url = (
-                    structured.get("file_path")
-                    or structured.get("path")
-                    or structured.get("output_path")
-                    or structured.get("url")
-                )
-        if not image_url:
-            for item in result.get("output", []):
-                if isinstance(item, dict):
-                    if item.get("type") == "image":
-                        image_url = item.get("uri") or item.get("url")
-                        break
-                    elif item.get("type") == "text":
-                        text_val = item.get("text")
-                        if isinstance(text_val, str) and text_val.startswith("{"):
-                            # The MCP library may stringify the tool result dict
-                            try:
-                                parsed = json.loads(text_val)
-                                if isinstance(parsed, dict):
-                                    # Check for saved_paths (mcp_media)
-                                    sp = parsed.get("saved_paths", [])
-                                    if sp:
-                                        for p in sp:
-                                            if p and not p.startswith("ERROR"):
-                                                image_url = p
-                                                break
-                                        if image_url:
-                                            break
-                                    # Check other common path keys
-                                    if not image_url:
-                                        image_url = (
-                                            parsed.get("file_path")
-                                            or parsed.get("path")
-                                            or parsed.get("output_path")
-                                            or parsed.get("url")
-                                        )
-                                        if image_url:
-                                            break
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-                        if not image_url:
-                            image_url = text_val
-                        break
+        gen = _parse_tool_json(result)
+        if gen.get("error"):
+            logger.error("media-generate pipeline error: %s", gen)
+            return ChatResponse(
+                speak="I couldn't generate an image. Please try again.",
+                display=f"Error: {gen['error']}",
+                data={"skill": "mcp_media", "intent": "media-generate", "error": gen["error"]},
+            )
+        host_path = gen.get("path")
+        if not host_path:
+            logger.error("media-generate: no path in tool result: %s", result)
+            return ChatResponse(
+                speak="I couldn't generate an image. Please try again.",
+                display="Error: pipeline returned no image path.",
+                data={"skill": "mcp_media", "intent": "media-generate", "error": "no path"},
+            )
+
+        # 2) Download the result to the local media library
+        fetched = await client.mcp_call(
+            tool_name="media_fetch",
+            arguments={"host_path": host_path},
+            server_id="mcp_media",
+        )
+        local_path = None
+        if not fetched.get("is_error"):
+            f = _parse_tool_json(fetched)
+            local_path = f.get("local_path")
+        if not local_path:
+            logger.error("media_fetch failed: %s", fetched)
+            return ChatResponse(
+                speak="The image was generated but I couldn't download it. Please try again.",
+                display=f"Error: media_fetch failed: {fetched.get('output')}",
+                data={"skill": "mcp_media", "intent": "media-generate", "error": "fetch failed"},
+            )
 
         _ctx = get_current_context()
         job = Job(
@@ -1684,31 +1676,23 @@ async def _handle_media_generate(text: str) -> ChatResponse:
             user_id=_ctx.user_id if _ctx else USER_SERVICE,
             run_id=_ctx.run_id if _ctx else uuid.uuid4().hex,
         )
-        job.add_log("Intent 'media-generate' dispatched to MCP server 'mcp_media'")
-        if image_url:
-            job.artifact_path = image_url
-            job.add_log(f"Image generated: {image_url}")
+        job.add_log("Intent 'media-generate' dispatched to MCP server 'mcp_media' (pipeline)")
+        job.add_log(f"Generated on GPU host: {host_path}")
+        job.add_log(f"Fetched locally: {local_path}")
+        job.artifact_path = local_path
         job.status = JobStatus.completed
         job.completed_at = datetime.now(timezone.utc).isoformat()
         job.summary = f"Image generated from prompt: {text}"
         jobs[job.job_id] = job
-        logger.info("Job %s completed for media generation. image=%s", job.job_id, image_url)
+        logger.info("Job %s completed for media generation. local=%s", job.job_id, local_path)
 
         # Convert local file path to accessible URL (public by default)
-        media_url = None
-        if image_url and image_url.startswith("/"):
-            # It's a local file path — convert to URL
-            try:
-                media_url = _make_media_url(image_url, public=True)
-            except Exception:
-                media_url = image_url
-        elif image_url:
-            media_url = image_url
+        try:
+            media_url = _make_media_url(local_path, public=True)
+        except Exception:
+            media_url = local_path
 
-        speak = "I've generated an image for you."
-        if media_url:
-            speak = f"I've generated an image for you. You can view it here: {media_url}"
-
+        speak = f"I've generated an image for you. You can view it here: {media_url}"
         return ChatResponse(
             speak=speak,
             display=f"Image generated from prompt: {text}",

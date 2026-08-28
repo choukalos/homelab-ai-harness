@@ -1,15 +1,14 @@
 # mcp_media
 
-MCP server for media operations: the **GPU-host media-pipeline** (preferred,
-new flows) plus legacy ComfyUI/HF image tools (being decommissioned).
-
-## Pipeline tools (2026-08-28)
+MCP server for media operations via the **GPU-host media-pipeline**.
 
 Thin HTTP client for the GPU-host `media-pipeline` service
-(`MEDIA_PIPELINE_URL`, default `http://192.168.4.55:8189` on Matrix). All GPU
-work (ComfyUI + VLLM + TTS/music/SFX workers) happens on the GPU host; this
+(`MEDIA_PIPELINE_URL`, `http://192.168.4.55:8189` on Matrix). All GPU work
+(ComfyUI + VLLM + TTS/music/SFX workers) happens on the GPU host; this
 container only POSTs jobs, polls, and downloads results. Jobs block until
 done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
+
+## Tools
 
 | Tool | Pipeline endpoint | Purpose |
 |---|---|---|
@@ -37,17 +36,8 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 
 Typical commercial flow: `media_storyboard` → per shot
 `media_generate_image` + `media_generate_shot` → `media_text_to_speech` +
-`media_generate_music` → `media_upscale_video(pipeline="b")` per shot →
+`media_generate_music` → `media_upscale_video(pipeline="b")` →
 `media_assemble` → `media_fetch` the final mp4.
-
-## Legacy tools (kept until old ComfyUI/HF flows are decommissioned)
-
-| Tool | Backend |
-|---|---|
-| `generate_image` | HF Inference API (primary) / ComfyUI `192.168.4.55:8188` (fallback) / LiteLLM DALL-E (legacy) |
-| `edit_image` | LiteLLM `/v1/images/edits` (stub) |
-| `image_info` | Pillow metadata |
-| `list_images` | Directory listing |
 
 ## Config
 
@@ -55,7 +45,11 @@ Typical commercial flow: `media_storyboard` → per shot
 |---|---|---|
 | `MEDIA_PIPELINE_URL` | `http://127.0.0.1:8189` | GPU-host pipeline base URL |
 | `MEDIA_PIPELINE_FETCH_DIR` | `/home/chuck/data/media/generated/pipeline` | `media_fetch` download dir |
-| `COMFYUI_BASE_URL` | `http://192.168.4.55:8188` | Legacy ComfyUI |
-| `MEDIA_OUTPUT_DIR` | `/home/chuck/data/media/generated` | Legacy image output |
 
 Transport: streamable-http on `0.0.0.0:8000` (`/mcp`).
+
+## History
+
+2026-08-28: legacy ComfyUI/HF tools (`generate_image`, `edit_image`,
+`image_info`, `list_images`) removed — old ComfyUI flows decommissioned.
+The `media-generate` skill now uses `media_generate_image` + `media_fetch`.
