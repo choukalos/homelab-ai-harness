@@ -16,7 +16,7 @@
 # Restore (see docs/memory/IMPLEMENTATION_STATE.md phase log):
 #   docker run -d --name qdrant-restore-test -p 16333:6333 \
 #     -v /home/chuck/data/backups/mem0_memories-<stamp>.snapshot:/qdrant/snapshots/restore.snapshot:ro \
-#     qdrant/qdrant:latest
+#     qdrant/qdrant:v1.18.1   # match production (pinned, Phase 9)
 #   curl -s -X PUT http://localhost:16333/collections/mem0_memories/snapshots/recover \
 #     -H 'Content-Type: application/json' \
 #     -d '{"location":"file:///qdrant/snapshots/restore.snapshot","priority":"snapshot"}'

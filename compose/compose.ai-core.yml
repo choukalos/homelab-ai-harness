@@ -21,7 +21,11 @@ services:
       retries: 5
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Phase 9 hardening (memory_todo.md D8): pinned off main-latest.
+    # v1.92.0 is the EXACT version running as of 2026-08-28 (verified in
+    # container: litellm-1.92.0.dist-info) — zero version drift, just
+    # removes the floating tag. Re-pin deliberately on future upgrades.
+    image: ghcr.io/berriai/litellm:v1.92.0
     container_name: litellm-proxy
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
@@ -83,7 +87,10 @@ services:
       - litellm
 
   qdrant:
-    image: qdrant/qdrant:latest
+    # Phase 9 hardening: pinned off latest. v1.18.1 is the EXACT version
+    # running as of 2026-08-28 (verified via GET / → version 1.18.1).
+    # Note: Qdrant tags carry a 'v' prefix (v1.18.1, not 1.18.1).
+    image: qdrant/qdrant:v1.18.1
     container_name: qdrant
     restart: unless-stopped
     networks:
