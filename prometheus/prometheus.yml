@@ -31,7 +31,9 @@ scrape_configs:
     # skill-runner binds only to THOR_IP:8091 (not 0.0.0.0), so the
     # docker0 gateway (host.docker.internal) cannot reach it — use the
     # thor LAN IP mapped via extra_hosts in compose.monitoring.yml.
-    - thor:8091
+    # ('thor-lan' on purpose: the host's own hostname 'thor' resolves
+    # to a host-local address from inside containers.)
+    - thor-lan:8091
     labels:
       instance: skill-runner
 - job_name: node-exporter-matrix
