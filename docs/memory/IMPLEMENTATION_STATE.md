@@ -77,8 +77,8 @@
   `siri_ask` via `/skills/siri_ask` (no user context) → job log
   `Identity: user_id=service`, Qdrant counts stayed 0/0 (no leak, no
   service memory). Counts back to 0 / 18.
-- **Phase 8: LIVE (post-rebuild e2e green 2026-08-28; scrape wiring pending
-  one victoria-metrics recreate)** — administration, observability,
+- **Phase 8: COMPLETE** (gate MET 2026-08-28 — post-rebuild e2e green,
+  scrape wiring verified) — administration, observability,
   backups. (1) **Admin REST endpoints** on skill-runner, admin-key protected
   (`MEMORY_ADMIN_API_KEY`, distinct from user keys; unset → 503, bad key →
   403): `GET /api/memory/users/{user_id}` (list/search by scope/query/limit),
@@ -106,8 +106,7 @@
   promscrape doesn't hot-reload by default → `configCheckInterval=30s`
   added (`b04a99b7`); one container recreate pending, then
   `up{job="skill-runner"}=1`.
-- Last updated: 2026-08-28 (post-rebuild e2e green; awaiting
-  victoria-metrics recreate for scrape wiring).
+- Last updated: 2026-08-28 (Phase 8 gate MET — scrape verified live).
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -140,10 +139,10 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
 
-**PENDING:** Phase 8 code complete (admin REST + CLI + metrics + restore
-verified). Awaiting **MANUAL STEP B** (`./homelab.sh rebuild skill-only`) to
-bake in the admin endpoints, then live admin e2e + gate. Next after Phase 8:
-Phase 6 (optional MCP) or Phase 9 (hardening).
+**STATUS (2026-08-28):** Phase 8 COMPLETE (gate MET) — admin REST + CLI +
+metrics + restore all live-verified post-rebuild; scrape wired into
+VictoriaMetrics (`up{job="skill-runner"}=1`). Next: Phase 9 (hardening &
+migration readiness) or Phase 6 (optional MCP).
 
 ## Decisions (locked by Chuck, 2026-08-25)
 
@@ -634,7 +633,7 @@ rebuild (user job → chuck; service job → service, no personal memory).
   green. Auth: admin key 200, bad key 403, no key 403. `/metrics` →
   Prometheus text (counters/histograms/per-user gauge). Admin key absent
   from logs (0 grep hits). Counts back to 0 / 18.
-- [ ] VictoriaMetrics scrape wiring: 3 fixes, all committed —
+- [x] VictoriaMetrics scrape wiring: 3 fixes, all committed —
   (a) promscrape does NOT hot-reload by default →
   `--promscrape.configCheckInterval=30s` (`b04a99b7`; hot-reload
   CONFIRMED working — target changes applied without restart);
@@ -643,24 +642,27 @@ rebuild (user job → chuck; service job → service, no personal memory).
   (c) alias `thor` collides with the HOST's own hostname (resolves to
   127.0.1.1 from inside containers) → renamed `thor-lan` (`35c9b03b`).
   Needs ONE container recreate (manual, below) for the extra_hosts
-  entry, then `up{job="skill-runner"}=1`.
-- [ ] Phase 8 gate: admin ops exercised manually ✅ (above); restore test
-  current ✅ (2026-08-28); scrape verified ⏳ (after recreate).
+  entry, then `up{job="skill-runner"}=1`. **DONE (2026-08-28):** recreate
+  applied the `thor-lan` extra_hosts; target UP; `up{job="skill-runner"}=1`;
+  all 12 `memory_*` series present; counters accumulating live.
+- [x] Phase 8 gate: admin ops exercised manually ✅; restore test current ✅
+  (2026-08-28); scrape verified ✅.
 
-**Gate to Phase 9: PENDING** (only the VictoriaMetrics recreate + scrape
-verification remain; admin ops exercised manually 2026-08-28; restore
-test current — verified 2026-08-28).
+**Gate to Phase 9: MET (2026-08-28).** Admin ops exercised manually
+(post-rebuild e2e on `memory_test`); restore test current (verified
+2026-08-28); scrape verified — `up{job="skill-runner"}=1`, all 12
+`memory_*` series in VictoriaMetrics. **Next: Phase 9** (hardening &
+migration readiness: pin mem0ai/litellm/qdrant, least-privilege review,
+regression suite, embedding-migration procedure).
 
-**Manual step (monitoring-only, no AI services touched):**
+**Manual step (monitoring-only, no AI services touched) — DONE 2026-08-28:**
 ```
 docker compose --env-file .env -f compose/compose.monitoring.yml up -d --force-recreate victoria-metrics
 ```
-Recreates ONLY victoria-metrics (grafana/node-exporter/cadvisor untouched;
-~10–30s metrics-ingestion blip; data persisted in
-`/home/chuck/data/victoria-metrics`). Needed so the `thor-lan`
-extra_hosts entry lands in /etc/hosts (applied at container creation).
-Rollback: `git checkout f1822009 -- compose/compose.monitoring.yml
-prometheus/prometheus.yml` + same command.
+Recreated ONLY victoria-metrics (grafana/node-exporter/cadvisor untouched;
+data persisted in `/home/chuck/data/victoria-metrics`). Applied the
+`thor-lan` extra_hosts entry (creation-time). Verified: target up,
+`up{job="skill-runner"}=1`, all 12 `memory_*` series present.
 
 **Phase 8 gotchas:**
 - **Admin key ≠ user keys.** `MEMORY_ADMIN_API_KEY` is a SEPARATE secret from
@@ -687,6 +689,14 @@ prometheus/prometheus.yml` + same command.
   Prometheus (it scrapes current values + computes rates). No persistence.
 
 ## Phase log
+
+- **2026-08-28** — **Phase 8 GATE MET.** Final recreate applied the
+  `thor-lan` extra_hosts (`192.168.4.54`); target `thor-lan:8091/metrics`
+  UP; `up{job="skill-runner"}=1`; all 12 `memory_*` series present in
+  VictoriaMetrics (search/writeback counters+latency histograms, hit/stored
+  totals, per-user gauge); counters accumulating live. Phase 8 complete:
+  admin REST + CLI + metrics + backups/restore all live-verified.
+  Next: Phase 9 (hardening & migration readiness).
 
 - **2026-08-28** — **Phase 8 scrape wiring: 3 fixes, 1 recreate left.**
   VictoriaMetrics recreate (manual) done; `configCheckInterval=30s` live.
