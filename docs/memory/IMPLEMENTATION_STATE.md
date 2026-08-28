@@ -77,7 +77,8 @@
   `siri_ask` via `/skills/siri_ask` (no user context) → job log
   `Identity: user_id=service`, Qdrant counts stayed 0/0 (no leak, no
   service memory). Counts back to 0 / 18.
-- **Phase 8: CODE COMPLETE** (2026-08-28) — administration, observability,
+- **Phase 8: LIVE (post-rebuild e2e green 2026-08-28; scrape wiring pending
+  one victoria-metrics recreate)** — administration, observability,
   backups. (1) **Admin REST endpoints** on skill-runner, admin-key protected
   (`MEMORY_ADMIN_API_KEY`, distinct from user keys; unset → 503, bad key →
   403): `GET /api/memory/users/{user_id}` (list/search by scope/query/limit),
@@ -98,7 +99,15 @@
   → full text + metadata recovered (text under `data` key). Unit tests
   145/145 (+25 Phase 8); live integration 60/60 (+8 Phase 8). REST smoke
   15/15 (auth 403/503/200, /metrics Prometheus text). Counts back to 0 / 18.
-- Last updated: 2026-08-28.
+  **Post-rebuild (2026-08-28):** MANUAL STEP B done (image 00:59:57Z);
+  live admin e2e green (seed/list/search/PATCH-verbatim/DELETE/
+  delete-user+export on `memory_test`; CLI green; auth 200/403/403;
+  admin key absent from logs; counts back to 0 / 18). Scrape gap: VM
+  promscrape doesn't hot-reload by default → `configCheckInterval=30s`
+  added (`b04a99b7`); one container recreate pending, then
+  `up{job="skill-runner"}=1`.
+- Last updated: 2026-08-28 (post-rebuild e2e green; awaiting
+  victoria-metrics recreate for scrape wiring).
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -614,15 +623,36 @@ rebuild (user job → chuck; service job → service, no personal memory).
   non-fatal + metrics exposition); live integration 60/60 (+8 Phase 8:
   admin list/search/health + metrics no-secrets); REST smoke 15/15 (auth
   403/503/200, /metrics Prometheus text, response shapes).
-- [ ] MANUAL STEP B: `./homelab.sh rebuild skill-only` (bakes in the admin
-  endpoints + metrics + CLI).
-- [ ] Post-rebuild: live admin e2e (CLI + curl against the rebuilt
-  skill-runner), verify `/metrics` is scraped by Prometheus, verify the
-  admin key is not in logs.
-- [ ] Phase 8 gate: admin ops exercised manually; restore test current.
+- [x] MANUAL STEP B: `./homelab.sh rebuild skill-only` (done 2026-08-28
+  ~01:00; image 2026-08-28T00:59:57Z). Post-checks green: litellm alive,
+  skill-runner `{"status":"ok"}`, clean startup + mem0 warmup (~4s),
+  litellm-proxy uptime unchanged (separate project).
+- [x] Post-rebuild live admin e2e (full cycle, non-production user
+  `memory_test`): seed 2 → list (2) → semantic search (ranked) → PATCH
+  update (verbatim, 200) → single DELETE (200) → DELETE user
+  `?export=true` (export + delete) → list 0. CLI `health`/`list`/`search`
+  green. Auth: admin key 200, bad key 403, no key 403. `/metrics` →
+  Prometheus text (counters/histograms/per-user gauge). Admin key absent
+  from logs (0 grep hits). Counts back to 0 / 18.
+- [ ] VictoriaMetrics scrape wiring: promscrape does NOT hot-reload its
+  config by default → added `--promscrape.configCheckInterval=30s`
+  (`b04a99b7`). Needs ONE container recreate (manual, below), then
+  `up{job="skill-runner"}=1`.
+- [ ] Phase 8 gate: admin ops exercised manually ✅ (above); restore test
+  current ✅ (2026-08-28); scrape verified ⏳ (after recreate).
 
-**Gate to Phase 9: PENDING** (admin ops exercised manually after manual
-step B; restore test current — restore verified 2026-08-28).
+**Gate to Phase 9: PENDING** (only the VictoriaMetrics recreate + scrape
+verification remain; admin ops exercised manually 2026-08-28; restore
+test current — verified 2026-08-28).
+
+**Manual step (monitoring-only, no AI services touched):**
+```
+docker compose --env-file .env -f compose/compose.monitoring.yml up -d --force-recreate victoria-metrics
+```
+Recreates ONLY victoria-metrics (grafana/node-exporter/cadvisor untouched;
+~10–30s metrics-ingestion blip; data persisted in
+`/home/chuck/data/victoria-metrics`). Rollback: `git checkout f1822009 --
+compose/compose.monitoring.yml` + same command.
 
 **Phase 8 gotchas:**
 - **Admin key ≠ user keys.** `MEMORY_ADMIN_API_KEY` is a SEPARATE secret from
@@ -649,6 +679,20 @@ step B; restore test current — restore verified 2026-08-28).
   Prometheus (it scrapes current values + computes rates). No persistence.
 
 ## Phase log
+
+- **2026-08-28** — **Phase 8: MANUAL STEP B done + live admin e2e green.**
+  Rebuild 01:00 (image 00:59:57Z). Post-checks green (litellm alive,
+  skill-runner ok, clean startup, mem0 warmup ~4s, litellm untouched).
+  Live admin e2e (non-production `memory_test`): seed 2 → list 2 → search
+  ranked → PATCH verbatim → single DELETE → delete-user `?export=true`
+  (export+delete) → 0. CLI health/list/search green. Auth 200/403/403.
+  `/metrics` Prometheus text live. Admin key absent from logs. Counts back
+  to 0 / 18. **Scrape gap found:** VictoriaMetrics (v1.145.0, the
+  "Prometheus" in this stack) does NOT hot-reload `--promscrape.config`
+  by default, so the Phase 8 `skill-runner` job was not picked up. Fix:
+  `--promscrape.configCheckInterval=30s` (`b04a99b7`) + one container
+  recreate (manual). Next: recreate victoria-metrics → verify
+  `up{job="skill-runner"}=1` → Phase 8 gate MET.
 
 - **2026-08-28** — **Phase 8: CODE COMPLETE** (administration,
   observability, backups). New `memory/admin.py` (admin ops that bypass the
