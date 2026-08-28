@@ -634,10 +634,16 @@ rebuild (user job → chuck; service job → service, no personal memory).
   green. Auth: admin key 200, bad key 403, no key 403. `/metrics` →
   Prometheus text (counters/histograms/per-user gauge). Admin key absent
   from logs (0 grep hits). Counts back to 0 / 18.
-- [ ] VictoriaMetrics scrape wiring: promscrape does NOT hot-reload its
-  config by default → added `--promscrape.configCheckInterval=30s`
-  (`b04a99b7`). Needs ONE container recreate (manual, below), then
-  `up{job="skill-runner"}=1`.
+- [ ] VictoriaMetrics scrape wiring: 3 fixes, all committed —
+  (a) promscrape does NOT hot-reload by default →
+  `--promscrape.configCheckInterval=30s` (`b04a99b7`; hot-reload
+  CONFIRMED working — target changes applied without restart);
+  (b) `host.docker.internal` = docker0 gateway (172.17.0.1), but
+  skill-runner binds THOR_IP only → scrape target retargeted (`b824aa99`);
+  (c) alias `thor` collides with the HOST's own hostname (resolves to
+  127.0.1.1 from inside containers) → renamed `thor-lan` (`35c9b03b`).
+  Needs ONE container recreate (manual, below) for the extra_hosts
+  entry, then `up{job="skill-runner"}=1`.
 - [ ] Phase 8 gate: admin ops exercised manually ✅ (above); restore test
   current ✅ (2026-08-28); scrape verified ⏳ (after recreate).
 
@@ -651,8 +657,10 @@ docker compose --env-file .env -f compose/compose.monitoring.yml up -d --force-r
 ```
 Recreates ONLY victoria-metrics (grafana/node-exporter/cadvisor untouched;
 ~10–30s metrics-ingestion blip; data persisted in
-`/home/chuck/data/victoria-metrics`). Rollback: `git checkout f1822009 --
-compose/compose.monitoring.yml` + same command.
+`/home/chuck/data/victoria-metrics`). Needed so the `thor-lan`
+extra_hosts entry lands in /etc/hosts (applied at container creation).
+Rollback: `git checkout f1822009 -- compose/compose.monitoring.yml
+prometheus/prometheus.yml` + same command.
 
 **Phase 8 gotchas:**
 - **Admin key ≠ user keys.** `MEMORY_ADMIN_API_KEY` is a SEPARATE secret from
@@ -679,6 +687,17 @@ compose/compose.monitoring.yml` + same command.
   Prometheus (it scrapes current values + computes rates). No persistence.
 
 ## Phase log
+
+- **2026-08-28** — **Phase 8 scrape wiring: 3 fixes, 1 recreate left.**
+  VictoriaMetrics recreate (manual) done; `configCheckInterval=30s` live.
+  Hot-reload CONFIRMED (target changes applied without restart). Two more
+  scrape fixes found + committed: (b) `host.docker.internal` is the
+  docker0 gateway (172.17.0.1) — skill-runner binds THOR_IP only, so the
+  scrape was refused; retargeted via extra_hosts (`b824aa99`). (c) alias
+  `thor` collides with the host's OWN hostname (`127.0.1.1 thor` in host
+  /etc/hosts → resolves to 127.0.1.1 from inside containers); renamed
+  `thor-lan` (`35c9b03b`). Left: one recreate for the extra_hosts entry
+  (creation-time) → verify `up{job="skill-runner"}=1` → Phase 8 gate MET.
 
 - **2026-08-28** — **Phase 8: MANUAL STEP B done + live admin e2e green.**
   Rebuild 01:00 (image 00:59:57Z). Post-checks green (litellm alive,
