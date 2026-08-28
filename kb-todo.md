@@ -2,7 +2,7 @@
 
 > Planning doc for the KB/knowledge workstream (post-memory-project).
 > Companion to `blog-todo.md` style: discovered state → decisions → phases → questions.
-> Owner: chuck. Last updated: 2026-08-28 (K0 discovery complete).
+> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision round 1 locked).
 
 ---
 
@@ -103,31 +103,49 @@
 
 | Axis | Memory (mem0) | KB (new) | Conflict? |
 |---|---|---|---|
-| Collection | `mem0_memories` (768) | `family_kb` (rebuilt, 768) | No — separate |
-| Qdrant key | JWT (rw `mem0_memories` only) | **new API key, rw KB collections only** | No — scoped |
+| Collection | `mem0_memories` (768) | **`kb_*` collections** (on-the-fly, 768) | No — separate, prefix-isolated |
+| Qdrant key | JWT (rw `mem0_memories` only) | **new `KB_API_KEY` JWT, global `m`, code-enforced `kb_` prefix** | No — separate credential (see note below) |
 | Engine | mem0 in skill-runner | mcp_knowledge container | No |
 | Identity | per-user (`chuck`/`service`) | **no user_id — household-shared** | No |
 | Write path | auto-extraction from chat | **explicit LLM tool calls only** | No |
-| Read path | auto pre-request retrieval | **`kb_search` tool (LLM decides)** | No (v1) |
+| Read path | auto pre-request retrieval | **`kb_search` MCP tool — available to ANY AI using LiteLLM** (`allow_all_keys: true`, confirmed in `litellm/config.yml`) | No (v1) |
 | Embeddings | `homelab-embedding-v1` (nomic 768) | `embeddings` (same backend, per D7) | Compatible |
+
+**KB key design (consequence of on-the-fly collections, Q3):** per-collection
+JWT scoping can't cover collections created later, so `KB_API_KEY` is a
+global-`m` JWT (`sub=mcp-knowledge`, no expiry, via
+`scripts/qdrant-jwt.py --global-access m`). The **code enforces the `kb_`
+collection prefix on every Qdrant operation** (read/write/create/delete/
+snapshot) — the key is broader than the code will ever use. Accepted risk
+(documented): a code bug *could* reach `mem0_memories` with this key.
+Mitigations: strict prefix allowlist + unit tests, and a **K7 audit-log
+check** that no `sub=mcp-knowledge` operation ever touches
+`mem0_memories` (Qdrant 1.18 audit logging).
 
 **Semantic boundary (to document):** memory = *who we are / what we
 prefer*, learned from conversation, per-person. KB = *what we know / what
 we filed*, explicit documents + facts, household-shared. A fact can live in
 both (accepted; dedup awareness is a future workstream).
 
-**v1 rule: chat does NOT auto-retrieve from the KB.** Siri answers from
-memory + tools; the LLM calls `kb_search` when it needs filed knowledge.
-This keeps the two systems orthogonal. (Hybrid retrieval = future.)
+**v1 rule: chat does NOT auto-retrieve from the KB.** Retrieval happens
+via the `kb_search` MCP tool, which is registered in LiteLLM with
+`allow_all_keys: true` — so **any AI using LiteLLM** (Siri, OWUI, pi, any
+channel) can query the KB (owner decision, Q8). Write tools are likewise
+callable by any LiteLLM key (per-key MCP restrictions are deferred to
+Phase 14) — accepted; ops are idempotent + timestamped (`kb_recent_changes`).
 
 ### 3.2 Ingestion model — the LLM is the operator
 
 No watcher, no watched dir, no pipeline directories. Two entry points:
 
-- **Files:** LLM has a path (media/, workspace/, anywhere readable) →
-  calls `kb_ingest_file(path, kb, ...)` → server converts (markitdown),
-  chunks with pagination, embeds (batched via LiteLLM), upserts.
-  Returns `{doc_id, pages, chunks, sha256, warnings[]}`.
+- **Files:** LLM has a path → calls `kb_ingest_file(path, kb, ...)` →
+  server converts (markitdown), chunks with pagination, embeds (batched
+  via LiteLLM), upserts. Returns `{doc_id, pages, chunks, sha256,
+  warnings[]}`.
+- **Canonical drop point (owner, Q4):** `/home/chuck/data/ai-kb/raw/` —
+  the owner uploads/drops files there (Thor). The LLM may also pass any
+  other Thor-readable path (media/, workspace/). Files on other machines:
+  owner copies them to Thor first (v1, see N3).
 - **Facts:** LLM calls `kb_add_fact(text, kb, ...)` — single fact, stored
   verbatim (`kind=fact`). Also the vehicle for **vision output**: the LLM
   reads an image (via a vision model), then stores the description/table
@@ -137,10 +155,10 @@ No watcher, no watched dir, no pipeline directories. Two entry points:
 (convert + embed + Qdrant rw). Rationale: "LLM uses the tooling" = MCP
 tools; single container; no skill-runner dependency for KB ops.
 Tradeoffs accepted: container image gets `markitdown[all]` + `pymupdf`
-(deps, ~50 MB); container gets a **new scoped write key** (not the
-read-only key) + ro mounts of `/home/chuck/data/media` +
+(deps, ~50 MB); container gets the **`KB_API_KEY` JWT** (§3.1) + ro mounts
+of `/home/chuck/data/ai-kb/raw` + `/home/chuck/data/media` +
 `/home/chuck/workspace` (source access). Same trust model as mcp_mysql
-(write-protected user): the key can only touch KB collections.
+(write-protected user): code + prefix allowlist are the guardrails.
 
 `family_kb_ingest` skill: **retired** (MCP tools replace it; see Q9).
 
@@ -168,8 +186,9 @@ file ──► markitdown.convert()  (PDF/DOCX/PPTX/XLSX/HTML/CSV/ZIP/EPUB/txt)
 - **Quality gate (per doc):** after conversion, sample N pages; if
   table/image pages produced empty/garbage text → vision fallback for
   those pages. Warnings surfaced in the ingest result.
-- Vision model: **Q1 — verify `matrix-coder` actually accepts image
-  input** (Qwen3.6-27B text model may not; if not, pick the VL alias).
+- Vision model (owner-confirmed, Q1): **`matrix-coder` is vision-capable —
+  up to 5 images and/or 1 video per turn.** Page-render fallback uses
+  image input; ≤5 pages per vision call (batch larger sets across turns).
 
 ### 3.4 Pagination + chunking (1000-page PDFs)
 
@@ -187,18 +206,29 @@ file ──► markitdown.convert()  (PDF/DOCX/PPTX/XLSX/HTML/CSV/ZIP/EPUB/txt)
 
 ### 3.5 Collections + payload schema
 
-- **One collection `family_kb` (rebuilt at 768-dim, Cosine)** with a
-  `kb` tag field (`family` / `homelab` / `research` / …). Multi-KB =
-  payload tag, not multiple collections (Q3). `kb_overview` groups by `kb`.
-- Drop the old 384-dim collection; **re-ingest the 3 real source docs**
-  from their markdown sources in `ai-kb/processed/markdown/` (Q5).
-  Wiki index pages: gone forever (requirement 3).
+- **Multiple collections, one per KB, created on the fly by the LLM**
+  (owner Q3: gaming / family / household / cars / guitar / side-biz
+  projects / … — "organized on the fly by the LLM").
+- **Naming:** `kb_<slug>` — the LLM passes a friendly `kb` name
+  ("Side Biz Project Blah") → server slugifies → `kb_side_biz_blah`
+  (lowercase, `[a-z0-9_]`). Prefix `kb_` is the isolation boundary
+  (enforced on every operation; see §3.1 key design). Examples:
+  `kb_gaming`, `kb_family`, `kb_household`, `kb_cars`, `kb_guitar`,
+  `kb_side_biz_blah`.
+- **On-the-fly creation:** `kb_ingest_file` / `kb_add_fact` create the
+  collection if missing (768-dim, Cosine) — no pre-provisioning.
+- **Manifest point:** each collection carries one special point
+  (`kind=manifest`, deterministic ID, `text` = short KB description the
+  LLM supplies at creation) so `kb_overview` can show what each KB is
+  about. Manifest points are filtered out of `kb_search` results.
+- **Old 384-dim `family_kb` collection: dropped, NOT migrated** (owner
+  Q5: "no, drop them"). Snapshot taken first (rollback safety), then
+  dropped. Wiki index pages + the 3 old docs: gone forever.
 
 ```
 text          chunk text (markdown)
-kind          doc | fact | image | table
+kind          doc | fact | image | table | manifest
 source        file path or "fact:<slug>"
-kb            family | homelab | research | ...
 chunk_index   int
 page_range    [int, int] | null
 sha256        source file hash (docs) | null
@@ -207,28 +237,36 @@ updated_at    iso8601
 superseded_by point_id | null   (corrections, see 3.6)
 ```
 
+(The `kb` tag field is gone — the collection name IS the KB.)
+
 Deterministic point IDs: `sha256(source + ":" + chunk_index)` → re-ingest
-is idempotent upsert; deletes are exact.
+is idempotent upsert; deletes are exact. (ID space is per-collection, so
+the same source in two KBs is fine.)
 
 ### 3.6 Toolset — mcp_knowledge v2 (~11 tools)
+
+All tools take `kb` as a **friendly name** (server slugifies + validates
+the `kb_` prefix). Omitted `kb` where sensible = all KBs (`kb_search` /
+`kb_forget` search across all `kb_*`). Registered in LiteLLM with
+`allow_all_keys: true` → available to **any AI using LiteLLM** (Q8).
 
 **Read (fixed/kept):**
 | Tool | Notes |
 |---|---|
-| `kb_search(query, top_k=5, kb?)` | **real vector search** (embed via LiteLLM `embeddings`); hybrid: vector + keyword fallback; returns snippets + `page_range` + `source` |
-| `kb_get_document(source)` | all chunks of a doc, ordered |
+| `kb_search(query, top_k=5, kb?)` | **real vector search** (embed via LiteLLM `embeddings`); hybrid keyword fallback; searches all `kb_*` (or one); filters manifest + superseded; returns snippets + `page_range` + `source` + `kb` |
+| `kb_get_document(source, kb)` | all chunks of a doc, ordered |
 | `kb_list_documents(kb?)` | per-doc metadata (source, pages, chunks, sha, ingested_at) |
-| `kb_recent_changes(days=7)` | kept (now has real timestamps) |
+| `kb_recent_changes(days=7)` | kept (now has real timestamps), across all `kb_*` |
 
 **High-level (requirement 6):**
 | Tool | Notes |
 |---|---|
-| `kb_overview()` | "what KBs do I have": per `kb` tag — doc count, chunk count, total size, last ingested, top sources. The LLM's map of the KB. |
+| `kb_overview()` | "what KBs do I have": every `kb_*` collection — manifest description, doc count, chunk count, total size, last ingested. The LLM's map of the KB. |
 
 **Write (new — requirement 4, 7):**
 | Tool | Notes |
 |---|---|
-| `kb_ingest_file(path, kb, description?)` | markitdown pipeline (§3.3/3.4); long-running; returns doc_id + stats + warnings |
+| `kb_ingest_file(path, kb, description?)` | markitdown pipeline (§3.3/3.4); creates `kb_<slug>` if missing (+ manifest from `description`); long-running; returns doc_id + stats + warnings |
 | `kb_add_fact(text, kb, source_hint?)` | verbatim fact; also stores vision-model output |
 | `kb_delete_document(source)` | remove all chunks for a source |
 | `kb_forget(query, confirm=false)` | **two-step**: default returns semantic matches (ids + snippets, nothing deleted); `confirm=true` + `ids` deletes. "forget that fact" |
@@ -237,29 +275,31 @@ is idempotent upsert; deletes are exact.
 **Backup (requirement 8):**
 | Tool | Notes |
 |---|---|
-| `kb_backup()` | Qdrant snapshot of `family_kb` → `/home/chuck/data/backups/kb/` (+ optional `tar` of source files if `include_sources=true`). Mirrors `backup-memory.sh` layout. |
+| `kb_backup()` | Qdrant snapshot of all `kb_*` collections → `/home/chuck/data/backups/kb/` (+ optional `tar` of source files if `include_sources=true`). Mirrors `backup-memory.sh` layout. |
 
 ### 3.7 Removals (requirements 3, 4)
 
 - **`family-wiki` container** + its block in `compose/compose.ai-core.yml`
-  (port 8011 freed).
-- **`/home/chuck/data/ai-kb/`:** delete `repo/` (wiki), `mkdocs.yml`,
-  `processed/`, `failed/`, `embeddings/`, `reports/`. **Keep `raw/`**
-  (source files) — rename to `/home/chuck/data/ai-kb/sources/`? (Q4)
-- **Old 384-dim `family_kb` collection:** dropped after re-ingest verified.
-- **`family_kb_ingest` skill:** retired (Q9).
+  (port 8011 freed). Owner restarts the ai-core stack.
+- **`/home/chuck/data/ai-kb/`:** delete **everything except `raw/`**
+  (owner Q10: "delete everything else other than the raw/ ingestion
+  point") — i.e. `repo/` (wiki), `mkdocs.yml`, `processed/`, `failed/`,
+  `embeddings/`, `reports/`. `raw/` stays as the canonical ingestion drop
+  point (owner will drop sample PDFs/images there for E2E).
+- **Old 384-dim `family_kb` collection:** snapshot → drop (no migration).
+- **`family_kb_ingest` skill:** retired + deleted (owner Q9).
 - **Docs:** `thor_ai_inventory.md`, `thor_data_classification.md`,
   `thor_skill_architecture.md`, root README — wiki + old pipeline refs.
 
-### 3.8 Qdrant exposure (D9 — revisit now)
+### 3.8 Qdrant exposure (D9 — owner decision: LEAVE for now)
 
-Proposal: un-publish 6333 from 0.0.0.0 → bind `127.0.0.1:6333` (host
-scripts keep working; containers use the docker network; LAN exposure
-gone). Low risk, real improvement. (Q7)
+Owner (Q7): other services/tooling use the Qdrant endpoint — leave the
+0.0.0.0:6333 publication as-is for now. D9 stays open as a future
+hardening item (not a K-phase).
 
 ### 3.9 Backup strategy
 
-- `scripts/backup-kb.sh`: Qdrant snapshot (`family_kb`) + optional source
+- `scripts/backup-kb.sh`: Qdrant snapshot (all `kb_*`) + optional source
   tar → `/home/chuck/data/backups/kb/` (same layout as memory backups).
 - `kb_backup` MCP tool for LLM-triggered snapshots.
 - Sources themselves live on disk (`ai-kb/raw` or media/workspace) —
@@ -276,39 +316,47 @@ gone). Low risk, real improvement. (Q7)
 - [x] This plan + questions to owner
 
 ### K1. Qdrant foundation
-- [ ] New Qdrant API key: rw `family_kb` only (verify 403 on
-      `mem0_memories` + create_collection)
-- [ ] Drop 384-dim `family_kb`; recreate 768-dim Cosine
-- [ ] Re-ingest the 3 real source docs (pet-care, house maintenance,
-      auto detailing) with the new payload schema
-- [ ] Verify: old points gone, 3 docs searchable, mem0 untouched
-      (count + auth matrix unchanged)
+- [ ] Issue `KB_API_KEY` JWT (global `m`, `sub=mcp-knowledge`, no expiry)
+      via `scripts/qdrant-jwt.py --global-access m`; store in `.env`
+- [ ] Verify empirically: create throwaway `kb_test` collection with it;
+      confirm `kb_` prefix code-gate works; confirm it CANNOT be narrowed
+      (document why global-`m` is required); drop `kb_test`
+- [ ] Snapshot old 384-dim `family_kb` (rollback safety) → drop it
+      (no migration, owner Q5)
+- [ ] Verify: mem0 untouched (counts + auth matrix unchanged), memory
+      regression suite still green
 
 ### K2. mcp_knowledge v2 — read tools
 - [ ] Real vector `kb_search` (embed query via LiteLLM `embeddings`;
-      hybrid keyword fallback; `kb` tag filter)
-- [ ] `kb_get_document`, `kb_list_documents`, `kb_overview`,
-      `kb_recent_changes` (fixed)
-- [ ] Container: read-only key stays for reads; image rebuild
-- [ ] E2E via LiteLLM MCP (raw JSON-RPC probe): search quality on the
-      3 migrated docs
+      hybrid keyword fallback; multi-`kb_*` search; manifest/superseded
+      filters)
+- [ ] `kb_get_document`, `kb_list_documents`, `kb_overview` (all `kb_*`
+      + manifest descriptions), `kb_recent_changes` (fixed)
+- [ ] Container: `KB_API_KEY` env + `kb_` prefix enforcement on every
+      Qdrant op; image rebuild; ro mounts (ai-kb/raw, media, workspace)
+- [ ] E2E via LiteLLM MCP (raw JSON-RPC probe): create a test KB, add a
+      fact, search it back
 
-### K3. Ingestion — files
-- [ ] markitdown integration (`[pdf,docx,pptx,xlsx,all]` as needed) +
+### K3. Ingestion — files (gated on owner fixtures in `ai-kb/raw/`)
+- [ ] markitdown integration (`[pdf,docx,pptx,xlsx]` + base) +
       pymupdf page pass + chunking/pagination (§3.4)
-- [ ] `kb_ingest_file`, `kb_add_fact`, `kb_delete_document`
+- [ ] `kb_ingest_file` (on-the-fly collection + manifest), `kb_add_fact`,
+      `kb_delete_document`
 - [ ] Batched embedding (32/batch via LiteLLM)
-- [ ] E2E: ingest a real multi-page PDF; **1000-page PDF timing test**
-      (owner fixture — Q2); re-ingest idempotency (sha256)
+- [ ] E2E: owner's sample files from `ai-kb/raw/` (owner will drop PDFs/
+      images/etc there); multi-page PDF; **1000-page PDF timing test**
+      (if owner provides one); re-ingest idempotency (sha256)
 - [ ] LiteLLM MCP timeout 7200 for mcp_knowledge
 
 ### K4. Images + tables + vision
-- [ ] Verify vision model accepts image input (Q1) — matrix-coder or alt
+- [ ] Vision: `matrix-coder` (owner-confirmed: ≤5 images and/or 1 video
+      per turn) via LiteLLM image input; ≤5 pages per vision call
 - [ ] markitdown-ocr plugin eval (LiteLLM as llm_client) vs page-render
       splice fallback; pick one, implement
-- [ ] Standalone image ingestion (EXIF+OCR+vision description)
-- [ ] E2E: owner's table/image PDF fixture (Q2) — tables come out as
-      markdown tables; image pages get descriptions; warnings surface
+- [ ] Standalone image ingestion (EXIF+OCR+vision description) from
+      `ai-kb/raw/` samples
+- [ ] E2E: owner's table/image fixtures — tables come out as markdown
+      tables; image pages get descriptions; warnings surface
 
 ### K5. Forget / correct
 - [ ] `kb_forget` (two-step semantic delete) + `kb_correct`
@@ -318,39 +366,57 @@ gone). Low risk, real improvement. (Q7)
 
 ### K6. Backup + removals + docs
 - [ ] `kb_backup` tool + `scripts/backup-kb.sh` + restore test
-      (throwaway Qdrant, like memory's)
+      (throwaway Qdrant, like memory's); scope: snapshot of all `kb_*`
+      + optional source tar (owner Q6: yes)
 - [ ] Remove `family-wiki` container + compose block (owner restarts
       ai-core stack)
-- [ ] Clean `/home/chuck/data/ai-kb/` (keep sources per Q4)
-- [ ] Retire `family_kb_ingest` skill
+- [ ] Clean `/home/chuck/data/ai-kb/` — delete everything except `raw/`
+      (owner Q10)
+- [ ] Retire + delete `family_kb_ingest` skill (owner Q9)
 - [ ] Docs: README, thor_ai_inventory, thor_data_classification,
       thor_skill_architecture, memory IMPLEMENTATION_STATE (D6 closed,
-      D9 resolved)
+      D9 left open per owner)
 
 ### K7. Verification + handoff
 - [ ] Memory isolation: full `scripts/memory-regression.sh` 70/70 after
       all KB work; mem0 counts unchanged
-- [ ] Auth matrix: KB key 403 on mem0_memories; read-only key 403 on
-      KB writes; no-key 401
+- [ ] Code-gate proof: unit tests + live probe that mcp_knowledge rejects
+      any non-`kb_` collection (incl. `mem0_memories`) at the tool layer;
+      **Qdrant audit-log scan: zero `sub=mcp-knowledge` operations on
+      non-`kb_` collections** (the KB key is global-`m` by necessity —
+      §3.1 — so the code gate is the boundary; the audit log proves it)
+- [ ] Auth matrix: read-only key 403 on KB writes; no-key 401; memory
+      JWT still 403 on `kb_*` (unchanged)
 - [ ] No secrets in payloads/logs; no internal leakage
 - [ ] Update this file + commit; handoff notes
 
 ---
 
-## 5. Questions for the owner
+## 5. Decisions log (owner, 2026-08-28) + open questions
 
-| # | Question | Proposal |
+### Round 1 — answered (locked)
+
+| # | Decision |
+|---|---|
+| Q1 | **`matrix-coder` IS the vision model** — up to **5 images and/or 1 video per turn**. |
+| Q2 | Test fixtures: owner will **drop sample PDFs/images/etc into `ai-kb/raw/`** on Thor (K3/K4 E2E is gated on that). |
+| Q3 | **Multiple collections**, one per KB, **created on the fly by the LLM** (gaming / family / household / cars / guitar / side-biz projects / …). → `kb_<slug>` naming, §3.5. |
+| Q4 | **`/home/chuck/data/ai-kb/raw/` = canonical ingestion drop point** (Thor); LLM may pass any other Thor-readable path; other machines → copy to Thor first (v1). |
+| Q5 | **Old 3 docs: NO migration — drop them** (snapshot first, then drop the 384-dim collection). |
+| Q6 | Backup: **Qdrant snapshot of all `kb_*` + optional source tar → `/home/chuck/data/backups/kb/`** — approved. |
+| Q7 | **Qdrant 0.0.0.0:6333 stays as-is for now** (other services/tooling use it). D9 remains open, not a K-phase. |
+| Q8 | **Chat retrieval via MCP tools for ANY AI using LiteLLM** — `mcp_knowledge` is already registered `allow_all_keys: true` (confirmed); no change needed, all kb tools (incl. writes) are LiteLLM-wide. |
+| Q9 | **`family_kb_ingest` skill: retire + delete** ("not needed anymore"). |
+| Q10 | **Delete everything in `ai-kb/` except `raw/`** ("I'll drop sample pdfs/images/etc to ingest in that raw/ folder"). |
+
+### Round 2 — open (small; defaults are reasonable)
+
+| # | Question | Default if no answer |
 |---|---|---|
-| Q1 | **Vision model:** is `matrix-coder` (qwen38-27b) actually vision-capable (accepts image input via vLLM)? If not, which alias should be the vision model? (K4 is gated on this.) | Verify empirically in K4 with a 1-image probe; fallback = page-render + whichever alias has VL |
-| Q2 | **Test fixtures:** which PDF with tables/images should be the E2E fixture, and where is the ~1000-page PDF? (Both on Thor or laptop?) | Any 2–3 real docs; the 1000-pager for the pagination timing test |
-| Q3 | **One collection + `kb` tag** vs multiple collections (family_kb, homelab_kb, …)? | One collection, tag field (simpler; `kb_overview` groups by tag) |
-| Q4 | **Source file location:** keep `ai-kb/raw/` as-is, rename to `ai-kb/sources/`, or no canonical location (LLM passes any readable path)? | Keep `raw/` (it works); new ingests record whatever path the LLM passes |
-| Q5 | **Migrate the 3 existing real docs** (pet-care, house maintenance, auto detailing) from their markdown sources? | Yes — they're the only real KB content today |
-| Q6 | **Backup scope:** Qdrant snapshot only, or also tar the source files? Where? | Snapshot + optional `include_sources` tar → `/home/chuck/data/backups/kb/` |
-| Q7 | **Qdrant 0.0.0.0:6333 (D9):** bind to 127.0.0.1 now? (Host scripts unaffected; LAN exposure removed.) | Yes |
-| Q8 | **Chat auto-retrieval from KB:** should Siri auto-retrieve KB chunks (like memory), or only via explicit `kb_search` tool calls? | v1: tool-only (keeps memory/KB orthogonal); hybrid later |
-| Q9 | **`family_kb_ingest` skill:** retire it (LLM uses MCP tools directly), or keep as a thin wrapper (e.g., for scheduler jobs)? | Retire |
-| Q10 | **Old wiki data:** confirm delete `ai-kb/repo/`, `mkdocs.yml`, `processed/`, `failed/`, `embeddings/`, `reports/` (keep `raw/`)? | Yes, per requirement 3/4 |
+| N1 | **Collection naming:** `kb_<slug>` prefix convention (e.g. `kb_gaming`, `kb_side_biz_blah`) — OK? Also: LLM can never rename/merge a KB in v1 (re-ingest into a new name) — acceptable? | Yes / yes |
+| N2 | **Video into the KB:** "1 video per turn" is the vision model's capability — is **ingesting video files into the KB** (frame sampling + vision) in v1 scope, or capability-only (v1 = files + facts)? | Capability-only; video ingestion = future workstream |
+| N3 | **Files on other machines:** v1 requires the file to be readable on Thor (drop into `ai-kb/raw/` or media/workspace). OK? | Yes |
+| N4 | **KB description at creation:** `kb_ingest_file`/`kb_add_fact` take an optional `description` (stored in the manifest point, shown in `kb_overview`) — required on first ingest to a NEW kb, optional otherwise? | As stated |
 
 ---
 
@@ -366,8 +432,10 @@ gone). Low risk, real improvement. (Q7)
 - **1000-page timeout:** page-by-page processing + batched embedding
   keeps memory flat; LiteLLM MCP timeout 7200; if still too long,
   split at page boundaries into 2 docs (owner-visible warning).
-- **Memory contamination:** impossible by construction (separate
-  collection + scoped key); K7 regression proves it.
+- **Memory contamination:** prevented by construction (separate
+  `kb_*`-prefix collections; code-gated key; no shared identity) — the
+  KB key is global-`m` by necessity (§3.1), so the code gate is the
+  boundary; K7 regression + audit-log scan prove it.
 - **Rollback K1:** snapshot of old 384-dim collection taken before drop
   (kept in backups dir until K7 passes).
 
@@ -378,8 +446,13 @@ gone). Low risk, real improvement. (Q7)
 - Memory changes (mem0, skill-runner memory code) — read-only observer.
 - Hybrid memory+KB retrieval (future workstream).
 - Multi-user KB scoping (household-shared by design).
+- **Video file ingestion into the KB** (pending N2 — default: out; the
+  vision model's 1-video-per-turn capability is for image/table analysis,
+  not a KB ingest format).
+- KB rename/merge/repurpose tools (re-ingest into a new name; v1).
 - OCR quality tuning beyond the vision fallback.
 - KB ingestion of URLs/web content (files + facts only; crawl4ai stays
   separate).
-- Qdrant TLS (D9 is exposure-only; TLS is a separate hardening item).
+- Qdrant TLS + 0.0.0.0 exposure hardening (D9 — owner: leave for now).
+- Per-key MCP restrictions (LiteLLM Phase 14).
 - Analytics/visits/status-panel workstreams (blog project).
