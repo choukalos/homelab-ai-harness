@@ -215,11 +215,18 @@ def main():
     # use POST /collections/{name}/points/scroll instead.
     import json as _json
     import urllib.request as _urlreq
+    import urllib.error as _urlerr
     real_key = os.environ.get("SKILL_RUNNER_API_KEY", "")
+    # Phase 9: Qdrant now requires auth — send the scoped JWT (rw on
+    # mem0_memories) so the raw ops scan is authorized. Empty = unauthenticated
+    # (pre-hardening / local dev without auth).
+    _hdrs = {"Content-Type": "application/json"}
+    if cfg.qdrant_api_key:
+        _hdrs["api-key"] = cfg.qdrant_api_key
     _req = _urlreq.Request(
         f"{cfg.qdrant_url}/collections/{cfg.collection}/points/scroll",
         data=_json.dumps({"limit": 256}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=_hdrs,
         method="POST",
     )
     with _urlreq.urlopen(_req, timeout=10) as _resp:
@@ -277,6 +284,35 @@ def main():
             os.environ.pop("MEMORY_RETRIEVAL_ENABLED", None)
         else:
             os.environ["MEMORY_RETRIEVAL_ENABLED"] = _saved_flag
+        interface._reset_singleton()
+
+    # GLOBAL feature flag off (MEMORY_ENABLED=false): the ENTIRE memory path
+    # must be disabled end-to-end — retrieval, writeback, explicit remember,
+    # and listing all return safe defaults (Phase 9 item 5). This runs on the
+    # live client, so it exercises the real config -> interface gating.
+    _saved_enabled = os.environ.get("MEMORY_ENABLED")
+    try:
+        os.environ["MEMORY_ENABLED"] = "false"
+        interface._reset_singleton()
+        check("global off: search -> []",
+              interface.search_memory("chuck", "what do I drink in the morning?") == [])
+        check("global off: render -> empty",
+              interface.render_context("chuck", "what do I drink in the morning?") == "")
+        check("global off: learn -> []",
+              interface.learn_from_turn(
+                  "chuck", [{"role": "user", "content": "I like oat milk"}]) == [])
+        check("global off: remember_direct -> []",
+              interface.remember_direct("chuck", "I like oat milk") == [])
+        check("global off: list -> []", interface.list_memories("chuck") == [])
+        # The backend itself is still healthy (the flag disables the path, not
+        # the backend) — health must not raise.
+        check("global off: is_healthy is bool",
+              isinstance(interface.is_healthy(), bool))
+    finally:
+        if _saved_enabled is None:
+            os.environ.pop("MEMORY_ENABLED", None)
+        else:
+            os.environ["MEMORY_ENABLED"] = _saved_enabled
         interface._reset_singleton()
 
     print("Phase 5: writeback policy + explicit commands (live)...")
@@ -488,6 +524,61 @@ def main():
     check("phase8: metrics has search counter", "memory_search_total" in out)
     check("phase8: metrics has user gauge", "memory_user_count" in out)
     check("phase8: metrics no secrets", "dentist" not in out)
+
+    # ── Phase 9: embedding-dimension consistency (live) ──────────────
+    # Every stored point must be exactly cfg.embed_dim (768, nomic-embed-text
+    # via homelab-embedding-v1). A dimension drift (e.g. a swapped embedding
+    # model) would corrupt search silently — this catches it at the store.
+    print("Phase 9: embedding-dimension consistency...")
+    import json as _json
+    import urllib.request as _urlreq
+    _hdrs = {"Content-Type": "application/json"}
+    if cfg.qdrant_api_key:
+        _hdrs["api-key"] = cfg.qdrant_api_key
+    _req = _urlreq.Request(
+        f"{cfg.qdrant_url}/collections/{cfg.collection}/points/scroll",
+        data=_json.dumps({"limit": 64, "with_payload": False,
+                          "with_vectors": True}).encode(),
+        headers=_hdrs, method="POST",
+    )
+    with _urlreq.urlopen(_req, timeout=10) as _resp:
+        _pts = _json.loads(_resp.read()).get("result", {}).get("points", [])
+    _dims = {len(p.get("vector", [])) for p in _pts if p.get("vector")}
+    check("p9: stored vectors are 768-dim", _dims == {cfg.embed_dim},
+          f"dims={_dims} expected={cfg.embed_dim} n={len(_pts)}")
+
+    # ── Phase 9: Qdrant auth / least-privilege regression (live) ─────
+    # The auth model must hold across rebuilds: no key → 401, the scoped JWT
+    # reads/writes its own collection, and is DENIED on another collection.
+    print("Phase 9: Qdrant auth / ACL regression...")
+    import urllib.error as _urlerr
+
+    def _qdrant_status(path, method="GET", api_key=None, body=None):
+        h = {"Content-Type": "application/json"}
+        if api_key:
+            h["api-key"] = api_key
+        data = _json.dumps(body).encode() if body is not None else None
+        req = _urlreq.Request(f"{cfg.qdrant_url}{path}", data=data,
+                              headers=h, method=method)
+        try:
+            with _urlreq.urlopen(req, timeout=10) as resp:
+                return resp.status
+        except _urlerr.HTTPError as e:
+            return e.code
+        except Exception:
+            return -1
+
+    check("p9: no key → 401 (auth enabled)",
+          _qdrant_status("/collections") == 401)
+    if cfg.qdrant_api_key:
+        check("p9: scoped JWT → 200 on own collection",
+              _qdrant_status(f"/collections/{cfg.collection}",
+                             api_key=cfg.qdrant_api_key) == 200)
+        check("p9: scoped JWT → 403 on family_kb (cross-collection denied)",
+              _qdrant_status("/collections/family_kb",
+                             api_key=cfg.qdrant_api_key) == 403)
+    else:
+        print("  (skip JWT ACL checks: MEMORY_QDRANT_API_KEY not set)")
 
     print("cleanup...")
     interface.delete_user_memories(user)

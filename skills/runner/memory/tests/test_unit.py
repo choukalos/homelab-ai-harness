@@ -101,6 +101,7 @@ def test_config_env():
     saved = {k: os.environ.get(k) for k in (
         "MEMORY_ENABLED", "MEMORY_RETRIEVAL_ENABLED", "MEMORY_WRITEBACK_ENABLED",
         "MEMORY_TOP_K", "MEMORY_TIMEOUT_MS", "MEMORY_ADMIN_TIMEOUT_MS",
+        "MEMORY_QDRANT_API_KEY",
     )}
     try:
         os.environ["MEMORY_ENABLED"] = "false"
@@ -122,6 +123,11 @@ def test_config_env():
         cfg2 = memconfig.load_config()
         check("retrieval flag independent", cfg2.retrieval_enabled is False)
         check("writeback still on", cfg2.writeback_allowed is True)
+        # Phase 9: scoped Qdrant JWT passthrough (empty default = unauthenticated)
+        check("qdrant_api_key empty by default", cfg2.qdrant_api_key == "")
+        os.environ["MEMORY_QDRANT_API_KEY"] = "test-jwt-token"
+        cfg3 = memconfig.load_config()
+        check("qdrant_api_key passthrough", cfg3.qdrant_api_key == "test-jwt-token")
     finally:
         for k, v in saved.items():
             if v is None:
