@@ -1,8 +1,27 @@
 # Thor Skill Architecture
 
 > Phase 4.6 — Define the skill architecture, API shape, and initial skill inventory.
-> Date: 2026-07-03
-> Status: Documentation only. No service restarts. No config edits. No file moves.
+> Date: 2026-07-03 (design baseline)
+> Status: **Implemented and evolved** — skill runner is in production. The July
+> inventory below is historical; current state is marked inline.
+
+**Current state (2026-08-28)**
+- **13 skills** live (the July 9-skill inventory has grown; `local/*` model
+  aliases were never implemented — skills use live aliases, primarily
+  `matrix-coder`; the stale `local/qwen-coder` references broke 7 skills and
+  were fixed in `auth_todo.md` Phase 9, 2026-08-25).
+- **Chat gateway:** `POST /api/chat` (intent dispatch → skills / direct LLM /
+  MCP tools) + `GET /api/jobs/{job_id}`; Siri via `siri.choukalos.com`
+  (Caddy, `X-API-Key`).
+- **Identity:** `X-API-Key` → `user_id` map (`memory/identity.py`;
+  `MEMORY_USER_KEYS`); jobs run as `service` unless user-triggered.
+- **Long-term memory (in-process Mem0, Phases 0–9 complete 2026-08-28):**
+  automatic pre-request retrieval + post-turn writeback, household scope,
+  secret filtering, admin REST (`/api/memory/*`, `X-Api-Key` header) + CLI +
+  `/metrics`. Plan: `memory_todo.md`; state: `docs/memory/IMPLEMENTATION_STATE.md`.
+- **Observability:** `/metrics` (Prometheus) scraped by VictoriaMetrics
+  (job `skill-runner`).
+- **Scheduler:** cron jobs via `dispatch_job()` under `service` identity.
 
 ---
 
@@ -266,7 +285,8 @@ max_runtime: 900  # seconds
 
 ## Rules
 
-- **Documentation only.** Do not implement yet.
+- **Implemented.** Skill runner runs in production (`compose/compose.skill-runner.yml`,
+  `THOR_IP:8091`); this doc is the design baseline.
 - Skills are independent modules with their own manifests.
 - Skills compose MCP tools and model calls — they do not directly access backends.
 - The skill runner handles job lifecycle, artifact storage, and channel routing.

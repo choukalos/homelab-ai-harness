@@ -1,8 +1,39 @@
 # Thor AI Capability Inventory
 
 > Phase 1 — Classify current capabilities and decide what becomes MCP, a skill, a regular app, or remains as-is.
-> Date: 2026-07-03
-> Status: Documentation only. No service restarts, config edits, or file moves.
+> Date: 2026-07-03 (design baseline)
+> Status: Historical planning doc. The table below reflects the July inventory;
+> read the **Current-state delta** first.
+
+## Current-state delta (2026-08-28)
+
+- **Images pinned:** `litellm-proxy` `ghcr.io/berriai/litellm:v1.92.0` (was
+  `main-latest`), `qdrant` `qdrant/qdrant:v1.18.1` (was `latest`) — memory
+  project Phase 9, verified live.
+- **Qdrant auth enabled:** `JWT_RBAC=true`. Three scoped credentials:
+  `QDRANT_ADMIN_API_KEY` (OPS-only — backups/ops scripts),
+  `QDRANT_READ_ONLY_API_KEY` (mcp_knowledge), scoped JWT (skill-runner memory,
+  `mem0_memories` rw, no expiry). Collections: `family_kb` (384-dim, 18 pts),
+  `mem0_memories` (768-dim, Cosine — long-term memory), `mem0migrations` (empty).
+  Port 0.0.0.0:6333 unchanged (decision §0.5; revisit with family-KB work).
+- **Skill Runner** is the production normalized AI gateway (`THOR_IP:8091`):
+  `POST /api/chat` intent dispatch, 13 skills, cron scheduler, 8 MCP dispatch,
+  **in-process long-term memory** (Mem0 OSS → Qdrant `mem0_memories`, identity
+  map, retrieval/writeback, admin REST + CLI, `/metrics`) — see
+  `memory_todo.md` + `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete
+  2026-08-28). Admin endpoints use the `X-Api-Key` header.
+- **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
+  `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
+  `hf-sd3`. 8 MCP servers / **34 tools** registered (was 4 servers / 11 in July).
+  Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
+- **Observability:** VictoriaMetrics now scrapes skill-runner `/metrics`
+  (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
+  resolve to 127.0.1.1 from inside containers); 12 `memory_*` series live.
+- **Backups:** `scripts/backup-memory.sh` (.env copy + `mem0_memories` snapshot,
+  restore-tested) + git for config/code. The July "backup NOT DONE" gap is closed.
+- **MCP servers (8 live):** search (3), crawl (1), knowledge (4, read-only Qdrant
+  key), filesystem_readonly (3), filesystem (5), homelab_status (4), media (4),
+  mysql (10). See `docs/thor_mcp_architecture.md`.
 
 ---
 

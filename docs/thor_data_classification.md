@@ -1,8 +1,13 @@
 # Thor Data Classification and KB Strategy
 
 > Phase 4.2 — Define data classification rules and knowledge base ingestion policy.
-> Date: 2026-07-03
-> Status: Documentation only. No service changes.
+> Date: 2026-07-03 (design baseline)
+> Status: **Classification rules still apply.** Current KB reality (2026-08-28):
+> `family_kb` (384-dim, 18 curated docs — legacy embeddings) and
+> `mem0_memories` (768-dim, skill-runner long-term memory). Ingestion is
+> manual via the Qdrant API with the admin key; the `family_kb_ingest` skill
+> is broken (targets the decommissioned harness). See
+> `docs/thor_mcp_architecture.md` §mcp_knowledge for the D6 gaps.
 
 ---
 

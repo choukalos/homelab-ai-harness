@@ -2,7 +2,23 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: Documentation only. Do not implement yet. Do not register tools with live LiteLLM.
+> Status: **Implemented** — all 8 servers below are live in LiteLLM (streamable-http,
+> `ai-net`, 34 tools as of 2026-08-28). This doc is the design baseline; the
+> "Current state" notes reflect the live system.
+
+**Current state (2026-08-28)**
+- 8 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
+  `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
+  `mcp_media` (4), `mcp_mysql` (10) — 34 tools total via `GET /v1/mcp/tools`.
+- **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
+  `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
+  (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
+  → 403). The admin key (`QDRANT_ADMIN_API_KEY`) is OPS-only (backups, ops
+  scripts) and is NOT held by any runtime service. Qdrant is pinned
+  `qdrant/qdrant:v1.18.1`.
+- `mcp_media` is mid-workstream: ComfyUI image gen on Matrix (192.168.4.55:8188)
+  is live; a GPU-host **media-pipeline** (:8189) integration (9 new tools) is
+  planned — see `media_mcp_tool_todo.md` (repo root).
 
 ---
 
@@ -24,12 +40,14 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 |---|---|---|
 | `mcp_search` | Web search via SearXNG | `searxng:8080` |
 | `mcp_crawl` | Page fetching and content extraction | `crawl4ai:11235` |
-| `mcp_knowledge` | Knowledge base read/write via Qdrant | `qdrant:6333` |
+| `mcp_knowledge` | Knowledge base READ via Qdrant (read-only key) | `qdrant:6333` |
 | `mcp_filesystem_readonly` | Read-only file access to workspace and media | `/home/chuck/workspace`, `/home/chuck/data/media` |
-| `mcp_stocks` | ~~Stock market data and financial lookups~~ (not implemented) | — |
+| `mcp_filesystem` | Writable file ops (workspace/media) — 5 tools | same mounts |
+| `mcp_mysql` | Read-mostly MySQL introspection + guarded queries — 10 tools | host MySQL |
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
-| `mcp_media` | Media operations: image gen via ComfyUI, file operations | `${MATRIX_IP}:8188` |
-| `mcp_home` | Home automation status (future, read-only) | Homebridge on Lego |
+| `mcp_media` | Media ops: ComfyUI image gen (Matrix) + GPU media-pipeline (planned) | `${MATRIX_IP}:8188`, GPU host `:8189` |
+| `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
+| `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
 ### Deferred
 
@@ -77,15 +95,26 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 | Field | Value |
 |---|---|
-| **Purpose** | Knowledge base query and curated ingestion via Qdrant |
-| **Tools** | `search(query, collection, top_k?)`, `ingest(file_path, collection)`, `delete(collection, filter)` |
-| **Inputs** | Query string or file path, collection name |
-| **Outputs** | Matching documents with scores, or ingestion confirmation |
-| **Read/write** | Read (search) + Write (ingest/delete, curated only) |
+| **Purpose** | Knowledge base READ via Qdrant |
+| **Tools (live)** | `kb_search(query, collection, top_k?)`, `kb_get_document(collection, doc_id)`, `kb_list_collections()`, `kb_recent_changes(collection, since?)` — **all read-only; no write tools exist** |
+| **Inputs** | Query string, collection name, doc id |
+| **Outputs** | Matching documents with scores, document content, collection listing |
+| **Read/write** | **Read-only** (2026-08-28: server runs with a Qdrant read-only API key; writes would 403 at Qdrant even if a tool were added) |
 | **Allowed paths** | `http://qdrant:6333` |
 | **Context impact** | Low-Medium — returns compact document chunks |
-| **Channel exposure** | CLI (full), Open WebUI (read-only), n8n (ingest-only) |
-| **Security** | Collection-level permissions enforced by skill runner. Ingestion requires manual approval or curated-only flag. Delete requires admin channel. |
+| **Security** | Read-only Qdrant key (`QDRANT_READ_ONLY_API_KEY`); collection allowlist in the server config |
+
+**Known gaps (D6 — separate workstream, open as of 2026-08-28):**
+- Server allowlists `family_curated`/`homelab_curated`/`coding_curated`, but the
+  only real KB collection is `family_kb` → `kb_search` finds nothing / `kb_list_collections`
+  returns `not_found` for the allowlisted names.
+- `kb_search` does exact-match `scroll` over payload text, NOT vector search.
+- `family_kb` is **384-dim** (legacy harness embeddings) while the current
+  `embeddings`/`homelab-embedding-v1` aliases return **768-dim** — never mix
+  collections or re-embed in place; a v2 KB migration needs a new collection.
+- The `family_kb_ingest` skill still targets the decommissioned harness
+  `/knowledge/ingest` endpoint — broken; ingestion is currently manual
+  (Qdrant API / ops script with the admin key).
 
 ---
 
@@ -144,15 +173,20 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 | Field | Value |
 |---|---|
-| **Purpose** | Media operations: image generation, file serving |
-| **Tools** | `generate_image(prompt, width?, height?, steps?)`, `get_media_file(path)`, `list_media(directory?)` |
-| **Inputs** | Prompt, dimensions, file path |
-| **Outputs** | Generated image file, media file, directory listing |
-| **Read/write** | Read (get/list) + Write (generate to `/data/media`) |
-| **Allowed paths** | `${MATRIX_IP}:8188` (ComfyUI), `/home/chuck/data/media/**` |
-| **Context impact** | Medium — image generation is async; returns job ID or file path |
-| **Channel exposure** | Open WebUI, CLI, n8n (via skill runner) |
-| **Security** | ComfyUI accessed over LAN. Output directory is write-scoped to `/data/media`. Prompt sanitized. Rate-limit generation. |
+| **Purpose** | Media operations: image generation + file serving |
+| **Tools (live)** | `generate_image(prompt, width?, height?, steps?)`, `edit_image(image, prompt, ...)`, `list_images(directory?)`, `image_info(path)` |
+| **Backends** | ComfyUI on Matrix `192.168.4.55:8188` (live); **GPU-host media-pipeline `:8189` (planned workstream — 9 new tools: storyboard, shot gen, TTS, music, SFX, upscale, assemble; see `media_mcp_tool_todo.md`)** |
+| **Read/write** | Read (list/info) + Write (generate/edit to `/home/chuck/data/media`) |
+| **Security** | ComfyUI over LAN. Output write-scoped to the media dir. |
+
+### 7b. `mcp_mysql` (added after the July design)
+
+| Field | Value |
+|---|---|
+| **Purpose** | MySQL introspection + guarded query execution for the host MySQL (Ghost, invest-hub, legacy AI_DB_*) |
+| **Tools (live)** | `list_databases`, `list_tables`, `describe_table`, `sample_table`, `run_query`, `run_query_to_csv`, `nl_to_sql_then_run`, `explain_sql`, `list_indexes`, `foreign_keys` (10 tools) |
+| **Read/write** | Read-mostly; `run_query`/`nl_to_sql_then_run` can execute writes — treat as the sensitive pair |
+| **Security** | DSN via env; no public exposure (ai-net only) |
 
 ---
 
@@ -189,9 +223,11 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 ## Rules
 
-- **Documentation only.** Do not implement yet.
-- **Do not register tools with live LiteLLM.**
-- MCP servers run as separate processes or containers on Thor.
-- Each server has its own manifest defining tools, permissions, and allowed paths.
+- **Implemented.** All 8 servers run as containers on `ai-net` (streamable-http, port 8000)
+  and are registered in `litellm/config.yml` (`mcp_servers`, `allow_all_keys: true` —
+  decided 2026-08-25: every valid key may call every tool; no scoped grants).
+- MCP servers run as separate containers on Thor (`compose/compose.mcp.yml`).
 - The skill runner composes MCP tools into workflows — MCP servers do not know about skills.
 - `mcp_code` is deferred to future exploration.
+- Qdrant-backed servers must use scoped keys (read-only for `mcp_knowledge`);
+  the Qdrant admin key stays OPS-only.

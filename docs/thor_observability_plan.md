@@ -1,8 +1,23 @@
 # Thor Observability Plan
 
 > Phase 12 — Make tools and skills visible before relying on them.
-> Date: 2026-07-03
-> Status: Documentation only. No config changes to production services.
+> Date: 2026-07-03 (design baseline)
+> Status: **Partially implemented** — skill-runner metrics are live and scraped
+> (2026-08-28, memory project Phase 8). See current-state notes below; the rest
+> of this doc is the original plan.
+
+**Current state (2026-08-28)**
+- **Skill Runner /metrics: ✅ DONE** — `prometheus_client` endpoint at
+  `THOR_IP:8091/metrics`; VictoriaMetrics job `skill-runner` (target
+  `thor-lan:8091` — the alias `thor` is unusable: it collides with the host's
+  own hostname and resolves to 127.0.1.1 inside containers). 12 `memory_*`
+  series + job/request counters confirmed in VictoriaMetrics
+  (`up{job="skill-runner"}=1`).
+- **Gotcha:** promscrape does NOT hot-reload by default —
+  `--promscrape.configCheckInterval=30s` is set on victoria-metrics.
+- Still open: MCP server /metrics, Qdrant scrape (note: Qdrant now requires
+  auth — `JWT_RBAC=true`, so its /metrics scrape needs the admin key header),
+  Grafana dashboards, alert rules.
 
 ---
 
@@ -28,7 +43,7 @@ Each new platform component must be visible before it's trusted:
 |---|---|---|
 | **LiteLLM** | Token counts, latency, per-key usage, model routing, errors, budget consumption | ✅ Already scraped |
 | **MCP Servers** | Tool call count, latency, errors, timeout rates, per-server health | ❌ Not yet |
-| **Skill Runner** | Job count, status distribution, runtime, success/failure rates, per-skill metrics | ❌ Not yet |
+| **Skill Runner** | Job count, status distribution, runtime, success/failure rates, per-skill metrics + 12 `memory_*` series | ✅ **Scraped (2026-08-28)** — job `skill-runner`, target `thor-lan:8091` |
 | **SearXNG** | Query count, response time, cache hit rate | ❌ Not yet |
 | **Qdrant** | Collection count, point count, query latency | ❌ Not yet |
 | **Crawl4AI** | Crawl count, success/failure, response size | ❌ Not yet |
@@ -315,11 +330,13 @@ Dashboards render with data from Victoria Metrics.
 
 ## Rules
 
-1. **Documentation only.** No config changes to production services.
+1. **Skill-runner metrics are live** (2026-08-28): `/metrics` endpoint +
+   VictoriaMetrics scrape (job `skill-runner`, target `thor-lan:8091`).
 2. **Victoria Metrics extensions are drafts.** Chuck applies manually.
+   (Qdrant scrape now requires the admin-key header — `JWT_RBAC=true`.)
 3. **Grafana dashboards are future work.** Chuck creates after Victoria Metrics is extended.
-4. **MCP servers need /metrics endpoints.** Added during Phase 14 (production integration).
-5. **Skill runner needs prometheus_client middleware.** Added during Phase 14.
+4. **MCP servers need /metrics endpoints.** Still open (Phase 14).
+5. **Skill runner prometheus_client middleware — DONE** (2026-08-28).
 6. **No new containers.** Reuse existing Victoria Metrics and Grafana.
 
 ---
@@ -328,8 +345,8 @@ Dashboards render with data from Victoria Metrics.
 
 1. ✅ LiteLLM metrics — Already working
 2. ✅ Node/container metrics — Already working
-3. ⏳ Skill runner /metrics — Phase 14 (add prometheus_client middleware)
-4. ⏳ MCP server /metrics — Phase 14 (add prometheus_client to each server)
-5. ⏳ Victoria Metrics scrape extensions — Phase 14 (Chuck applies)
-6. ⏳ Grafana dashboards — Phase 14 (Chuck creates)
+3. ✅ Skill runner /metrics — **DONE 2026-08-28** (prometheus_client + VM scrape, job `skill-runner`)
+4. ⏳ MCP server /metrics — not started
+5. ✅ Victoria Metrics scrape extension (skill-runner) — **DONE 2026-08-28** (Qdrant/MCP/Caddy drafts remain open)
+6. ⏳ Grafana dashboards — not started
 7. ⏳ Alert rules — Future (Chuck defines thresholds)
