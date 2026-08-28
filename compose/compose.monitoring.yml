@@ -65,6 +65,13 @@ services:
       - "matrix:${MATRIX_IP:-192.168.4.55}"
       - "athena:${ATHENA_IP:-192.168.5.110}"
       - "lego:${LEGO_IP:-192.168.5.100}"
+      # skill-runner binds only to THOR_IP (not 0.0.0.0), so
+      # host.docker.internal (docker0 gateway) cannot reach it —
+      # map the thor LAN IP directly (memory_todo.md Phase 8).
+      # NOTE: named 'thor-lan' on purpose — the host's own hostname is
+      # 'thor', which resolves to a host-local address (127.0.1.1) from
+      # inside containers and would shadow this entry.
+      - "thor-lan:${THOR_IP:-192.168.4.54}"
     user: "0:0"
 
   grafana:
