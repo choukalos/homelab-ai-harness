@@ -12,6 +12,9 @@ services:
     container_name: mcp_knowledge
     environment:
       - QDRANT_URL=http://qdrant:6333
+      # Phase 9 least-privilege: Qdrant now requires auth. This server is
+      # read-only by design → the instance read-only key (not the admin key).
+      - QDRANT_API_KEY=${QDRANT_READ_ONLY_API_KEY}
       - QDRANT_TIMEOUT=15
     restart: unless-stopped
     networks:

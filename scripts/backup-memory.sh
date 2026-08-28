@@ -43,6 +43,20 @@ QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
 COLLECTION="mem0_memories"
 STAMP="$(date +%Y%m%d-%H%M)"
 
+# Phase 9 least-privilege: Qdrant now requires an API key. The backup tool is
+# an OPS credential holder, so it uses the ADMIN key (full access). Read it
+# from the environment if present, else from .env (the file is backed up in
+# step 1, so the key is included in the env backup — expected for ops tools).
+QDRANT_ADMIN_API_KEY="${QDRANT_ADMIN_API_KEY:-}"
+if [[ -z "$QDRANT_ADMIN_API_KEY" && -f "$ENV_FILE" ]]; then
+  QDRANT_ADMIN_API_KEY="$(grep -E '^QDRANT_ADMIN_API_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+fi
+# api-key header (empty when unset = pre-hardening / unauthenticated node).
+QDRANT_AUTH_HEADER=()
+if [[ -n "$QDRANT_ADMIN_API_KEY" ]]; then
+  QDRANT_AUTH_HEADER=(-H "api-key: ${QDRANT_ADMIN_API_KEY}")
+fi
+
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
@@ -58,6 +72,7 @@ echo "    wrote $(stat -c%s "$ENV_DEST") bytes (mode 600)"
 
 echo "==> [2/3] Qdrant snapshot of '${COLLECTION}'"
 HTTP_CODE="$(curl -s -o /tmp/qdrant-snap-resp.json -w '%{http_code}' \
+  "${QDRANT_AUTH_HEADER[@]}" \
   -X POST "${QDRANT_URL}/collections/${COLLECTION}/snapshots")"
 if [[ "$HTTP_CODE" == "404" ]]; then
   echo "    WARNING: collection '${COLLECTION}' does not exist yet — skipping snapshot."

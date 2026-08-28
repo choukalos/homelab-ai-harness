@@ -62,7 +62,12 @@ class MemoryConfig:
     embed_model: str = "homelab-embedding-v1"
 
     # Qdrant vector store.
+    # Phase 9 hardening: qdrant_api_key is a JWT RBAC token (HS256, signed
+    # with the Qdrant admin key) scoped to THIS collection only (rw). See
+    # scripts/qdrant-jwt.py and docs/memory/IMPLEMENTATION_STATE.md.
+    # Empty = no auth header (pre-hardening / local dev without auth).
     qdrant_url: str = "http://qdrant:6333"
+    qdrant_api_key: str = ""
     collection: str = "mem0_memories"
     embed_dim: int = 768
 
@@ -126,6 +131,7 @@ def load_config() -> MemoryConfig:
         litellm_api_key=os.environ.get("MEMORY_LITELLM_KEY", ""),
         extraction_model=os.environ.get("MEMORY_EXTRACTION_MODEL", "matrix-coder"),
         qdrant_url=os.environ.get("MEMORY_QDRANT_URL", "http://qdrant:6333"),
+        qdrant_api_key=os.environ.get("MEMORY_QDRANT_API_KEY", ""),
         collection=os.environ.get("MEMORY_COLLECTION", "mem0_memories"),
         embed_dim=_env_int("MEMORY_EMBED_DIM", 768),
         top_k=_env_int("MEMORY_TOP_K", 6),

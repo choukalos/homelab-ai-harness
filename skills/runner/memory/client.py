@@ -87,6 +87,13 @@ class MemoryClient:
                             "url": self.cfg.qdrant_url,
                             "collection_name": self.cfg.collection,
                             "embedding_model_dims": self.cfg.embed_dim,
+                            # Phase 9: JWT RBAC token scoped to this
+                            # collection (rw). Omitted when unset (local dev).
+                            **(
+                                {"api_key": self.cfg.qdrant_api_key}
+                                if self.cfg.qdrant_api_key
+                                else {}
+                            ),
                         },
                     },
                 }
@@ -150,6 +157,12 @@ class MemoryClient:
             r = httpx.get(
                 f"{self.cfg.qdrant_url}/collections/{self.cfg.collection}",
                 timeout=2.0,
+                # Phase 9: same scoped JWT as the mem0 client.
+                headers=(
+                    {"api-key": self.cfg.qdrant_api_key}
+                    if self.cfg.qdrant_api_key
+                    else {}
+                ),
             )
             healthy = r.status_code == 200
         except Exception:  # noqa: BLE001 - health check must never raise

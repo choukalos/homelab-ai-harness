@@ -680,14 +680,60 @@ rebuild (user job → chuck; service job → service, no personal memory).
   matrix-coder + embeddings completions OK; qdrant 0/18 both green;
   skill-runner healthy + clean mem0 warmup; VM scrape `up=1` after
   recreate.
-- [ ] Least privilege: Qdrant collection ACLs; memory-service credential
-  minimal model access. (Qdrant 0.0.0.0:6333 stays per decision §0.5.)
-- [ ] Regression suite: identity isolation, household scope, secret
-  filtering, prompt-injection boundary, outage degradation, embedding-dim
-  consistency.
-- [ ] Embedding-migration procedure (PDF §9): document v1→v2 alias/
-  collection cutover runbook (NO live migration).
-- [ ] Feature-flag review: `MEMORY_ENABLED=false` end-to-end.
+- [x] **Least privilege** (code-complete, awaiting rebuild): Qdrant admin key
+  (`QDRANT_ADMIN_API_KEY`, OPS-only) + read-only key (`QDRANT_READ_ONLY_API_KEY`,
+  mcp_knowledge) + scoped JWT (`MEMORY_QDRANT_JWT`, skill-runner, `mem0_memories`
+  rw, no exp). `JWT_RBAC=true` on qdrant. LiteLLM memory key tightened to exactly
+  `[matrix-coder, homelab-embedding-v1]` (new key `sk-8Ar7F5H…`; old over-broad
+  key `sk-vodi_Fd…` to be deleted post-rebuild). `scripts/qdrant-jwt.py` generator
+  committed. Runtime services never hold the admin key. **Live auth matrix
+  verified on a throwaway v1.18.1 container** (no-key 401 / admin 200 / read-only
+  list-OK+create-403 / JWT mem0 rw OK + family_kb 403 + create_collection 403).
+  (Qdrant 0.0.0.0:6333 stays per decision §0.5; TLS deferred.)
+- [x] **Regression suite** (code-complete, awaiting rebuild):
+  `scripts/memory-regression.sh` — repeatable e2e gate (preflight: clean git tree
+  + qdrant authorized + host unit tests; throwaway `skill-runner:local` container
+  on `ai-net` with the live tree mounted `:ro`; runs `test_integration.py`;
+  verifies Qdrant left clean `mem0_memories=0`/`family_kb=18`; removes the
+  container). Integration test now also checks embedding-dimension consistency
+  (all vectors 768) + Qdrant auth/ACL (no-key 401 / scoped-JWT own-collection 200
+  / scoped-JWT foreign-collection 403). Run it post-rebuild: `bash
+  scripts/memory-regression.sh`.
+- [x] **Embedding-migration procedure** (doc-only, no live migration):
+  `docs/memory/embedding-migration.md` runbook — new alias `homelab-embedding-v2`
+  → new collection → re-embed from stored text → quality compare → cutover via
+  env+rebuild → keep v1 briefly for rollback; **never silently repoint v1**.
+  Reference tool `scripts/reembed-memory.py` (idempotent upsert-by-id, batched,
+  rate-limited, `--dry-run` capable; reads `payload["data"]`; admin key). Dry-run
+  verified against the live (currently empty) collection.
+- [x] **Feature-flag review** (code-complete, live check added to regression):
+  `MEMORY_ENABLED=false` verified to disable the ENTIRE memory path end-to-end —
+  retrieval (`search_memory`→`[]`, `render_context`→`""`), writeback
+  (`learn_from_turn`→`[]`), explicit `remember_direct`→`[]`, `forget`, `list`→`[]`,
+  `update`/`delete`→no-op, and the chat path (no `<long_term_memory>` block, no
+  errors). The flag gates at the interface level (`retrieval_allowed` /
+  `writeback_allowed` = `enabled AND …`), so the backend stays healthy (health is
+  independent of the flag). Live global-off check added to `test_integration.py`
+  (runs on the real client); the unit test already covers the interface-level
+  flag-off path. The per-request `{"memory":{"enabled":false}}` override (Phase 4)
+  is a separate, additive switch on top of the global flag.
+
+**SINGLE MANUAL REBUILD (Chuck) — items 2–5 are code-complete and uncommitted.**
+They touch three projects (qdrant auth in ai-core, the MCP knowledge server,
+skill-runner), so the one manual step is a three-part line, run **in this order**
+(ai-core first so qdrant auth is on before consumers rebuild; mcp before skill):
+```
+./homelab.sh rebuild ai-only && ./homelab.sh rebuild mcp-only && ./homelab.sh rebuild skill-only
+```
+> Briefly drops qdrant (auth on), mcp_knowledge, and skill-runner, then restores
+> them with the least-privilege keys. litellm is NOT rebuilt here (its key was
+> tightened via the admin API; the new key is in `.env` and picked up when
+> skill-runner rebuilds). Expect a few minutes of degraded memory/MCP service.
+**Post-rebuild (I do, no manual steps):** (1) Qdrant auth matrix live; (2)
+skill-runner memory e2e on a non-prod user (JWT rw); (3) mcp_knowledge read-only
+works + write 403; (4) `bash scripts/memory-regression.sh` → PASS + Qdrant clean;
+(5) delete the old LiteLLM key `sk-vodi_Fd…` (hash `a881a217…`); (6) report +
+commit.
 
 **Gate to Phase 9: MET (2026-08-28).** Admin ops exercised manually
 (post-rebuild e2e on `memory_test`); restore test current (verified

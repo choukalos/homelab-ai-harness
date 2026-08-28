@@ -26,6 +26,9 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue, Range
 # ---------------------------------------------------------------------------
 
 QDRANT_URL: str = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+# Phase 9 hardening: Qdrant requires an API key. This server is read-only by
+# design, so it uses the instance read-only key (QDRANT__SERVICE__READ_ONLY_API_KEY).
+QDRANT_API_KEY: str = os.environ.get("QDRANT_API_KEY", "")
 HTTP_TIMEOUT: float = float(os.environ.get("QDRANT_TIMEOUT", "15"))
 MAX_TOP_K: int = 20
 DEFAULT_TOP_K: int = 5
@@ -125,6 +128,8 @@ def _get_client() -> AsyncQdrantClient:
     return AsyncQdrantClient(
         url=QDRANT_URL,
         timeout=HTTP_TIMEOUT,
+        # Phase 9: read-only API key (empty = unauthenticated, pre-hardening).
+        api_key=QDRANT_API_KEY or None,
     )
 
 
