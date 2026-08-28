@@ -51,12 +51,21 @@
   `data:` base64) — no litellm python client dep (keep the image lean);
   small retry wrapper. (Alternative: litellm client — decide at A1.)
 
-### 1.3 Vision model (owner-confirmed, KB Q1)
+### 1.3 Vision model (owner-confirmed, KB Q1) — **A0 probe done 2026-08-28**
 
 - `matrix-coder` (Qwen3.6-27B via vLLM on Matrix, via LiteLLM) — vision
   capable, **≤5 images and/or 1 video per turn/request**.
-- A0 verifies empirically via LiteLLM (the skill's probe, re-pointed at
-  the LiteLLM endpoint) — exact cap, latency, token cost per 640px frame.
+- **Probe results (`tmp/vision_probe.py`, direct to LiteLLM REST):**
+  - 6-image request → 400 `"At most 5 image(s) may be provided in one
+    prompt"` — **cap = 5 confirmed** (matches the skill's 2026-08-27 probe).
+  - 5× 640×360 frames → HTTP 200 in **2.6 s**; **~236 prompt tokens per
+    frame**; thinking OFF (`extra_body.chat_template_kwargs.
+    enable_thinking=false`) — with thinking ON the model burned the whole
+    completion budget on reasoning and `content` came back `null`.
+  - **REST API takes the alias as-is** (`matrix-coder`), NOT the
+    `openai/`-prefixed form (that's the litellm-SDK path only).
+  - Cost model: a 60-frame video ≈ 12 vision calls (5/batch) ≈ 14k prompt
+    tokens + consolidation — trivially cheap at this scale.
 
 ---
 
@@ -209,12 +218,22 @@ artifacts: media/generated/vision/<slug>/{frames, summary.md,
 
 ## 4. Phased plan
 
-### A0. Spec lock + vision probe — **this doc**
+### A0. Spec lock + vision probe — **DONE (2026-08-28)**
 - [x] Read the skill (SKILL.md + 5 scripts)
 - [x] Draft tool spec (this doc)
-- [ ] `vision_probe` equivalent via LiteLLM: confirm the 5-image cap,
-      latency + token cost per 640px frame (numbers inform defaults)
-      — direct httpx to the proxy, **no config change / no reload**
+- [x] Vision probe via LiteLLM (`tmp/vision_probe.py`, direct httpx, no
+      config change / no reload) — **results:**
+      - **Cap CONFIRMED: at most 5 images per request** (upstream vLLM
+        error: "At most 5 image(s) may be provided in one prompt")
+      - 5× 640×360 frames: **HTTP 200 in 0.5s**, prompt=1144 tokens
+        (**~228 tokens/frame** for flat-color frames; real frames will be
+        higher), completion=10 — model correctly identified all 5 colors
+      - **`matrix-coder` accepts image input via LiteLLM REST** (alias as-is,
+        no provider prefix — the `openai/` prefix is only for the litellm
+        SDK path, cf. mcp_mysql)
+      - **Thinking MUST be disabled** (`extra_body.chat_template_kwargs.
+        enable_thinking=false`) — with thinking on, completion tokens burn
+        on reasoning and `content` comes back `None` (same as mcp_mysql)
 - [x] Owner decision round 1 locked (§5) — no open questions
 
 ### A1. Server + images
