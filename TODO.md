@@ -21,9 +21,9 @@
   qdrant v1.18.1), embedding-migration runbook. State:
   `docs/memory/IMPLEMENTATION_STATE.md`. Phase 6 (optional MCP memory tools)
   remains the only deferred phase — gated on a week of production use.
-- **LiteLLM** running with **8 MCP servers (40 tools as of 2026-08-28 — 10 media-pipeline tools; legacy media tools removed)** via
+- **LiteLLM** running with **8 MCP servers (41 tools as of 2026-08-28 — 10 media-pipeline tools, legacy media tools removed, + `schema_overview` on mcp_mysql)** via
   streamable-http (`mcp_search` 3, `mcp_crawl` 1, `mcp_knowledge` 4,
-  `mcp_filesystem_readonly` 3, `mcp_filesystem` 5, `mcp_mysql` 10,
+  `mcp_filesystem_readonly` 3, `mcp_filesystem` 5, `mcp_mysql` 11,
   `mcp_homelab_status` 4, `mcp_media` 10).
   **MCP access model (decided 2026-08-25):** `allow_all_keys: true` is
   intentional — every valid key may call every MCP tool; no scoped grants

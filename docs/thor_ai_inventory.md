@@ -24,7 +24,7 @@
   2026-08-28). Admin endpoints use the `X-Api-Key` header.
 - **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
   `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
-  `hf-sd3`. 8 MCP servers / **40 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, then 44 → 40 when the legacy media tools were removed — all on 2026-08-28).
+  `hf-sd3`. 8 MCP servers / **41 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview` — all on 2026-08-28).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
 - **Observability:** VictoriaMetrics now scrapes skill-runner `/metrics`
   (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
@@ -32,8 +32,8 @@
 - **Backups:** `scripts/backup-memory.sh` (.env copy + `mem0_memories` snapshot,
   restore-tested) + git for config/code. The July "backup NOT DONE" gap is closed.
 - **MCP servers (8 live):** search (3), crawl (1), knowledge (4, read-only Qdrant
-  key), filesystem_readonly (3), filesystem (5), homelab_status (4), media (4),
-  mysql (10). See `docs/thor_mcp_architecture.md`.
+  key), filesystem_readonly (3), filesystem (5), homelab_status (4), media (10),
+  mysql (11). See `docs/thor_mcp_architecture.md`.
 
 ---
 

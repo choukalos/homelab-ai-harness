@@ -63,10 +63,12 @@ services:
       - MYSQL_PASSWORD=${AI_DB_PASS}
       - LITELLM_API_BASE=http://litellm-proxy:4000
       - LITELLM_API_KEY=${LITELLM_API_KEY}
-      - LITELLM_MODEL=studio-gemma4-4b
+      - LITELLM_MODEL=matrix-coder
       - CSV_OUTPUT_DIR=/home/chuck/data/media/csv
     volumes:
       - /home/chuck/data/media/csv:/home/chuck/data/media/csv
+      # Curated NL-to-SQL domain hints — mount so edits take effect on restart, no rebuild
+      - ../mcp/servers/mysql/schema_hints.json:/app/schema_hints.json:ro
     restart: unless-stopped
     networks:
       - ai-net

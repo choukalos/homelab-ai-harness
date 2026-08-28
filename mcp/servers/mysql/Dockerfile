@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir .
 
 # Copy application code
 COPY server.py .
+COPY schema_hints.json .
 
 EXPOSE 8000
 
