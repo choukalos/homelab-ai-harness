@@ -8,6 +8,9 @@ Provides tools:
   - foreign_keys(database)          Show foreign key relationships between tables
   - list_indexes(database, table)   Show indexes on a table
   - sample_table(database, table)   Return sample rows from a table
+  - schema_overview(database)       Full schema intelligence: tables, columns, indexes,
+                                    FKs, inferred soft relations, join graph, curated
+                                    hints, and data samples
   - run_query(database, sql)        Execute a SELECT query, return rows as JSON
   - run_query_to_csv(database, sql, filename)  Execute query and save to CSV
   - explain_sql(database, natural_language)   Translate NL to SQL via LiteLLM
@@ -22,6 +25,7 @@ Query safety: EXPLAIN pre-flight checks row estimates, join count, and full tabl
 import csv
 import hashlib
 import io
+import json
 import os
 import re
 import logging
@@ -51,14 +55,29 @@ BLOCK_FULL_TABLE_SCANS: bool = os.environ.get("BLOCK_FULL_TABLE_SCANS", "true").
 SCHEMA_MAX_TABLES: int = int(os.environ.get("SCHEMA_MAX_TABLES", "50"))
 SAMPLE_MAX_ROWS: int = int(os.environ.get("SAMPLE_MAX_ROWS", "20"))
 
+# Curated per-database hints (domain knowledge for NL-to-SQL). JSON file keyed
+# by database name -> list of hint strings. Mounted read-only in production so
+# hints can be updated without a rebuild.
+SCHEMA_HINTS_FILE: str = os.environ.get("SCHEMA_HINTS_FILE", "/app/schema_hints.json")
+
+# Soft-relation inference: columns named <table>Id / <table>_id that reference
+# another table's id without a declared FK (typical of ORM apps). Used to build
+# the join graph when a database lacks real foreign keys.
+INFER_SOFT_RELATIONS: bool = os.environ.get("INFER_SOFT_RELATIONS", "true").lower() in ("true", "1", "yes")
+
 # CSV output
 CSV_OUTPUT_DIR: str = os.environ.get("CSV_OUTPUT_DIR", "/home/chuck/data/media/csv")
 
 # LiteLLM config for NL-to-SQL
 LITELLM_API_BASE: str = os.environ.get("LITELLM_API_BASE", "http://litellm-proxy:4000")
 LITELLM_API_KEY: str = os.environ.get("LITELLM_API_KEY")
-LITELLM_MODEL: str = os.environ.get("LITELLM_MODEL", "studio-gemma4-4b")
-LITELLM_MAX_TOKENS: int = int(os.environ.get("LITELLM_MAX_TOKENS", "1000"))
+LITELLM_MODEL: str = os.environ.get("LITELLM_MODEL", "matrix-coder")
+LITELLM_MAX_TOKENS: int = int(os.environ.get("LITELLM_MAX_TOKENS", "2000"))
+# Qwen3-style "thinking" models (e.g. matrix-coder) burn the token budget on
+# reasoning and return empty content. Disable thinking for NL-to-SQL: the task
+# is mechanical SQL generation, not open-ended reasoning. Set false for models
+# whose chat template rejects the enable_thinking kwarg.
+LITELLM_DISABLE_THINKING: bool = os.environ.get("LITELLM_DISABLE_THINKING", "true").lower() in ("true", "1", "yes")
 
 # Databases to exclude from list_databases
 SYSTEM_DATABASES = {
@@ -86,9 +105,13 @@ You are a SQL translator. Convert natural language questions into safe, read-onl
 RULES:
 - Output ONLY a single valid SELECT statement, nothing else.
 - Use ONLY the SELECT keyword. NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, REPLACE, GRANT, or REVOKE.
-- Use proper table and column names with backtick escaping where needed.
-- Use foreign key relationships to determine join conditions.
-- Prefer indexed columns in WHERE clauses when possible.
+- Use proper table and column names exactly as given in the schema context, with backtick escaping where needed.
+- JOIN tables using the FOREIGN KEYS and JOIN GRAPH sections of the schema context. When a SOFT RELATION is listed (inferred, no declared FK), it is a valid join condition — join on it.
+- Prefer the smallest join path (fewest tables) that answers the question.
+- Prefer precomputed/summary tables over recomputing from raw data when one exists (e.g. annual/decade return tables over raw price history).
+- Prefer indexed columns in WHERE clauses when possible; filter large tables by their indexed key columns (e.g. symbolId + date, symbolId + year).
+- Use DATE() on timestamp columns when comparing by day; timestamps may carry a fixed time-of-day offset.
+- If the schema context includes HINTS, follow them — they encode domain conventions (value scales, formats, which tables are app-internal noise).
 - Keep queries concise; use LIMIT 500 as a safety default.
 - If the question cannot be answered with a SELECT query, output: SELECT 'I cannot translate this to a safe read-only query.' AS result;
 - Do NOT wrap the SQL in markdown code blocks or any formatting.
@@ -112,13 +135,14 @@ def _get_connection(database: Optional[str] = None) -> mysql.connector.connectio
         connect_timeout=QUERY_TIMEOUT,
         autocommit=False,
     )
-    # Set session to read-only for extra safety
+    # Set session to read-only for extra safety (server-side enforcement:
+    # any write attempt in this session is rejected by MySQL itself)
     cursor = conn.cursor()
     cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES'")
     try:
-        cursor.execute("SET GLOBAL sql_log_bin=0")
+        cursor.execute("SET SESSION transaction_read_only=1")
     except Exception:
-        pass  # Global may not be permitted; ignore
+        pass  # Non-super users may lack the privilege; keyword guard still applies
     cursor.close()
     return conn
 
@@ -271,9 +295,17 @@ def _translate_nl_to_sql(database: str, natural_language: str) -> str:
     # Gather schema context for the LLM
     schema_context = _build_schema_context(database)
 
+    # litellm.completion needs a provider prefix for custom model names;
+    # the LiteLLM proxy aliases are OpenAI-compatible (vLLM) endpoints.
+    model = LITELLM_MODEL if "/" in LITELLM_MODEL else f"openai/{LITELLM_MODEL}"
+
+    extra_body = {}
+    if LITELLM_DISABLE_THINKING:
+        extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+
     try:
         response = litellm.completion(
-            model=LITELLM_MODEL,
+            model=model,
             api_base=LITELLM_API_BASE,
             api_key=LITELLM_API_KEY,
             messages=[
@@ -289,12 +321,16 @@ def _translate_nl_to_sql(database: str, natural_language: str) -> str:
             ],
             temperature=0.0,
             max_tokens=LITELLM_MAX_TOKENS,
+            extra_body=extra_body or None,
         )
-        sql = response.choices[0].message.content.strip()
+        sql = (response.choices[0].message.content or "").strip()
 
         # Strip markdown code blocks if the model wraps them
         sql = re.sub(r"^```(?:sql)?\s*", "", sql, flags=re.IGNORECASE).strip()
         sql = re.sub(r"\s*```\s*$", "", sql, flags=re.IGNORECASE).strip()
+
+        if not sql:
+            raise RuntimeError("LLM returned an empty response (check LITELLM_DISABLE_THINKING / max_tokens)")
 
         # Final safety check
         _validate_read_only(sql)
@@ -306,7 +342,11 @@ def _translate_nl_to_sql(database: str, natural_language: str) -> str:
 
 
 def _get_foreign_keys(cursor, database: str) -> list[dict]:
-    """Query information_schema for foreign key relationships in a database."""
+    """Query information_schema for foreign key relationships in a database.
+
+    Returns dicts with stable lowercase keys: from_table, from_column,
+    to_table, to_column, constraint_name.
+    """
     try:
         cursor.execute("""
             SELECT
@@ -314,7 +354,7 @@ def _get_foreign_keys(cursor, database: str) -> list[dict]:
                 kcu.column_name AS from_column,
                 kcu.referenced_table_name AS to_table,
                 kcu.referenced_column_name AS to_column,
-                rc.constraint_name
+                rc.constraint_name AS constraint_name
             FROM information_schema.KEY_COLUMN_USAGE kcu
             JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
                 ON rc.constraint_name = kcu.constraint_name
@@ -328,10 +368,21 @@ def _get_foreign_keys(cursor, database: str) -> list[dict]:
 
 
 def _get_table_indexes(cursor, database: str, table: str) -> list[dict]:
-    """Query SHOW INDEX for indexes on a specific table (works across MySQL versions)."""
+    """Query SHOW INDEX for indexes on a specific table (works across MySQL versions).
+
+    Returns dicts with stable lowercase keys: index_name, column_name, non_unique.
+    """
     try:
         cursor.execute(f"SHOW INDEX FROM `{database}`.`{table}`")
-        return cursor.fetchall()
+        raw = cursor.fetchall()
+        return [
+            {
+                "index_name": r.get("Key_name") or r.get("index_name") or "",
+                "column_name": r.get("Column_name") or r.get("column_name") or "",
+                "non_unique": bool(r.get("Non_unique", r.get("non_unique", 0))),
+            }
+            for r in raw
+        ]
     except mysql.connector.Error:
         return []
 
@@ -341,112 +392,223 @@ def _get_table_row_count(conn, database: str, table: str) -> int:
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT table_rows
+            SELECT table_rows AS tr
             FROM information_schema.TABLES
             WHERE table_schema = %s AND table_name = %s
         """, (database, table))
         row = cursor.fetchone()
         cursor.close()
-        return int(row['table_rows']) if row and row['table_rows'] else 0
+        return int(row['tr']) if row and row['tr'] is not None else 0
     except Exception:
         return 0
 
 
-def _build_schema_context(database: str) -> str:
-    """Build a rich schema context string for NL-to-SQL.
+def _load_schema_hints(database: str) -> list[str]:
+    """Load curated per-database hints (domain knowledge) for NL-to-SQL.
 
-    Includes:
-      - Table definitions (column name, type, nullable, key)
-      - Foreign key relationships
-      - Index information
-      - Sample rows for small tables
+    Hints live in SCHEMA_HINTS_FILE (JSON: {database: [hint, ...]}). Missing
+    file or unknown database -> empty list (never fatal).
     """
     try:
-        conn = _get_connection(database)
+        with open(SCHEMA_HINTS_FILE) as f:
+            data = json.load(f)
+        hints = data.get(database, [])
+        if isinstance(hints, str):
+            hints = [hints]
+        return [h for h in hints if isinstance(h, str)]
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _get_all_columns(cursor, database: str, table: str) -> list[dict]:
+    """All columns of a table with stable lowercase keys."""
+    cursor.execute(f"DESCRIBE `{database}`.`{table}`")
+    return [
+        {
+            "name": r["Field"],
+            "type": r["Type"],
+            "nullable": r["Null"] != "NO",
+            "key": r["Key"] or "",
+        }
+        for r in cursor.fetchall()
+    ]
+
+
+def _get_inferred_relations(cursor, database: str, tables: list[str], fks: list[dict]) -> list[dict]:
+    """Infer soft relations for <table>Id / <table>_id columns without a real FK.
+
+    ORM-style apps (Prisma, Django, Sequelize) often store reference IDs without
+    declared constraints. Naming convention: a column named <X>Id / <x>_id
+    references table <X>.id. Matching is case-insensitive, exact or by suffix
+    (snapshotId -> LandingSnapshot). Only columns NOT already covered by a
+    declared FK are reported.
+    """
+    if not INFER_SOFT_RELATIONS:
+        return []
+    fk_covered = {(fk["from_table"], fk["from_column"]) for fk in fks}
+    table_names_lower = {t.lower(): t for t in tables}
+    inferred: list[dict] = []
+    for table in tables:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cols = _get_all_columns(cursor, database, table)
+        except Exception:
+            continue
+        for col in cols:
+            name = col["name"]
+            if (table, name) in fk_covered:
+                continue
+            m = re.match(r"^(.+?)(?:Id|_id)$", name)
+            if not m:
+                continue
+            prefix = m.group(1).lower()
+            target = table_names_lower.get(prefix)
+            if target is None or target == table:
+                # suffix match: snapshotId -> LandingSnapshot
+                candidates = [t for tl, t in table_names_lower.items() if tl.endswith(prefix) and len(tl) > len(prefix)]
+                if len(candidates) == 1:
+                    target = candidates[0]
+                else:
+                    continue
+            if target == table:
+                continue
+            inferred.append({
+                "from_table": table,
+                "from_column": name,
+                "to_table": target,
+                "to_column": "id",
+            })
+    return inferred
 
-            # Get all tables
-            cursor.execute(f"SHOW TABLES FROM `{database}`")
-            tables = [row[list(row.keys())[0]] for row in cursor.fetchall()]
 
-            # Get foreign keys
-            fks = _get_foreign_keys(cursor, database)
+def _collect_schema(database: str) -> dict:
+    """Collect full schema intelligence for a database.
 
-            context_parts = []
+    Returns a dict with: tables (columns + indexes + row counts), foreign_keys,
+    soft_relations, join_graph, hints, samples. Shared by _build_schema_context
+    (text rendering for the LLM) and the schema_overview tool (structured JSON).
+    """
+    conn = _get_connection(database)
+    try:
+        cursor = conn.cursor(dictionary=True)
 
-            # Build table definitions with indexes and FKs
-            for table in tables[:SCHEMA_MAX_TABLES]:
-                # Describe table
-                cursor.execute(f"DESCRIBE `{database}`.`{table}`")
-                columns = cursor.fetchall()
-                col_defs = ", ".join(
-                    f"`{c['Field']}` ({c['Type']}, {'NOT NULL' if c['Null'] == 'NO' else 'NULL'}, {c['Key']})"
-                    for c in columns[:15]
-                )
-                context_parts.append(f"TABLE `{table}`: {col_defs}")
+        cursor.execute(f"SHOW TABLES FROM `{database}`")
+        tables = [row[list(row.keys())[0]] for row in cursor.fetchall()]
+        tables = tables[:SCHEMA_MAX_TABLES]
 
-                # Get indexes for this table
-                indexes = _get_table_indexes(cursor, database, table)
-                if indexes:
-                    # Group by index name
-                    idx_groups = {}
-                    for idx in indexes:
-                        idx_name = idx['index_name']
-                        if idx_name not in idx_groups:
-                            idx_groups[idx_name] = {
-                                'unique': not idx['non_unique'],
-                                'columns': []
-                            }
-                        idx_groups[idx_name]['columns'].append(idx['column_name'])
+        fks = _get_foreign_keys(cursor, database)
+        soft = _get_inferred_relations(cursor, database, tables, fks)
+        hints = _load_schema_hints(database)
 
-                    idx_strs = []
-                    for idx_name, info in idx_groups.items():
-                        cols = ", ".join(info['columns'])
-                        prefix = "UNIQUE" if info['unique'] else "INDEX"
-                        idx_strs.append(f"  {prefix} `{idx_name}` ({cols})")
-                    if idx_strs:
-                        context_parts.append("  ".join(idx_strs))
+        # Per-table details
+        table_infos = []
+        samples: dict[str, list[dict]] = {}
+        for table in tables:
+            cols = _get_all_columns(cursor, database, table)
+            row_count = _get_table_row_count(conn, database, table)
 
-            # Add foreign key relationships
-            if fks:
-                fk_strs = []
-                for fk in fks:
-                    fk_strs.append(
-                        f"FK: `{fk['from_table']}`.`{fk['from_column']}` "
-                        f"→ `{fk['to_table']}`.`{fk['to_column']}`"
-                    )
-                context_parts.extend(fk_strs)
+            # Indexes grouped by name
+            idx_groups: dict[str, dict] = {}
+            for idx in _get_table_indexes(cursor, database, table):
+                g = idx_groups.setdefault(idx["index_name"], {"unique": not idx["non_unique"], "columns": []})
+                g["columns"].append(idx["column_name"])
 
-            # Add sample rows for small tables
-            sample_tables = []
-            for table in tables[:SCHEMA_MAX_TABLES]:
-                row_count = _get_table_row_count(conn, database, table)
-                if row_count <= 100:  # Only sample small tables
-                    sample_tables.append((table, min(row_count, SAMPLE_MAX_ROWS)))
+            # Sample rows: up to 3 for small tables, 1 row for every other table
+            # (LIMIT 1 is a cheap first-page read even on multi-million-row tables).
+            limit = 3 if row_count <= 100 else 1
+            try:
+                cursor.execute(f"SELECT * FROM `{database}`.`{table}` LIMIT {limit}")
+                rows = cursor.fetchall()
+                if rows:
+                    samples[table] = [
+                        {k: (str(v)[:60] if v is not None else None) for k, v in r.items()}
+                        for r in rows
+                    ]
+            except Exception:
+                pass
 
-            if sample_tables:
-                context_parts.append("\n-- SAMPLE DATA:")
-                for table, limit in sample_tables[:5]:  # Limit to first 5 small tables
-                    try:
-                        cursor.execute(
-                            f"SELECT * FROM `{database}`.`{table}` LIMIT {limit}"
-                        )
-                        sample_rows = cursor.fetchall()
-                        if sample_rows:
-                            # Convert first row to a readable format
-                            sample_str = ", ".join(
-                                f"{k}={repr(v)}" for k, v in sample_rows[0].items()
-                            )
-                            context_parts.append(f"  {table} sample: {{{sample_str}}}")
-                    except Exception:
-                        pass
+            table_infos.append({
+                "name": table,
+                "row_count": row_count,
+                "columns": cols,
+                "indexes": [
+                    {"index_name": n, "columns": g["columns"], "unique": g["unique"]}
+                    for n, g in idx_groups.items()
+                ],
+            })
 
-            return "\n".join(context_parts) if context_parts else "No tables found."
-        finally:
-            conn.close()
-    except Exception:
+        # Join graph: table -> [tables it references via FK or soft relation]
+        join_graph: dict[str, list[str]] = {t: [] for t in tables}
+        for rel in fks + soft:
+            if rel["from_table"] in join_graph and rel["to_table"] not in join_graph[rel["from_table"]]:
+                join_graph[rel["from_table"]].append(rel["to_table"])
+
+        return {
+            "database": database,
+            "hints": hints,
+            "tables": table_infos,
+            "foreign_keys": fks,
+            "soft_relations": soft,
+            "join_graph": join_graph,
+            "samples": samples,
+        }
+    finally:
+        conn.close()
+
+
+def _build_schema_context(database: str) -> str:
+    """Render the schema intelligence as a compact text block for the NL-to-SQL prompt.
+
+    Sections: HINTS (curated domain knowledge), TABLES (all columns, indexes,
+    row counts, samples), FOREIGN KEYS, SOFT RELATIONS (inferred), JOIN GRAPH.
+    """
+    try:
+        schema = _collect_schema(database)
+    except Exception as exc:
+        logger.error("Schema context collection failed for %s: %s", database, exc)
         return f"Database '{database}' — schema context unavailable."
+
+    parts: list[str] = []
+
+    if schema["hints"]:
+        parts.append("HINTS (curated domain knowledge — follow these):")
+        parts.extend(f"  - {h}" for h in schema["hints"])
+        parts.append("")
+
+    parts.append(f"TABLES ({len(schema['tables'])}):")
+    for t in schema["tables"]:
+        col_defs = ", ".join(
+            f"`{c['name']}` {c['type']}{' PK' if c['key'] == 'PRI' else ''}{' UNI' if c['key'] == 'UNI' else ''}"
+            for c in t["columns"]
+        )
+        parts.append(f"TABLE `{t['name']}` (~{t['row_count']} rows): {col_defs}")
+        for idx in t["indexes"]:
+            if idx["index_name"] == "PRIMARY":
+                continue
+            prefix = "UNIQUE" if idx["unique"] else "INDEX"
+            parts.append(f"  {prefix} `{idx['index_name']}` ({', '.join(idx['columns'])})")
+        if t["name"] in schema["samples"]:
+            for row in schema["samples"][t["name"]]:
+                row_str = ", ".join(f"{k}={v!r}" for k, v in row.items())
+                parts.append(f"  sample: {{{row_str}}}")
+
+    if schema["foreign_keys"]:
+        parts.append("")
+        parts.append(f"FOREIGN KEYS ({len(schema['foreign_keys'])}):")
+        for fk in schema["foreign_keys"]:
+            parts.append(f"  `{fk['from_table']}`.`{fk['from_column']}` → `{fk['to_table']}`.`{fk['to_column']}`")
+
+    if schema["soft_relations"]:
+        parts.append("")
+        parts.append(f"SOFT RELATIONS (inferred from naming — no declared FK, still valid join conditions):")
+        for rel in schema["soft_relations"]:
+            parts.append(f"  `{rel['from_table']}`.`{rel['from_column']}` → `{rel['to_table']}`.`{rel['to_column']}`")
+
+    parts.append("")
+    parts.append("JOIN GRAPH (table → tables it references):")
+    for table, targets in schema["join_graph"].items():
+        parts.append(f"  {table} → {', '.join(targets)}" if targets else f"  {table} → (none)")
+
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -460,9 +622,14 @@ mcp = FastMCP(
     instructions=(
         "Read-only MySQL database access. "
         "Executes SELECT queries, lists databases/tables/columns/indexes/foreign keys, "
-        "samples table data, translates natural language to SQL via LiteLLM, "
-        "and exports query results to CSV. "
-        "All queries are enforced read-only (no INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/TRUNCATE). "
+        "samples table data, and exports query results to CSV. "
+        "schema_overview returns full schema intelligence (tables, columns, indexes, "
+        "foreign keys, inferred soft relations, join graph, curated domain hints, data samples) "
+        "— call it before writing join queries against an unfamiliar database. "
+        "explain_sql / nl_to_sql_then_run translate natural language to SQL via LiteLLM "
+        f"using that schema intelligence (model: {LITELLM_MODEL}). "
+        "All queries are enforced read-only (no INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/TRUNCATE) "
+        "at both the app level and the MySQL session level (transaction_read_only). "
         f"Max {MAX_ROWS} rows per query, {QUERY_TIMEOUT}s timeout. "
         f"CSV output directory: {CSV_OUTPUT_DIR}."
     ),
@@ -704,6 +871,35 @@ def sample_table(database: str, table: str, limit: int = 5) -> dict:
 
 
 @mcp.tool(
+    name="schema_overview",
+    description=(
+        "Full schema intelligence for a database: every table with all columns and indexes, "
+        "row counts, declared foreign keys, inferred soft relations (ORM-style reference IDs "
+        "without declared FKs), the join graph, curated domain hints, and sample rows. "
+        "Call this BEFORE writing join-heavy SQL so you know the exact join conditions and "
+        "data formats. Then use run_query with the SQL you compose."
+    ),
+)
+def schema_overview(database: str) -> dict:
+    """Return full schema intelligence for a database.
+
+    Args:
+        database: The database name.
+
+    Returns:
+        Dict with 'database', 'hints' (curated domain knowledge), 'tables' (name,
+        row_count, columns, indexes), 'foreign_keys', 'soft_relations' (inferred
+        from naming — valid join conditions even without declared FKs),
+        'join_graph' (table -> referenced tables), and 'samples' (example rows).
+    """
+    try:
+        return _collect_schema(database)
+    except Exception as exc:
+        logger.error("Schema overview failed for %s: %s", database, exc)
+        raise RuntimeError(f"Failed to build schema overview: {exc}") from exc
+
+
+@mcp.tool(
     name="run_query",
     description=(
         "Execute a read-only SELECT query against the specified database. "
@@ -758,8 +954,6 @@ def run_query_to_csv(database: str, sql: str, filename: str) -> dict:
     conn = None
     try:
         _validate_read_only(sql)
-        # Run the query directly (like sample_table) — CSV export is a user request, not blind NL-to-SQL
-        cursor = conn.cursor(dictionary=True) if conn else None
         conn = _get_connection(database)
         try:
             cursor = conn.cursor(dictionary=True)

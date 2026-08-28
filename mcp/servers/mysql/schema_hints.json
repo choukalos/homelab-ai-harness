@@ -1,0 +1,17 @@
+{
+  "investorhub": [
+    "Return columns (totalReturn, priceReturn, avgReturn, ytdReturn, etc.) are stored as FRACTIONS: 0.3147 means 31.47%. Multiply by 100 when presenting percentages.",
+    "PriceHistory has two price series: `close` (raw) and `adjClose` (adjusted for splits/dividends). Use `adjClose` for any return or performance calculation.",
+    "Prefer the precomputed return tables over recomputing from PriceHistory: SymbolYearReturn (per year), SymbolAnnualReturn (per year, with priceReturn + totalReturn + dividendsPaid), SymbolDecadeReturn (per decade). They are indexed by (symbolId, year/decade).",
+    "`year` and `decade` columns are plain integers (1996, 2020, ...).",
+    "PriceHistory.date and DividendHistory.date are timestamps with a fixed time-of-day offset (13:30 or 14:30, an ET timezone artifact). Use DATE(date) when comparing or grouping by day.",
+    "SymbolFundamentals is a latest-snapshot table: one row per symbol with current metrics (peRatio, marketCap, rsi14, chowderScore, grahamNumber, dividendYield, ...). It has no date column.",
+    "LandingSnapshot rows are point-in-time snapshots of the landing page. 'Latest snapshot' = the row with MAX(asOfDate). LandingLeaderboardRow / LandingSectorSummary / LandingIndexSummary all reference it via snapshotId.",
+    "Tickers are plain US tickers (e.g. 'MMM', 'AAPL'); dual-class tickers use a dot ('BRK.B', 'GOOG'). Join Symbol to everything via Symbol.id = <table>.symbolId.",
+    "`Index` table codes: SP500 (S&P 500), NDX (Nasdaq 100), DJIA (Dow), FTSE100. The table name `Index` is a MySQL reserved word — ALWAYS backtick it in SQL: `Index`.",
+    "Portfolio value: current value = SUM(quantity * latest adjClose from PriceHistory); cost basis = SUM(quantity * costBasis) from Position. Unrealized gain = value - cost basis.",
+    "Symbol.isActive = 1 for currently tracked symbols; filter with it when listing universe-wide results.",
+    "JobRun, LoginHistory, User, and _prisma_migrations are app-internal (job logs, auth, migration bookkeeping) — ignore them for investment questions.",
+    "DividendHistory.amount is the per-share dividend in `currency` (USD); hasFullData=0 on return tables marks partial years.",
+    "LandingLeaderboardRow.type is an enum: HIGH_YIELD, TOP_YTD_RETURN, TOP_RSI, LOW_RSI."  ]
+}

@@ -9,7 +9,7 @@
 - Skill runner is in production (`THOR_IP:8091`), 13 skills, `/api/chat`
   gateway, long-term memory (Phases 0–9 complete — see
   `docs/memory/IMPLEMENTATION_STATE.md`), admin REST + CLI + `/metrics`.
-- 8 MCP servers live in LiteLLM (streamable-http, **40 tools** — was 11/4 servers; 34 → 44 → 40 on 2026-08-28 as media-pipeline tools replaced the legacy media tools).
+- 8 MCP servers live in LiteLLM (streamable-http, **41 tools** — was 11/4 servers; 34 → 44 → 40 → 41 on 2026-08-28: media-pipeline tools replaced the legacy media tools, then `mcp_mysql` gained `schema_overview`).
 - Images pinned: `litellm:v1.92.0`, `qdrant:v1.18.1` (2026-08-28, Phase 9).
 - Qdrant JWT RBAC on; `mcp_knowledge` on a read-only key.
 - Backup gap CLOSED: `scripts/backup-memory.sh` (.env + Qdrant snapshot,

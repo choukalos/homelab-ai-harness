@@ -431,7 +431,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_mysql` | MySQL (InvestorHub) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_homelab_status` | Docker API + Victoria Metrics | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
-| `mcp_media` | Image gen/edit via ComfyUI | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_media` | Media generation via GPU-host media-pipeline | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
@@ -593,24 +593,24 @@ curl -s -X POST https://siri.choukalos.com/api/chat \
 **Response:**
 ```json
 {
-  "speak": "I've generated an image. View it at https://siri.choukalos.com/media/files/generated/gen_a geometric abstract logo.png",
+  "speak": "I've generated an image. View it at https://siri.choukalos.com/media/files/generated/pipeline/mp_a1b2c3d4e5f6_00001_.png",
   "display": "Image generated from prompt: generate image of a geometric abstract logo",
   "job_id": "abc123",
-  "media": "/home/chuck/data/media/generated/gen_a geometric abstract logo.png",
+  "media": "/home/chuck/data/media/generated/pipeline/mp_a1b2c3d4e5f6_00001_.png",
   "data": {
     "skill": "mcp_media",
     "intent": "media-generate",
-    "image_url": "https://siri.choukalos.com/media/files/generated/gen_a geometric abstract logo.png"
+    "image_url": "https://siri.choukalos.com/media/files/generated/pipeline/mp_a1b2c3d4e5f6_00001_.png"
   }
 }
 ```
 
-**Generated images** are saved to `/home/chuck/data/media/generated/` as PNG files.
+**Generated images** are saved to `/home/chuck/data/media/generated/pipeline/` as PNG files (named `mp_{job_id}_{seq}.png`).
 The response includes accessible URLs — `image_url` is a public URL that can be
 viewed directly in a browser or embedded in markdown.
 
 Requires the `mcp_media` container to be running on `ai-net`.
-Prerequisite: ComfyUI must be running on the AI Workstation (Matrix).
+Prerequisite: the media-pipeline must be running on the AI Workstation (Matrix, port 8189).
 
 ### Media URL Structure
 
@@ -621,7 +621,7 @@ All generated assets are served through a single route proxied by Caddy:
 | `/media/files/*` | `/home/chuck/data/media/*` | `https://siri.choukalos.com/media/files/generated/img.png` | `http://192.168.4.54:8091/media/files/generated/img.png` |
 
 Subdirectories:
-- **`generated/`** — images from `media-generate` (ComfyUI)
+- **`generated/`** — images from `media-generate` (GPU-host media-pipeline; under `generated/pipeline/`)
 - **`demos/`** — demo HTML files from `demo_workflow` / `demo_browse`
 - **`images/`** — static images
 - **`presentations/`** — PPTX exports (downloadable, not the Presenton web portal)
@@ -750,10 +750,10 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_knowledge` — KB retrieval via Qdrant
 - `mcp_crawl` — Web page extraction via Crawl4AI
 - `mcp_filesystem_readonly` — Read-only filesystem access
-- `mcp_mysql` — Database queries via MySQL (InvestorHub)
+- `mcp_mysql` — Database queries via MySQL (InvestorHub): read-only SELECTs, NL-to-SQL with full schema intelligence (join graph, curated domain hints, data samples)
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
 - `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
-- `mcp_media` — Image generation/editing via ComfyUI on Matrix
+- `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch)
 
 All run on `ai-net`. Accessed by the skill runner over streamable HTTP.
 

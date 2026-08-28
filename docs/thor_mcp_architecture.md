@@ -3,13 +3,13 @@
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
 > Status: **Implemented** — all 8 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 40 tools as of 2026-08-28 — 34 + 10 media-pipeline tools, legacy media tools removed). This doc is the design baseline; the
+> `ai-net`, 41 tools as of 2026-08-28 — 34 + 10 media-pipeline tools, legacy media tools removed, + mcp_mysql schema_overview). This doc is the design baseline; the
 > "Current state" notes reflect the live system.
 
 **Current state (2026-08-28)**
 - 8 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (10), `mcp_mysql` (10) — 40 tools total via `GET /v1/mcp/tools`.
+  `mcp_media` (10), `mcp_mysql` (11) — 41 tools total via `GET /v1/mcp/tools`.
 - **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
   `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
   (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
@@ -17,10 +17,15 @@
   scripts) and is NOT held by any runtime service. Qdrant is pinned
   `qdrant/qdrant:v1.18.1`.
 - `mcp_media` now runs the **GPU-host media-pipeline** (192.168.4.55:8189) —
-  10 new `media_*` tools (storyboard, image gen/edit, I2V shots, TTS, music, SFX,
-  upscale, assemble, fetch) live 2026-08-28. Legacy ComfyUI image gen (:8188) +
-  HF tools kept until the old flows are decommissioned. See
-  `mcp/servers/media/README.md` and `media_mcp_tool_todo.md` (repo root).
+  10 `media_*` tools (storyboard, image gen/edit, I2V shots, TTS, music, SFX,
+  upscale, assemble, fetch) live 2026-08-28. Legacy ComfyUI/HF tools removed the
+  same day (old flows decommissioned). See `mcp/servers/media/README.md` for the
+  full tool table and pipeline endpoint reference.
+- `mcp_mysql` gained **schema intelligence** (2026-08-28): new `schema_overview`
+  tool (all columns, FKs, inferred soft relations, join graph, curated hints,
+  samples); fixed three key-casing bugs that made the NL-to-SQL schema context
+  fail silently; NL-to-SQL now runs on `matrix-coder` with thinking disabled.
+  Verified e2e on `investorhub` (portfolio + index join queries).
 
 ---
 
@@ -179,18 +184,40 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | **Tools (live)** | **10** — `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch` |
 | **Backends** | **GPU-host media-pipeline `192.168.4.55:8189` (live 2026-08-28)** — ComfyUI + VLLM + TTS/music/SFX workers on Matrix |
 | **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
-| **Read/write** | Read (list/info) + Write (generate/edit/fetch to `/home/chuck/data/media`) |
+| **Read/write** | Write (generate/edit/assemble to GPU host) + `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/` |
 | **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. |
 | **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. |
+
+**Media pipeline (GPU host, `192.168.4.55:8189`)** — the service `mcp_media` wraps. Stdlib-only client (`media_pipeline_client.py`, vendored verbatim; no auth, LAN-only). Endpoints, each mapped 1:1 to an MCP tool:
+
+| Endpoint | MCP tool | Model/worker | Typical time |
+|---|---|---|---|
+| `POST /storyboard` | `media_storyboard` | VLLM (shot-list JSON) | ~30s |
+| `POST /images` | `media_generate_image` | ComfyUI (SD3 keyframes) | 30–60s |
+| `POST /images/edit` | `media_edit_image` | ComfyUI (img2img edit) | ~30s |
+| `POST /shots` | `media_generate_shot` | LTXV I2V (~4s clips) | 10–30 min |
+| `POST /tts` | `media_text_to_speech` | TTS worker (default voice: movie-trailer) | 15–60s |
+| `POST /music` | `media_generate_music` | ACE-Step | 10–30 min |
+| `POST /sfx` | `media_sfx` | MMAudio (synced to a clip) | 10–30 min |
+| `POST /upscale` | `media_upscale_video` | SeedVR2 (`b`) / 4xUltrasharp (`a2`) | 1–5 min |
+| `POST /assemble` | `media_assemble` | ffmpeg concat + audio mix | 1–10 min |
+| `GET /files/{name}` | `media_fetch` | — (download) | seconds |
+| `GET /health` | — (probes only) | — | — |
+
+Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue returns 503 with `retry_after_seconds` — the MCP tools surface it as a structured error. Job artifacts live under `/home/chuck/data/comfyui/run/media_jobs/{job_id}/` on Matrix. Typical video flow: `media_storyboard` → per-shot `media_generate_image` → `media_generate_shot` → `media_text_to_speech` + `media_generate_music` → `media_assemble` (shots must stay GPU-host paths) → `media_fetch` for the final mp4.
 
 ### 7b. `mcp_mysql` (added after the July design)
 
 | Field | Value |
 |---|---|
-| **Purpose** | MySQL introspection + guarded query execution for the host MySQL (Ghost, invest-hub, legacy AI_DB_*) |
-| **Tools (live)** | `list_databases`, `list_tables`, `describe_table`, `sample_table`, `run_query`, `run_query_to_csv`, `nl_to_sql_then_run`, `explain_sql`, `list_indexes`, `foreign_keys` (10 tools) |
-| **Read/write** | Read-mostly; `run_query`/`nl_to_sql_then_run` can execute writes — treat as the sensitive pair |
+| **Purpose** | MySQL introspection + guarded query execution for the host MySQL (Ghost, InvestorHub, homelab) |
+| **Tools (live)** | `list_databases`, `list_tables`, `describe_table`, `sample_table`, `schema_overview`, `run_query`, `run_query_to_csv`, `nl_to_sql_then_run`, `explain_sql`, `list_indexes`, `foreign_keys` (11 tools) |
+| **Schema intelligence (2026-08-28)** | `schema_overview` returns full per-database intelligence: every table with **all** columns + indexes + row counts, declared FKs, **inferred soft relations** (ORM-style `xxxId` reference columns without declared FKs — the join graph works even for FK-less databases), the join graph, curated domain hints, and sample rows. NL-to-SQL receives this as prompt context. |
+| **NL-to-SQL** | `matrix-coder` (Qwen3.6-27B via vLLM) with thinking disabled (`LITELLM_DISABLE_THINKING`, Qwen thinking models otherwise burn the token budget on reasoning and return empty content). 2000-token budget. |
+| **Curated hints** | `mcp/servers/mysql/schema_hints.json` (mounted read-only; edit + restart, no rebuild). `investorhub` has 14 hints: returns stored as fractions, `adjClose` for performance, precomputed return tables, integer years, timestamp TZ artifacts, `Index` reserved-word backticks, portfolio value formulas, app-internal tables to ignore. |
+| **Read/write** | Strictly read-only: app-level DDL/DML regex **and** `SET SESSION transaction_read_only=1` (server-side write rejection). |
 | **Security** | DSN via env; no public exposure (ai-net only) |
+| **Notes** | 2026-08-28: fixed three key-casing bugs that made the schema context builder fail silently (NL-to-SQL had been running with **zero** schema context); removed 15-column truncation; samples now cover all tables; EXPLAIN pre-flight (max examined rows, max joins, full-scan block) unchanged. Verified e2e: 3–4 table join queries on `investorhub` (portfolio positions, S&P 500 YTD via latest snapshot, dividend-yield screen, multi-year returns) all translate + execute correctly in 2–3s. |
 
 ---
 
