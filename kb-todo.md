@@ -2,7 +2,7 @@
 
 > Planning doc for the KB/knowledge workstream (post-memory-project).
 > Companion to `blog-todo.md` style: discovered state → decisions → phases → questions.
-> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision round 1 locked).
+> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision rounds 1–2 locked).
 
 ---
 
@@ -218,9 +218,12 @@ file ──► markitdown.convert()  (PDF/DOCX/PPTX/XLSX/HTML/CSV/ZIP/EPUB/txt)
 - **On-the-fly creation:** `kb_ingest_file` / `kb_add_fact` create the
   collection if missing (768-dim, Cosine) — no pre-provisioning.
 - **Manifest point:** each collection carries one special point
-  (`kind=manifest`, deterministic ID, `text` = short KB description the
-  LLM supplies at creation) so `kb_overview` can show what each KB is
-  about. Manifest points are filtered out of `kb_search` results.
+  (`kind=manifest`, deterministic ID, `text` = short KB description). The
+  description is **required when a new KB is created** (owner N4): the
+  user or the LLM supplies context for the KB name + a collection summary
+  at creation — the server rejects a first write to a missing `kb_<slug>`
+  without a `description` (the LLM derives it from the user's request or
+  asks the user). Manifest points are filtered out of `kb_search` results.
 - **Old 384-dim `family_kb` collection: dropped, NOT migrated** (owner
   Q5: "no, drop them"). Snapshot taken first (rollback safety), then
   dropped. Wiki index pages + the 3 old docs: gone forever.
@@ -266,8 +269,8 @@ the `kb_` prefix). Omitted `kb` where sensible = all KBs (`kb_search` /
 **Write (new — requirement 4, 7):**
 | Tool | Notes |
 |---|---|
-| `kb_ingest_file(path, kb, description?)` | markitdown pipeline (§3.3/3.4); creates `kb_<slug>` if missing (+ manifest from `description`); long-running; returns doc_id + stats + warnings |
-| `kb_add_fact(text, kb, source_hint?)` | verbatim fact; also stores vision-model output |
+| `kb_ingest_file(path, kb, description?)` | markitdown pipeline (§3.3/3.4); creates `kb_<slug>` if missing — **`description` required on new-KB creation** (manifest, N4); long-running; returns doc_id + stats + warnings |
+| `kb_add_fact(text, kb, description?)` | verbatim fact; also stores vision-model output; `description` required on new-KB creation (manifest, N4) |
 | `kb_delete_document(source)` | remove all chunks for a source |
 | `kb_forget(query, confirm=false)` | **two-step**: default returns semantic matches (ids + snippets, nothing deleted); `confirm=true` + `ids` deletes. "forget that fact" |
 | `kb_correct(old_query, new_text, kb?)` | finds the old fact/chunk (top-1, must exceed score gate), marks `superseded_by`, stores new text as new point; `kb_search` filters superseded. "it should be this instead" |
@@ -308,6 +311,13 @@ hardening item (not a K-phase).
 ---
 
 ## 4. Phased plan
+
+> **Ordering (owner, 2026-08-28):** the **image/video analysis MCP tool**
+> (N2 — separate workstream, based on the owner's existing pi
+> image/video-analysis skill; planning doc TBD, e.g. `avmcp-todo.md`) is
+> built **before** KB K1 starts. Rationale: it validates the
+> `matrix-coder` vision path end-to-end (the Q1 "≤5 images/turn" probe)
+> and K4 reuses the proven pattern/client.
 
 ### K0. Discovery + decisions — **DONE (2026-08-28)**
 - [x] Inventory memory state (Phase 9 complete, RBAC live)
@@ -409,14 +419,19 @@ hardening item (not a K-phase).
 | Q9 | **`family_kb_ingest` skill: retire + delete** ("not needed anymore"). |
 | Q10 | **Delete everything in `ai-kb/` except `raw/`** ("I'll drop sample pdfs/images/etc to ingest in that raw/ folder"). |
 
-### Round 2 — open (small; defaults are reasonable)
+### Round 2 — answered (locked 2026-08-28)
 
-| # | Question | Default if no answer |
-|---|---|---|
-| N1 | **Collection naming:** `kb_<slug>` prefix convention (e.g. `kb_gaming`, `kb_side_biz_blah`) — OK? Also: LLM can never rename/merge a KB in v1 (re-ingest into a new name) — acceptable? | Yes / yes |
-| N2 | **Video into the KB:** "1 video per turn" is the vision model's capability — is **ingesting video files into the KB** (frame sampling + vision) in v1 scope, or capability-only (v1 = files + facts)? | Capability-only; video ingestion = future workstream |
-| N3 | **Files on other machines:** v1 requires the file to be readable on Thor (drop into `ai-kb/raw/` or media/workspace). OK? | Yes |
-| N4 | **KB description at creation:** `kb_ingest_file`/`kb_add_fact` take an optional `description` (stored in the manifest point, shown in `kb_overview`) — required on first ingest to a NEW kb, optional otherwise? | As stated |
+| # | Decision |
+|---|---|
+| N1 | **`kb_<slug>` naming: yes.** No KB rename/merge in v1 (re-ingest into a new name): **yes, acceptable.** |
+| N2 | **Video files: NOT a KB ingest format.** Handled by a **separate image/video analysis MCP tool** (new workstream) — owner's existing pi image/video-analysis skill is the base. Owner wants that MCP tool built **before** the KB update (it also de-risks K4's vision path). See §4 note. |
+| N3 | **Default stands:** v1 requires files readable on Thor (`ai-kb/raw/`, media/, workspace/). |
+| N4 | **New-KB creation requires context:** the user or the LLM provides the KB name context + a collection summary (manifest description) when a new `kb_<slug>` is created; `description` is mandatory on first write to a new KB. |
+
+### Round 3 — open
+
+(none — all questions resolved; remaining unknowns are implementation details,
+not owner decisions)
 
 ---
 
@@ -446,9 +461,8 @@ hardening item (not a K-phase).
 - Memory changes (mem0, skill-runner memory code) — read-only observer.
 - Hybrid memory+KB retrieval (future workstream).
 - Multi-user KB scoping (household-shared by design).
-- **Video file ingestion into the KB** (pending N2 — default: out; the
-  vision model's 1-video-per-turn capability is for image/table analysis,
-  not a KB ingest format).
+- **Video file ingestion into the KB** (N2: out — video/image *analysis*
+  is the separate image/video analysis MCP tool workstream, built first).
 - KB rename/merge/repurpose tools (re-ingest into a new name; v1).
 - OCR quality tuning beyond the vision fallback.
 - KB ingestion of URLs/web content (files + facts only; crawl4ai stays
