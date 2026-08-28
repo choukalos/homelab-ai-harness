@@ -101,13 +101,14 @@ Narrow public endpoints protected by API keys at the Caddy layer + backend auth.
 
 Deliberately public web applications. Not AI platform tools — they share infrastructure but are independent.
 
-#### Ghost Blog
+#### Hugo Portal (blog)
 
 | Route | Auth | Backend | Purpose |
 |---|---|---|---|
-| `choukalos.com` | None | `ghost-blog:2368` | Family blog / public face |
+| `choukalos.com` | None | `portal:8080` (Hugo static site + `/files/` drop zone + `/status/`) | Family blog / public face |
+| `choukalos.com/media/files/*` | None | `skill-runner:8091` | Same-origin generated artifacts (charts, demos, video) |
 
-Standard public blog. No AI capabilities.
+Standard public static site. No AI capabilities, no secrets in the serving container. (Ghost removed 2026-08-28 after the Hugo cutover — `blog-todo.md` B7.)
 
 #### Invest Hub
 
@@ -137,7 +138,7 @@ Verified against `caddy/Caddyfile`:
 
 | Host | Paths Proxied | Auth | Backend |
 |---|---|---|---|
-| `choukalos.com` | All | None | `ghost-blog:2368` |
+| `choukalos.com` | All | None | `portal:8080` (`/media/files/*` → `skill-runner:8091`) |
 | `www.choukalos.com` | Redirect to `choukalos.com` | — | — |
 | `invest.choukalos.com` | `/api/*` + rest | App-level (downstream) | `invest-hub-server:4000` / `invest-hub-client:80` |
 | `api.choukalos.com` | All | App-level (downstream) | `invest-hub-server:4000` |
@@ -228,9 +229,9 @@ Changing public access can expose private services or interrupt existing public 
 Command:
 TBD after Qwen drafts Caddy/Cloudflare changes.
 Expected impact:
-Could affect Ghost, Invest Hub, Siri, or LiteLLM access.
+Could affect the blog portal, Invest Hub, Siri, or LiteLLM access.
 Rollback:
 Restore previous Caddyfile and Cloudflare Tunnel config.
 Validation:
-Confirm Ghost, Invest Hub, Siri, and LiteLLM still work and no admin endpoints are exposed.
+Confirm the blog portal, Invest Hub, Siri, and LiteLLM still work and no admin endpoints are exposed.
 ```

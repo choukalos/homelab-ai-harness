@@ -39,11 +39,11 @@ Changing public access can expose private services or interrupt existing public 
 Command:
 TBD after Qwen drafts Caddy/Cloudflare changes.
 Expected impact:
-Could affect Ghost, Invest Hub, Siri, or LiteLLM access.
+Could affect the blog portal, Invest Hub, Siri, or LiteLLM access.
 Rollback:
 Restore previous Caddyfile and Cloudflare Tunnel config.
 Validation:
-Confirm Ghost, Invest Hub, Siri, and LiteLLM still work and no admin endpoints are exposed.
+Confirm the blog portal, Invest Hub, Siri, and LiteLLM still work and no admin endpoints are exposed.
 ```
 
 ---

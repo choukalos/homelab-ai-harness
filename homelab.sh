@@ -13,7 +13,7 @@ fi
 
 CORE="${COMPOSE_DIR}/compose.core.yml"
 EDGE="${COMPOSE_DIR}/compose.edge.yml"
-GHOST="${COMPOSE_DIR}/compose.ghost.yml"
+BLOG="${COMPOSE_DIR}/compose.portal.yml"
 AI_CORE="${COMPOSE_DIR}/compose.ai-core.yml"
 INVEST="${COMPOSE_DIR}/compose.invest-hub.yml"
 N8N="${COMPOSE_DIR}/compose.n8n.yml"
@@ -54,10 +54,10 @@ Commands:
 Stacks:
   core        Caddy only
   edge        Caddy + Cloudflare Tunnel
-  ghost       Caddy + Cloudflare Tunnel + Ghost
+  blog        Caddy + Cloudflare Tunnel + Hugo Portal (git-sync + portal)
   ai          AI core (litellm, open-webui, etc.) + MCP + Skill Runner
   invest      Caddy + Cloudflare Tunnel + Invest Hub
-  public      Caddy + Cloudflare Tunnel + Ghost + Invest Hub
+  public      Caddy + Cloudflare Tunnel + Hugo Portal + Invest Hub
   n8n         Caddy + n8n
   monitoring  Monitoring (node-exporter, cadvisor, prometheus, grafana)
   all         Everything except n8n
@@ -65,7 +65,7 @@ Stacks:
 
   core-only
   edge-only
-  ghost-only     Ghost only (Caddy + cloudflared kept running)
+  blog-only      Hugo portal only (Caddy + cloudflared kept running)
   ai-only        AI core only (litellm, open-webui, qdrant, redis, searxng, etc.)
   mcp-only       MCP servers only
   skill-only     Skill Runner only (MCP and AI core kept running)
@@ -80,7 +80,7 @@ Notes:
   mcp-only or skill-only will NOT restart litellm or other ai-core
   services, so your LLM connection stays alive.
 
-  ghost and invest are also separate projects. Rebuilding ghost-only or
+  blog and invest are also separate projects. Rebuilding blog-only or
   invest-only will NOT restart Caddy or Cloudflare Tunnel.
 
   monitoring is a standalone stack. Prometheus scrapes local services,
@@ -94,12 +94,12 @@ compose_files() {
     core|core-only) echo "-f ${CORE}" ;;
     edge)           echo "-f ${CORE} -f ${EDGE}" ;;
     edge-only)      echo "-f ${EDGE}" ;;
-    ghost)          echo "-f ${CORE} -f ${EDGE} -f ${GHOST}" ;;
-    ghost-only)     echo "-f ${GHOST}" ;;
+    blog)           echo "-f ${CORE} -f ${EDGE} -f ${BLOG}" ;;
+    blog-only)      echo "-f ${BLOG}" ;;
     ai-only)        echo "-f ${AI_CORE}" ;;
     invest)         echo "-f ${CORE} -f ${EDGE} -f ${INVEST}" ;;
     invest-only)    echo "-f ${INVEST}" ;;
-    public)         echo "-f ${CORE} -f ${EDGE} -f ${GHOST} -f ${INVEST}" ;;
+    public)         echo "-f ${CORE} -f ${EDGE} -f ${BLOG} -f ${INVEST}" ;;
     n8n)            echo "-f ${CORE} -f ${N8N}" ;;
     n8n-only)       echo "-f ${N8N}" ;;
     monitoring|monitoring-only) echo "-f ${MONITORING}" ;;
@@ -176,27 +176,28 @@ run_ai_stack() {
   esac
 }
 
-run_ghost_stack() {
+run_blog_stack() {
   local command="$1"
   shift
 
-  # Ghost runs as its own project (homelab-ghost).
-  # Caddy + cloudflared live in a separate project (homelab) and are NOT touched.
+  # Blog (Hugo portal) runs as its own project (homelab-portal):
+  # git-sync + portal containers. Caddy + cloudflared live in a separate
+  # project (homelab) and are NOT touched.
   case "${command}" in
     up)
-      run_compose_single up "-f ${GHOST}" -d "$@"
+      run_compose_single up "-f ${BLOG}" -d "$@"
       ;;
     down|restart|rebuild)
-      run_compose_single down "-f ${GHOST}" "$@"
+      run_compose_single down "-f ${BLOG}" "$@"
       if [[ "${command}" == "restart" || "${command}" == "rebuild" ]]; then
-        run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+        run_compose_single up "-f ${BLOG}" -d --force-recreate --remove-orphans "$@"
       fi
       ;;
     pull)
-      run_compose_single pull "-f ${GHOST}" "$@"
+      run_compose_single pull "-f ${BLOG}" "$@"
       ;;
     logs|ps|config)
-      run_compose_single "${command}" "-f ${GHOST}" "$@"
+      run_compose_single "${command}" "-f ${BLOG}" "$@"
       ;;
     *)
       echo "Unknown command: ${command}" >&2
@@ -240,27 +241,27 @@ run_public_stack() {
   local command="$1"
   shift
 
-  # Public = ghost + invest together. Both are separate projects.
+  # Public = blog + invest together. Both are separate projects.
   case "${command}" in
     up)
-      run_compose_single up "-f ${GHOST}" -d "$@"
+      run_compose_single up "-f ${BLOG}" -d "$@"
       run_compose_single up "-f ${INVEST}" -d "$@"
       ;;
     down|restart|rebuild)
       run_compose_single down "-f ${INVEST}" "$@"
-      run_compose_single down "-f ${GHOST}" "$@"
+      run_compose_single down "-f ${BLOG}" "$@"
       if [[ "${command}" == "restart" || "${command}" == "rebuild" ]]; then
-        run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+        run_compose_single up "-f ${BLOG}" -d --force-recreate --remove-orphans "$@"
         run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
       fi
       ;;
     pull)
-      run_compose_single pull "-f ${GHOST}" "$@"
+      run_compose_single pull "-f ${BLOG}" "$@"
       run_compose_single pull "-f ${INVEST}" "$@"
       ;;
     logs|ps|config)
-      echo "=== ghost project ==="
-      run_compose_single "${command}" "-f ${GHOST}" "$@"
+      echo "=== blog project ==="
+      run_compose_single "${command}" "-f ${BLOG}" "$@"
       echo -e "\n=== invest project ==="
       run_compose_single "${command}" "-f ${INVEST}" "$@"
       ;;
@@ -296,8 +297,8 @@ do_dispatch() {
     ai)
       run_ai_stack "${cmd}" "$@"
       ;;
-    ghost|ghost-only)
-      run_ghost_stack "${cmd}" "$@"
+    blog|blog-only)
+      run_blog_stack "${cmd}" "$@"
       ;;
     invest|invest-only)
       run_invest_stack "${cmd}" "$@"
@@ -383,7 +384,7 @@ do_dispatch() {
         up)
           run_compose_single up "-f ${CORE}" -d "$@"
           run_compose_single up "-f ${EDGE}" -d "$@"
-          run_compose_single up "-f ${GHOST}" -d "$@"
+          run_compose_single up "-f ${BLOG}" -d "$@"
           run_compose_single up "-f ${INVEST}" -d "$@"
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${MCP}" -d "$@"
@@ -396,19 +397,19 @@ do_dispatch() {
           run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
-          run_compose_single down "-f ${GHOST}" "$@"
+          run_compose_single down "-f ${BLOG}" "$@"
           run_compose_single down "-f ${EDGE}" "$@"
           run_compose_single down "-f ${CORE}" "$@"
           if [[ "${cmd}" == "restart" ]]; then
             run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
-            run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
+            run_compose_single up "-f ${BLOG}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
             run_compose_single up "-f ${SKILL_RUNNER}" -d
             run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${BLOG}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
@@ -417,12 +418,12 @@ do_dispatch() {
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core mcp skill-runner monitoring; do
+          for f in core edge blog invest ai-core mcp skill-runner monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
@@ -435,7 +436,7 @@ do_dispatch() {
         up)
           run_compose_single up "-f ${CORE}" -d "$@"
           run_compose_single up "-f ${EDGE}" -d "$@"
-          run_compose_single up "-f ${GHOST}" -d "$@"
+          run_compose_single up "-f ${BLOG}" -d "$@"
           run_compose_single up "-f ${INVEST}" -d "$@"
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${MCP}" -d "$@"
@@ -450,12 +451,12 @@ do_dispatch() {
           run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
-          run_compose_single down "-f ${GHOST}" "$@"
+          run_compose_single down "-f ${BLOG}" "$@"
           run_compose_single down "-f ${EDGE}" "$@"
           run_compose_single down "-f ${CORE}" "$@"
           if [[ "${cmd}" == "restart" ]]; then
             run_compose_single up "-f ${CORE}" -d; run_compose_single up "-f ${EDGE}" -d
-            run_compose_single up "-f ${GHOST}" -d; run_compose_single up "-f ${INVEST}" -d
+            run_compose_single up "-f ${BLOG}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
             run_compose_single up "-f ${SKILL_RUNNER}" -d
             run_compose_single up "-f ${N8N}" -d
@@ -463,7 +464,7 @@ do_dispatch() {
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${EDGE}" -d --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${GHOST}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${BLOG}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
@@ -473,12 +474,12 @@ do_dispatch() {
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${N8N}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${GHOST}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${N8N}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge ghost invest ai-core mcp skill-runner n8n monitoring; do
+          for f in core edge blog invest ai-core mcp skill-runner n8n monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"

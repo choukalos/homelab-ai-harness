@@ -1,0 +1,82 @@
+# CHOUKALOS // HOMELAB — public portal (blog-todo.md B2).
+#
+#   git-sync : pulls the `deploy` branch of the Hugo repo into
+#              /home/chuck/data/portal/git with an atomic `current` symlink.
+#   portal   : stdlib-only static server (portal/server.py) serving the site,
+#              the /files/ public drop zone, and /status/ runtime artifacts.
+#
+# Caddy (compose.edge.yml) routes choukalos.com → portal:8080. The portal
+# holds nothing sensitive: no secrets, no DB, no auth state, ro mounts.
+name: homelab-portal
+
+services:
+  git-sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.5.1
+    container_name: portal-git-sync
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - --repo=https://github.com/choukalos/homelab-blog
+      - --branch=deploy
+      - --root=/git
+      - --link=current
+      - --period=30s
+    volumes:
+      - /home/chuck/data/portal/git:/git
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - public-net
+
+  portal:
+    build:
+      context: ../portal
+      dockerfile: Dockerfile
+    image: portal:local
+    container_name: portal
+    restart: unless-stopped
+    depends_on:
+      - git-sync
+    environment:
+      - PORTAL_PORT=8080
+      - PORTAL_GIT_ROOT=/git
+      - PORTAL_FILES_ROOT=/files
+      - PORTAL_RUNTIME_ROOT=/runtime
+      - TZ=America/Chicago
+    volumes:
+      # git-sync output (read the `current` symlink live per request)
+      - /home/chuck/data/portal/git:/git:ro
+      # curated public drop zone
+      - /home/chuck/data/media/public:/files:ro
+      # status artifacts (publisher deferred)
+      - /home/chuck/data/portal/runtime:/runtime:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import urllib.request, urllib.error, sys
+          try:
+              r = urllib.request.urlopen('http://127.0.0.1:8080/', timeout=2)
+              sys.exit(0 if r.status < 500 else 1)
+          except urllib.error.HTTPError as e:
+              sys.exit(0 if e.code < 500 else 1)
+          except Exception:
+              sys.exit(1)
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    expose:
+      - "8080"
+    networks:
+      - public-net
+
+networks:
+  public-net:
+    external: true
