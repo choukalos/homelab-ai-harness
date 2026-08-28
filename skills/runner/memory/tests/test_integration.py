@@ -460,6 +460,35 @@ def main():
               meta.get("source") == "chat" and meta.get("turn_id") == "user-run-1",
               str(meta))
 
+    print("Phase 8: admin ops + metrics (live)...")
+    from memory import admin, metrics
+
+    # chuck has the dentist memory from Phase 7.
+    admin_hits = admin.list_user("chuck", scope="private")
+    check("phase8: admin list finds chuck's memory",
+          any("dentist" in h["text"].lower() for h in admin_hits),
+          f"n={len(admin_hits)}")
+    # admin list bypasses _valid_user (service is rejected by the chat path).
+    admin_svc = admin.list_user("service", scope="private")
+    check("phase8: admin list service (bypass _valid_user)",
+          isinstance(admin_svc, list))
+    # admin search by query.
+    admin_q = admin.list_user("chuck", query="dentist", scope="private")
+    check("phase8: admin search by query",
+          any("dentist" in h["text"].lower() for h in admin_q),
+          f"n={len(admin_q)}")
+    # health endpoint backing.
+    h = admin.health()
+    check("phase8: health healthy", h["healthy"] is True, str(h.get("healthy")))
+    check("phase8: health has counters",
+          "counters" in h and "search_total" in h["counters"],
+          str(sorted(h.get("counters", {}).keys())))
+    # metrics exposition (reflects the ops above; never carries memory text).
+    out = metrics.exposition()
+    check("phase8: metrics has search counter", "memory_search_total" in out)
+    check("phase8: metrics has user gauge", "memory_user_count" in out)
+    check("phase8: metrics no secrets", "dentist" not in out)
+
     print("cleanup...")
     interface.delete_user_memories(user)
     interface.delete_user_memories(other)

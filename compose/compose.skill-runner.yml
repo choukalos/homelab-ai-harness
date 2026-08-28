@@ -57,6 +57,8 @@ services:
       # Identity (Phase 3): key -> user_id map (env var NAMES, not values)
       - SIRI_KEY_SERVICE=${SIRI_KEY_SERVICE}
       - MEMORY_USER_KEYS=${MEMORY_USER_KEYS}
+      # Phase 8: admin key(s) for /api/memory/* (distinct from user keys)
+      - MEMORY_ADMIN_API_KEY=${MEMORY_ADMIN_API_KEY}
       - MEM0_TELEMETRY=false
     volumes:
       - ../skills:/app/skills:ro
