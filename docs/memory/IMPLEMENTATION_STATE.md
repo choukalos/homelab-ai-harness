@@ -105,7 +105,18 @@
   admin key absent from logs; counts back to 0 / 18). Scrape gap: VM
   promscrape doesn't hot-reload by default → `configCheckInterval=30s`
   added (`b04a99b7`); one container recreate pending, then
-  `up{job="skill-runner"}=1`.
+  `up{job="skill-runner"}=1`. **DONE (2026-08-28):** recreate applied;
+  `up{job="skill-runner"}=1`, all 12 `memory_*` series live.
+- **Phase 9: IN PROGRESS** (started 2026-08-28) — hardening & migration
+  readiness. (1) **Version pinning: DONE + committed (`f1c63336`)** —
+  `litellm` `main-latest` → `v1.92.0` (the EXACT version running, verified
+  via dist-info; matches config header's tested line, D8) and `qdrant`
+  `latest` → `v1.18.1` (EXACT running version via GET /; Qdrant tags carry
+  a `v` prefix). Zero version drift — pins lock what's proven. `mem0ai`
+  already pinned (2.0.19). Awaiting **MANUAL STEP D** (`rebuild ai-only`)
+  then **STEP B** (`rebuild skill-only`). (2) Least privilege: TODO.
+  (3) Regression suite: TODO. (4) Embedding-migration procedure (doc only):
+  TODO. (5) Feature-flag review: TODO.
 - Last updated: 2026-08-28 (Phase 8 gate MET — scrape verified live).
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
@@ -648,6 +659,28 @@ rebuild (user job → chuck; service job → service, no personal memory).
 - [x] Phase 8 gate: admin ops exercised manually ✅; restore test current ✅
   (2026-08-28); scrape verified ✅.
 
+**Phase 9 (hardening & migration readiness) — started 2026-08-28:**
+- [x] Pin versions: `mem0ai` (already 2.0.19), `litellm` → `v1.92.0`,
+  `qdrant` → `v1.18.1` — committed `f1c63336`; gate backup taken
+  (`env-20260828-0122.env` + `mem0_memories-20260828-0122.snapshot`).
+- [ ] MANUAL STEP D: `./homelab.sh rebuild ai-only` (recreates all 10
+  ai-core services with pinned images — litellm, qdrant, owui, redis,
+  searxng+valkey, crawl4ai, family-wiki, presenton, litellm-db; data on
+  bind mounts persists), then MANUAL STEP B: `./homelab.sh rebuild
+  skill-only` (fresh pooled HTTP client to the recreated litellm).
+- [ ] Post-rebuild verify: litellm health + `matrix-coder` + `embeddings`
+  still work (litellm version UNCHANGED — v1.92.0 was already running —
+  so this is a regression check, not a version-change check); qdrant
+  1.18.1 serving both collections (counts 0 / 18); skill-runner health.
+- [ ] Least privilege: Qdrant collection ACLs; memory-service credential
+  minimal model access. (Qdrant 0.0.0.0:6333 stays per decision §0.5.)
+- [ ] Regression suite: identity isolation, household scope, secret
+  filtering, prompt-injection boundary, outage degradation, embedding-dim
+  consistency.
+- [ ] Embedding-migration procedure (PDF §9): document v1→v2 alias/
+  collection cutover runbook (NO live migration).
+- [ ] Feature-flag review: `MEMORY_ENABLED=false` end-to-end.
+
 **Gate to Phase 9: MET (2026-08-28).** Admin ops exercised manually
 (post-rebuild e2e on `memory_test`); restore test current (verified
 2026-08-28); scrape verified — `up{job="skill-runner"}=1`, all 12
@@ -689,6 +722,21 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
   Prometheus (it scrapes current values + computes rates). No persistence.
 
 ## Phase log
+
+- **2026-08-28** — **Phase 9 started: version pinning (item 1) done +
+  committed (`f1c63336`).** Recon: running litellm = EXACTLY 1.92.0
+  (verified `litellm-1.92.0.dist-info` in the container's venv; image
+  built 2026-07-03; matches config header's tested line per D8) and
+  running qdrant = 1.18.1 (GET / version API). Both exact tags verified
+  to exist upstream (`ghcr.io/berriai/litellm:v1.92.0` manifest OK;
+  `qdrant/qdrant:v1.18.1` — note Qdrant tags carry a `v` prefix, so
+  `1.18.1` alone 404s). Pins are ZERO-DRIFT: they lock the exact
+  versions already running, removing floating-tag risk on the next
+  rebuild without any version jump. `mem0ai` already pinned 2.0.19.
+  Gate backup taken (`env-20260828-0122.env`,
+  `mem0_memories-20260828-0122.snapshot`; tree clean at `f1c63336`).
+  Awaiting MANUAL STEP D (`rebuild ai-only`) + STEP B (`rebuild
+  skill-only`).
 
 - **2026-08-28** — **Phase 8 GATE MET.** Final recreate applied the
   `thor-lan` extra_hosts (`192.168.4.54`); target `thor-lan:8091/metrics`
