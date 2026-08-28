@@ -356,11 +356,17 @@ hardening item (not a K-phase).
 - [ ] E2E: owner's sample files from `ai-kb/raw/` (owner will drop PDFs/
       images/etc there); multi-page PDF; **1000-page PDF timing test**
       (if owner provides one); re-ingest idempotency (sha256)
-- [ ] LiteLLM MCP timeout 7200 for mcp_knowledge
+- [ ] LiteLLM MCP timeout 7200 for mcp_knowledge — **batch this config
+      change with the `mcp_vision` registration into ONE owner reload**
+      (owner reloads LiteLLM manually; minimize reloads — if mcp_vision
+      A3 lands before K3, ship both entries in the same reload)
 
 ### K4. Images + tables + vision
 - [ ] Vision: `matrix-coder` (owner-confirmed: ≤5 images and/or 1 video
-      per turn) via LiteLLM image input; ≤5 pages per vision call
+      per turn) via LiteLLM image input; ≤5 pages per vision call —
+      **pattern + probe numbers already validated by `mcp_vision` A0/A1
+      (`mcp-vision-todo.md`)**; reuse the verified client/batching
+      approach (~50-line internal helper)
 - [ ] markitdown-ocr plugin eval (LiteLLM as llm_client) vs page-render
       splice fallback; pick one, implement
 - [ ] Standalone image ingestion (EXIF+OCR+vision description) from
