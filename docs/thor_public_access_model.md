@@ -142,7 +142,7 @@ Verified against `caddy/Caddyfile`:
 | `www.choukalos.com` | Redirect to `choukalos.com` | — | — |
 | `invest.choukalos.com` | `/api/*` + rest | App-level (downstream) | `invest-hub-server:4000` / `invest-hub-client:80` |
 | `api.choukalos.com` | All | App-level (downstream) | `invest-hub-server:4000` |
-| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*` | `X-API-Key` on `/siri/*` | `ai-harness:8090` |
+| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*` | `X-API-Key` on `/siri/*` | `skill-runner:8091` |
 | `llm.choukalos.com` | All paths | `X-API-Key` (all requests) | `litellm-proxy:4000` |
 | `plausible.choukalos.com` | `/js/*`, `/api/event` only | None | `plausible:8000` |
 
