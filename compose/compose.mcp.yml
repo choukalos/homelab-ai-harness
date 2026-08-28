@@ -98,10 +98,6 @@ services:
       context: ../mcp/servers/media
     container_name: mcp_media
     environment:
-      - LITELLM_BASE_URL=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
-      - HF_TOKEN=${HF_TOKEN}
-      - COMFYUI_BASE_URL=http://192.168.4.55:8188
       # GPU-host media-pipeline (2026-08-28): ComfyUI + VLLM + TTS/music/SFX
       # workers on Matrix. Thin HTTP client — no GPU work in this container.
       - MEDIA_PIPELINE_URL=http://192.168.4.55:8189

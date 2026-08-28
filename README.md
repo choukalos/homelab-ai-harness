@@ -569,13 +569,15 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **find-demos** / **list-demos** — Browse/search demos
 - **list-presentations** — List existing presentations
 - **list-images** — List generated images with accessible URLs
-- **media-generate** — Generate an image via `mcp_media.generate_image` (ComfyUI backend)
+- **media-generate** — Generate an image via `mcp_media.media_generate_image` (GPU-host media-pipeline) + `media_fetch`
 
 ### Media Generation (Image)
 
 The `media-generate` intent dispatches directly to the `mcp_media` MCP server
-(ComfyUI on Matrix) without spawning a background skill job. It blocks for
-the duration of image generation (~30–60 sec).
+(GPU-host media-pipeline on Matrix) without spawning a background skill job.
+It calls `media_generate_image` (blocks until the GPU job finishes, ~30–60 sec
+plus any queue wait), then `media_fetch` to download the result to
+`/home/chuck/data/media/generated/pipeline/` and serves it via the media URL.
 
 **Keywords that trigger it:** `generate image`, `create image`, `make image`,
 `create media`, `media generate`, `generate media`, `image generate`
