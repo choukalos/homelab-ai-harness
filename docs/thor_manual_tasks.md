@@ -1,7 +1,8 @@
 # Thor Manual Tasks
 
 > Tasks that require Chuck's manual intervention.
-> Updated: 2026-07-03
+> Updated: 2026-08-28 (backup + skill-runner /metrics marked DONE; remaining
+> items still open)
 
 ---
 
@@ -12,13 +13,19 @@ MANUAL TASK FOR CHUCK:
 Reason:
 A real backup requires preserving production config and data before structural changes.
 Command:
-TBD — will be specified after inventory is complete.
+DONE (2026-08-26/28): scripts/backup-memory.sh — copies .env + snapshots the
+mem0_memories Qdrant collection to /home/chuck/data/backups/; restore tested
+into a throwaway Qdrant (2026-08-28). Git covers config/code; .env is copied
+into the archive.
 Expected impact:
 None if done as copy/archive only.
 Rollback:
 Restore from backup archive.
 Validation:
-Confirm backup archive contains homelab configs, LiteLLM config/data, Open WebUI data, Qdrant data, Redis data if persistent, Caddy config, Cloudflare config, and relevant .env files.
+Confirmed: .env + mem0_memories snapshot present; restore round-trip verified
+(points_count matches, payloads readable). Other collections (family_kb,
+mem0migrations) are not in scope for this script — family_kb has no
+production data (18 curated docs, re-ingestable).
 ```
 
 ---
@@ -189,13 +196,13 @@ New endpoint works from outside. No admin endpoints exposed.
 
 | # | Phase | Task | Priority |
 |---|---|---|---|
-| 1 | 0 | Execute backup | **CRITICAL** — before any changes |
+| 1 | 0 | Execute backup | ✅ DONE 2026-08-26/28 — `scripts/backup-memory.sh`, restore tested |
 | 2 | 3 | Review public access changes | High — affects all public services |
 | 3 | 10 | Apply LiteLLM MCP config | High — core integration |
 | 4 | 10 | Apply model aliases & key restrictions | High — core integration |
 | 5 | 11 | Harden Presenton auth | Medium — before remote skill access |
-| 6 | 12 | Enable skill runner /metrics | Medium — observability |
-| 7 | 12 | Extend Victoria Metrics scraping | Medium — observability |
+| 6 | 12 | Enable skill runner /metrics | ✅ DONE 2026-08-28 — `/metrics` + VictoriaMetrics job `skill-runner` |
+| 7 | 12 | Extend Victoria Metrics scraping | ✅ skill-runner done 2026-08-28 (Qdrant/MCP/Caddy drafts open) |
 | 8 | 12 | Create Grafana dashboards | Low — nice to have |
 | 9 | 14 | Skill runner Caddy routing | High — LAN access |
 | 10 | 14 | Cloudflare tunnel (if needed) | Low — depends on remote needs |

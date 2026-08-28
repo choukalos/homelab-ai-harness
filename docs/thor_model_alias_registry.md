@@ -1,8 +1,28 @@
 # Thor Model Alias Registry
 
 > Phase 4.1 — Define the strategy for model aliasing so clients never reference Matrix ports directly.
-> Date: 2026-07-03
-> Status: Documentation only.
+> Date: 2026-07-03 (design baseline — the `local/*` aliases below were a DRAFT
+> strategy and were never implemented; see the live table below)
+> Status: Superseded in practice by the live LiteLLM config.
+
+## Live aliases (verified 2026-08-28, `GET /v1/models`)
+
+| alias | backend | purpose | notes |
+|---|---|---|---|
+| `matrix-coder` | `openai/qwen38-27b` via vLLM (`matrix:8000`) | Main model — chat, skills, extraction LLM | "One model rule" in practice |
+| `matrix-gemma4-moe` | `ollama/gemma4:26b` (`matrix:11434`) | Family chat, copywriting, translation | Sole alternative |
+| `studio-gemma4-4b` | LMStudio (`macstudio:1234`) | Small local model | Mac Studio |
+| `embeddings` | `ollama/nomic-embed-text` (`matrix:11434`) | KB path (legacy name) | 768-dim |
+| `homelab-embedding-v1` | same nomic backend | **Memory path** (versioned alias) | Added 2026-08-26 (memory Phase 1); migration runbook in `docs/memory/embedding-migration.md` — never silently repoint v1 |
+| `hf-sd3` | HF Inference API | SD3 image gen | DNS-unreachable from Thor; inactive path |
+
+**Per-key reality (2026-08-28):** the July per-key allowlist table below was
+never implemented. Keys in LiteLLM: master (OPS), public (`llm.choukalos.com`),
+service, and the **memory service key scoped to exactly
+`[matrix-coder, homelab-embedding-v1]`** (least privilege, Phase 9; the old
+over-broad 3-model key was deleted 2026-08-28). MCP access is `allow_all_keys: true`
+(decision 2026-08-25 — intentional, no scoped grants). Identity (key → user)
+lives in skill-runner, not LiteLLM (`MEMORY_USER_KEYS`).
 
 ---
 

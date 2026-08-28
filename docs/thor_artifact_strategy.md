@@ -1,8 +1,10 @@
 # Thor Artifact Strategy
 
 > Phase 4.3 — Define where skill artifacts live and how they are accessed.
-> Date: 2026-07-03
-> Status: Documentation only. No service changes.
+> Date: 2026-07-03 (design baseline)
+> Status: **Implemented** — skill-runner mounts `/home/chuck/data/media` and
+> `/home/chuck/workspace` for artifacts; job artifacts retrievable via
+> `GET /api/jobs/{job_id}`. July text kept as historical context.
 
 ---
 

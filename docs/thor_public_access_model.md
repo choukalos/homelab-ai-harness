@@ -1,8 +1,10 @@
 # Thor Public Access Model
 
 > Phase 3 — Make the public exposure strategy explicit.
-> Date: 2026-07-03
-> Status: Documentation only. No service changes.
+> Date: 2026-07-03 (design baseline)
+> Status: **Implemented** — `siri.choukalos.com` (skill-runner chat) and
+> `llm.choukalos.com` (LiteLLM public key) are live via Caddy + Cloudflare
+> Tunnel; no admin endpoints public. July text kept as historical context.
 
 ---
 

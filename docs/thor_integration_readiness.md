@@ -1,8 +1,23 @@
 # Thor Integration Readiness Review
 
 > Phase 13 — Stop before production integration. Comprehensive checklist.
-> Date: 2026-07-04
-> Status: Updated after all phases 0–9, 12–15 completed in this run.
+> Date: 2026-07-04 (historical)
+> Status: **Superseded** — integration long since complete. July status kept
+> for reference; current-state deltas marked inline.
+
+**Current state (2026-08-28):**
+- Skill runner is in production (`THOR_IP:8091`), 13 skills, `/api/chat`
+  gateway, long-term memory (Phases 0–9 complete — see
+  `docs/memory/IMPLEMENTATION_STATE.md`), admin REST + CLI + `/metrics`.
+- 8 MCP servers live in LiteLLM (streamable-http, **34 tools** — was 11/4 servers).
+- Images pinned: `litellm:v1.92.0`, `qdrant:v1.18.1` (2026-08-28, Phase 9).
+- Qdrant JWT RBAC on; `mcp_knowledge` on a read-only key.
+- Backup gap CLOSED: `scripts/backup-memory.sh` (.env + Qdrant snapshot,
+  restore-tested) + git for config/code.
+- Per-key MCP restrictions: **dropped by decision 2026-08-25** —
+  `allow_all_keys: true` is intentional (every valid key may call every tool).
+- Caddy/Cloudflare: `siri.choukalos.com` → skill-runner:8091 live; public
+  routes stable.
 
 ---
 
@@ -20,7 +35,7 @@ All documentation, implementation, and containerization phases are complete. MCP
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| 1 | Backup exists | ⚠️ **NOT DONE** | Manual task. Chuck must execute a real backup before further changes. |
+| 1 | Backup exists | ✅ **DONE** (2026-08-26) | `scripts/backup-memory.sh` — `.env` copy + `mem0_memories` Qdrant snapshot to `/home/chuck/data/backups/`; restore tested into a throwaway Qdrant (2026-08-28). Git covers config/code. (July: ⚠️ NOT DONE.) |
 | 2 | AI inventory complete | ✅ | `docs/thor_ai_inventory.md` — completed Phase 1 |
 | 3 | Channel architecture complete | ✅ | `docs/thor_channels_architecture.md` — 10 channels documented, Phase 2 |
 | 4 | Public access model complete | ✅ | `docs/thor_public_access_model.md` — routes, keys, rules, Phase 3 |
@@ -90,7 +105,7 @@ All documentation, implementation, and containerization phases are complete. MCP
 | 4 | SSE config applied to LiteLLM | ✅ | `litellm/config.yml` updated with SSE transport for 4 MCP servers (Phase 15) |
 | 5 | LiteLLM upgraded to 1.92.0 | ✅ | Resolved tool calling issues (Phase 15) |
 | 6 | Metrics auth bypass fixed | ✅ | `require_auth_for_metrics_endpoint: false` (Phase 15) |
-| 7 | Per-key MCP restrictions | ⚠️ **NEEDED** | Currently `allow_all_keys: true`. Needs scoped grants. Manual task. |
+| 7 | Per-key MCP restrictions | ✅ **Resolved (2026-08-25)** | Decision: `allow_all_keys: true` is intentional — every valid key may call every MCP tool; scoped grants dropped. (July: ⚠️ NEEDED.) |
 
 ### Rollback & Safety
 

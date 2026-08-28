@@ -1,17 +1,30 @@
 # Thor AI Platform — Status
 
-> Updated: 2026-08-25 (cleaned up; old work items folded into the active plans)
+> Updated: 2026-08-28 (memory workstream closed; MCP tool count refreshed)
 > **Active workstreams:** `auth_todo.md` (user auth, per-user usage tracking,
-> OWUI removal, budgets/ROI, skill fixes) and `memory_todo.md` (long-term
-> memory). This file is status/history only — no open work lives here.
+> OWUI removal, budgets/ROI, skill fixes) and `media_mcp_tool_todo.md`
+> (media-mcp → GPU media-pipeline :8189, 9 new tools). `memory_todo.md` is
+> **COMPLETE** (Phases 0–9, 2026-08-28 — see
+> `docs/memory/IMPLEMENTATION_STATE.md`). This file is status/history only —
+> no open work lives here.
 
 ---
 
 ## Completed (July 2026)
 
-- **LiteLLM** running with **8 MCP servers** (29 tools) via streamable-http
-  (`mcp_search`, `mcp_knowledge`, `mcp_crawl`, `mcp_filesystem_readonly`,
-  `mcp_mysql`, `mcp_homelab_status`, `mcp_filesystem`, `mcp_media`).
+- **Long-term memory (memory_todo.md, Phases 0–9) — COMPLETE 2026-08-28.**
+  In-process Mem0 in skill-runner → Qdrant `mem0_memories` (768-dim); identity
+  map, retrieval + writeback, household scope, secret filtering, admin REST +
+  CLI + `/metrics` (scraped by VictoriaMetrics), backups
+  (`scripts/backup-memory.sh`), regression suite (`scripts/memory-regression.sh`,
+  70/70), Qdrant JWT RBAC + scoped keys, image pins (litellm v1.92.0,
+  qdrant v1.18.1), embedding-migration runbook. State:
+  `docs/memory/IMPLEMENTATION_STATE.md`. Phase 6 (optional MCP memory tools)
+  remains the only deferred phase — gated on a week of production use.
+- **LiteLLM** running with **8 MCP servers (34 tools as of 2026-08-28)** via
+  streamable-http (`mcp_search` 3, `mcp_crawl` 1, `mcp_knowledge` 4,
+  `mcp_filesystem_readonly` 3, `mcp_filesystem` 5, `mcp_mysql` 10,
+  `mcp_homelab_status` 4, `mcp_media` 4).
   **MCP access model (decided 2026-08-25):** `allow_all_keys: true` is
   intentional — every valid key may call every MCP tool; no scoped grants
   planned (the old "per-key access hardening" deferral is dropped).

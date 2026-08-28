@@ -2,7 +2,9 @@
 
 > Phase 4.4 — Plan for rebuilding the AI Harness as a modular skill runner beside the current monolith.
 > Date: 2026-07-03
-> Status: Documentation only. No changes to the current Harness.
+> Status: **DONE — superseded.** The skill runner became the normalized AI
+> gateway and the old ai-harness monolith was decommissioned (2026-08-25,
+> containers removed). Kept as historical planning context.
 
 ---
 
