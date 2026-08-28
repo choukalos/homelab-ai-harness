@@ -28,7 +28,10 @@ scrape_configs:
   metrics_path: /metrics
   static_configs:
   - targets:
-    - host.docker.internal:8091
+    # skill-runner binds only to THOR_IP:8091 (not 0.0.0.0), so the
+    # docker0 gateway (host.docker.internal) cannot reach it — use the
+    # thor LAN IP mapped via extra_hosts in compose.monitoring.yml.
+    - thor:8091
     labels:
       instance: skill-runner
 - job_name: node-exporter-matrix
