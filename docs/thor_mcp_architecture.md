@@ -2,14 +2,16 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 8 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 41 tools as of 2026-08-28 — 34 + 10 media-pipeline tools, legacy media tools removed, + mcp_mysql schema_overview). This doc is the design baseline; the
+> Status: **Implemented** — all 9 servers below are live in LiteLLM (streamable-http,
+> `ai-net`, 46 tools as of 2026-08-28 — 41 + 5 mcp_vision tools; legacy media tools
+> removed earlier the same day). This doc is the design baseline; the
 > "Current state" notes reflect the live system.
 
 **Current state (2026-08-28)**
-- 8 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
+- 9 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (10), `mcp_mysql` (11) — 41 tools total via `GET /v1/mcp/tools`.
+  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5) — 46 tools total via
+  `GET /v1/mcp/tools`.
 - **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
   `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
   (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
@@ -26,6 +28,17 @@
   samples); fixed three key-casing bugs that made the NL-to-SQL schema context
   fail silently; NL-to-SQL now runs on `matrix-coder` with thinking disabled.
   Verified e2e on `investorhub` (portfolio + index join queries).
+- `mcp_vision` added (2026-08-28): image/video analysis via `matrix-coder`
+  vision (5 images per LLM call — server-side batching, no session budget).
+  5 tools: `vision_analyze_image`, `vision_analyze_video` (scene + raw
+  full-FPS modes, frame-budget guarded), `vision_extract_frames` (no LLM),
+  `vision_cleanup`, `vision_probe`. Sources: local paths (allowlisted), any
+  http(s) URL (2 GB cap), YouTube (yt-dlp). `focus=commercial` QA's
+  mcp_media-generated media (PASS/FAIL verdict). Artifacts are ephemeral and
+  NON-public (`/home/chuck/data/workspace/vision/<slug>/`; cleaned via
+  `vision_cleanup` or `scripts/cleanup-vision.sh`). Registered in LiteLLM with
+  `timeout: 7200` (batched owner reload with the `mcp_knowledge` 7200s timeout
+  for KB K3). See `mcp/servers/vision/README.md` and `mcp-vision-todo.md`.
 
 ---
 
@@ -52,7 +65,8 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_filesystem` | Writable file ops (workspace/media) — 5 tools | same mounts |
 | `mcp_mysql` | Read-mostly MySQL introspection + guarded queries — 10 tools | host MySQL |
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
-| `mcp_media` | Media ops: **GPU media-pipeline (10 tools, live 2026-08-28)** + legacy ComfyUI/HF (4 tools) | GPU host `:8189`, legacy `${MATRIX_IP}:8188` |
+| `mcp_media` | Media ops: **GPU media-pipeline (10 tools, live 2026-08-28)** | GPU host `:8189` |
+| `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
@@ -221,6 +235,24 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ---
 
+### 7c. `mcp_vision` (added 2026-08-28)
+
+| Field | Value |
+|---|---|
+| **Purpose** | Image/video analysis via the `matrix-coder` vision model (Qwen3.6-27B) — ported from the owner's `video-analyze` pi skill; server-side batching replaces the skill's per-subagent session-budget pattern |
+| **Tools (live)** | `vision_analyze_image`, `vision_analyze_video`, `vision_extract_frames`, `vision_cleanup`, `vision_probe` (5 tools) |
+| **Sources** | Local path (allowlisted roots: media/, workspace/, ai-kb/raw — symlink/`../` escape rejected) · any http(s) URL (2 GB cap) · YouTube (yt-dlp, metadata first) |
+| **Video modes** | `scene` (scene-change detection; single-pass <5 min, chunked longer; 200-frame cap) · `raw` (full native FPS, precise per-frame timestamps, **frame-budget guarded** — 3000 default, refuses before extracting) |
+| **Focus templates** | `general` · `gameplay` · `tutorial` · `commercial` (QA of mcp_media-generated media: PASS/FAIL verdict + fix suggestions; pass the generation brief in `prompt`) |
+| **Batching** | ≤5 images per fresh LLM call (provider limit, probed 2026-08-27); unlimited calls; thinking OFF (`chat_template_kwargs.enable_thinking=false` — Qwen3 thinking burns the completion budget) |
+| **Artifacts** | `/home/chuck/data/workspace/vision/<slug>/` — frames, `summary.md`, `chapters.json`, `frame_metadata.jsonl`, `report.md`. **Ephemeral + NON-public** (no Caddy route, never under `media/public/`); cleaned via `vision_cleanup` or `scripts/cleanup-vision.sh` (manual, no cron) |
+| **Read/write** | Reads sources (ro mounts); writes only the artifact dir (rw mount nested in ro workspace) |
+| **Security** | ffmpeg/ffprobe/yt-dlp as arg lists (no shell); LiteLLM master key in-container; ai-net only |
+| **LiteLLM** | `allow_all_keys: true`, `timeout: 7200` (long videos = minutes) |
+| **Notes** | A1/A2 E2E 2026-08-28: local mp4 (scene + commercial QA), GIF (40 frames), remote URL, YouTube (18 s e2e), raw mode (precise timestamps), budget guard, cleanup. See `mcp/servers/vision/README.md` + `mcp-vision-todo.md`. |
+
+---
+
 ### 8. `mcp_home`
 
 | Field | Value |
@@ -248,6 +280,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | `mcp_stocks` | ❌ | — | — | — | ❌ | — | — |
 | `mcp_homelab_status` | ✅ | — | — | — | ✅ | — | — |
 | `mcp_media` | ✅ | — | ✅ | — | ✅ | — | — |
+| `mcp_vision` | ✅ | ✅ | ✅ | — | — | — | — |
 | `mcp_home` | ✅ | — | — | — | — | — | Read (future) |
 
 ---

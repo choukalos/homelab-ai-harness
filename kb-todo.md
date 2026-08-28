@@ -2,7 +2,8 @@
 
 > Planning doc for the KB/knowledge workstream (post-memory-project).
 > Companion to `blog-todo.md` style: discovered state → decisions → phases → questions.
-> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision rounds 1–2 locked).
+> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision rounds 1–2 locked;
+> `mcp_vision` A0–A3 completed — batched LiteLLM reload staged).
 
 ---
 
@@ -314,10 +315,10 @@ hardening item (not a K-phase).
 
 > **Ordering (owner, 2026-08-28):** the **`mcp_vision` image/video
 > analysis MCP tool** (N2 — separate workstream, built from the owner's
-> `video-analyze` pi skill; planning doc `mcp-vision-todo.md`) is built
-> **before** KB K1 starts. Rationale: it validates the `matrix-coder`
-> vision path end-to-end (the Q1 "≤5 images/turn" probe) and K4 reuses
-> the proven pattern/client.
+> `video-analyze` pi skill; planning doc `mcp-vision-todo.md`) was built
+> **before** KB K1 starts. **DONE 2026-08-28 (A0–A3)**: it validated the
+> `matrix-coder` vision path end-to-end (cap=5 confirmed, thinking-OFF
+> pattern, batched client) and K4 reuses the proven pattern/client.
 
 ### K0. Discovery + decisions — **DONE (2026-08-28)**
 - [x] Inventory memory state (Phase 9 complete, RBAC live)
@@ -326,6 +327,10 @@ hardening item (not a K-phase).
 - [x] This plan + questions to owner
 
 ### K1. Qdrant foundation
+- [ ] **Prerequisite (owner):** the batched LiteLLM reload — `mcp_vision`
+      registration + `mcp_knowledge` 7200 s timeout are both staged in
+      `litellm/config.yml` (2026-08-28, mcp_vision A3). K1 itself needs no
+      reload (Qdrant-side), but K3's E2E does.
 - [ ] Issue `KB_API_KEY` JWT (global `m`, `sub=mcp-knowledge`, no expiry)
       via `scripts/qdrant-jwt.py --global-access m`; store in `.env`
 - [ ] Verify empirically: create throwaway `kb_test` collection with it;
@@ -356,10 +361,10 @@ hardening item (not a K-phase).
 - [ ] E2E: owner's sample files from `ai-kb/raw/` (owner will drop PDFs/
       images/etc there); multi-page PDF; **1000-page PDF timing test**
       (if owner provides one); re-ingest idempotency (sha256)
-- [ ] LiteLLM MCP timeout 7200 for mcp_knowledge — **batch this config
-      change with the `mcp_vision` registration into ONE owner reload**
-      (owner reloads LiteLLM manually; minimize reloads — if mcp_vision
-      A3 lands before K3, ship both entries in the same reload)
+- [ ] LiteLLM MCP timeout 7200 for mcp_knowledge — **config staged
+      2026-08-28** (batched with the `mcp_vision` registration in
+      `litellm/config.yml`; owner's single reload covers both) — K3 E2E
+      verifies it live
 
 ### K4. Images + tables + vision
 - [ ] Vision: `matrix-coder` (owner-confirmed: ≤5 images and/or 1 video

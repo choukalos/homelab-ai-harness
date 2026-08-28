@@ -162,6 +162,9 @@ mcp_servers:
     transport: http
     url: http://mcp_knowledge:8000/mcp
     allow_all_keys: true
+    # KB K3 (batched with mcp_vision registration, 2026-08-28): ingest
+    # (markitdown + embedding) and long video QA can exceed the 60s default.
+    timeout: 7200
 
   # ── Crawl (Crawl4AI) ─────────────────────────────────────────────
   mcp_crawl:
@@ -193,13 +196,22 @@ mcp_servers:
     url: http://mcp_filesystem:8000/mcp
     allow_all_keys: true
 
-  # ── Media (image gen via GPU-host media-pipeline + legacy ComfyUI/HF) ──
+  # ── Media (image/video gen via GPU-host media-pipeline) ─────────
   mcp_media:
     transport: http
     url: http://mcp_media:8000/mcp
     allow_all_keys: true
     # Pipeline flows block up to 2h (video upscale); LiteLLM's default MCP
     # client timeout is 60s (LITELLM_MCP_CLIENT_TIMEOUT).
+    timeout: 7200
+
+  # ── Vision (image/video analysis via matrix-coder) ──────────────
+  mcp_vision:
+    transport: http
+    url: http://mcp_vision:8000/mcp
+    allow_all_keys: true
+    # vision_analyze_video batches frames 5-per-call; long videos run
+    # minutes (extraction + N vision calls + consolidation).
     timeout: 7200
 
 

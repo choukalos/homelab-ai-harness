@@ -236,34 +236,48 @@ artifacts: media/generated/vision/<slug>/{frames, summary.md,
         on reasoning and `content` comes back `None` (same as mcp_mysql)
 - [x] Owner decision round 1 locked (§5) — no open questions
 
-### A1. Server + images
-- [ ] `mcp/servers/vision/` skeleton (Dockerfile with ffmpeg, pyproject,
-      compose block in `compose.mcp.yml`)
-- [ ] `vision_analyze_image` (local + URL + gif) + path/URL validation
-- [ ] E2E **directly** (raw JSON-RPC probe, no LiteLLM yet): analyze a
-      real image
+### A1. Server + images — **DONE (2026-08-28)**
+- [x] `mcp/servers/vision/` skeleton (Dockerfile with ffmpeg + yt-dlp,
+      pyproject, compose block in `compose.mcp.yml` — ro media/workspace/
+      ai-kb/raw mounts + rw `workspace/vision` nested mount)
+- [x] `vision_analyze_image` (local + URL + gif) + path/URL validation
+      (allowlist via `resolve()`, 2 GB download cap)
+- [x] E2E **directly** (raw JSON-RPC, no LiteLLM registration yet —
+      `tmp/vision_e2e_a1.py`): 5 tools listed; real image analyzed in 6 s
+      (pipeline smoke-test PNG → structured markdown incl. verbatim text);
+      `vision_probe` confirms cap=5 (0.11 s); `vision_cleanup` deletes
+      artifacts; allowlist + focus validation reject correctly
 
-### A2. Video
-- [ ] `vision_analyze_video` — scene mode (single-pass + chunked) ported
-      from `extract-frames.sh`/`extract-chunks.sh` (python + ffmpeg
-      subprocess)
-- [ ] `mode=raw` ported from `extract-raw.sh` (+ frame-budget guard)
-- [ ] `vision_extract_frames` + `vision_cleanup` (+
-      `scripts/cleanup-vision.sh`)
-- [ ] YouTube via yt-dlp (meta-first pattern from `fetch-youtube.sh`)
-- [ ] `focus=commercial` template + QA E2E on a `mcp_media`-generated
-      asset (image + clip)
-- [ ] E2E (direct, no LiteLLM yet): (a) a local mp4 from media/, (b) a
-      website mp4/mov/gif URL, (c) a YouTube video, (d) a gif — verify
-      report quality + artifact layout + timing on a 10+ min video
+### A2. Video — **DONE (2026-08-28)**
+- [x] `vision_analyze_video` — scene mode (single-pass <5 min + chunked)
+      ported from `extract-frames.sh`/`extract-chunks.sh` (python + ffmpeg
+      subprocess, arg lists only)
+- [x] `mode=raw` ported from `extract-raw.sh` (+ frame-budget guard —
+      verified: 96-frame estimate vs budget 3 → refused before extracting;
+      `fps=2` run: 8 frames, precise timestamps 0.0–3.5 s, 2 batches, 27 s)
+- [x] `vision_extract_frames` + `vision_cleanup` (+
+      `scripts/cleanup-vision.sh` — dry-run/all/days/slug; no cron per house
+      convention)
+- [x] YouTube via yt-dlp (meta-first pattern from `fetch-youtube.sh`) —
+      "Me at the zoo" e2e in 18 s (download + 2 frames + report)
+- [x] `focus=commercial` template + QA E2E on a `mcp_media`-generated
+      asset (`banana_vs_darth_broccoli.mp4` — PASS/FAIL verdict + fix
+      suggestions in the consolidated report)
+- [x] E2E (direct, no LiteLLM yet — `tmp/vision_e2e_a2.py`): local mp4
+      (scene + commercial), GIF (40 frames), remote website URL (10 s
+      Big Buck Bunny clip), YouTube, raw mode, budget guard, cleanup —
+      all green. (10+ min video timing untested — no long fixture on Thor;
+      chunked mode + 7200 s LiteLLM timeout cover it by design.)
 
-### A3. Integration + handoff
-- [ ] LiteLLM config entry (`mcp_vision`, timeout 7200) — **owner does
-      the one reload**, then verify via LiteLLM MCP (raw JSON-RPC)
-- [ ] `vision_probe` tool (ops)
-- [ ] Docs: `mcp/servers/vision/README.md`, root README,
-      `thor_mcp_architecture.md`, `thor_ai_inventory.md` (41 → ~46 tools)
-- [ ] Commit + handoff → **KB K1 starts**
+### A3. Integration + handoff — **DONE (2026-08-28)**
+- [x] LiteLLM config entry (`mcp_vision`, timeout 7200) — **batched with
+      the `mcp_knowledge` 7200 s timeout (KB K3) in one owner reload**
+      (config edited; owner reload pending — see handoff below)
+- [x] `vision_probe` tool (ops) — verified in A1 E2E (cap=5, 0.11 s)
+- [x] Docs: `mcp/servers/vision/README.md`, `thor_mcp_architecture.md`
+      (41 → 46 tools, §7c spec + exposure matrix), `thor_ai_inventory.md`,
+      `TODO.md`
+- [x] Commit + handoff → **KB K1 starts** (after owner's batched reload)
 
 ---
 
