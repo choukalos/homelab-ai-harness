@@ -110,6 +110,29 @@ services:
     networks:
       - ai-net
 
+  mcp_vision:
+    build:
+      context: ../mcp/servers/vision
+    container_name: mcp_vision
+    environment:
+      # Vision model via LiteLLM REST (alias as-is; thinking OFF in code).
+      # Cap: 5 images per request (probed 2026-08-27) — server batches.
+      - LITELLM_API_BASE=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - VISION_MODEL=matrix-coder
+      # Artifacts: NON-public (no Caddy route). rw vision dir nested in the
+      # ro workspace mount; sources read from media/ + ai-kb/raw/ (ro).
+      - VISION_OUTPUT_ROOT=/data/workspace/vision
+      - VISION_ALLOWED_ROOTS=/data/media,/data/workspace,/data/ai-kb/raw
+    volumes:
+      - /home/chuck/data/workspace/vision:/data/workspace/vision
+      - /home/chuck/data/media:/data/media:ro
+      - /home/chuck/data/workspace:/data/workspace:ro
+      - /home/chuck/data/ai-kb/raw:/data/ai-kb/raw:ro
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:

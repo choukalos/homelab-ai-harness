@@ -132,7 +132,7 @@ NOT committed to GitHub.
     compose.edge.yml
     compose.portal.yml   # Hugo portal (git-sync + static server), choukalos.com
     compose.ai-core.yml
-    compose.mcp.yml          # MCP server containers (6 active)
+    compose.mcp.yml          # MCP server containers (9 active)
     compose.skill-runner.yml # Skill orchestration API (port 8091)
     compose.invest-hub.yml
     compose.monitoring.yml
@@ -420,7 +420,7 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **streamable HTTP** transport.
 
-**Eight MCP servers are currently deployed** via `compose.mcp.yml` (29 tools total).
+**Nine MCP servers are currently deployed** via `compose.mcp.yml` (46 tools total).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -432,6 +432,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_homelab_status` | Docker API + Victoria Metrics | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_media` | Media generation via GPU-host media-pipeline | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_vision` | Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
@@ -445,6 +446,7 @@ Skill Runner (:8091)  →  Streamable HTTP  →  mcp_search container
                                            mcp_homelab_status container
                                            mcp_filesystem container
                                            mcp_media container
+                                           mcp_vision container
 
 LiteLLM (:4000)       →  Streamable HTTP  →  same MCP servers (for tool routing)
 ```
