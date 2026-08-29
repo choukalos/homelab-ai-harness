@@ -10,7 +10,7 @@ Purpose:
 
 Workflow:
   1. Validate inputs (query is required).
-  2. Build the tools array (search_web, family_kb_search, family_kb_ask,
+  2. Build the tools array (search_web, kb_search,
      docker_status) in LiteLLM/OpenAI function-calling format.
   3. Call litellm_client.chat_completion with system prompt + tools.
   4. If the model requests tool calls, execute each tool via
@@ -61,8 +61,7 @@ logger = logging.getLogger("skill.siri_chat")
 # Maps each tool name to the MCP server ID that provides it.
 TOOL_SERVER_MAP: dict[str, str] = {
     "search_web": "mcp_search",
-    "family_kb_search": "mcp_knowledge",
-    "family_kb_ask": "mcp_knowledge",
+    "kb_search": "mcp_knowledge",
     "docker_ps": "mcp_homelab_status",
     "system_info": "mcp_homelab_status",
 }
@@ -103,8 +102,8 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     Rules:
     - Give SHORT, DIRECT answers (one or two sentences when possible).
     - Use plain language suitable for spoken playback.
-    - When you have access to tools (search_web, family_kb_search,
-      family_kb_ask, docker_status), USE them to get accurate information
+    - When you have access to tools (search_web, kb_search,
+      docker_status), USE them to get accurate information
       rather than guessing.
     - Always cite your sources when you use a tool — briefly mention
       where the information came from.
@@ -146,11 +145,13 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "family_kb_search",
+            "name": "kb_search",
             "description": (
-                "Search the family knowledge base for stored notes, "
-                "memories, and reference material. Use this for personal "
-                "facts, family info, or previously saved content."
+                "Search the family knowledge base (stored documents, notes, "
+                "and reference material) with semantic vector search. Use "
+                "this for personal facts, family info, or previously saved "
+                "content. Optionally restrict to one KB (e.g. 'gaming', "
+                "'house', 'guitar')."
             ),
             "parameters": {
                 "type": "object",
@@ -158,30 +159,16 @@ TOOLS = [
                     "query": {
                         "type": "string",
                         "description": "The search query for the knowledge base.",
-                    }
+                    },
+                    "kb": {
+                        "type": "string",
+                        "description": (
+                            "Optional: one KB to search (e.g. 'gaming'). "
+                            "Omit to search all KBs."
+                        ),
+                    },
                 },
                 "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "family_kb_ask",
-            "description": (
-                "Ask a natural-language question to the family knowledge base. "
-                "Use this for questions that require semantic understanding "
-                "of stored content, not just keyword matching."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The natural-language question to ask.",
-                    }
-                },
-                "required": ["question"],
             },
         },
     },
@@ -291,7 +278,7 @@ def _execute_tool_calls(
                 )
                 result_text = _format_tool_result(func_name, result)
                 # Track sources
-                if func_name in ("search_web", "family_kb_search"):
+                if func_name in ("search_web", "kb_search"):
                     result_text_sources = _extract_urls_from_result(result)
                     sources.extend(result_text_sources)
             except Exception as exc:

@@ -44,7 +44,6 @@ Runs:
 - Cloudflare Tunnel
 - Crawl4AI
 - SearXNG
-- MkDocs family wiki
 - Presenton (presentation generation)
 - Victoria Metrics (Prometheus-compatible metrics collection)
 - Grafana (dashboards)
@@ -99,7 +98,6 @@ Contains:
 - Dockerfiles
 - AI harness code
 - Caddy config
-- MkDocs config
 
 Safe to commit to GitHub.
 
@@ -167,7 +165,6 @@ NOT committed to GitHub.
     investment_brief/       # Portfolio + market analysis
     morning_brief/          # Daily news summary
     homelab_report/         # Infrastructure health report
-    family_kb_ingest/       # KB ingestion (approval gate)
     code_review/            # Code quality review
     repo_maintenance/       # Repo hygiene (approval gate)
     siri_chat/              # Enhanced chat with MCP tool access
@@ -240,24 +237,23 @@ NOT committed to GitHub.
 
 # Knowledge Base Design
 
-Family/private knowledge base is intentionally LOCAL ONLY.
+The family knowledge base is intentionally LOCAL ONLY.
 
-The KB repo is:
+**v2 (2026-08-29):** the KB is a set of Qdrant `kb_*` collections
+(one per domain — `kb_gaming`, `kb_house`, `kb_guitar`, ...), created
+on the fly by `mcp_knowledge`. There is no watcher or pipeline: the
+LLM is the operator and ingests via `kb_ingest_file` / `kb_add_fact`.
 
-```text
-/home/chuck/data/ai-kb/repo
-```
-
-It is:
-- Git initialized locally
-- NOT pushed to GitHub
-- NOT exposed publicly
-
-Purpose:
-- retain version history
-- support AI-assisted edits
-- allow rollback/review
-- maintain privacy
+- Source files: `/home/chuck/data/ai-kb/raw/` (canonical drop point);
+  `/home/chuck/data/media` and `/home/chuck/data/workspace` are also
+  readable as sources
+- Embeddings: 768-dim (nomic via LiteLLM), Cosine distance
+- Vision fallback: image/table pages transcribed via `matrix-coder`
+- Backups: `/home/chuck/data/backups/kb/` (Qdrant snapshots + source
+  tarball) via `scripts/backup-kb.sh` — run at phase gates / before KB
+  storage changes
+- Retired 2026-08-29: legacy `family_kb` collection (384-dim,
+  snapshotted + dropped) and the MkDocs family-wiki container
 
 ---
 
@@ -425,7 +421,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
 | `mcp_search` | SearXNG | ✅ Implemented | ✅ Container on `ai-net` |
-| `mcp_knowledge` | Qdrant | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_knowledge` | Qdrant (kb_* collections) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_crawl` | Crawl4AI | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_filesystem_readonly` | Local filesystem | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_mysql` | MySQL (InvestorHub) | ✅ Implemented | ✅ Container on `ai-net` |
@@ -507,7 +503,6 @@ Skills compose MCP tools into controlled agentic workflows. The skill runner cal
 | `investment_brief` | mcp_mysql, mcp_search | No | CLI, Pi, n8n | Portfolio status, dividend highlights, market news |
 | `morning_brief` | mcp_search | No | CLI, Pi, n8n | Daily news summary across interest topics |
 | `homelab_report` | mcp_homelab_status | No | CLI, Pi, n8n | Infrastructure health report (containers, system) |
-| `family_kb_ingest` | — | **Yes** | CLI, Pi, n8n | Curated KB ingestion into Qdrant |
 | `code_review` | — | No | CLI, Pi, n8n | Code quality review |
 | `repo_maintenance` | — | **Yes** | CLI, Pi, n8n | Repository health, cleanup |
 | `siri_chat` | mcp_search, mcp_knowledge, mcp_homelab_status | No | Siri | Enhanced chat with MCP tool access |
@@ -518,7 +513,7 @@ Skills compose MCP tools into controlled agentic workflows. The skill runner cal
 | `list-presentations` | Presenton API | No | Siri, CLI | List presentations with view/edit URLs |
 | `list-images` | Local filesystem | No | Siri, CLI | List generated images with accessible URLs |
 
-Skills with **approval gates** (`family_kb_ingest`, `repo_maintenance`) pause at `awaiting_approval` until explicitly approved via the API.
+Skills with **approval gates** (`repo_maintenance`) pause at `awaiting_approval` until explicitly approved via the API.
 
 ---
 
@@ -543,7 +538,6 @@ Connected to LiteLLM.
 | SearXNG | Privacy-first web search | ✅ Running |
 | Crawl4AI | Web page extraction | ✅ Running |
 | Redis | Queues/cache (Celery broker) | ✅ Running |
-| MkDocs | Family wiki | ✅ Running |
 | Presenton | Presentation generation | ✅ Running |
 | Victoria Metrics | Prometheus-compatible metrics | ✅ Running |
 | Grafana | Dashboard visualization | ✅ Running (LAN) |
@@ -743,7 +737,6 @@ AI infrastructure (separate Docker Compose project `ai-core`):
 - Redis
 - SearXNG
 - Crawl4AI
-- MkDocs family wiki
 
 Rarely changes. Services communicate via the shared `ai-net` network.
 
@@ -753,7 +746,7 @@ Rarely changes. Services communicate via the shared `ai-net` network.
 
 MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_search` — Web search via SearXNG
-- `mcp_knowledge` — KB retrieval via Qdrant
+- `mcp_knowledge` — Family KB (Qdrant kb_* collections): ingest, search, correct, forget, backup
 - `mcp_crawl` — Web page extraction via Crawl4AI
 - `mcp_filesystem_readonly` — Read-only filesystem access
 - `mcp_mysql` — Database queries via MySQL (InvestorHub): read-only SELECTs, NL-to-SQL with full schema intelligence (join graph, curated domain hints, data samples)

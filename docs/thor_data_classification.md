@@ -2,12 +2,14 @@
 
 > Phase 4.2 — Define data classification rules and knowledge base ingestion policy.
 > Date: 2026-07-03 (design baseline)
-> Status: **Classification rules still apply.** Current KB reality (2026-08-28):
-> `family_kb` (384-dim, 18 curated docs — legacy embeddings) and
+> Status: **Classification rules still apply.** Current KB reality (2026-08-29):
+> the family KB is a set of Qdrant `kb_*` collections (one per domain,
+> 768-dim nomic, created on the fly by `mcp_knowledge` v2) plus
 > `mem0_memories` (768-dim, skill-runner long-term memory). Ingestion is
-> manual via the Qdrant API with the admin key; the `family_kb_ingest` skill
-> is broken (targets the decommissioned harness). See
-> `docs/thor_mcp_architecture.md` §mcp_knowledge for the D6 gaps.
+> LLM-driven via `kb_ingest_file` / `kb_add_fact` (canonical drop point
+> `/home/chuck/data/ai-kb/raw/`); backups via `scripts/backup-kb.sh`.
+> Legacy `family_kb` (384-dim) and the `family_kb_ingest` skill were
+> retired 2026-08-29 (snapshotted + dropped). See `mcp/servers/knowledge/README.md`.
 
 ---
 

@@ -5,13 +5,23 @@
 > Status: **Superseded** — integration long since complete. July status kept
 > for reference; current-state deltas marked inline.
 
-**Current state (2026-08-28):**
+**Current state (2026-08-29):**
 - Skill runner is in production (`THOR_IP:8091`), 13 skills, `/api/chat`
   gateway, long-term memory (Phases 0–9 complete — see
   `docs/memory/IMPLEMENTATION_STATE.md`), admin REST + CLI + `/metrics`.
-- 8 MCP servers live in LiteLLM (streamable-http, **41 tools** — was 11/4 servers; 34 → 44 → 40 → 41 on 2026-08-28: media-pipeline tools replaced the legacy media tools, then `mcp_mysql` gained `schema_overview`).
+- 9 MCP servers live in LiteLLM (streamable-http, **53 tools** — was 11/4
+  servers; 34 → 44 → 40 → 41 on 2026-08-28: media-pipeline tools replaced
+  the legacy media tools, then `mcp_mysql` gained `schema_overview`; 2026-08-29:
+  `mcp_knowledge` v2 rebuilt with 11 KB tools).
 - Images pinned: `litellm:v1.92.0`, `qdrant:v1.18.1` (2026-08-28, Phase 9).
-- Qdrant JWT RBAC on; `mcp_knowledge` on a read-only key.
+- Qdrant JWT RBAC on; `mcp_knowledge` v2 on a global-`m` key (sub=
+  mcp-knowledge) — the `kb_` prefix code-gate is the security boundary
+  (per-collection scoping cannot cover on-the-fly collection creation).
+- **Family KB v2 (2026-08-29):** Qdrant `kb_*` collections (one per
+  domain, 768-dim, created on the fly); LLM-driven ingest via
+  `kb_ingest_file` / `kb_add_fact`; legacy `family_kb` (384-dim) +
+  family-wiki (MkDocs) retired; `family_kb_ingest` skill retired;
+  backups via `scripts/backup-kb.sh` (restore E2E-verified).
 - Backup gap CLOSED: `scripts/backup-memory.sh` (.env + Qdrant snapshot,
   restore-tested) + git for config/code.
 - Per-key MCP restrictions: **dropped by decision 2026-08-25** —

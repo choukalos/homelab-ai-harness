@@ -83,7 +83,11 @@ Decision 1 ("is there ONE normalized gateway all entry points use?") is YES for
 Siri/CLI/jobs (skill-runner) but NO for OWUI. Consequence: v1 memory covers
 skill-runner channels; OWUI is out of scope (decision §0.2).
 
-**D6 — Knowledge-base quirks (context, not blockers).**
+**D6 — Knowledge-base quirks (context, not blockers).** ✅ RESOLVED
+2026-08-29 by the KB v2 rebuild (`kb-todo.md` K1–K7): `mcp_knowledge` v2
+uses real `kb_*` collections (768-dim nomic, vector search, LLM-driven
+ingest); legacy `family_kb` (384-dim) + family-wiki retired; the
+`family_kb_ingest` skill removed. Original notes kept for history:
 - `mcp_knowledge` allowlists `family_curated`/`homelab_curated`/`coding_curated`,
   but the only real Qdrant collection is `family_kb` → `kb_search` currently finds
   nothing. Separate workstream.
@@ -102,7 +106,10 @@ cut over cleanly (PDF §4).
 **D8 — LiteLLM image is unpinned** (`ghcr.io/berriai/litellm:main-latest`).
 Phase 9 hardening should pin it (config header mentions 1.92.0 as the tested line).
 
-**D9 — Qdrant port 6333 published on 0.0.0.0** — decision §0.5: leave as-is for v1; revisit with the family KB work.
+**D9 — Qdrant port 6333 published on 0.0.0.0** — decision §0.5: leave as-is
+for v1; revisit with the family KB work. **Revisited 2026-08-29 (KB work
+done): owner decision — LEAVE as-is for now** (other services/tooling use
+the port); stays open, tracked in `kb-todo.md` Q7.
 
 **D10 — Scheduler/jobs have no identity.** `dispatch_job()` hardcodes
 `requester="siri"`. PDF Phase 3 requires a service identity so jobs don't pollute

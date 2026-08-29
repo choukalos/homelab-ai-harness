@@ -25,11 +25,11 @@ The one invariant this runbook protects:
 - So: new model ⇒ new collection. The old collection is left intact (read-only
   in practice) until the rollback window closes.
 
-Current state (2026-08-28):
+Current state (2026-08-29):
 
 | alias | backend | dim | used by |
 |---|---|---|---|
-| `embeddings` | `ollama/nomic-embed-text` | 768 | KB path (`family_kb`, 384-dim legacy — separate) |
+| `embeddings` | `ollama/nomic-embed-text` | 768 | KB path (legacy `family_kb` 384-dim collection retired 2026-08-29; new `kb_*` collections are 768-dim — see `kb-todo.md`) |
 | `homelab-embedding-v1` | `ollama/nomic-embed-text` | 768 | long-term memory (`mem0_memories`) |
 
 ---

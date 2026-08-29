@@ -124,8 +124,8 @@
   doc-only, dry-run verified). (5) Feature-flag review:
   `MEMORY_ENABLED=false` disables the entire path end-to-end (live
   global-off check in the regression suite).
-- Last updated: 2026-08-28 (Phase 9 COMPLETE — items 2–5 verified live
-  post-rebuild; old LiteLLM key deleted).
+- Last updated: 2026-08-29 (Phase 9 COMPLETE; KB v2 rebuild closed D6 —
+  see 2026-08-29 phase-log entry; D9 Qdrant exposure left open per owner).
 
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
@@ -835,6 +835,29 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
   Prometheus (it scrapes current values + computes rates). No persistence.
 
 ## Phase log
+
+- **2026-08-29** — **KB v2 rebuild COMPLETE (separate workstream,
+  `kb-todo.md` K1–K7) — D6 CLOSED; D9 left open per owner.**
+  `mcp_knowledge` v2: Qdrant `kb_*` collections (one per domain, 768-dim
+  nomic, created on the fly, manifest points, deterministic point IDs);
+  11 tools (`kb_search` vector+keyword, `kb_ingest_file` LLM-driven with
+  vision fallback, `kb_add_fact`, `kb_correct`, `kb_forget`, `kb_backup`,
+  ...). Security: `kb_` prefix code-gate on every Qdrant operation is the
+  boundary (server runs a global-`m` key `sub=mcp-knowledge` — per-
+  collection scoping cannot cover on-the-fly collection creation, proven
+  2026-08-29); `mem0_memories` unreachable by construction. Legacy
+  `family_kb` (384-dim, 18 points) snapshotted to
+  `/home/chuck/data/backups/family_kb-20260828-2233.snapshot` then DROPPED
+  (D6's "allowlist ≠ real collections" gap and the 384/768-dim mismatch are
+  both gone); family-wiki (MkDocs) + `family_kb_ingest` skill retired.
+  Restore E2E verified (`kb_gaming` snapshot → disposable node → 589/589
+  points byte-identical); `scripts/backup-kb.sh` added (OPS backup path,
+  admin key, no cron). Memory regression suite expected unaffected (KB
+  work is prefix-gated; re-run at K7 verification).
+  **D9 (Qdrant port 6333 on 0.0.0.0 + TLS) stays OPEN** — owner decision
+  2026-08-29: leave as-is for now (other services/tooling use it); not a
+  K-phase, tracked in `kb-todo.md` Q7. Commits: `82a6274a` (v2 + retire),
+  `6f84f664` (backup script + restore E2E).
 
 - **2026-08-28** — **Phase 9 items 2–5 COMPLETE + verified live —
   PHASE 9 GATE MET; memory project (Phases 0–9) DONE.** Chuck ran the

@@ -5,17 +5,28 @@
 > Status: Historical planning doc. The table below reflects the July inventory;
 > read the **Current-state delta** first.
 
-## Current-state delta (2026-08-28)
+## Current-state delta (2026-08-29)
 
+- **Family KB v2 (2026-08-29):** `mcp_knowledge` rebuilt — Qdrant `kb_*`
+  collections (one per domain, 768-dim nomic, created on the fly; the
+  `kb_` prefix code-gate is the security boundary), LLM-driven ingest
+  (`kb_ingest_file` / `kb_add_fact`), vision fallback via matrix-coder.
+  Legacy `family_kb` (384-dim) snapshotted + dropped; family-wiki
+  (MkDocs) container removed; `family_kb_ingest` skill retired.
+  Backups: `scripts/backup-kb.sh` → `/home/chuck/data/backups/kb/`.
 - **Images pinned:** `litellm-proxy` `ghcr.io/berriai/litellm:v1.92.0` (was
   `main-latest`), `qdrant` `qdrant/qdrant:v1.18.1` (was `latest`) — memory
   project Phase 9, verified live.
 - **Qdrant auth enabled:** `JWT_RBAC=true`. Three scoped credentials:
   `QDRANT_ADMIN_API_KEY` (OPS-only — backups/ops scripts),
   `QDRANT_READ_ONLY_API_KEY` (mcp_knowledge), scoped JWT (skill-runner memory,
-  `mem0_memories` rw, no expiry). Collections: `family_kb` (384-dim, 18 pts),
-  `mem0_memories` (768-dim, Cosine — long-term memory), `mem0migrations` (empty).
-  Port 0.0.0.0:6333 unchanged (decision §0.5; revisit with family-KB work).
+  `mem0_memories` rw, no expiry). Collections (2026-08-29): `mem0_memories`
+  (768-dim, Cosine — long-term memory), `mem0migrations` (empty), and the
+  family-KB `kb_*` collections (`kb_family`, `kb_gaming`, `kb_guitar`,
+  `kb_house`, `kb_media_test`, `kb_travel`, `kb_vehicles` — 614 points;
+  `mcp_knowledge` uses a global-`m` JWT, boundary enforced by the `kb_`
+  prefix code-gate). Legacy `family_kb` (384-dim) dropped 2026-08-29.
+  Port 0.0.0.0:6333 unchanged (decision §0.5).
 - **Skill Runner** is the production normalized AI gateway (`THOR_IP:8091`):
   `POST /api/chat` intent dispatch, 13 skills, cron scheduler, 8 MCP dispatch,
   **in-process long-term memory** (Mem0 OSS → Qdrant `mem0_memories`, identity
