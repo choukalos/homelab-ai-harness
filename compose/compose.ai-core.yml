@@ -158,19 +158,6 @@ services:
     volumes:
       - /home/chuck/data/crawl4ai:/app/data
 
-  family-wiki:
-    image: squidfunk/mkdocs-material:latest
-    container_name: family-wiki
-    restart: unless-stopped
-    networks:
-      - ai-net
-    command: serve -a 0.0.0.0:8000
-    ports:
-      - "8011:8000"
-    volumes:
-      - /home/chuck/data/ai-kb/mkdocs.yml:/docs/mkdocs.yml
-      - /home/chuck/data/ai-kb/repo:/docs/docs
-
   presenton:
     image: ghcr.io/presenton/presenton:latest
     container_name: presenton
