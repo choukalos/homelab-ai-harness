@@ -15,7 +15,6 @@ See [runner/](runner/) for implementation.
 | [investment_brief](investment_brief/) | | Stock/investment analysis |
 | [code_review](code_review/) | | Code review on PRs/files |
 | [repo_maintenance](repo_maintenance/) | | Repository health, cleanup |
-| [family_kb_ingest](family_kb_ingest/) | | Curated KB ingestion (approval gate) |
 | [presentation_build](presentation_build/) | | Presenton integration |
 | [presentation_update](presentation_update/) | | Update existing presentations |
 | [morning_brief](morning_brief/) | | Daily summary (weather, news, status) |

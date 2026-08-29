@@ -249,7 +249,6 @@ _SKILL_TIMEOUTS = {
     "morning_brief": 60,
     "homelab_report": 60,
     "investment_brief": 60,
-    "family_kb_ingest": 60,
     "code_review": 120,
     "repo_maintenance": 120,
 }
@@ -416,7 +415,6 @@ KNOWN_SKILLS = [
     "presentation_build",
     "code_review",
     "repo_maintenance",
-    "family_kb_ingest",
     "morning_brief",
     "homelab_report",
     "demo_workflow",
@@ -1161,7 +1159,6 @@ def _artifact_subdir_for_skill(skill: str) -> Optional[str]:
         "morning_brief": "homelab_reports",
         "homelab_report": "homelab_reports",
         "siri_ask": "siri_outputs",
-        "family_kb_ingest": None,  # ingests into Qdrant, no file artifact
         "demo_workflow": "presentations",
     }
     return mapping.get(skill)
@@ -2315,7 +2312,7 @@ async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobRes
     # Approval gate: if the skill requires approval, pause here
     # In skeleton form, no skills require approval by default.
     # Phase 9 will add per-skill approval gate configuration.
-    if skill_name in ("family_kb_ingest", "repo_maintenance"):
+    if skill_name in ("repo_maintenance",):
         job.status = JobStatus.awaiting_approval
         job.add_log("Awaiting approval gate")
         jobs[job.job_id] = job

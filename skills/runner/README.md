@@ -122,7 +122,6 @@ The runner recognizes these skill names (defined in Phase 4.6):
 - `presentation_update` — Update existing presentations
 - `code_review` — Code quality review
 - `repo_maintenance` — Repository hygiene (approval gate)
-- `family_kb_ingest` — KB ingestion (approval gate)
 - `morning_brief` — Daily morning briefing
 - `homelab_report` — Homelab health report
 - `siri_chat` — Enhanced chat with MCP tool access
@@ -140,7 +139,7 @@ These are handled directly by the chat gateway via `/api/chat`:
 
 All listing intents dispatch asynchronously and return a `job_id` for polling.
 
-Skills with approval gates: `family_kb_ingest`, `repo_maintenance`
+Skills with approval gates: `repo_maintenance`
 
 ## Running Modes
 

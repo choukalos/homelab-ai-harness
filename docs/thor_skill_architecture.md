@@ -197,25 +197,8 @@ GET  /skills/jobs/{job_id}/artifact  — Retrieve artifact
 
 ---
 
-### 7. `family_kb_ingest`
+### 7. `morning_brief`
 
-| Field | Value |
-|---|---|
-| **Purpose** | Ingest curated files into the knowledge base. |
-| **Inputs** | `file_paths` (list of strings), `collection` (family_curated/homelab_curated/etc.) |
-| **Outputs** | Ingestion summary: files processed, chunks created, collection updated |
-| **Required tools** | `mcp_knowledge` (ingest), embedding model |
-| **Required model alias** | `local/embed` |
-| **Expected runtime** | 1-5 minutes |
-| **Approval gates** | Manual approval required before ingestion |
-| **Artifact path** | None (ingests into Qdrant, not media) |
-| **Logging** | Files ingested, collection, chunk count, model used |
-| **Rollback** | Delete chunks from collection on failure |
-| **Channel entry points** | CLI, n8n |
-
----
-
-### 8. `morning_brief`
 
 | Field | Value |
 |---|---|
@@ -233,7 +216,7 @@ GET  /skills/jobs/{job_id}/artifact  — Retrieve artifact
 
 ---
 
-### 9. `homelab_report`
+### 8. `homelab_report`
 
 | Field | Value |
 |---|---|

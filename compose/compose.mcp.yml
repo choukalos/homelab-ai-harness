@@ -12,13 +12,29 @@ services:
     container_name: mcp_knowledge
     environment:
       - QDRANT_URL=http://qdrant:6333
-      # Phase 9 least-privilege: Qdrant now requires auth. This server is
-      # read-only by design → the instance read-only key (not the admin key).
-      - QDRANT_API_KEY=${QDRANT_READ_ONLY_API_KEY}
-      - QDRANT_TIMEOUT=15
+      # KB rebuild (2026-08-29): full KB server (read + write). KB_API_KEY is
+      # a global-`m` Qdrant JWT (sub=mcp-knowledge) — per-collection scoping
+      # cannot cover on-the-fly kb_* collections (proven: Qdrant 403 on
+      # collection create). The `kb_` prefix gate in code is the boundary.
+      - KB_API_KEY=${KB_API_KEY}
+      # LiteLLM for embeddings (768-dim nomic) + vision fallback (matrix-coder).
+      - LITELLM_API_BASE=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - EMBED_MODEL=embeddings
+      - VISION_MODEL=matrix-coder
+      # Source-path allowlist for kb_ingest_file (container paths).
+      - KB_ALLOWED_ROOTS=/data/media,/data/workspace,/data/ai-kb/raw
+      # Writable backup target for kb_backup (host: /home/chuck/data/backups/kb).
+      - KB_BACKUP_DIR=/backups/kb
+      - QDRANT_TIMEOUT=60
     restart: unless-stopped
     networks:
       - ai-net
+    volumes:
+      - /home/chuck/data/ai-kb/raw:/data/ai-kb/raw:ro
+      - /home/chuck/data/media:/data/media:ro
+      - /home/chuck/data/workspace:/data/workspace:ro
+      - /home/chuck/data/backups/kb:/backups/kb:rw
 
   mcp_search:
     build:
