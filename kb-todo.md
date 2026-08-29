@@ -2,8 +2,10 @@
 
 > Planning doc for the KB/knowledge workstream (post-memory-project).
 > Companion to `blog-todo.md` style: discovered state → decisions → phases → questions.
-> Owner: chuck. Last updated: 2026-08-28 (K0 discovery + owner decision rounds 1–2 locked;
-> `mcp_vision` A0–A3 completed — batched LiteLLM reload staged).
+> Owner: chuck. Last updated: 2026-08-29 (K6 backup item done —
+> `scripts/backup-kb.sh` + restore E2E verified; prior: K0 discovery +
+> owner decision rounds 1–2 locked, `mcp_vision` A0–A3 completed —
+> batched LiteLLM reload staged).
 
 ---
 
@@ -386,9 +388,28 @@ hardening item (not a K-phase).
       confirm-gate negative test (no delete without confirm)
 
 ### K6. Backup + removals + docs
-- [ ] `kb_backup` tool + `scripts/backup-kb.sh` + restore test
+- [x] `kb_backup` tool + `scripts/backup-kb.sh` + restore test
       (throwaway Qdrant, like memory's); scope: snapshot of all `kb_*`
-      + optional source tar (owner Q6: yes)
+      + optional source tar (owner Q6: yes) — **backup item DONE
+      2026-08-29**:
+      - `scripts/backup-kb.sh` (OPS credential holder — ADMIN key from
+        env/`.env`, works if the mcp_knowledge container is down):
+        snapshots every `kb_*` collection via `docker exec qdrant cat`
+        (Qdrant writes snapshots inside the container, ephemeral) +
+        tars exactly the ingested source files (unique payload
+        `source` values across all `kb_*`, same semantics as the
+        `kb_backup` MCP tool; container roots → host roots). 7/7
+        collections, 7/7 source files, ≈300 MB per set (media
+        sources dominate).
+      - Restore E2E verified: `kb_gaming` snapshot recovered into
+        throwaway `qdrant/qdrant:v1.18.1` (port 16334, snapshot
+        mounted ro) via `PUT .../snapshots/recover` — `priority`
+        MUST be `"snapshot"` on an empty node (default `"replica"`
+        restores an EMPTY collection). Full-scroll compare vs
+        production: 589/589 points, id + payload + vectors
+        byte-identical.
+      - Run manually (no cron in v1): before any KB storage change
+        and at phase gates.
 - [ ] Remove `family-wiki` container + compose block (owner restarts
       ai-core stack)
 - [ ] Clean `/home/chuck/data/ai-kb/` — delete everything except `raw/`
