@@ -2,10 +2,10 @@
 
 > Planning doc for the KB/knowledge workstream (post-memory-project).
 > Companion to `blog-todo.md` style: discovered state → decisions → phases → questions.
-> Owner: chuck. Last updated: 2026-08-29 (K6 backup item done —
-> `scripts/backup-kb.sh` + restore E2E verified; prior: K0 discovery +
-> owner decision rounds 1–2 locked, `mcp_vision` A0–A3 completed —
-> batched LiteLLM reload staged).
+> Owner: chuck. Last updated: 2026-08-29 (**K7 COMPLETE — all phases K0–K7 done**;
+> `scripts/backup-kb.sh` + restore E2E verified, docs sweep committed `ddf3c8e7`,
+> verification green — see K7; prior: K0 discovery + owner decision rounds 1–2
+> locked, `mcp_vision` A0–A3 completed — batched LiteLLM reload staged).
 
 ---
 
@@ -410,27 +410,72 @@ hardening item (not a K-phase).
         byte-identical.
       - Run manually (no cron in v1): before any KB storage change
         and at phase gates.
-- [ ] Remove `family-wiki` container + compose block (owner restarts
-      ai-core stack)
-- [ ] Clean `/home/chuck/data/ai-kb/` — delete everything except `raw/`
-      (owner Q10)
-- [ ] Retire + delete `family_kb_ingest` skill (owner Q9)
-- [ ] Docs: README, thor_ai_inventory, thor_data_classification,
+- [x] Remove `family-wiki` container + compose block — **DONE 2026-08-29**
+      (commit `82a6274a`; container not running, compose block removed)
+- [x] Clean `/home/chuck/data/ai-kb/` — delete everything except `raw/`
+      (owner Q10) — **DONE 2026-08-29** (only `raw/` remains)
+- [x] Retire + delete `family_kb_ingest` skill (owner Q9) — **DONE
+      2026-08-29** (commit `82a6274a`)
+- [x] Docs: README, thor_ai_inventory, thor_data_classification,
       thor_skill_architecture, memory IMPLEMENTATION_STATE (D6 closed,
-      D9 left open per owner)
+      D9 left open per owner) — **DONE 2026-08-29** (commit `ddf3c8e7`:
+      README + thor docs current-state sections + memory_todo D6/D9 +
+      IMPLEMENTATION_STATE 2026-08-29 entry; dated historical entries left
+      as-is; siri_chat `kb_search` tool fix + regression-test update
+      included)
 
-### K7. Verification + handoff
-- [ ] Memory isolation: full `scripts/memory-regression.sh` 70/70 after
-      all KB work; mem0 counts unchanged
-- [ ] Code-gate proof: unit tests + live probe that mcp_knowledge rejects
-      any non-`kb_` collection (incl. `mem0_memories`) at the tool layer;
-      **Qdrant audit-log scan: zero `sub=mcp-knowledge` operations on
-      non-`kb_` collections** (the KB key is global-`m` by necessity —
-      §3.1 — so the code gate is the boundary; the audit log proves it)
-- [ ] Auth matrix: read-only key 403 on KB writes; no-key 401; memory
-      JWT still 403 on `kb_*` (unchanged)
-- [ ] No secrets in payloads/logs; no internal leakage
-- [ ] Update this file + commit; handoff notes
+### K7. Verification + handoff — **DONE (2026-08-29)**
+- [x] Memory isolation: full `scripts/memory-regression.sh` 70/70 after
+      all KB work; mem0 counts unchanged — **PASS (suite green + Qdrant
+      clean)**: 70/70 checks, `mem0_memories=0`, `family_kb` 404 (absent)
+- [x] Code-gate proof: unit tests (57/57 incl. TestPrefixGate +
+      TestToolLevelGate) + live probe that mcp_knowledge rejects any
+      non-`kb_` collection (incl. `mem0_memories`) at the tool layer
+      (`kb='mem0_memories'` → friendly note, results=0, no Qdrant op on
+      `mem0_memories`); **Qdrant audit-log scan: zero `sub=mcp-knowledge`
+      operations on non-`kb_` collections** — scanned the qdrant actix
+      access log (full v2 window, 2026-08-28T13:35 → now): every
+      collection operation from the mcp_knowledge container IP
+      (172.18.0.5) targets `kb_*` only; the only non-`kb_` paths from that
+      IP are `GET /collections` (listing) and v1-era allowlist probes
+      (`family_curated`/`homelab_curated`/`coding_curated` — 404, no
+      writes). Adversarial `kb=mem0_memories` attempts produced only
+      `kb_mem0_memories` (slugified, distinct collection) 404s on the
+      legacy create path — no `kb_mem0_memories` collection exists and
+      `mem0_memories` was never touched. Live collection inventory:
+      `mem0_memories` + `mem0migrations` (mem0 OSS internal, 0 points,
+      created by skill-runner) + 7 `kb_*` — nothing else.
+- [x] Auth matrix (live, 2026-08-29): no-key 401 ✓; read-only key
+      200 read `kb_gaming` + 403 upsert ("Global manage access is
+      required") ✓; memory JWT 403 on `kb_gaming` ("Access to collection
+      kb_gaming is required") + 403 create-collection ("Global access is
+      required") + 200 on `mem0_memories` ✓ (Qdrant RBAC evaluates before
+      existence — 403 even for dropped collections)
+- [x] No secrets in payloads/logs: full-payload scan of all 9 collections
+      (614 points) against 19 `.env` secret values + generic `sk-`/JWT
+      patterns → clean; mcp_knowledge container logs → no secret values
+      (hostnames only)
+- [x] Update this file + commit; handoff notes — **this entry**
+
+**Handoff notes (2026-08-29):**
+- Commits: `82a6274a` (K1–K5: v2 server + retire family-wiki),
+  `6f84f664` (K6: backup script + restore E2E), `ddf3c8e7` (K6 docs sweep
+  + siri_chat fix + regression-test update).
+- Production state: 7 `kb_*` collections (614 points: kb_gaming 589,
+  kb_guitar 8, kb_house 7, kb_family 3, kb_vehicles 3, kb_media_test 2,
+  kb_travel 2); all have the `ingested_at` datetime payload index;
+  `mcp_knowledge` v2 live (11 tools, global-`m` key + `kb_` prefix gate);
+  legacy `family_kb` dropped (snapshot:
+  `/home/chuck/data/backups/family_kb-20260828-2233.snapshot` +
+  `ai-kb-legacy-20260829.tar.gz`); family-wiki container + the
+  `family_kb_ingest` skill gone.
+- Backups: `/home/chuck/data/backups/kb/20260829-1417/` (7/7 snapshots +
+  297 MB source tarball); run `scripts/backup-kb.sh` before KB storage
+  changes / at phase gates (no cron in v1).
+- Known follow-ups (not blocking): (a) `kb_gaming`'s 588 chunks were
+  chunked with the v1 algorithm — re-ingest to normalize boundaries if
+  desired; (b) D9 (Qdrant 0.0.0.0:6333 + TLS) left open per owner;
+  (c) Phase 6 (optional MCP memory tools) still gated on production use.
 
 ---
 
