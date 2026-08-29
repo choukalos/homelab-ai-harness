@@ -24,7 +24,7 @@ tools:
   - presenton_api
   - model_chat
   - mcp_knowledge
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/presentations/
 approval_gates: []
 channels: [cli, siri, n8n]

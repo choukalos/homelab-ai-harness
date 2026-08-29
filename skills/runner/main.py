@@ -177,6 +177,17 @@ class JobStatus(str, Enum):
     failed = "failed"
     awaiting_approval = "awaiting_approval"
     cancelled = "cancelled"
+    interrupted = "interrupted"
+
+
+# Terminal job states (a job in one of these will not change again). Used by
+# the durable job index to mark in-flight jobs "interrupted" on restart.
+_TERMINAL_JOB_STATUSES = {
+    JobStatus.completed,
+    JobStatus.failed,
+    JobStatus.cancelled,
+    JobStatus.interrupted,
+}
 
 
 class Job(BaseModel):
@@ -216,9 +227,166 @@ class Job(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# In-memory job store (dev only — no database)
+# Job store: in-memory fast path + durable MySQL backing store
 # ---------------------------------------------------------------------------
+# The in-memory dict is the hot path (zero-latency reads inside a request).
+# The MySQL table (skill_jobs in the `homelab` DB) is a write-through durable
+# index so that `GET /skills/jobs/{id}` survives a runner restart. The index is
+# best-effort: if MySQL is unreachable (e.g. dev, no creds) the runner degrades
+# gracefully to in-memory-only (the previous behaviour) and never crashes.
+#
+# Credentials come from the homelab .env: AI_DB_USER / AI_DB_PASS / AI_DB_NAME
+# (=homelab) on MYSQL_DB_HOST (thor.local:3306). The `ai` user has ALL
+# PRIVILEGES on homelab.* so the table is auto-created if missing.
 jobs: dict[str, Job] = {}
+
+_JOBS_DB_AVAILABLE = False
+_JOBS_DB_LOCK = threading.Lock()
+_JOBS_TABLE = "skill_jobs"
+
+
+def _jobs_db_conn():
+    """Open a short-lived MySQL connection for the durable job index."""
+    import pymysql  # lazy: main.py imports on the host without pymysql
+
+    return pymysql.connect(
+        host=os.environ.get("MYSQL_DB_HOST", "thor.local"),
+        port=int(os.environ.get("MYSQL_DB_PORT", "3306")),
+        user=os.environ.get("AI_DB_USER", ""),
+        password=os.environ.get("AI_DB_PASS", ""),
+        database=os.environ.get("AI_DB_NAME", "homelab"),
+        charset="utf8mb4",
+        connect_timeout=5,
+        read_timeout=10,
+        write_timeout=10,
+    )
+
+
+def _init_jobs_db() -> None:
+    """Initialise the durable job index (idempotent). Non-fatal on failure."""
+    global _JOBS_DB_AVAILABLE
+    try:
+        with _JOBS_DB_LOCK:
+            conn = _jobs_db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        CREATE TABLE IF NOT EXISTS {_JOBS_TABLE} (
+                            job_id     VARCHAR(64) PRIMARY KEY,
+                            skill      VARCHAR(128) NOT NULL,
+                            status     VARCHAR(32) NOT NULL,
+                            created_at VARCHAR(64) NOT NULL,
+                            updated_at VARCHAR(64) NOT NULL,
+                            data       LONGTEXT NOT NULL
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        """
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        _JOBS_DB_AVAILABLE = True
+        logger.info(
+            "Durable job index ready (MySQL %s.%s)",
+            os.environ.get("AI_DB_NAME", "homelab"),
+            _JOBS_TABLE,
+        )
+    except Exception as exc:  # noqa: BLE001 - job index must never break startup
+        _JOBS_DB_AVAILABLE = False
+        logger.warning(
+            "Durable job index unavailable (MySQL %s: %s); falling back to "
+            "in-memory-only job store.",
+            os.environ.get("AI_DB_NAME", "homelab"),
+            exc,
+        )
+
+
+def _persist_job(job: Job) -> None:
+    """Write-through a job record to the durable index (no-op if unavailable)."""
+    if not _JOBS_DB_AVAILABLE:
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        with _JOBS_DB_LOCK:
+            conn = _jobs_db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        INSERT INTO {_JOBS_TABLE}
+                            (job_id, skill, status, created_at, updated_at, data)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            skill      = VALUES(skill),
+                            status     = VALUES(status),
+                            created_at = VALUES(created_at),
+                            updated_at = VALUES(updated_at),
+                            data       = VALUES(data);
+                        """,
+                        (
+                            job.job_id,
+                            job.skill,
+                            job.status.value,
+                            job.created_at,
+                            now,
+                            job.model_dump_json(),
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+    except Exception as exc:  # noqa: BLE001 - persistence must never break a job
+        logger.warning("Failed to persist job %s: %s", job.job_id, exc)
+
+
+def _hydrate_jobs() -> None:
+    """Load durable job records into the in-memory store on startup.
+
+    Jobs that were in-flight (non-terminal) before a restart are marked
+    `interrupted` so they are queryable with an accurate final state.
+    """
+    if not _JOBS_DB_AVAILABLE:
+        return
+    try:
+        with _JOBS_DB_LOCK:
+            conn = _jobs_db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT data FROM {_JOBS_TABLE} ORDER BY created_at ASC;"
+                    )
+                    rows = cur.fetchall()
+            finally:
+                conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to hydrate jobs from MySQL: %s", exc)
+        return
+
+    loaded = 0
+    interrupted = 0
+    for (data,) in rows:
+        try:
+            job = Job.model_validate_json(data)
+        except Exception as exc:  # noqa: BLE001 - skip a corrupt row, keep going
+            logger.warning("Skipping corrupt job row: %s", exc)
+            continue
+        if job.status not in _TERMINAL_JOB_STATUSES:
+            job.status = JobStatus.interrupted
+            if not job.error:
+                job.error = "Interrupted by runner restart"
+            if not job.completed_at:
+                job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.add_log("Marked interrupted on startup (was in-flight before restart)")
+            _persist_job(job)
+            interrupted += 1
+        jobs[job.job_id] = job
+        loaded += 1
+    logger.info(
+        "Hydrated %d job(s) from durable index (%d marked interrupted).",
+        loaded,
+        interrupted,
+    )
+
 
 # Thread pool for background skill execution
 _exec_pool: Optional[concurrent.futures.ThreadPoolExecutor] = None
@@ -365,6 +533,25 @@ class SkillJobResponse(BaseModel):
     error: Optional[str] = None
 
 
+class SkillInfo(BaseModel):
+    """One skill entry for GET /skills (sourced from skill.yml)."""
+
+    name: str
+    description: Optional[str] = None
+    version: Optional[str] = None
+    model_alias: Optional[str] = None
+    max_runtime: Optional[int] = None
+    channels: list[str] = Field(default_factory=list)
+    inputs: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SkillListResponse(BaseModel):
+    """GET /skills response."""
+
+    skills: list[SkillInfo]
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # Schedule Request/Response Models
 # ---------------------------------------------------------------------------
@@ -481,7 +668,7 @@ class LiteLLMClient:
         Call /v1/chat/completions for LLM text generation.
 
         Args:
-            model: Model alias (e.g. 'local/qwen-coder').
+            model: Model alias (e.g. 'matrix-coder').
             messages: List of {role, content} dicts.
             **kwargs: Additional OpenAI-compatible params (temperature, max_tokens, tools, ...).
 
@@ -997,6 +1184,9 @@ def _execute_skill(job: Job) -> None:
     # Memory identity (Phase 3): log the principal + request correlation.
     # user_id only — raw API key values are never logged.
     job.add_log(f"Identity: user_id={job.user_id} run_id={job.run_id}")
+    # Persist immediately (status=running) so an in-flight job survives a runner
+    # restart: hydrate() will mark it `interrupted` instead of losing it.
+    _persist_job(job)
 
     if job.dry_run:
         job.add_log("DRY RUN — skipping actual execution")
@@ -1148,6 +1338,9 @@ def _execute_skill(job: Job) -> None:
             job.artifact_path = str(ARTIFACT_ROOT / artifact_subdir / art_name)
             job.add_log(f"Artifact path: {job.artifact_path}")
 
+    # Durable job index: write-through the final state (completed/failed/etc.).
+    _persist_job(job)
+
 
 def _artifact_subdir_for_skill(skill: str) -> Optional[str]:
     mapping = {
@@ -1181,6 +1374,12 @@ async def lifespan(app: FastAPI):
     On shutdown: gracefully stop the scheduler thread.
     """
     # --- Startup ---
+    # Durable job index: initialise the SQLite backing store and hydrate the
+    # in-memory store so GET /skills/jobs/{id} survives a runner restart.
+    # Non-fatal: if the DB is unavailable the runner degrades to in-memory-only.
+    _init_jobs_db()
+    _hydrate_jobs()
+
     scheduler.dispatch_fn = _schedule_dispatch_fn
     num_loaded = scheduler.load_config()
     logger.info(
@@ -2283,6 +2482,96 @@ async def _chat_direct(text: str, model: str, memory_enabled: bool = True) -> Ch
         await client.close()
 
 
+# ---------------------------------------------------------------------------
+# Skill discovery (GET /skills)
+# ---------------------------------------------------------------------------
+# Reads each skill's skill.yml manifest and returns name/description/inputs/
+# channels/model_alias/max_runtime. This is the discovery surface for the
+# mcp_skills gateway (list_skills) and any client that wants to enumerate
+# available skills without importing 15 tool schemas.
+
+
+def _skills_base_dirs() -> list[Path]:
+    """Directories scanned for skill subfolders (container + dev)."""
+    return [
+        Path("/app/skills"),
+        Path(__file__).resolve().parent.parent,
+    ]
+
+
+def _parse_skill_yml(path: Path) -> dict:
+    """Parse a skill.yml manifest ({} on any failure)."""
+    try:
+        import yaml  # lazy: keeps module import fast; pyyaml is a direct dep
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:  # noqa: BLE001 - a bad manifest must not 500 the list
+        logger.warning("Failed to parse %s: %s", path, exc)
+        return {}
+
+
+def _list_skills() -> list[SkillInfo]:
+    """Enumerate available skills from their skill.yml manifests."""
+    seen: set[str] = set()
+    out: list[SkillInfo] = []
+    for base in _skills_base_dirs():
+        if not base.is_dir():
+            continue
+        try:
+            entries = sorted(base.iterdir())
+        except OSError:
+            continue
+        for skill_dir in entries:
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if name in seen:
+                continue
+            yml = skill_dir / "skill.yml"
+            if not yml.is_file():
+                continue
+            seen.add(name)
+            data = _parse_skill_yml(yml)
+            max_runtime = data.get("max_runtime")
+            channels = data.get("channels")
+            inputs = data.get("inputs")
+            out.append(
+                SkillInfo(
+                    name=name,
+                    description=data.get("description"),
+                    version=(
+                        str(data.get("version"))
+                        if data.get("version") is not None
+                        else None
+                    ),
+                    model_alias=data.get("model_alias") or None,
+                    max_runtime=max_runtime if isinstance(max_runtime, int) else None,
+                    channels=channels if isinstance(channels, list) else [],
+                    inputs=inputs if isinstance(inputs, list) else [],
+                )
+            )
+    return out
+
+
+@app.get("/skills", response_model=SkillListResponse)
+async def list_skills(x_api_key: Optional[str] = Header(None)) -> SkillListResponse:
+    """
+    List available skills (name, description, inputs, channels, model_alias).
+
+    Auth: same inbound allow-list as /api/chat — enforced when
+    SKILL_RUNNER_API_KEY is set (comma-separated keys); open when unset.
+    This is the discovery endpoint backing the mcp_skills `list_skills` tool.
+    """
+    if SKILL_RUNNER_API_KEY:
+        allowed = [k.strip() for k in SKILL_RUNNER_API_KEY.split(",") if k.strip()]
+        if allowed and x_api_key not in allowed:
+            raise HTTPException(status_code=403, detail="Invalid API key")
+    skills = _list_skills()
+    return SkillListResponse(skills=skills, count=len(skills))
+
+
 @app.post("/skills/{skill_name}")
 async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobResponse:
     """
@@ -2316,6 +2605,7 @@ async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobRes
         job.status = JobStatus.awaiting_approval
         job.add_log("Awaiting approval gate")
         jobs[job.job_id] = job
+        _persist_job(job)
         logger.info("Job %s awaiting approval.", job.job_id)
         return _job_to_response(job)
 
@@ -2409,7 +2699,12 @@ async def cancel_job(job_id: str) -> SkillJobResponse:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    terminal_states = {JobStatus.completed, JobStatus.failed, JobStatus.cancelled}
+    terminal_states = {
+        JobStatus.completed,
+        JobStatus.failed,
+        JobStatus.cancelled,
+        JobStatus.interrupted,
+    }
     if job.status in terminal_states:
         raise HTTPException(
             status_code=400,
@@ -2419,6 +2714,7 @@ async def cancel_job(job_id: str) -> SkillJobResponse:
     job.status = JobStatus.cancelled
     job.completed_at = datetime.now(timezone.utc).isoformat()
     job.add_log("Job cancelled by requester")
+    _persist_job(job)
     logger.info("Job %s cancelled.", job.job_id)
     return _job_to_response(job)
 

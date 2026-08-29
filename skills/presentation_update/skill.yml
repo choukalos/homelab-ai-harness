@@ -13,7 +13,7 @@ inputs:
 tools:
   - presenton_api
   - model_chat
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 approval_gates: []
 channels: [cli, pi, n8n, siri]
 max_runtime: 300  # seconds (5 minutes)

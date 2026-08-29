@@ -10,7 +10,7 @@ inputs:
     description: "Report scope: full (all), containers (Docker only), system (CPU/RAM/disk only)."
 tools:
   - mcp_homelab_status
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/homelab_reports/
 approval_gates: []
 channels: [cli, pi, n8n]

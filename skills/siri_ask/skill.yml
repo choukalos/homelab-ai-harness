@@ -12,7 +12,7 @@ inputs:
     description: "Optional previous conversation context for continuity."
 tools:
   - model_chat
-model_alias: local/qwen-coder
+model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/siri_outputs/
 approval_gates: []
 channels: [siri]
