@@ -14,7 +14,8 @@
 #         scope, secret filtering, prompt-injection boundary, outage
 #         degradation, embedding-dim consistency, Qdrant auth/ACL.
 #   [2/3] verifies Qdrant is left CLEAN afterwards (mem0_memories=0,
-#         family_kb=18) and removes the throwaway container.
+#         family_kb absent — dropped by the KB rebuild 2026-08-29) and
+#         removes the throwaway container.
 #
 # Safe to run repeatedly: uses non-production users (memory_test,
 # memory_test_other) and cleans them up. Does NOT touch the running
@@ -31,7 +32,10 @@ IMAGE="skill-runner:local"
 CONTAINER="memory-regression"
 NETWORK="ai-net"
 QDRANT_HOST_URL="http://localhost:6333"
-EXPECTED_FAMILY_KB=18
+# KB rebuild (2026-08-29): the old 384-dim family_kb collection was DROPPED
+# (snapshot saved to /home/chuck/data/backups/family_kb-<stamp>.snapshot). The
+# clean-state expectation is now that family_kb is ABSENT (404), not 18 points.
+EXPECTED_FAMILY_KB_ABSENT=1
 
 log() { echo "==> $*"; }
 
@@ -92,13 +96,13 @@ log "[2/3] verifying Qdrant left clean"
 CNT_MEM0="$(curl -s -H "api-key: $QDRANT_ADMIN_API_KEY" \
   "$QDRANT_HOST_URL/collections/mem0_memories" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["points_count"])' 2>/dev/null || echo '?')"
-CNT_FKB="$(curl -s -H "api-key: $QDRANT_ADMIN_API_KEY" \
-  "$QDRANT_HOST_URL/collections/family_kb" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["points_count"])' 2>/dev/null || echo '?')"
-echo "    mem0_memories=$CNT_MEM0 (expect 0)   family_kb=$CNT_FKB (expect $EXPECTED_FAMILY_KB)"
+# family_kb should now be ABSENT (dropped by the KB rebuild). 404 = expected.
+FKB_HTTP="$(curl -s -o /dev/null -w '%{http_code}' -H "api-key: $QDRANT_ADMIN_API_KEY" \
+  "$QDRANT_HOST_URL/collections/family_kb")"
+echo "    mem0_memories=$CNT_MEM0 (expect 0)   family_kb HTTP=$FKB_HTTP (expect 404 = absent)"
 CLEAN=0
 [[ "$CNT_MEM0" == "0" ]] || CLEAN=1
-[[ "$CNT_FKB" == "$EXPECTED_FAMILY_KB" ]] || CLEAN=1
+[[ "$FKB_HTTP" == "404" ]] || CLEAN=1
 
 log "[3/3] cleanup + result"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
