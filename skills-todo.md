@@ -183,29 +183,24 @@ losing it. (Completion/approval/cancel paths also persist.)
   manual step remains:** restart LiteLLM to pick up the `mcp_servers` entry
   (config.yml changed).
 
-### W3. SKILL.md wrappers + pi install (item 4) — small
-- New git subfolder `agents-skills/` in homelab-ai-harness: one dir per
-  skill, `agents-skills/<name>/SKILL.md` (standard layout — portable across
-  harnesses; flat root `.md` is a pi-only leniency, avoid).
+### W3. SKILL.md wrappers + pi install (item 4) — **DONE (2026-08-29)**
+
+**Created `agents-skills/`** in the repo — one dir per skill (12 total),
+each with `agents-skills/<hyphenated-name>/SKILL.md` (standard layout):
 - Frontmatter: `name` (hyphenated, e.g. `morning-brief`), `description`
   (from `skill.yml`).
-- Body: how to run it —
-  1. preferred: call the `run_skill` MCP tool (client has `mcp_skills`) —
-     no secrets in the skill file;
-  2. fallback: `curl -X POST http://thor.local:8091/skills/<name>` with
-     `X-API-Key: $SKILL_RUNNER_API_KEY` (user-set env; **no secrets in repo**;
-     aligns with auth_todo.md v2 per-user keys).
-  3. note the skill's declared inputs so the agent maps the short prompt
-     onto them (e.g. interests → "smart home competitors").
-- **Install on pi** (pick one):
-  - `git clone`/existing checkout + settings: `"skills": ["~/homelab/agents-skills"]`
-    in `~/.pi/agent/settings.json`; or
-  - symlink each wrapper dir into `~/.pi/agent/skills/`; or
-  - project-level: `agents-skills/` at repo root + `.pi/settings.json`
-    `skills` entry when running pi from inside the repo.
-- Set `enableSkillCommands: true` → `/skill:morning-brief <prompt>` works.
-- Same files also serve Claude Code / OpenCode / Codex (Agent Skills
-  standard) — e.g. point their skill dirs at the same checkout.
+- Body: how to run it — call the `mcp_skills` `run_skill` MCP tool with the
+  skill's underscore name + prompt; declared inputs table; example.
+
+**Configured pi** (`~/.pi/agent/settings.json`):
+- `enableSkillCommands: true`
+- `skills: ["/home/chuck/homelab/agents-skills"]`
+
+**Remaining manual step**: restart the pi session to pick up the skills.
+After that, `/skill:morning-brief <topic>` works in any pi session.
+
+Same files also serve Claude Code / OpenCode / Codex (Agent Skills standard)
+— point their skill dirs at the same checkout.
 
 ### W4. Skill Hub registration (item 1) — optional, do last
 - Script: for each skill, `POST /claude-code/plugins`
@@ -227,7 +222,7 @@ losing it. (Completion/approval/cancel paths also persist.)
 |---|---|---|
 | A | W1 | **DONE (deployed + verified live, 2026-08-29):** `./homelab.sh rebuild skill-only` run; `GET /skills` (12 skills, auth), a real `morning_brief` job persisted to `skill_jobs`, completed job survives restart, in-flight job → `interrupted`. Does NOT touch LiteLLM. |
 | B | W2 | **DONE (deployed + verified live, 2026-08-29):** `mcp_skills` built + up on `ai-net`; `list_skills`/`run_skill`/`get_skill_job` verified against the running skill-runner. **One manual step remains:** `docker compose -f compose/compose.ai-core.yml restart litellm` (config.yml `mcp_servers` entry added) — the container is up but LiteLLM hasn't picked up the new entry yet. |
-| C | W3 | commit `agents-skills/` to GitHub; edit `~/.pi/agent/settings.json` (`skills` array + `enableSkillCommands`); restart pi session |
+| C | W3 | **DONE** (2026-08-29) — `agents-skills/` generated (12 SKILL.md), pi settings configured (`enableSkillCommands` + `skills` array). Restart pi session to activate. |
 | D | W4 (optional) | run registration script (idempotent; re-POST updates) |
 
 ## 5. Decisions (resolved 2026-08-29)
