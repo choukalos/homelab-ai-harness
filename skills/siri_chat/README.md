@@ -7,8 +7,9 @@ Conversational chat with MCP tool access. Uses web search, family knowledge base
 Provide a full-featured chat experience that goes beyond plain Q&A. The model can autonomously call tools to gather information before answering:
 
 - **Web search** — look up current facts, news, or anything beyond training data
-- **Knowledge base search** — find stored notes, memories, and reference material
-- **Knowledge base ask** — semantic question answering against stored content
+- **Knowledge base search** — semantic vector search across the family KB
+- **Knowledge base document read** — fetch the full text of a KB document
+  when a search snippet isn't enough (specs, sizes, dates)
 - **Docker/homelab status** — check service health and container status
 
 This skill is designed for:
@@ -54,7 +55,9 @@ The skill uses LiteLLM's native function calling to let the model decide which t
 | Tool | MCP Server | Description |
 |---|---|---|
 | `search_web` | `mcp_search` | Web search via SearXNG |
-| `kb_search` | `mcp_knowledge` | Semantic vector search across the family KB (kb_* collections); optional `kb` to restrict to one KB |
+| `kb_search` | `mcp_knowledge` | Semantic vector search across the family KB (kb_* collections); optional `kb` to restrict to one KB; returns short snippets |
+| `kb_get_document` | `mcp_knowledge` | Full text of one KB document (all chunks) — follow up when a `kb_search` snippet lacks the needed detail |
+| `kb_list_documents` | `mcp_knowledge` | List documents in a KB (or all KBs): source, chunks, pages, ingested date |
 | `docker_status` | `mcp_homelab_status` | Check Docker container status |
 
 ## Constraints

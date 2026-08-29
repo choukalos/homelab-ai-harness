@@ -10,8 +10,8 @@ Purpose:
 
 Workflow:
   1. Validate inputs (query is required).
-  2. Build the tools array (search_web, kb_search,
-     docker_status) in LiteLLM/OpenAI function-calling format.
+  2. Build the tools array (search_web, kb_search, kb_get_document,
+     kb_list_documents, docker_status) in LiteLLM/OpenAI function-calling format.
   3. Call litellm_client.chat_completion with system prompt + tools.
   4. If the model requests tool calls, execute each tool via
      litellm_client.mcp_call (mapped to the correct MCP server).
@@ -62,6 +62,8 @@ logger = logging.getLogger("skill.siri_chat")
 TOOL_SERVER_MAP: dict[str, str] = {
     "search_web": "mcp_search",
     "kb_search": "mcp_knowledge",
+    "kb_get_document": "mcp_knowledge",
+    "kb_list_documents": "mcp_knowledge",
     "docker_ps": "mcp_homelab_status",
     "system_info": "mcp_homelab_status",
 }
@@ -103,8 +105,12 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - Give SHORT, DIRECT answers (one or two sentences when possible).
     - Use plain language suitable for spoken playback.
     - When you have access to tools (search_web, kb_search,
-      docker_status), USE them to get accurate information
-      rather than guessing.
+      kb_get_document, kb_list_documents, docker_status), USE them to get
+      accurate information rather than guessing.
+    - KB lookup flow: kb_search returns short snippets. If the answer is
+      not in the snippet but the document looks relevant, call
+      kb_get_document with the result's source + kb to read the full
+      document, then answer from that.
     - Always cite your sources when you use a tool — briefly mention
       where the information came from.
     - If you lack information, say so briefly rather than guessing.
@@ -169,6 +175,64 @@ TOOLS = [
                     },
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "kb_get_document",
+            "description": (
+                "Read the FULL text of a knowledge-base document (all "
+                "chunks, in order). Use this after kb_search when the "
+                "snippet doesn't contain the specific detail you need "
+                "(e.g. a spec, size, or date buried deeper in the "
+                "document). Pass the source and kb from a kb_search result."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "description": (
+                            "The document source path, exactly as shown "
+                            "in a kb_search result."
+                        ),
+                    },
+                    "kb": {
+                        "type": "string",
+                        "description": (
+                            "The KB the document is in (e.g. 'vehicles'), "
+                            "as shown in a kb_search result."
+                        ),
+                    },
+                },
+                "required": ["source", "kb"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "kb_list_documents",
+            "description": (
+                "List the documents in one knowledge base (or all KBs): "
+                "source, chunk count, pages, ingested date. Use this to "
+                "find out what is stored before searching, or to locate "
+                "the exact source name for kb_get_document."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kb": {
+                        "type": "string",
+                        "description": (
+                            "Optional: one KB (e.g. 'vehicles'). "
+                            "Omit to list all KBs."
+                        ),
+                    },
+                },
+                "required": [],
             },
         },
     },
@@ -278,7 +342,7 @@ def _execute_tool_calls(
                 )
                 result_text = _format_tool_result(func_name, result)
                 # Track sources
-                if func_name in ("search_web", "kb_search"):
+                if func_name in ("search_web", "kb_search", "kb_get_document"):
                     result_text_sources = _extract_urls_from_result(result)
                     sources.extend(result_text_sources)
             except Exception as exc:
