@@ -111,3 +111,18 @@ LiteLLM `litellm/config.yml` (owner reload — batched with KB K3's
     allow_all_keys: true
     display_tools_to_model: true
 ```
+## State / future work
+
+> The vision plan file (`mcp-vision-todo.md`, A0–A3, all complete
+> 2026-08-28) was deleted 2026-08-29; this README is the mcp_vision state
+> doc.
+
+- **All phases complete** — server live (5 tools), E2E verified (local mp4,
+  GIF, remote URL, YouTube, raw mode, budget guard, cleanup).
+- **Artifacts**: ephemeral + NON-public; `scripts/cleanup-vision.sh` (manual,
+  no cron — house convention).
+- **Possible future work** (none currently scheduled):
+  - Per-user artifact attribution (today: single household).
+  - Frame-budget auto-tuning per video length (today: fixed guard).
+  - `focus` template expansion (today: general / gameplay / tutorial /
+    commercial).

@@ -111,3 +111,21 @@ mcp_knowledge (python:3.12-slim, :8000)
 - Legacy `family_kb` collection (384-dim) — snapshotted + dropped.
 - `/home/chuck/data/ai-kb/` legacy pipeline dirs — deleted (legacy tar in
   `/home/chuck/data/backups/`); only `raw/` remains.
+
+## Future work / open items
+
+> The KB plan file (`kb-todo.md`, K0–K7, all complete 2026-08-29) was
+> deleted 2026-08-29; this README is the KB state doc.
+
+- **`kb_gaming` chunk boundaries**: its 588 chunks were produced by the v1
+  chunker (page-boundary based). Re-ingest with the v2 paragraph chunker
+  (`kb_delete_document` + `kb_ingest_file`) to normalize — optional, no
+  correctness issue (search quality verified live).
+- **Qdrant exposure (D9, from the memory workstream)**: `0.0.0.0:6333`
+  without TLS — owner decision 2026-08-29: **leave as-is** (other
+  services/tooling use the port). Revisit if the LAN trust model changes.
+- **MCP memory tools (memory workstream Phase 6)**: optional read-only
+  memory tools for MCP clients — gated on a week of production use.
+- **Backups**: `scripts/backup-kb.sh` is manual (no cron) — run at phase
+  gates / before any KB storage change. Latest set:
+  `/home/chuck/data/backups/kb/20260829-1417/` (restore E2E verified).
