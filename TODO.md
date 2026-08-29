@@ -2,21 +2,27 @@
 
 > Updated: 2026-08-29 (memory workstream closed; mcp_vision live; **KB
 > rebuild COMPLETE — K0–K7 done 2026-08-29**)>
-> **Workstreams:** `auth_todo.md` (user auth, per-user usage tracking,
-> OWUI removal, budgets/ROI, skill fixes) is the only active one.
-> `kb-todo.md` is **COMPLETE** (K0–K7, 2026-08-29 — mcp_knowledge v2 live
-> with 11 KB tools, family-wiki + `family_kb_ingest` retired, backups +
-> restore E2E verified, verification green). `mcp-vision-todo.md` is
-> **COMPLETE** (A0–A3, 2026-08-28 — mcp_vision live). `memory_todo.md` is
-> **COMPLETE** (Phases 0–9, 2026-08-28 — see
-> `docs/memory/IMPLEMENTATION_STATE.md`). This file is status/history
-> only — no open work lives here.
+> **Workstreams:** `auth_todo.md` v2 (per-user LiteLLM keys, per-user
+> usage attribution, tooling/scripts — old Phase 9 folded into Phase 5)
+> is the only active plan. The three completed plans
+> (`memory_todo.md`, `mcp-vision-todo.md`, `kb-todo.md`) were **deleted
+> 2026-08-29**; their state lives in the canonical state docs:
+> `docs/memory/IMPLEMENTATION_STATE.md`, `mcp/servers/vision/README.md`,
+> `mcp/servers/knowledge/README.md`. This file is status/history only —
+> no open work lives here.
 
 ---
 
 ## Completed (July 2026)
 
-- **`mcp_vision` (mcp-vision-todo.md, A0–A3) — COMPLETE 2026-08-28.** Image/video
+- **Family KB rebuild (K0–K7) — COMPLETE 2026-08-29.** mcp_knowledge v2
+  live (Qdrant `kb_*` collections, 768-dim, 11 tools, `kb_` prefix
+  code-gate); legacy `family_kb` (384-dim) snapshotted + dropped;
+  family-wiki + `family_kb_ingest` retired; `scripts/backup-kb.sh` +
+  restore E2E verified; verification green (regression 70/70, audit-log
+  scan, auth matrix, secret scan). Plan file deleted 2026-08-29; state:
+  `mcp/servers/knowledge/README.md`.
+- **`mcp_vision` (A0–A3) — COMPLETE 2026-08-28.** Image/video
   analysis via `matrix-coder` vision (5 images per LLM call — server-side
   batching replaces the video-analyze skill's per-subagent session-budget
   pattern). 5 tools: `vision_analyze_image`, `vision_analyze_video` (scene +
@@ -28,7 +34,7 @@
   E2E green (local mp4, GIF, remote URL, YouTube 18 s, raw timestamps, budget
   guard). LiteLLM registration + `mcp_knowledge` 7200s timeout (KB K3) batched
   in one owner reload. See `mcp/servers/vision/README.md`.
-- **Long-term memory (memory_todo.md, Phases 0–9) — COMPLETE 2026-08-28.**
+- **Long-term memory (Phases 0–9) — COMPLETE 2026-08-28.**
   In-process Mem0 in skill-runner → Qdrant `mem0_memories` (768-dim); identity
   map, retrieval + writeback, household scope, secret filtering, admin REST +
   CLI + `/metrics` (scraped by VictoriaMetrics), backups
@@ -37,8 +43,8 @@
   qdrant v1.18.1), embedding-migration runbook. State:
   `docs/memory/IMPLEMENTATION_STATE.md`. Phase 6 (optional MCP memory tools)
   remains the only deferred phase — gated on a week of production use.
-- **LiteLLM** running with **9 MCP servers (46 tools as of 2026-08-28 — 10 media-pipeline tools, legacy media tools removed, + `schema_overview` on mcp_mysql, + 5 mcp_vision tools)** via
-  streamable-http (`mcp_search` 3, `mcp_crawl` 1, `mcp_knowledge` 4,
+- **LiteLLM** running with **9 MCP servers (53 tools as of 2026-08-29 — 10 media-pipeline tools, legacy media tools removed, + `schema_overview` on mcp_mysql, + 5 mcp_vision tools, + 7 KB tools from the mcp_knowledge v2 rebuild)** via
+  streamable-http (`mcp_search` 3, `mcp_crawl` 1, `mcp_knowledge` 11,
   `mcp_filesystem_readonly` 3, `mcp_filesystem` 5, `mcp_mysql` 11,
   `mcp_homelab_status` 4, `mcp_media` 10, `mcp_vision` 5).
   **MCP access model (decided 2026-08-25):** `allow_all_keys: true` is
@@ -67,32 +73,44 @@
   kept for reference.
 - **Log rotation** — `RotatingFileHandler` in `skills/runner/main.py`
   (10MB, 3 backups); `logs/` gitignored. (The two log files that were
-  committed before the gitignore are untracked in `auth_todo.md` Phase 9.)
+  committed before the gitignore are untracked in `auth_todo.md` v2 Phase 5.)
 
 ---
 
-## Open items — tracked in `kb-todo.md` and `auth_todo.md`
+## Open items — tracked in `auth_todo.md` (v2)
 
-- **Family KB rebuild (`kb-todo.md`)** — ✅ **COMPLETE 2026-08-29**
-  (K0–K7): mcp_knowledge v2 live (Qdrant `kb_*` collections, 768-dim,
-  11 tools, `kb_` prefix code-gate); legacy `family_kb` (384-dim)
-  snapshotted + dropped; family-wiki + `family_kb_ingest` retired;
-  `scripts/backup-kb.sh` + restore E2E verified; verification green
-  (regression 70/70, audit-log scan, auth matrix, secret scan).
-- **C8: `create-demo` / `demo_workflow`** — root cause found 2026-08-25:
-  stale `model_alias: local/qwen-coder` (alias no longer exists in LiteLLM;
-  7 skills affected). Fix → `auth_todo.md` Phase 9.
-- **Presenton** — presentation fetch path verified working (2026-08-25,
-  HTTP 200). Env var name mismatch + password rotation → `auth_todo.md`
-  Phase 9.
-- **Open WebUI** — deprecated (no longer used); removal → `auth_todo.md`
-  Phase 6. The old "Frontier Integration Plan" (OWUI MCP + OpenAPI tools,
-  2026-07-22) is **dropped** with it — the capability survives anyway: all 9
-  MCP servers are registered in LiteLLM, so any OpenAI-compatible client
-  (pi, opencode) can call the 53 MCP tools directly via
-  `llm.choukalos.com`.
-- **Repo hygiene** — git-committed log files untracked → `auth_todo.md`
-  Phase 9.
+`auth_todo.md` v2 (fresh plan, 2026-08-29) is the only active plan —
+per-user LiteLLM keys + per-user usage attribution, with the surviving
+old-Phase-9 tooling items (C8, Presenton, repo hygiene) folded into
+Phase 5. OWUI removal is **on hold** (owner decision 2026-08-29 — not
+scheduled for deletion). Phases:
+
+- **Phase 1 — Key foundation (no restart):** `chuck` + `dylan` LiteLLM
+  keys (regenerate or supply values — Q1) via `cli/litellm-keys.sh`,
+  `.env` vars, delete `simba` + stray test keys, per-key verification.
+- **Phase 2 — skill-runner key threading:** `LiteLLMClient` per-user
+  `Bearer` behind `AUTH_KEY_THREADING_ENABLED` (default off),
+  `MEMORY_USER_KEYS` += dylan, unit + container tests, manual rebuild (B).
+- **Phase 3 — Caddy OR-gate:** edge accepts chuck / dylan / legacy keys
+  (hot reload, no manual step).
+- **Phase 4 — Grafana:** verify per-user Key Usage panels show
+  chuck / dylan after threading.
+- **Phase 5 — Tooling & scripts (old Phase 9):** `cli/litellm-keys.sh`,
+  `run-skill.sh --user`, fix stale `local/qwen-coder` aliases (C8 —
+  6 `skill.yml` + 2 `skill.py` + docstring → `matrix-coder`),
+  `PRESENTON_BASE_URL` → `PRESENTON_URL`, Presenton passwordless
+  (`DISABLE_AUTH=true`), untrack git-committed log files (repo hygiene),
+  rebuild + e2e (`create-demo`).
+- **Phase 6 — Device migration (owner, later):** Siri shortcut, son's
+  laptop, Mac pi; 24–48 h observation.
+- **Phase 7 — Legacy key retirement (owner, after migration):** remove
+  `SIRI_API_KEY` from list + Caddy, delete old keys, docs.
+
+The old "Frontier Integration Plan" (OWUI MCP + OpenAPI tools,
+2026-07-22) is **dropped** — the capability survives anyway: all 9 MCP
+servers are registered in LiteLLM, so any OpenAI-compatible client
+(pi, opencode) can call the 53 MCP tools directly via
+`llm.choukalos.com`.
 
 ---
 
@@ -100,7 +118,7 @@
 
 1. Pre-flight: confirm backup exists, `ai-net` active
 2. LiteLLM health: `/health/readiness` returns 200
-3. MCP tools: `GET /v1/mcp/tools` returns correct count (46)
+3. MCP tools: `GET /v1/mcp/tools` returns correct count (53)
 4. Tool calls: test via `/v1/chat/completions`
 5. Public services: `llm.choukalos.com`, `siri.choukalos.com`
 6. Metrics: `GET /metrics/` returns 200

@@ -1,8 +1,10 @@
 # Long-Term Memory — Implementation State
 
 > **Handoff file for the implementing model.** Start every phase by reading THIS
-> file + `homelab/memory_todo.md` (full plan: phases, gates, tests, non-negotiables).
-> Update this file at the end of every phase. Keep < ~5K tokens.
+> file. **The plan file (`memory_todo.md`) was deleted 2026-08-29** — all
+> phases (0–9) are complete; this file is the memory state doc (architecture,
+> decisions, phase log, ops gotchas). Open items are in §Open items below.
+> Keep < ~5K tokens of *current* content (phase log is history).
 > **No secret values here — ever.** (Key names/paths yes; key contents no.)
 
 ## Status
@@ -127,14 +129,29 @@
 - Last updated: 2026-08-29 (Phase 9 COMPLETE; KB v2 rebuild closed D6 —
   see 2026-08-29 phase-log entry; D9 Qdrant exposure left open per owner).
 
+## Open items / future work (post-completion, 2026-08-29)
+
+- **D9 — Qdrant exposure**: `0.0.0.0:6333` without TLS. Owner decision
+  2026-08-29 (revisited after the KB work): **leave as-is** — other
+  services/tooling use the port. Revisit if the LAN trust model changes.
+- **Phase 6 — MCP memory tools**: optional read-only memory tools for MCP
+  clients (search/get/list against `mem0_memories`). Gated on a week of
+  production use before building. Design notes: Qdrant JWT RBAC evaluates
+  access BEFORE the existence check (403 not 404); a scoped read-only key
+  per the auth workstream is the natural credential.
+- **Identity map is now shared with the auth workstream** (`auth_todo.md` v2):
+  `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for
+  both memory and per-user LiteLLM attribution.
+- **Embedding migration runbook**: `docs/memory/embedding-migration.md`
+  (follow it if the embedding model changes again).
+
 ## Operational constraint — container lifecycle is MANUAL (read first)
 
 **The implementing model NEVER runs container lifecycle commands** (no
 `docker (compose) up|down|restart|recreate|rm`, no `docker pull`, no
 `./homelab.sh up|down|restart|rebuild|pull`). The session itself runs through
 `skill-runner` → `litellm-proxy` (skill-runner holds a pooled HTTP client to
-litellm) — restarting either breaks the session. Full protocol + post-checks +
-rollback: `memory_todo.md` §3.0.
+litellm) — restarting either breaks the session.
 
 **Allowed docker usage:** read-only (`docker ps/inspect/logs --tail/exec
 read-only`) + `docker run --rm` throwaway containers (no published ports, or
@@ -157,6 +174,13 @@ non-clashing only, e.g. 16333; never 4000/8091/6333/3000).
 
 **Caveat:** after step A, the model's first LLM turn may fail once (stale
 keep-alive in skill-runner's pool) — re-send the prompt if so.
+
+**Rollback (only if a post-check fails — model prepares, Chuck runs):**
+- litellm config: `git checkout <last-good-commit> -- litellm/config.yml` →
+  manual step A.
+- skill-runner: `git checkout <last-good-commit>` → manual step B.
+- If a restart leaves a service unhealthy, **stop and report** — do not chain
+  further lifecycle commands to "fix" it.
 
 **STATUS (2026-08-28):** Phase 8 COMPLETE (gate MET) — admin REST + CLI +
 metrics + restore all live-verified post-rebuild; scrape wired into
@@ -195,9 +219,19 @@ migration readiness) or Phase 6 (optional MCP).
 - **Flags:** `MEMORY_ENABLED`, `MEMORY_RETRIEVAL_ENABLED`,
   `MEMORY_WRITEBACK_ENABLED`, `MEMORY_MCP_ENABLED=false`,
   `MEMORY_HOUSEHOLD_ENABLED`, `MEMORY_DEBUG_LOGGING` (all in `.env`).
-- **Non-negotiables:** see `memory_todo.md` §7 (11 items; e.g. no secrets in
-  memory, no LiteLLM bypass, graceful degradation, skills stay out of user
-  memory, no container lifecycle commands from the model).
+- **Non-negotiables** (from the memory plan, deleted 2026-08-29 — kept here):
+  1. No raw API keys as memory user IDs; no secrets printed/stored.
+  2. No bypassing LiteLLM to call model providers directly.
+  3. No hard-coded embedding dimensions — always test the live endpoint.
+  4. No system prompts, hidden reasoning, raw tool logs, credentials, or full
+     transcripts in long-term memory.
+  5. Memory failure degrades gracefully; it never takes down normal AI use.
+  6. Private memories stay isolated between users.
+  7. Skills/procedural instructions stay out of user memory.
+  8. Every change reversible and covered by tests.
+  9. The model never runs container lifecycle commands (all manual, §above).
+  10. No second Postgres / embedding server / model server / dashboard
+      (build-time constraint — satisfied).
 
 ## Verified facts (2026-08-24 — do not re-derive; re-verify only where noted)
 
@@ -237,7 +271,7 @@ migration readiness) or Phase 6 (optional MCP).
 
 | File | Why |
 |---|---|
-| `memory_todo.md` | The plan: phases 0–9, gates, tests, non-negotiables |
+| `auth_todo.md` | Active workstream: per-user keys + LiteLLM attribution (shares this plan's identity layer) |
 | `skills/runner/main.py` | `api_chat` (~1893), `_chat_direct` (~1986, memory injection), `ChatRequest` (~1251, `memory` switch), `dispatch_job` (~254, `memory_enabled`) |
 | `skills/siri_chat/skill.py` | `SYSTEM_PROMPT` (~99) — second injection point |
 | `skills/runner/scheduler.py` | jobs (service identity) |
