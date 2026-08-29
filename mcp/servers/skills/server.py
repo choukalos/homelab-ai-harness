@@ -69,11 +69,21 @@ def _caller_key(ctx: Optional[Context]) -> Optional[str]:
         return None
 
 
-def _headers(ctx: Optional[Context]) -> dict:
-    """Headers for a skill-runner call. Presents the caller's key if present,
-    else the service key (open mode when neither is set)."""
+def _headers(ctx: Optional[Context], use_caller_key: bool = True) -> dict:
+    """Headers for a skill-runner call.
+
+    - ``use_caller_key=True`` (execution: run_skill / get_skill_job): present
+      the caller's LiteLLM key (forwarded via Authorization) so the job
+      attributes to the right user; falls back to the service key when absent.
+    - ``use_caller_key=False`` (discovery: GET /skills): always the service
+      key — discovery is not user-specific, and the caller's key (e.g. the
+      LiteLLM master) is not in skill-runner's allow-list.
+    """
     h = {"Content-Type": "application/json"}
-    key = _caller_key(ctx) or (SKILL_RUNNER_API_KEY or None)
+    if use_caller_key:
+        key = _caller_key(ctx) or (SKILL_RUNNER_API_KEY or None)
+    else:
+        key = SKILL_RUNNER_API_KEY or None
     if key:
         h["X-API-Key"] = key
     return h
@@ -85,8 +95,10 @@ def _headers(ctx: Optional[Context]) -> dict:
 
 
 def _get_skills(ctx: Optional[Context]) -> dict:
+    # Discovery always uses the service key (not user-specific; the caller's
+    # key, e.g. the LiteLLM master, is not in skill-runner's allow-list).
     with httpx.Client(timeout=30) as client:
-        r = client.get(f"{SKILL_RUNNER_URL}/skills", headers=_headers(ctx))
+        r = client.get(f"{SKILL_RUNNER_URL}/skills", headers=_headers(ctx, use_caller_key=False))
         r.raise_for_status()
         return r.json()
 
