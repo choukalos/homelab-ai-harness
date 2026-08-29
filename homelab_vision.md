@@ -420,7 +420,6 @@ Recommended skills:
 - `presentation_build`
 - `code_review`
 - `repo_maintenance`
-- `family_kb_ingest`
 - `morning_brief`
 - `homelab_report`
 

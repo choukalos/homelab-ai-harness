@@ -1,13 +1,16 @@
 # Thor AI Platform — Status
 
-> Updated: 2026-08-28 (memory workstream closed; mcp_vision live; KB rebuild active)
-> **Active workstreams:** `kb-todo.md` (family KB / knowledge-mcp rebuild —
-> K1 next, after the owner's batched LiteLLM reload) and `auth_todo.md`
-> (user auth, per-user usage tracking, OWUI removal, budgets/ROI, skill fixes).
-> `mcp-vision-todo.md` is **COMPLETE** (A0–A3, 2026-08-28 — mcp_vision live).
-> `memory_todo.md` is **COMPLETE** (Phases 0–9, 2026-08-28 — see
-> `docs/memory/IMPLEMENTATION_STATE.md`). This file is status/history only —
-> no open work lives here.
+> Updated: 2026-08-29 (memory workstream closed; mcp_vision live; **KB
+> rebuild COMPLETE — K0–K7 done 2026-08-29**)>
+> **Workstreams:** `auth_todo.md` (user auth, per-user usage tracking,
+> OWUI removal, budgets/ROI, skill fixes) is the only active one.
+> `kb-todo.md` is **COMPLETE** (K0–K7, 2026-08-29 — mcp_knowledge v2 live
+> with 11 KB tools, family-wiki + `family_kb_ingest` retired, backups +
+> restore E2E verified, verification green). `mcp-vision-todo.md` is
+> **COMPLETE** (A0–A3, 2026-08-28 — mcp_vision live). `memory_todo.md` is
+> **COMPLETE** (Phases 0–9, 2026-08-28 — see
+> `docs/memory/IMPLEMENTATION_STATE.md`). This file is status/history
+> only — no open work lives here.
 
 ---
 
@@ -70,11 +73,12 @@
 
 ## Open items — tracked in `kb-todo.md` and `auth_todo.md`
 
-- **Family KB rebuild (`kb-todo.md`)** — K0 done (discovery + planning +
-  rounds 1–2 decisions locked). Next: **K1** (issue `KB_API_KEY` JWT, drop the
-  old 384-dim `family_kb` collection) — the batched LiteLLM reload
-  (`mcp_vision` registration + `mcp_knowledge` 7200s timeout) is a prerequisite
-  for K3's E2E. K3/K4 E2E gated on owner fixtures in `ai-kb/raw/`.
+- **Family KB rebuild (`kb-todo.md`)** — ✅ **COMPLETE 2026-08-29**
+  (K0–K7): mcp_knowledge v2 live (Qdrant `kb_*` collections, 768-dim,
+  11 tools, `kb_` prefix code-gate); legacy `family_kb` (384-dim)
+  snapshotted + dropped; family-wiki + `family_kb_ingest` retired;
+  `scripts/backup-kb.sh` + restore E2E verified; verification green
+  (regression 70/70, audit-log scan, auth matrix, secret scan).
 - **C8: `create-demo` / `demo_workflow`** — root cause found 2026-08-25:
   stale `model_alias: local/qwen-coder` (alias no longer exists in LiteLLM;
   7 skills affected). Fix → `auth_todo.md` Phase 9.
@@ -83,9 +87,9 @@
   Phase 9.
 - **Open WebUI** — deprecated (no longer used); removal → `auth_todo.md`
   Phase 6. The old "Frontier Integration Plan" (OWUI MCP + OpenAPI tools,
-  2026-07-22) is **dropped** with it — the capability survives anyway: all 8
+  2026-07-22) is **dropped** with it — the capability survives anyway: all 9
   MCP servers are registered in LiteLLM, so any OpenAI-compatible client
-  (pi, opencode) can call the 29 MCP tools directly via
+  (pi, opencode) can call the 53 MCP tools directly via
   `llm.choukalos.com`.
 - **Repo hygiene** — git-committed log files untracked → `auth_todo.md`
   Phase 9.
