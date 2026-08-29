@@ -38,6 +38,19 @@
   (`LITELLM_API_KEY=${LITELLM_MASTER_KEY}`) → all Siri/skill usage attributed
   to `default_user_id` / master. **No key threading** (0 refs to
   `LiteLLM-User-Id` / `AUTH_KEY_THREADING`).
+- **⚠ Discovery (2026-08-29, during mcp_skills Phase B):** the service key
+  `SIRI_API_KEY` (= `SKILL_RUNNER_API_KEY` in the container, 64-char) resolves
+  to `user_id=service`, **not** `chuck` — even though `MEMORY_USER_KEYS`
+  lists `chuck=SKILL_RUNNER_API_KEY` first and `SKILL_RUNNER_API_KEY`=`SIRI_API_KEY`
+  (same value, verified by hash). `SIRI_KEY_SERVICE` (32-char, the `service`
+  pair) is a different value. So the `chuck` pair's env var (`SKILL_RUNNER_API_KEY`)
+  currently holds the **service** key, not a personal Chuck key — meaning the
+  `chuck` mapping is effectively dormant until Phase 1 points it at Chuck's
+  personal LiteLLM key. **Action for Phase 1:** when the raw Chuck key value is
+  supplied (Q1), set the `chuck` pair's env var to that value (or add a new
+  `LITELLM_KEY_CHUCK`-backed pair) so `resolve_user_id()` maps Chuck's key →
+  `chuck`. Investigate why `service` wins the match (iteration order vs. key
+  value) so the per-user attribution is unambiguous.
 
 ### LiteLLM key inventory (live, 8 rows)
 | key (alias) | user_id | status |
@@ -202,8 +215,14 @@
   use.
 
 ## 9. Questions for Chuck
-1. **Q1 — key values**: regenerate the `chuck` + `dylan` LiteLLM keys, or do
-   you have the raw values (to place in `.env` out-of-band)?
+1. **Q1 — key values (ANSWERED 2026-08-29):**
+   - **chuck**: keep the existing key (owner has the value; does NOT want to
+     change it). Owner will **supply the raw value out-of-band** when Phase 1
+     is reached (→ `.env LITELLM_KEY_CHUCK`). Do NOT regenerate.
+   - **dylan**: **regenerate** (owner does not have the raw value). One-time
+     value capture → `.env LITELLM_KEY_DYLAN`.
+   - **Constraint (owner):** do NOT touch/restart the LiteLLM proxy from the
+     implementing agent (kills its own session); batch manual steps.
 2. **Q2 — service key**: a dedicated LiteLLM `service` key for scheduler
    attribution, or keep the scheduler on the master key?
 3. **Q3 — Presenton**: `DISABLE_AUTH=true` is verified in the deployed image —

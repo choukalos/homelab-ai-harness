@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]>=0.27.0" \
     "pydantic>=2.0.0" \
     "httpx>=0.27.0" \
+    "pyyaml>=6.0" \
+    "pymysql>=1.1.0" \
     "mem0ai==2.0.19"
 
 # Runtime config

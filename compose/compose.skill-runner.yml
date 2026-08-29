@@ -30,6 +30,15 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
       - HARNESS_URL=http://skill-runner:8091
+      # Durable job index (skills-todo Phase A): MySQL backing store so
+      # GET /skills/jobs/{id} survives a runner restart. skill_jobs table in
+      # the `homelab` DB (thor.local:3306); creds sourced from .env. The runner
+      # degrades to in-memory-only if MySQL is unreachable.
+      - MYSQL_DB_HOST=${MYSQL_DB_HOST}
+      - MYSQL_DB_PORT=3306
+      - AI_DB_NAME=${AI_DB_NAME}
+      - AI_DB_USER=${AI_DB_USER}
+      - AI_DB_PASS=${AI_DB_PASS}
       # ── Long-term memory (memory_todo.md Phase 2) ──────────────
       # In-process Mem0. Dedicated, model-restricted LiteLLM key (least
       # privilege). All values sourced from .env (gitignored).

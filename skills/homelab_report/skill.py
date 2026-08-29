@@ -44,7 +44,7 @@ ARTIFACT_DIR = Path(
     os.environ.get("HOMELAB_REPORT_ARTIFACT_DIR", "/home/chuck/data/media/homelab_reports")
 )
 MAX_RUNTIME_SECS = int(os.environ.get("HOMELAB_REPORT_MAX_RUNTIME", "120"))
-MODEL_ALIAS = os.environ.get("HOMELAB_REPORT_MODEL", "local/qwen-coder")
+MODEL_ALIAS = os.environ.get("HOMELAB_REPORT_MODEL", "matrix-coder")
 
 logger = logging.getLogger("skill.homelab_report")
 

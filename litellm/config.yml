@@ -214,4 +214,18 @@ mcp_servers:
     # minutes (extraction + N vision calls + consolidation).
     timeout: 7200
 
+  # ── Skills (cross-client skill discovery + execution) ──────────
+  mcp_skills:
+    transport: http
+    url: http://mcp_skills:8000/mcp
+    allow_all_keys: true
+    # Forward the caller's key so skill-runner can attribute the job to the
+    # right user (resolve_user_id). Plain non-OAuth server → LiteLLM forwards
+    # the caller's Authorization upstream (strip logic returns False).
+    extra_headers:
+      - Authorization
+    # run_skill blocks up to the skill's max_runtime (deep_research = 900s);
+    # default MCP client timeout is 60s (LITELLM_MCP_CLIENT_TIMEOUT).
+    timeout: 7200
+
 

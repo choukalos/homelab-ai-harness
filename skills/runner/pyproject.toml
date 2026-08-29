@@ -8,6 +8,10 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.0.0",
     "httpx>=0.27.0",
+    # Skill manifest parsing for GET /skills (skill discovery).
+    "pyyaml>=6.0",
+    # Durable job index (MySQL backend; skill_jobs table in the homelab DB).
+    "pymysql>=1.1.0",
     # Long-term memory (memory_todo.md Phase 2). Pinned to the version
     # verified in Phase 1 (round-trip + restore). See memory/ package.
     "mem0ai==2.0.19",

@@ -47,7 +47,7 @@ MAX_RUNTIME_SECS = int(os.environ.get("PRESENTATION_UPDATE_MAX_RUNTIME", "300"))
 # LiteLLM endpoint (set by skill runner or environment)
 LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
-MODEL_ALIAS = os.environ.get("PRESENTATION_UPDATE_MODEL_ALIAS", "local/qwen-coder")
+MODEL_ALIAS = os.environ.get("PRESENTATION_UPDATE_MODEL_ALIAS", "matrix-coder")
 
 # Presenton endpoint (set by skill runner or environment)
 # Default: Docker internal network (presenton:80). Override with PRESENTON_URL env var.
