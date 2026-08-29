@@ -574,8 +574,8 @@ def main():
         check("p9: scoped JWT → 200 on own collection",
               _qdrant_status(f"/collections/{cfg.collection}",
                              api_key=cfg.qdrant_api_key) == 200)
-        check("p9: scoped JWT → 403 on family_kb (cross-collection denied)",
-              _qdrant_status("/collections/family_kb",
+        check("p9: scoped JWT → 403 on kb_gaming (cross-collection denied)",
+              _qdrant_status("/collections/kb_gaming",
                              api_key=cfg.qdrant_api_key) == 403)
     else:
         print("  (skip JWT ACL checks: MEMORY_QDRANT_API_KEY not set)")

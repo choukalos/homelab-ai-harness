@@ -3,21 +3,30 @@
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
 > Status: **Implemented** — all 9 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 46 tools as of 2026-08-28 — 41 + 5 mcp_vision tools; legacy media tools
-> removed earlier the same day). This doc is the design baseline; the
+> `ai-net`, 53 tools as of 2026-08-29 — 46 + 6 new `mcp_knowledge` v2 tools;
+> legacy media tools removed 2026-08-28). This doc is the design baseline; the
 > "Current state" notes reflect the live system.
 
-**Current state (2026-08-28)**
-- 9 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (4),
+**Current state (2026-08-29)**
+- 9 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (11),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5) — 46 tools total via
-  `GET /v1/mcp/tools`.
-- **Qdrant now has JWT RBAC auth** (2026-08-28, memory project Phase 9):
-  `JWT_RBAC=true`; `mcp_knowledge` uses a **read-only** API key
-  (`QDRANT_READ_ONLY_API_KEY` — list/scroll/search only; create/upsert/delete
-  → 403). The admin key (`QDRANT_ADMIN_API_KEY`) is OPS-only (backups, ops
-  scripts) and is NOT held by any runtime service. Qdrant is pinned
-  `qdrant/qdrant:v1.18.1`.
+  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5) — 53 tools total.
+- **`mcp_knowledge` v2 (2026-08-29 — D6 closed):** family KB rebuilt on Qdrant
+  `kb_*` collections (one per domain, 768-dim nomic, created on the fly;
+  11 tools: `kb_search`, `kb_get_document`, `kb_list_documents`, `kb_overview`,
+  `kb_recent_changes`, `kb_add_fact`, `kb_ingest_file`, `kb_delete_document`,
+  `kb_forget`, `kb_correct`, `kb_backup`). The `kb_` prefix code-gate is the
+  security boundary (the server cannot touch any non-`kb_` collection, incl.
+  `mem0_memories`). Runs on a **global-`m`** key (`sub=mcp-knowledge`) —
+  per-collection scoping cannot cover on-the-fly collection creation (proven
+  2026-08-29). Legacy `family_kb` (384-dim) snapshotted + dropped; the
+  `family_kb_ingest` skill is retired. See `mcp/servers/knowledge/README.md`.
+- **Qdrant has JWT RBAC auth** (2026-08-28, memory project Phase 9):
+  `JWT_RBAC=true`; skill-runner memory uses a scoped JWT (`mem0_memories`
+  rw, no expiry); `mcp_knowledge` uses the global-`m` key above (prefix
+  gate is its boundary). The admin key (`QDRANT_ADMIN_API_KEY`) is
+  OPS-only (backups, ops scripts) and is NOT held by any runtime service.
+  Qdrant is pinned `qdrant/qdrant:v1.18.1`.
 - `mcp_media` now runs the **GPU-host media-pipeline** (192.168.4.55:8189) —
   10 `media_*` tools (storyboard, image gen/edit, I2V shots, TTS, music, SFX,
   upscale, assemble, fetch) live 2026-08-28. Legacy ComfyUI/HF tools removed the
@@ -60,7 +69,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 |---|---|---|
 | `mcp_search` | Web search via SearXNG | `searxng:8080` |
 | `mcp_crawl` | Page fetching and content extraction | `crawl4ai:11235` |
-| `mcp_knowledge` | Knowledge base READ via Qdrant (read-only key) | `qdrant:6333` |
+| `mcp_knowledge` | Family KB (Qdrant kb_* collections): ingest, search, correct, forget, backup | `qdrant:6333` |
 | `mcp_filesystem_readonly` | Read-only file access to workspace and media | `/home/chuck/workspace`, `/home/chuck/data/media` |
 | `mcp_filesystem` | Writable file ops (workspace/media) — 5 tools | same mounts |
 | `mcp_mysql` | Read-mostly MySQL introspection + guarded queries — 10 tools | host MySQL |
@@ -116,26 +125,22 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 
 | Field | Value |
 |---|---|
-| **Purpose** | Knowledge base READ via Qdrant |
-| **Tools (live)** | `kb_search(query, collection, top_k?)`, `kb_get_document(collection, doc_id)`, `kb_list_collections()`, `kb_recent_changes(collection, since?)` — **all read-only; no write tools exist** |
-| **Inputs** | Query string, collection name, doc id |
-| **Outputs** | Matching documents with scores, document content, collection listing |
-| **Read/write** | **Read-only** (2026-08-28: server runs with a Qdrant read-only API key; writes would 403 at Qdrant even if a tool were added) |
-| **Allowed paths** | `http://qdrant:6333` |
-| **Context impact** | Low-Medium — returns compact document chunks |
-| **Security** | Read-only Qdrant key (`QDRANT_READ_ONLY_API_KEY`); collection allowlist in the server config |
+| **Purpose** | Family KB: ingest, search, correct, forget, backup (Qdrant `kb_*` collections) |
+| **Tools (live)** | `kb_search(query, top_k?, kb?)`, `kb_get_document(source, kb)`, `kb_list_documents(kb?)`, `kb_overview()`, `kb_recent_changes(days?)`, `kb_add_fact(text, kb, description?)`, `kb_ingest_file(path, kb, description?)`, `kb_delete_document(source, kb?)`, `kb_forget(query, kb?, confirm?, ids?)`, `kb_correct(old_query, new_text, kb?)`, `kb_backup(include_sources?)` — **read + write** |
+| **Inputs** | Query string, KB name (friendly, slugified to `kb_<slug>`), source path, fact text |
+| **Outputs** | Ranked chunks with kb/source/page_range, document chunks, KB map, change log, ingest/backup reports |
+| **Read/write** | **Read + write** (2026-08-29 v2: server is the KB operator; writes are gated by the `kb_` prefix code-gate, not a read-only key) |
+| **Allowed paths** | `http://qdrant:6333`; sources under `/data/media`, `/data/workspace`, `/data/ai-kb/raw` (ro mounts); embeddings + vision via LiteLLM |
+| **Context impact** | Low-Medium — returns compact chunks/snippets |
+| **Security** | Global-`m` Qdrant key (`sub=mcp-knowledge`) + **`kb_` prefix code-gate** (structural: every Qdrant operation validates the collection name; adversarial-tested). The prefix gate, not the JWT, is the boundary — `mem0_memories` is unreachable by construction. |
 
-**Known gaps (D6 — separate workstream, open as of 2026-08-28):**
-- Server allowlists `family_curated`/`homelab_curated`/`coding_curated`, but the
-  only real KB collection is `family_kb` → `kb_search` finds nothing / `kb_list_collections`
-  returns `not_found` for the allowlisted names.
-- `kb_search` does exact-match `scroll` over payload text, NOT vector search.
-- `family_kb` is **384-dim** (legacy harness embeddings) while the current
-  `embeddings`/`homelab-embedding-v1` aliases return **768-dim** — never mix
-  collections or re-embed in place; a v2 KB migration needs a new collection.
-- The `family_kb_ingest` skill still targets the decommissioned harness
-  `/knowledge/ingest` endpoint — broken; ingestion is currently manual
-  (Qdrant API / ops script with the admin key).
+**D6 status: ✅ CLOSED 2026-08-29.** The v1 gaps (allowlisted-but-nonexistent
+collections, exact-match scroll instead of vector search, 384-dim legacy
+embeddings, broken `family_kb_ingest` skill) were all resolved by the v2
+rebuild: real `kb_*` collections with 768-dim nomic embeddings, vector +
+keyword search, LLM-driven ingest (`kb_ingest_file` / `kb_add_fact`), and the
+retired skill. Restore E2E-verified (`kb_gaming` snapshot → disposable node →
+589/589 points byte-identical). See `mcp/servers/knowledge/README.md`.
 
 ---
 
@@ -287,11 +292,13 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 8 servers run as containers on `ai-net` (streamable-http, port 8000)
+- **Implemented.** All 9 servers run as containers on `ai-net` (streamable-http, port 8000)
   and are registered in `litellm/config.yml` (`mcp_servers`, `allow_all_keys: true` —
   decided 2026-08-25: every valid key may call every tool; no scoped grants).
 - MCP servers run as separate containers on Thor (`compose/compose.mcp.yml`).
 - The skill runner composes MCP tools into workflows — MCP servers do not know about skills.
 - `mcp_code` is deferred to future exploration.
-- Qdrant-backed servers must use scoped keys (read-only for `mcp_knowledge`);
-  the Qdrant admin key stays OPS-only.
+- Qdrant-backed servers must use scoped keys where possible; the documented
+  exception is `mcp_knowledge` (global-`m` key + `kb_` prefix code-gate —
+  on-the-fly collection creation requires global access, proven 2026-08-29).
+  The Qdrant admin key stays OPS-only.

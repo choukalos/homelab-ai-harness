@@ -29,7 +29,7 @@ This skill is designed for:
 ```json
 {
   "answer": "The response text...",
-  "sources": ["search_web: query=...", "family_kb_search: query=..."],
+  "sources": ["search_web: query=...", "kb_search: query=..."],
   "model_alias": "matrix-coder"
 }
 ```
@@ -54,8 +54,7 @@ The skill uses LiteLLM's native function calling to let the model decide which t
 | Tool | MCP Server | Description |
 |---|---|---|
 | `search_web` | `mcp_search` | Web search via SearXNG |
-| `family_kb_search` | `mcp_knowledge` | Keyword/vector search in the family knowledge base |
-| `family_kb_ask` | `mcp_knowledge` | Semantic question answering in the knowledge base |
+| `kb_search` | `mcp_knowledge` | Semantic vector search across the family KB (kb_* collections); optional `kb` to restrict to one KB |
 | `docker_status` | `mcp_homelab_status` | Check Docker container status |
 
 ## Constraints
