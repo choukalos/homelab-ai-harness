@@ -124,19 +124,27 @@
 
 ## 3. Phases
 
-### Phase 1 — Key foundation (no restart)
-- [**Q1**: regenerate vs supply existing values]
-- 1.1 Create / rotate the `chuck` + `dylan` LiteLLM keys via a new
-  `cli/litellm-keys.sh` (one-time value capture → `.env`).
-- 1.2 `.env`: `LITELLM_KEY_CHUCK`, `LITELLM_KEY_DYLAN` (+ `LITELLM_KEY_SERVICE`
-  if Q2=yes).
-- 1.3 Delete `simba` (+ optionally the 3 expired + the `nned` test key).
-- 1.4 Verify: each key 200 on a test chat; metrics show `user=chuck` / `dylan`
-  series; invalid key 401.
+### Phase 1 — Key foundation (no restart) — **DONE 2026-08-29**
+- 1.1 Create / rotate the `chuck` + `dylan` LiteLLM keys. ✅
+  - **chuck**: kept existing key (owner supplied raw value out-of-band →
+    `.env LITELLM_KEY_CHUCK`). Verified 200 on `/v1/chat/completions`.
+  - **dylan**: created new key (alias `dylan-v2`, `user_id=dylan`) because the
+    old `dylan` alias already exists (test key, raw value unrecoverable).
+    One-time value captured → `.env LITELLM_KEY_DYLAN`. Verified 200.
+- 1.2 `.env`: `LITELLM_KEY_CHUCK` ✅ (owner-supplied), `LITELLM_KEY_DYLAN` ✅
+  (generated). `LITELLM_KEY_SERVICE` — pending Q2.
+- 1.3 Delete `simba`. ⚠️ **Blocked**: LiteLLM `/key/list` returns masked
+  tokens (not raw values); `/key/info` rejects non-`sk-` tokens. Cannot delete
+  by alias/token via API. Owner must delete manually (LiteLLM UI or by
+  supplying the raw value). **Noted; deferred to Phase 7.**
+- 1.4 Verify: chuck 200 ✅, dylan 200 ✅. Metrics per-user series — pending
+  Phase 2 (key threading) + skill-runner restart.
 
 ### Phase 2 — skill-runner key threading (code + manual rebuild B)
-- 2.1 `.env`: `MEMORY_USER_KEYS` += dylan; `SKILL_RUNNER_API_KEY` list +=
-  dylan's key.
+- 2.1 `.env`: `MEMORY_USER_KEYS` += dylan ✅; `SKILL_RUNNER_API_KEY` list +=
+  dylan's key ✅. (2026-08-29: `MEMORY_USER_KEYS` now has 4 pairs;
+  `SKILL_RUNNER_API_KEY` = `${SIRI_API_KEY},${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}`
+  in both compose files.)
 - 2.2 Code: `LiteLLMClient` key threading (optional `api_key` / `user_id`),
   flag `AUTH_KEY_THREADING_ENABLED`.
 - 2.3 Tests (unit + disposable container).

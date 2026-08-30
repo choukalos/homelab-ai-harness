@@ -137,6 +137,10 @@ LITELLM_BASE_URL = os.environ.get(
     "LITELLM_BASE_URL", "http://litellm-proxy:4000"
 )
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
+# Key threading (auth_todo.md Phase 2): when enabled, the caller's per-user
+# LiteLLM key is used instead of the master key, so LiteLLM metrics show
+# per-user attribution. Default off (master key = today's behaviour).
+AUTH_KEY_THREADING_ENABLED = os.environ.get("AUTH_KEY_THREADING_ENABLED", "").lower() in ("1", "true", "yes")
 SKILL_RUNNER_API_KEY = os.environ.get("SKILL_RUNNER_API_KEY", "")
 # Phase 8: admin key(s) for the /api/memory/* management endpoints
 # (comma-separated). Distinct from the user keys — the admin key is the
@@ -622,16 +626,24 @@ class LiteLLMClient:
     Supports both LLM generation via /v1/chat/completions and MCP tool
     calls via /mcp-rest/tools/call.  Skills use this client exclusively —
     they never touch MCP servers directly.
+
+    Key threading (auth_todo.md Phase 2): when ``AUTH_KEY_THREADING_ENABLED``
+    is set, the client can be constructed with a per-user ``api_key`` (the
+    caller's LiteLLM virtual key) and an optional ``user_id``. The
+    ``LiteLLM-User-Id`` header is added for attribution. When the flag is off
+    (default), the client always uses the master key (today's behaviour).
     """
 
     def __init__(
         self,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        user_id: Optional[str] = None,
         timeout: float = 120.0,
     ) -> None:
         self.base_url = (base_url or LITELLM_BASE_URL).rstrip("/")
         self.api_key = api_key or LITELLM_API_KEY
+        self.user_id = user_id
         self._timeout = Timeout(timeout)
         self._client: Optional[AsyncClient] = None
 
@@ -648,6 +660,8 @@ class LiteLLMClient:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.user_id:
+            headers["LiteLLM-User-Id"] = self.user_id
         return headers
 
     async def close(self) -> None:
