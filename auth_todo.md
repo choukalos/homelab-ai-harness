@@ -204,7 +204,8 @@
   **Manual step:** recreate Caddy + rebuild skill-only.
 - 7.2 Delete the old `chuck-remote` / `dylan` keys (if regenerated). ⚠️
   Pending (owner, via `cli/litellm-keys.sh delete <token>`).
-- 7.3 Docs: `README_SIRI.md`, `README.md`. ⚠️ Pending.
+- 7.3 Docs: `README_SIRI.md`, `README.md`. ✅ (2026-08-29: updated to
+  reflect the new per-user key setup.)
 
 ## 4. Flags & rollback
 - `AUTH_KEY_THREADING_ENABLED` (default false) — off = master key (today's
