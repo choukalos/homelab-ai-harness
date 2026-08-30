@@ -151,9 +151,12 @@
 - 2.4 Commit; **manual step B** (rebuild skill-only).
 - 2.5 Live: T5–T8 (per-user attribution, isolation).
 
-### Phase 3 — Caddy OR-gate (hot reload, no manual step)
-- 3.1 `@noAuth not header X-API-Key (chuck|dylan|legacy)`.
-- 3.2 `caddy reload` + verify.
+### Phase 3 — Caddy OR-gate (hot reload, no manual step) — **DONE 2026-08-29**
+- 3.1 `@noAuth not header X-API-Key (chuck|dylan|legacy)`. ✅
+  (`caddy/Caddyfile`: `@siri` + `@api` routes now accept `X-API-Key` =
+  `{$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}`. Caddy `header`
+  matcher OR. Validated with `caddy validate`.)
+- 3.2 `caddy reload` + verify. ⚠️ **Manual step** (owner): `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`.
 
 ### Phase 4 — Grafana (verify + small add)
 - 4.1 Verify the per-user panels show chuck / dylan after threading (grouped
