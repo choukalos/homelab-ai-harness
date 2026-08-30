@@ -37,32 +37,40 @@ shortcut sends in the `X-API-Key` header. It's also what makes Peanut's
 # Part 1 — MVP Shortcut (spoken answers)
 
 **Goal:** "Hey Siri, Peanut" → Peanut asks your question → Peanut answers
-out loud. ~10 minutes, one-time. **Build it on your Mac** — it syncs to your
-iPhone via iCloud, and the same shortcut works on both.
+out loud. ~10 minutes, one-time.
 
+> ### ⚠️ Platform gotcha: `Send HTTP Request` is missing on some Macs
+> The macOS Shortcuts action library is a **subset** of the iPhone's — the
+> `Send HTTP Request` action does **not exist on macOS** (as of macOS Tahoe
+> 26.6.2; it's an iOS/iPadOS action). That's why you couldn't find it.
+>
+> **The plan:** build the shortcut on your **iPhone** (10 min, below). It
+> syncs to your Mac via iCloud (the Mac copy can't run it — the HTTP action
+> is unavailable there — but it's a handy reference copy). If you want a
+> working shortcut on the Mac too, see **§1.4** (a Mac-only variant that
+> uses `Run Shell Script` + `curl` instead).
+>
 > ### ⚠️ Action names: Mac vs iPhone
-> The Mac Shortcuts app calls the text-input action **`Ask for Input`** — on
-> iPhone the same action shows up as **`Ask for Text`**. Every other action
-> in this guide has the **same name on both platforms**. If you can't find an
-> action, type its name in the **search field at the top of the action
-> library** (click the **+** button in the editor to open it).
+> The Mac app calls the text-input action **`Ask for Input`** — on iPhone
+> the same action shows up as **`Ask for Text`**. All other actions keep
+> their names on both platforms. If you can't find an action, type its name
+> in the **search field** of the action library.
 
-## 1.1 Create the shortcut (on your Mac)
+## 1.1 Create the shortcut (on your iPhone)
 
-1. Open the **Shortcuts** app on your Mac → **+** (top right) → **New Shortcut**.
+1. Open the **Shortcuts** app on your iPhone → **+** (top right) → **New Shortcut**.
 2. Name it **`Peanut`**.
    - Siri triggers a shortcut by its **exact name**: "Hey Siri, Peanut".
    - If "Peanut" (a common word) ever mis-triggers, rename it **`Ask Peanut`**
      and use "Hey Siri, Ask Peanut".
-3. Click the **+** button (top right, "Add Action") to open the action
-   library, and add the following, **in order** (search for each bold name):
+3. Tap **Add Action** and add the following, **in order** (search for each
+   bold name):
 
-### Action 1 — `Ask for Input`
-*(This is the Mac name for the iPhone "Ask for Text" action.)*
-- When you add it, make sure it's set to **Ask for Text** (it has a prompt field).
-- **Prompt:** `What do you want to ask Peanut?`
-- Run it normally → a dialog where you type. **Triggered by Siri → it asks
-  you to SPEAK the answer instead** — no extra setup, that's the magic.
+### Action 1 — `Ask for Text`
+*(iOS 18+. On older iOS use **Dictate Text** instead.)*
+- **Prompt Text:** `What do you want to ask Peanut?`
+- This captures your spoken question (when triggered by Siri) or typed
+  question (when run from the app).
 
 ### Action 2 — `Text`
 *(builds the JSON request body — Shortcuts can't build JSON natively)*
@@ -70,22 +78,22 @@ iPhone via iCloud, and the same shortcut works on both.
   ```
   {"text": ""}
   ```
-- Delete the empty `""` and click the **`Ask for Input` variable chip**
-  (in the variable bar at the top of the editor) so it reads:
+- Delete the empty `""` and tap the **`Ask for Text` variable chip**
+  (top of the screen) so it reads:
   ```
-  {"text": "[Ask for Input]"}
+  {"text": "[Ask for Text]"}
   ```
 
 ### Action 3 — `Send HTTP Request`
 - **URL:** `https://siri.choukalos.com/siri/api/chat`
 - **Method:** `POST`
-- **Headers** → click **Add Header**:
+- **Headers** → tap **Add Header**:
   - Name: `X-API-Key`
   - Value: *your key* (`sk-…` — from `.env` on the homelab, or send it to
     yourself via Messages from the Mac. **Do not put it in a note anyone else
     can see.**) 
-- **Body** → click **Add Body** → type: `JSON`
-  - **Body:** click the variable bar and select the **`Text`** action's output
+- **Body** → tap **Add Body** → type: `JSON`
+  - **Body:** tap the variable bar and select the **`Text`** action's output
     (the `{"text": …}` variable).
 - *(Show More → Timeout: leave the default; sync answers usually come back in
   < 15 s.)*
@@ -102,19 +110,16 @@ iPhone via iCloud, and the same shortcut works on both.
 - Input: add a `Get Dictionary Value` for key `display` first, then show it.
 - Gives you the full answer on screen while Siri speaks the short version.
 
-4. **Siri trigger:** on the Mac there is **no "Add to Siri" step** —
-   "Hey Siri, Peanut" works as soon as the shortcut exists. On your iPhone
-   (after it syncs), add it properly: Shortcuts → **⋯** menu next to the
-   shortcut → **Add to Siri** (hold the on-screen button to confirm).
+4. **Add to Siri:** tap the **⋯** menu next to the shortcut → **Add to Siri**
+   (hold the on-screen button to confirm).
+   - Or: Settings → Siri & Search → "Hey Siri, Peanut".
 
 ## 1.2 Test it
 
-**From your Mac:**
-- Click the **▶ Run** button in the editor (or press **⌘R**) — a dialog asks
-  for your question (type it), and Peanut answers out loud from your Mac's
-  speakers.
-- Or say **"Hey Siri, Peanut"** — the same shortcut then prompts you to
-  **speak** your question.
+1. Tap the **▶ Run** button in the Shortcuts app — a dialog asks for your
+   question (type it), and Peanut answers out loud.
+2. Then say **"Hey Siri, Peanut"** — the same shortcut prompts you to
+   **speak** your question instead.
 
 | You say | What happens |
 |---|---|
@@ -122,8 +127,9 @@ iPhone via iCloud, and the same shortcut works on both.
 | "Hey Siri, Peanut" → *remember that the garage door code is 4415* | `remember` intent → stores it in **your** memory ("Got it — I'll remember that.") |
 | "Hey Siri, Peanut" → *what did I tell you about the garage door?* | LLM answers from your retrieved memories |
 
-**From your iPhone:** once the shortcut has synced (it appears in the
-Shortcuts app), say "Hey Siri, Peanut" and speak your question.
+**On the Mac:** the shortcut syncs over and shows up in the Mac Shortcuts
+app, but it can't run there (the `Send HTTP Request` action doesn't exist on
+macOS). For a working Mac version, see **§1.4**.
 
 ## 1.3 What you can ask (intent cheat sheet)
 
@@ -148,6 +154,44 @@ The harness auto-detects intent from your words:
 **MVP note:** async intents return *"I've started processing …"* immediately
 and give a `job_id`. The MVP shortcut just speaks that. Part 2 adds the
 polling so you get the actual result.
+
+## 1.4 (Optional) Mac version: `Run Shell Script` + `curl`
+
+macOS has no `Send HTTP Request` action, but it **does** have
+**`Run Shell Script`** — and `curl` is built in. This gives you a
+**Mac-only** shortcut (name it **`Peanut Mac`** so it doesn't clash with the
+iPhone one — trigger: "Hey Siri, Peanut Mac").
+
+1. New shortcut → name it **`Peanut Mac`**.
+2. Add **`Ask for Input`** (Mac name for "Ask for Text") — prompt:
+   `What do you want to ask Peanut?`
+3. Add **`Run Shell Script`** → paste this (replace `<PASTE_KEY>` with your
+   key) → check **"Pass input: as arguments"**:
+   ```bash
+   #!/bin/bash
+   QUESTION="$*"
+   ESCAPED=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$QUESTION")
+   curl -s --max-time 60 -X POST https://siri.choukalos.com/siri/api/chat \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <PASTE_KEY>" \
+     -d "{\"text\": $ESCAPED}" | \
+   python3 -c 'import json,sys
+   d=json.load(sys.stdin)
+   print(d.get("speak") or d.get("display") or "Peanut got no answer.")'
+   ```
+   The script does the whole job: JSON-escapes your question, POSTs it,
+   and prints just the `speak` text.
+4. Add **`Speak Text`** — input: the script's output.
+
+**Notes:**
+- Requires `python3` (Xcode Command Line Tools — macOS will prompt
+  `xcode-select --install` the first time if you don't have them).
+- macOS will ask permission to run the script the first time → **Allow**.
+- Your key lives in the script body — visible only to you on your Mac.
+- This variant is **Mac-only** (`Run Shell Script` doesn't exist on
+  iPhone) — the synced copy on your iPhone won't run.
+- To extend it later (links/media, Part 2), have the script print the
+  `links`/`media` values too and add `Add to Reminders` after `Speak Text`.
 
 ---
 
@@ -177,7 +221,8 @@ iCloud) → create a list named **`Peanut`**.
 
 ## 2.3 Extend the shortcut (after Action 5, `Speak Text`)
 
-Add these actions in order (same names on Mac — search for each one):
+Add these actions in order (these actions exist on both Mac and iPhone —
+search for each one):
 
 ### Action 7 — `Get List Items`
 - **From:** the `Send HTTP Request` result
@@ -351,7 +396,7 @@ curl -s -X POST https://siri.choukalos.com/siri/api/chat \
 
 | Symptom | Likely cause / fix |
 |---|---|
-| **Can't find an action** in the Mac app | Use the **search field** at the top of the action library. The Mac calls the input action **`Ask for Input`** (iPhone: "Ask for Text"); everything else keeps its name |
+| **Can't find an action** in the Mac app | Use the **search field** at the top of the action library. The Mac calls the input action **`Ask for Input`** (iPhone: "Ask for Text"). **`Send HTTP Request` doesn't exist on macOS at all** — build on iPhone, or use the `Run Shell Script` + `curl` variant (§1.4) |
 | Shortcut shows **401** | Key wrong, or not in the Caddy allowlist (Part 3, Step 3) |
 | Shortcut shows **403 "Invalid API key"** | Key passes Caddy but missing from `SKILL_RUNNER_API_KEY` (Part 3, Step 4) |
 | Siri says *"couldn't complete the request"* | Timeout — long intents are async; use the Part 2.5 polling shortcut or check the job later |
