@@ -5,14 +5,29 @@
 > Status: **Implemented and evolved** — skill runner is in production. The July
 > inventory below is historical; current state is marked inline.
 
-**Current state (2026-08-28)**
-- **13 skills** live (the July 9-skill inventory has grown; `local/*` model
+**Current state (2026-08-29)**
+- **12 skills** live (the July 9-skill inventory has grown; `local/*` model
   aliases were never implemented — skills use live aliases, primarily
   `matrix-coder`; the stale `local/qwen-coder` references broke 7 skills and
-  were fixed in `auth_todo.md` Phase 9, 2026-08-25).
+  were fixed in `auth_todo.md` Phase 9, 2026-08-25). `code_review` / `repo_maintenance`
+  are TODO placeholders (no `skill.py`/`skill.yml`, excluded from `GET /skills`).
 - **Chat gateway:** `POST /api/chat` (intent dispatch → skills / direct LLM /
   MCP tools) + `GET /api/jobs/{job_id}`; Siri via `siri.choukalos.com`
   (Caddy, `X-API-Key`).
+- **Skill discovery:** `GET /skills` lists the 12 skills (name, description,
+  inputs, max_runtime, channels). Auth mirrors `/api/chat` (enforced when
+  `SKILL_RUNNER_API_KEY` set, open when unset). Added 2026-08-29 (skills-todo
+  Phase A).
+- **Durable job index (MySQL, 2026-08-29):** job state backed by
+  `homelab.skill_jobs` (not in-memory-only) — jobs survive skill-runner restarts;
+  a job still `running`/`pending` at restart is marked `interrupted`. Best-effort:
+  degrades to in-memory-only if MySQL is unreachable. See
+  `docs/thor_cross_client_skills.md`.
+- **Cross-client access (2026-08-29, skills-todo A–D):** the `mcp_skills` MCP
+  server (3 meta-tools) wraps the skill-runner so any MCP client lists + runs
+  skills through LiteLLM; 12 skills registered in the LiteLLM Skill Hub
+  (`/claude-code/marketplace.json`); `agents-skills/` SKILL.md wrappers for
+  per-machine `/skill:name` slash commands. See `docs/thor_cross_client_skills.md`.
 - **Identity:** `X-API-Key` → `user_id` map (`memory/identity.py`;
   `MEMORY_USER_KEYS`); jobs run as `service` unless user-triggered.
 - **Long-term memory (in-process Mem0, Phases 0–9 complete 2026-08-28):**
@@ -38,9 +53,12 @@ Channel → Skill Runner → Workflow (MCP tools + model calls) → Artifact
 ## Skill API
 
 ```
-POST /skills/{skill_name}       — Launch a skill
-GET  /skills/jobs/{job_id}      — Get job status
-GET  /skills/jobs/{job_id}/artifact  — Retrieve artifact
+GET  /skills                          — List skills (name, description, inputs, max_runtime, channels)
+POST /skills/{skill_name}             — Launch a skill (synchronous: blocks until terminal or approval gate)
+GET  /skills/jobs/{job_id}            — Get job status (durable: survives restarts)
+GET  /skills/jobs/{job_id}/artifact   — Retrieve artifact
+POST /skills/jobs/{job_id}/approve    — Approve a job at an approval gate
+POST /skills/jobs/{job_id}/cancel     — Cancel a job
 ```
 
 ### Launch Request
@@ -84,6 +102,7 @@ GET  /skills/jobs/{job_id}/artifact  — Retrieve artifact
 | `failed` | Error during execution |
 | `awaiting_approval` | Waiting for manual approval gate |
 | `cancelled` | Cancelled by user |
+| `interrupted` | Was `running`/`pending` when the runner restarted (durable index) |
 
 ---
 

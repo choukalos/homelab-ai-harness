@@ -9,7 +9,7 @@ context footprint stays negligible as the skill count grows.
 | Tool | Description |
 |---|---|
 | `list_skills()` | List all skills: `name`, `description`, `version`, `model_alias`, `max_runtime`, `channels`, `inputs`. |
-| `run_skill(name, prompt?, params?)` | Run a skill by name. `prompt` (short natural-language) is mapped to the skill's primary string input; `params` (explicit input dict) wins. Blocks until the job finishes (up to the skill's `max_runtime`) and returns the job (`job_id`, `status`, `summary`, `artifact_path`). |
+| `run_skill(name, prompt?, params?, max_wait?)` | Run a skill by name. `prompt` (short natural-language) is mapped to the skill's primary string input (well-known names → required string → first string); `params` (explicit input dict) wins. `max_wait` defaults to the skill's `max_runtime` (else `SKILL_RUNNER_TIMEOUT`, 180s); httpx timeout = `max_wait + 30`. Blocks until the job finishes (up to `max_wait`) and returns the job (`job_id`, `status`, `summary`, `artifact_path`); on timeout → `RuntimeError` with a `job_id` hint. |
 | `get_skill_job(job_id)` | Re-fetch a job's status/result by id (durable — survives a runner restart via the MySQL job index). |
 
 ## Execution model
@@ -27,10 +27,16 @@ with a generous timeout and returns the final job.
 ## Identity threading
 
 The caller's LiteLLM key is forwarded by LiteLLM via the `Authorization`
-header (`extra_headers: ["Authorization"]` in `litellm/config.yml`) and passed
-to skill-runner as `X-API-Key`, so the job attributes to the right user
-(`resolve_user_id()`). Falls back to the service key when no caller key is
-present.
+header (`extra_headers: ["Authorization"]` in `litellm/config.yml`). The server
+reads it from the MCP request context (`_caller_key(ctx)`):
+
+- **Execution** (`run_skill`, `get_skill_job`): presents the **caller key** as
+  `X-API-Key`, so the job attributes to the right user (`resolve_user_id()`).
+  Falls back to the service key when no caller key is present.
+- **Discovery** (`list_skills` / internal `GET /skills`): always uses the
+  **service key** (`SKILL_RUNNER_API_KEY`) — the caller's key (e.g. the LiteLLM
+  master) is not in skill-runner's allow-list. (Fixed 2026-08-29: discovery
+  used the caller key → 403.)
 
 ## Configuration
 

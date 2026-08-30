@@ -130,7 +130,7 @@ NOT committed to GitHub.
     compose.edge.yml
     compose.portal.yml   # Hugo portal (git-sync + static server), choukalos.com
     compose.ai-core.yml
-    compose.mcp.yml          # MCP server containers (9 active)
+    compose.mcp.yml          # MCP server containers (10 active)
     compose.skill-runner.yml # Skill orchestration API (port 8091)
     compose.invest-hub.yml
     compose.monitoring.yml
@@ -416,7 +416,7 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **streamable HTTP** transport.
 
-**Nine MCP servers are currently deployed** via `compose.mcp.yml` (46 tools total).
+**Ten MCP servers are currently deployed** via `compose.mcp.yml` (56 tools total).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -429,8 +429,14 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_media` | Media generation via GPU-host media-pipeline | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp) | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_skills` | Skill-runner gateway (list/run/get skill jobs) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
+
+**`mcp_skills`** (added 2026-08-29) is the cross-client skill gateway: 3 meta-tools
+(`list_skills`, `run_skill`, `get_skill_job`) that wrap the skill-runner. It lets any
+MCP client list and run the homelab's skills through LiteLLM without exposing
+skill-runner. See [Cross-Client Skills](docs/thor_cross_client_skills.md).
 
 **Architecture:**
 ```
@@ -481,14 +487,25 @@ POST /api/schedule/{id}/run-now       — Trigger a schedule immediately
 
 **Job lifecycle API** (direct skill invocation):
 ```
-POST /skills/{skill_name}             — Launch a skill job
-GET  /skills/jobs/{job_id}            — Get job status
+GET  /skills                          — List skills (name, description, inputs, max_runtime, channels)
+POST /skills/{skill_name}             — Launch a skill job (synchronous: blocks until terminal or approval gate)
+GET  /skills/jobs/{job_id}            — Get job status (durable: survives restarts)
 GET  /skills/jobs/{job_id}/artifact   — Retrieve artifact file
 POST /skills/jobs/{job_id}/approve    — Approve a job at an approval gate
 POST /skills/jobs/{job_id}/cancel     — Cancel a job
 ```
 
+**Durable job index (MySQL, 2026-08-29):** job state is backed by MySQL
+`homelab.skill_jobs` (not in-memory-only) — jobs survive skill-runner restarts;
+a job still `running`/`pending` at restart is marked `interrupted`. Best-effort:
+degrades to in-memory-only if MySQL is unreachable. See
+[Cross-Client Skills](docs/thor_cross_client_skills.md).
+
 Skills compose MCP tools into controlled agentic workflows. The skill runner calls MCP servers **directly** over streamable HTTP on the Docker network (no LiteLLM proxy for tool calls).
+
+**Cross-client access:** the `mcp_skills` MCP server (3 meta-tools) wraps this API so
+any MCP client can list + run skills through LiteLLM. See
+[Cross-Client Skills](docs/thor_cross_client_skills.md).
 
 **Built-in scheduler:** A background thread (`scheduler.py`) checks a JSON config file every 60 seconds and dispatches matching scheduled jobs.
 
@@ -753,6 +770,8 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
 - `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
 - `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch)
+- `mcp_vision` — Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp)
+- `mcp_skills` — Cross-client skill gateway: 3 meta-tools (list_skills, run_skill, get_skill_job) wrapping the skill-runner; forwards the caller's LiteLLM key for per-user attribution
 
 All run on `ai-net`. Accessed by the skill runner over streamable HTTP.
 
