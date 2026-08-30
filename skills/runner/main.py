@@ -168,6 +168,8 @@ MCP_SERVER_URLS: dict[str, str] = {
 PRESENTON_URL = os.environ.get("PRESENTON_URL", "http://presenton:80")
 PRESENTON_USERNAME = os.environ.get("PRESENTON_AUTH_USERNAME", "presenton")
 PRESENTON_PASSWORD = os.environ.get("PRESENTON_AUTH_PASSWORD", "")
+# Passwordless (auth_todo.md Phase 5.5): when true, skip the Basic auth header.
+PRESENTON_PASSWORDLESS = os.environ.get("PRESENTON_PASSWORDLESS", "").lower() in ("1", "true", "yes")
 
 # ---------------------------------------------------------------------------
 # Job Model
@@ -1955,9 +1957,12 @@ def _scan_presentations(query: str) -> ChatResponse:
     """
     import base64
 
-    credentials = f"{PRESENTON_USERNAME}:{PRESENTON_PASSWORD}"
-    encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
-    auth_header = {"Authorization": f"Basic {encoded}", "Accept": "application/json"}
+    if PRESENTON_PASSWORDLESS:
+        auth_header = {"Accept": "application/json"}
+    else:
+        credentials = f"{PRESENTON_USERNAME}:{PRESENTON_PASSWORD}"
+        encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+        auth_header = {"Authorization": f"Basic {encoded}", "Accept": "application/json"}
 
     url = f"{PRESENTON_URL}/api/v1/ppt/presentation/all"
 

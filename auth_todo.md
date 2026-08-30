@@ -157,6 +157,11 @@
   `{$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}`. Caddy `header`
   matcher OR. Validated with `caddy validate`.)
 - 3.2 `caddy reload` + verify. ⚠️ **Manual step** (owner): `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+  **⚠️ 2026-08-29:** `caddy reload` only reloads the config, not the env vars.
+  The Caddy container was started before `LITELLM_KEY_CHUCK`/`LITELLM_KEY_DYLAN`
+  were added to `.env`, so the OR-gate only accepts the legacy key (401 for
+  chuck/dylan). **Additional manual step:** `docker restart caddy` to pick up
+  the new env vars. Verify: `curl -H "Host: siri.choukalos.com" -H "X-API-Key: <chuck-key>" http://192.168.4.54:80/api/health` → 404 (passed auth).
 
 ### Phase 4 — Grafana (verify + small add)
 - 4.1 Verify the per-user panels show chuck / dylan after threading (grouped
