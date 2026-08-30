@@ -172,7 +172,7 @@
   in `homelab-overview.json`. Per-user metrics will show up when
   `AUTH_KEY_THREADING_ENABLED=true`.)
 - 4.2 (optional) add a cached-tokens panel (small JSON edit, auto-provisioned).
-  ⚠️ Pending (optional).
+  ✅ (2026-08-29: 'Cached Tokens' panel added to `homelab-overview.json`.
 
 ### Phase 5 — Tooling & scripts (old Phase 9) — **DONE 2026-08-29**
 - 5.1 `cli/litellm-keys.sh` helper. ✅ (list/generate/delete; one-time value
