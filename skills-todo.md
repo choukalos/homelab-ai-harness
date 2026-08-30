@@ -202,19 +202,24 @@ After that, `/skill:morning-brief <topic>` works in any pi session.
 Same files also serve Claude Code / OpenCode / Codex (Agent Skills standard)
 — point their skill dirs at the same checkout.
 
-### W4. Skill Hub registration (item 1) — optional, do last
-- Script: for each skill, `POST /claude-code/plugins`
-  `{"name": "<hyphenated>", "source": {"source": "git-subdir",
-  "url": "https://github.com/choukalos/homelab-ai-harness.git",
-  "path": "agents-skills/<name>"}, "description": "...", "version": "1.0"}`
-  (auth: master/admin key), then `POST /claude-code/plugins/<name>/enable`.
-- Effect: `marketplace.json` lists them; pi injects name+description as
-  prompt guidance; Claude Code can `plugin marketplace add` + install.
-- **Caveat:** for Claude Code to treat the clone as a real plugin it needs a
-  plugin layout (`.claude-plugin/plugin.json` etc.); a bare SKILL.md dir is
-  only useful as a skill. Since W3 already covers Claude Code via Agent
-  Skills, W4's incremental value today is mostly the registry + pi prompt
-  hints. Low priority.
+### W4. Skill Hub registration (item 1) — **DONE (2026-08-29)**
+
+**Registered all 12 skills** in the LiteLLM Skill Hub via `POST /claude-code/plugins`:
+- `source`: `git-subdir` → `https://github.com/choukalos/homelab-ai-harness.git` / `agents-skills/<name>`.
+- `version`: `1.0.0`, `keywords`: `[homelab, skill-runner]`, `category`: `homelab`.
+- All 12 enabled via `POST /claude-code/plugins/<name>/enable`.
+
+**Effect:** `marketplace.json` now lists 12 plugins. pi (via `pi-provider-litellm`
+`listSkills()`) fetches `/claude-code/marketplace.json` and injects name+
+description into the system prompt as `<litellm_skills>` guidance — works on
+**any machine** (no per-machine setup). Claude Code can `plugin marketplace
+add` + install.
+
+**Caveat:** for Claude Code to treat the clone as a real plugin it needs a
+plugin layout (`.claude-plugin/plugin.json` etc.); a bare SKILL.md dir is
+only useful as a skill. Since W3 already covers Claude Code via Agent
+Skills, W4's incremental value today is mostly the registry + pi prompt
+hints.
 
 ## 4. Phases & manual steps (Chuck runs between turns)
 
@@ -223,7 +228,7 @@ Same files also serve Claude Code / OpenCode / Codex (Agent Skills standard)
 | A | W1 | **DONE (deployed + verified live, 2026-08-29):** `./homelab.sh rebuild skill-only` run; `GET /skills` (12 skills, auth), a real `morning_brief` job persisted to `skill_jobs`, completed job survives restart, in-flight job → `interrupted`. Does NOT touch LiteLLM. |
 | B | W2 | **DONE (deployed + verified live, 2026-08-29):** `mcp_skills` built + up on `ai-net`; `list_skills`/`run_skill`/`get_skill_job` verified against the running skill-runner. **One manual step remains:** `docker compose -f compose/compose.ai-core.yml restart litellm` (config.yml `mcp_servers` entry added) — the container is up but LiteLLM hasn't picked up the new entry yet. |
 | C | W3 | **DONE** (2026-08-29) — `agents-skills/` generated (12 SKILL.md), pi settings configured (`enableSkillCommands` + `skills` array). Restart pi session to activate. |
-| D | W4 (optional) | run registration script (idempotent; re-POST updates) |
+| D | W4 (optional) | **DONE** (2026-08-29) — 12 skills registered + enabled in LiteLLM Skill Hub (`/claude-code/marketplace.json`). pi on any machine now discovers them via system prompt. |
 
 ## 5. Decisions (resolved 2026-08-29)
 
