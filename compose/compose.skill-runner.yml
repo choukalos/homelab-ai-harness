@@ -27,6 +27,10 @@ services:
       - MCP_SERVER_FILESYSTEM_URL=http://mcp_filesystem:8000
       - MCP_SERVER_MEDIA_URL=http://mcp_media:8000
       - SKILL_RUNNER_API_KEY=${SIRI_API_KEY},${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
+      # Presenton passwordless (auth_todo.md Phase 5.5): skip Basic auth header.
+      - PRESENTON_PASSWORDLESS=true
+      # Key threading (auth_todo.md Phase 2.2): off by default (master key).
+      - AUTH_KEY_THREADING_ENABLED=${AUTH_KEY_THREADING_ENABLED:-false}
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
       - HARNESS_URL=http://skill-runner:8091

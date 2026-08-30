@@ -169,8 +169,9 @@ services:
     volumes:
       - /home/chuck/data/presenton:/app_data
     environment:
-      - AUTH_USERNAME=presenton
-      - AUTH_PASSWORD=${PRESENTON_AUTH_PASSWORD}
+      # Passwordless (auth_todo.md Phase 5.5): DISABLE_AUTH=true skips the
+      # auth middleware entirely. LAN-only :5000. Manual step G: recreate.
+      - DISABLE_AUTH=true
       - CAN_CHANGE_KEYS=false
       - LLM=custom
       - CUSTOM_LLM_URL=http://litellm-proxy:4000/v1
