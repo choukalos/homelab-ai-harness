@@ -26,7 +26,7 @@ services:
       - MCP_SERVER_HOMELAB_STATUS_URL=http://mcp_homelab_status:8000
       - MCP_SERVER_FILESYSTEM_URL=http://mcp_filesystem:8000
       - MCP_SERVER_MEDIA_URL=http://mcp_media:8000
-      - SKILL_RUNNER_API_KEY=${SIRI_API_KEY},${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
+      - SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
       # Presenton passwordless (auth_todo.md Phase 5.5): skip Basic auth header.
       - PRESENTON_PASSWORDLESS=true
       # Key threading (auth_todo.md Phase 2.2): off by default (master key).

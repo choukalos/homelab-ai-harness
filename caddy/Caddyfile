@@ -97,7 +97,7 @@
 		# Siri API — authenticated proxy to skill-runner
 		handle /siri/* {
 			uri strip_prefix /siri
-			@noAuth expression {http.request.header.X-Api-Key} != '{$SIRI_API_KEY}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
+			@noAuth expression {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
@@ -105,7 +105,7 @@
 		# Chat Gateway API — authenticated proxy to skill-runner
 		handle /api/* {
 			uri strip_prefix /api
-			@noAuth expression {http.request.header.X-Api-Key} != '{$SIRI_API_KEY}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
+			@noAuth expression {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
