@@ -1,50 +1,16 @@
-# =====================================================================
-# DRAFT — Fix metrics auth + add cache costs for litellm 1.92.0 (v2)
-# =====================================================================
-#
-# Changes from live config.yml:
-#   1. litellm_settings: added require_auth_for_metrics_endpoint: false
-#      (MUST be under litellm_settings, NOT general_settings.
-#       The proxy does setattr(litellm, key, value) for each key in
-#       litellm_settings, and PrometheusAuthMiddleware reads
-#       litellm.require_auth_for_metrics_endpoint.)
-#   2. model_info on each model: added cache_creation_input_token_cost and
-#      cache_read_input_token_cost (silences the register_model warnings)
-#      Cache creation cost = same as input cost (writing to cache costs the same)
-#      Cache read cost     = 10% of input cost (reading from cache is much cheaper)
-#   3. Note: The register_model warnings for the shared backend keys
-#      (openai/gemma-4b, etc.) may still appear at startup because the
-#      router intentionally strips custom pricing from the shared backend
-#      key to prevent cross-deployment pollution. Cache costs ARE tracked
-#      per-deployment via model_id. This is a cosmetic-only warning.
-#
-# Review and apply:
-#   cp litellm/draft/config.fix-cache-costs.yml litellm/config.yml
-#   docker compose -f compose/compose.ai-core.yml restart litellm
-# =====================================================================
-
 model_list:
-
-  # ─── Custom pricing for budget tracking ─────────────────────────
-  # Self-hosted models have no real $ cost, so we set nominal pricing
-  # so that key budgets actually work. At $0.000001/token:
-  #   $1 budget  = ~1M tokens  (~3-5k chat turns with ~200-300 tokens each)
-  #   $10 budget = ~10M tokens
-  #   $100 budget = ~100M tokens
-  # Embeddings are 10x cheaper since they're short vectors.
-  # Adjust to taste — the real "cost" is just your GPU time.
-
-  # -- Gemma-4b via LMStudio on Mac Studio M1 -----------------------
-  - model_name: studio-gemma4-4b
+  # -- Gemma-4 via OMLX on Mac Studio M1 (Backup LLM) -----------------------
+  - model_name: studio-gemma4-26b
     model_info:
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000001
-      cache_creation_input_token_cost: 0.000001
-      cache_read_input_token_cost: 0.0000001
+      input_cost_per_token: 0.00000025
+      output_cost_per_token: 0.000002
+      cache_creation_input_token_cost: 0.000000025
+      cache_read_input_token_cost: 0.0000000025
     litellm_params:
-      model: openai/gemma-4b
-      api_base: http://macstudio:1234/v1
-      api_key: "not-needed"
+      model: lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit
+      api_base: http://macstudio:8000/v1
+      api_key: "unused"
+      num_retries: 2
 
   # ── Qwen3.6-27B via vLLM (port 8000) ─────────────────────────────
   - model_name: matrix-coder
@@ -58,21 +24,6 @@ model_list:
       api_base: http://matrix:8000/v1
       api_key: "unused"
       num_retries: 2
-
-  - model_name: matrix-gemma4-moe
-    model_info:
-      input_cost_per_token: 0.00000025
-      output_cost_per_token: 0.000002
-      cache_creation_input_token_cost: 0.000000025
-      cache_read_input_token_cost: 0.0000000025
-    litellm_params:
-      model: ollama/gemma4:26b
-      api_base: http://matrix:11434
-      api_key: "unused"
-      num_retries: 2
-      extra_body:
-        options:
-          think: false
 
   # ── Nomic embed-text for embeddings ──────────────────────────────
   - model_name: embeddings
@@ -88,12 +39,6 @@ model_list:
       num_retries: 2
 
   # ── Nomic embed-text for long-term memory (versioned alias) ──────
-  # Same backend as `embeddings`; versioned so a future re-embedding
-  # migration (homelab-embedding-v2) can cut over cleanly without
-  # silently repointing the alias in use (memory_todo.md Phase 1/9).
-  # drop_params: mem0's OpenAI embedder hardcodes encoding_format=float,
-  # which LiteLLM rejects for the ollama backend; dropping it is safe
-  # (default response is a float list). Verified Phase 1 round-trip.
   - model_name: homelab-embedding-v1
     model_info:
       input_cost_per_token: 0.0000001
@@ -105,10 +50,6 @@ model_list:
       api_base: http://matrix:11434
       api_key: "unused"
       num_retries: 2
-      # mem0's OpenAI embedder always sends encoding_format=float; the ollama
-      # adapter rejects it. drop_params strips it before forwarding (LiteLLM's
-      # own suggested fix). Scoped to this alias only — other models keep
-      # strict param validation.
       drop_params: true
 
   - model_name: hf-sd3
@@ -124,108 +65,71 @@ general_settings:
   database_url: "os.environ/LITELLM_DATABASE_URL"
   set_verbose: true
   debug_level: "WARNING"
-  # Required for LiteLLM to store MCP server definitions
-  # in the database so the /mcp-rest endpoints can discover tools.
   store_model_in_db: true
-  # MCP client timeout (seconds) — SSE connections need more time
   mcp_client_timeout: 30
-  # Disable spend tracking — unnecessary for self-hosted homelab
   disable_spend_logs: true
   disable_spend_updates: true
 
 litellm_settings:
   callbacks:
     - prometheus
-  # ─── FIX: /metrics endpoint returning 401 ─────────────────────
-  # In 1.84.0+ the /metrics endpoint is authenticated by default.
-  # DISABLE_METRICS_AUTH env var is no longer honored.
-  # MUST be here under litellm_settings, NOT general_settings.
   require_auth_for_metrics_endpoint: false
 
-# ─── MCP Servers ───────────────────────────────────────────────────
-# LiteLLM v1.54+ supports MCP natively via the mcp_servers key.
-#
-# NOTE: Per-key MCP access restrictions (allow_all_keys → scoped grants)
-# are deferred to Phase 14.  For now both servers use allow_all_keys: true
-# so all LiteLLM API keys can call all MCP tools.
-
 mcp_servers:
-
-  # ── Search (SearXNG) ─────────────────────────────────────────────
   mcp_search:
     transport: http
     url: http://mcp_search:8000/mcp
     allow_all_keys: true
 
-  # ── Knowledge (Qdrant) ───────────────────────────────────────────
   mcp_knowledge:
     transport: http
     url: http://mcp_knowledge:8000/mcp
     allow_all_keys: true
-    # KB K3 (batched with mcp_vision registration, 2026-08-28): ingest
-    # (markitdown + embedding) and long video QA can exceed the 60s default.
     timeout: 7200
 
-  # ── Crawl (Crawl4AI) ─────────────────────────────────────────────
   mcp_crawl:
     transport: http
     url: http://mcp_crawl:8000/mcp
     allow_all_keys: true
 
-  # ── Filesystem Readonly ─────────────────────────────────────────
   mcp_filesystem_readonly:
     transport: http
     url: http://mcp_filesystem_readonly:8000/mcp
     allow_all_keys: true
 
-  # ── MySQL (Read-Only Database Queries) ──────────────────────────
   mcp_mysql:
     transport: http
     url: http://mcp_mysql:8000/mcp
     allow_all_keys: true
 
-  # ── Homelab Status (Docker/System) ──────────────────────────────
   mcp_homelab_status:
     transport: http
     url: http://mcp_homelab_status:8000/mcp
     allow_all_keys: true
 
-  # ── Filesystem (Read/Write, scoped to /home/chuck/workspace) ────
   mcp_filesystem:
     transport: http
     url: http://mcp_filesystem:8000/mcp
     allow_all_keys: true
 
-  # ── Media (image/video gen via GPU-host media-pipeline) ─────────
   mcp_media:
     transport: http
     url: http://mcp_media:8000/mcp
     allow_all_keys: true
-    # Pipeline flows block up to 2h (video upscale); LiteLLM's default MCP
-    # client timeout is 60s (LITELLM_MCP_CLIENT_TIMEOUT).
     timeout: 7200
 
-  # ── Vision (image/video analysis via matrix-coder) ──────────────
   mcp_vision:
     transport: http
     url: http://mcp_vision:8000/mcp
     allow_all_keys: true
-    # vision_analyze_video batches frames 5-per-call; long videos run
-    # minutes (extraction + N vision calls + consolidation).
     timeout: 7200
 
-  # ── Skills (cross-client skill discovery + execution) ──────────
   mcp_skills:
     transport: http
     url: http://mcp_skills:8000/mcp
     allow_all_keys: true
-    # Forward the caller's key so skill-runner can attribute the job to the
-    # right user (resolve_user_id). Plain non-OAuth server → LiteLLM forwards
-    # the caller's Authorization upstream (strip logic returns False).
     extra_headers:
       - Authorization
-    # run_skill blocks up to the skill's max_runtime (deep_research = 900s);
-    # default MCP client timeout is 60s (LITELLM_MCP_CLIENT_TIMEOUT).
     timeout: 7200
 
 
