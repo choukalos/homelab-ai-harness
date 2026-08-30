@@ -1,11 +1,11 @@
 ---
 name: morning-brief
-description: Daily morning brief: news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary.
+description: Daily morning brief — news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary.
 ---
 
 # Morning Brief
 
-Daily morning brief: news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary.
+Daily morning brief — news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary.
 
 ## How to run
 

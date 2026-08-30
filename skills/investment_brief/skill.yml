@@ -1,6 +1,6 @@
 name: investment_brief
 version: "1.0"
-description: "Investment brief: portfolio status, dividend highlights, market news. Configurable per user."
+description: "Investment brief — portfolio status, dividend highlights, market news. Configurable per user."
 inputs:
   - name: user_email
     type: string
