@@ -571,7 +571,7 @@ Two pathways coexist:
 iPhone Shortcut  →  Cloudflare Tunnel  →  Caddy  →  Skill Runner (:8091)  →  MCP servers / LiteLLM
 ```
 Endpoint: `POST https://siri.choukalos.com/api/chat`
-Auth: `X-API-Key` header (`SIRI_API_KEY` from `.env`)
+Auth: `X-API-Key` header (`LITELLM_KEY_CHUCK` or `LITELLM_KEY_DYLAN` from `.env`)
 
 Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **chat** — General Q&A via `siri_chat` skill
@@ -599,7 +599,7 @@ plus any queue wait), then `media_fetch` to download the result to
 ```bash
 curl -s -X POST https://siri.choukalos.com/api/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $SIRI_API_KEY" \
+  -H "X-API-Key: $LITELLM_KEY_CHUCK" \
   -d '{"text": "generate image of a geometric abstract logo"}'
 ```
 
