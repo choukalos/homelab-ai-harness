@@ -2,15 +2,15 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 9 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 53 tools as of 2026-08-29 — 46 + 6 new `mcp_knowledge` v2 tools;
-> legacy media tools removed 2026-08-28). This doc is the design baseline; the
-> "Current state" notes reflect the live system.
+> Status: **Implemented** — all 10 servers below are live in LiteLLM (streamable-http,
+> `ai-net`, 56 tools as of 2026-08-29 — 46 + 6 new `mcp_knowledge` v2 tools + 3
+> `mcp_skills` tools; legacy media tools removed 2026-08-28). This doc is the design
+> baseline; the "Current state" notes reflect the live system.
 
 **Current state (2026-08-29)**
-- 9 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (11),
+- 10 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (11),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5) — 53 tools total.
+  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3) — 56 tools total.
 - **`mcp_knowledge` v2 (2026-08-29 — D6 closed):** family KB rebuilt on Qdrant
   `kb_*` collections (one per domain, 768-dim nomic, created on the fly;
   11 tools: `kb_search`, `kb_get_document`, `kb_list_documents`, `kb_overview`,
@@ -48,6 +48,16 @@
   `vision_cleanup` or `scripts/cleanup-vision.sh`). Registered in LiteLLM with
   `timeout: 7200` (batched owner reload with the `mcp_knowledge` 7200s timeout
   for KB K3). See `mcp/servers/vision/README.md` and `mcp-vision-todo.md`.
+- **`mcp_skills` added (2026-08-29 — cross-client skill gateway):** 3 meta-tools
+  (`list_skills`, `run_skill`, `get_skill_job`) wrapping the skill-runner so any
+  MCP client can list + run skills through LiteLLM (low context: 3 schemas
+  always-on, not 15 per-skill tools). `run_skill` is synchronous (blocks up to the
+  skill's `max_runtime`, else returns a `job_id`); `get_skill_job` retrieves it.
+  Identity threading: LiteLLM forwards the caller's `Authorization` header
+  (`extra_headers: [Authorization]`); the server presents it as `X-API-Key` for
+  execution (per-user attribution) and uses the service key for discovery
+  (`GET /skills`). `timeout: 7200`. See `mcp/servers/skills/README.md` and
+  `docs/thor_cross_client_skills.md`.
 
 ---
 
@@ -76,6 +86,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
 | `mcp_media` | Media ops: **GPU media-pipeline (10 tools, live 2026-08-28)** | GPU host `:8189` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
+| `mcp_skills` | Cross-client skill gateway: list/run/get skill jobs (3 tools, live 2026-08-29) | skill-runner `:8091` |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
@@ -258,6 +269,23 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ---
 
+### 7d. `mcp_skills` (added 2026-08-29)
+
+| Field | Value |
+|---|---|
+| **Purpose** | Cross-client skill gateway: lets any MCP client list + run the homelab's skills through LiteLLM, without exposing skill-runner. Low context footprint — 3 meta-tools always-on, not 15 per-skill tools. |
+| **Tools (live)** | `list_skills()`, `run_skill(name, prompt?, params?, max_wait?)`, `get_skill_job(job_id)` — **3 tools** |
+| **Behavior** | `list_skills` → `GET /skills` (discovery, service key). `run_skill` → `POST /skills/{name}` — **synchronous** (blocks until terminal or approval gate); `prompt` auto-maps to the skill's primary string input (well-known names → required string → first string); `params` wins over `prompt`; `max_wait` defaults to the skill's `max_runtime` (else 180s); httpx timeout = `max_wait + 30`; on timeout → `RuntimeError` with a `job_id` hint. `get_skill_job` → `GET /skills/jobs/{job_id}`. |
+| **Identity threading** | `_caller_key(ctx)` reads the caller's LiteLLM key from the `Authorization` header (LiteLLM forwards it via `extra_headers: [Authorization]` — plain non-OAuth server, strip logic returns False). **Execution** (`run_skill`/`get_skill_job`) presents the caller key as `X-API-Key` → skill-runner `resolve_user_id()` attributes the job to the right user (falls back to the service key). **Discovery** (`list_skills`) always uses the service key (`SKILL_RUNNER_API_KEY`) — the caller's key (e.g. the LiteLLM master) is not in skill-runner's allow-list. (Fixed 2026-08-29: discovery used the caller key → 403.) |
+| **Backend** | skill-runner `:8091` (`GET /skills`, `POST /skills/{name}`, `GET /skills/jobs/{id}`) |
+| **Read/write** | Read (`list_skills`, `get_skill_job`) + write (`run_skill` — executes a skill, may produce artifacts) |
+| **Security** | ai-net only (NOT exposed to host). No client ever talks to skill-runner directly. Per-user attribution via the caller key (Phase 1 of `auth_todo.md` will point the `chuck` pair at a personal key). |
+| **LiteLLM** | `allow_all_keys: true`, `extra_headers: [Authorization]`, `timeout: 7200` (run_skill blocks up to max_runtime; deep_research=900s) |
+| **Deps** | `mcp>=1.10,<2`, `httpx>=0.27`. Transport: streamable-http, path `/mcp`. |
+| **Notes** | Verified through LiteLLM 2026-08-29: `mcp_skills-list_skills` (12 skills), `mcp_skills-run_skill` (morning_brief, siri_ask completed), `mcp_skills-get_skill_job` (job retrieval), identity threading (X-API-Key → `service`). See `mcp/servers/skills/README.md` + `docs/thor_cross_client_skills.md`. |
+
+---
+
 ### 8. `mcp_home`
 
 | Field | Value |
@@ -286,15 +314,18 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | `mcp_homelab_status` | ✅ | — | — | — | ✅ | — | — |
 | `mcp_media` | ✅ | — | ✅ | — | ✅ | — | — |
 | `mcp_vision` | ✅ | ✅ | ✅ | — | — | — | — |
+| `mcp_skills` | ✅ | ✅ | ✅ | — | ✅ | — | — |
 | `mcp_home` | ✅ | — | — | — | — | — | Read (future) |
 
 ---
 
 ## Rules
 
-- **Implemented.** All 9 servers run as containers on `ai-net` (streamable-http, port 8000)
+- **Implemented.** All 10 servers run as containers on `ai-net` (streamable-http, port 8000)
   and are registered in `litellm/config.yml` (`mcp_servers`, `allow_all_keys: true` —
   decided 2026-08-25: every valid key may call every tool; no scoped grants).
+  `mcp_skills` additionally forwards the caller's `Authorization` header
+  (`extra_headers: [Authorization]`) for per-user skill attribution.
 - MCP servers run as separate containers on Thor (`compose/compose.mcp.yml`).
 - The skill runner composes MCP tools into workflows — MCP servers do not know about skills.
 - `mcp_code` is deferred to future exploration.
