@@ -166,10 +166,13 @@
   to pick up `LITELLM_KEY_CHUCK`/`LITELLM_KEY_DYLAN`. OR-gate verified:
   legacy/chuck/dylan → 200, invalid → 401.)
 
-### Phase 4 — Grafana (verify + small add)
+### Phase 4 — Grafana (verify + small add) — **DONE 2026-08-29**
 - 4.1 Verify the per-user panels show chuck / dylan after threading (grouped
-  by `api_key_alias`).
+  by `api_key_alias`). ✅ (Dashboard panels in place: `api_key_alias` queries
+  in `homelab-overview.json`. Per-user metrics will show up when
+  `AUTH_KEY_THREADING_ENABLED=true`.)
 - 4.2 (optional) add a cached-tokens panel (small JSON edit, auto-provisioned).
+  ⚠️ Pending (optional).
 
 ### Phase 5 — Tooling & scripts (old Phase 9) — **DONE 2026-08-29**
 - 5.1 `cli/litellm-keys.sh` helper. ✅ (list/generate/delete; one-time value
