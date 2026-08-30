@@ -34,8 +34,8 @@
 		}
 	}
 
-	@invest host invest.choukalos.com
-	handle @invest {
+    @invest host invest.choukalos.com
+    handle @invest {
 		# 1. Route API requests to the backend server (same-origin, no CORS)
 		route /api/* {
 			reverse_proxy http://invest-hub-server:4000 {
@@ -67,11 +67,25 @@
 		}
 	}
 
+
+#	@invest host invest.choukalos.com
+#	handle @invest {
+#	          reverse_proxy http://invest-hub-client:80 {
+#              header_up Host {host}
+#              header_up X-Real-IP {remote_host}
+#              header_up X-Forwarded-For {remote_host}
+#              header_up X-Forwarded-Host {host} 
+#              header_up X-Forwarded-Proto https
+#              header_up X-Forwarded-Port 443
+#            }
+#	}
+
 	@siri_media {
 		host siri.choukalos.com
 		path /media/files/*
 	}
 	handle @siri_media {
+		# Old: reverse_proxy http://ai-harness:8090
 		reverse_proxy http://skill-runner:8091
 	}
 
@@ -95,23 +109,25 @@
 		}
 
 		# Siri API — authenticated proxy to skill-runner
+		# OR-gate over 3 keys (auth_todo.md Phase 3): legacy SIRI_API_KEY,
+		# LITELLM_KEY_CHUCK, LITELLM_KEY_DYLAN. Caddy `header` matches ANY value.
 		handle /siri/* {
 			uri strip_prefix /siri
-			@noAuth expression {http.request.header.X-Api-Key} != '{$SIRI_API_KEY}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
+			@noAuth not header X-API-Key {$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
 
 		# Chat Gateway API — authenticated proxy to skill-runner
 		handle /api/* {
-			uri strip_prefix /api
-			@noAuth expression {http.request.header.X-Api-Key} != '{$SIRI_API_KEY}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
+			@noAuth not header X-API-Key {$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
 
 		respond "Not Found" 404
 	}
+
 
 	@llm host llm.choukalos.com
 	handle @llm {
