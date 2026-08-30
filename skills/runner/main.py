@@ -1232,8 +1232,22 @@ def _execute_skill(job: Job) -> None:
 
     job.add_log(f"Skill module found at: {skill_path}")
 
-    # Build LiteLLM client and sync wrapper for the job
-    litellm_client = LiteLLMClient()
+    # Build LiteLLM client and sync wrapper for the job.
+    # Key threading (auth_todo.md Phase 2.2): when AUTH_KEY_THREADING_ENABLED,
+    # use the caller's per-user LiteLLM key (from the request context) so
+    # LiteLLM metrics show per-user attribution. Otherwise use the master key.
+    _ctx = get_current_context()
+    _caller_key: Optional[str] = None
+    _caller_user: Optional[str] = None
+    if AUTH_KEY_THREADING_ENABLED and _ctx is not None:
+        # The caller's key is the X-API-Key that was used to call the runner.
+        # It's stored in the request context (set by the /api/chat handler).
+        _caller_key = getattr(_ctx, "api_key", None)
+        _caller_user = _ctx.user_id
+    litellm_client = LiteLLMClient(
+        api_key=_caller_key,
+        user_id=_caller_user,
+    )
     sync_client = _SyncLiteLLMWrapper(litellm_client)
     job.add_log(
         f"LiteLLM client initialised: base_url={litellm_client.base_url}"
@@ -2263,7 +2277,10 @@ async def api_chat(
     # contextvar is task-scoped: visible to inline handlers and _chat_direct;
     # Job objects carry the identity into background execution.
     user_id = resolve_user_id(x_api_key)
-    set_current_context(RequestContext(user_id=user_id, source="web"))
+    # Key threading (auth_todo.md Phase 2.2): store the caller's X-API-Key in
+    # the request context so the LiteLLMClient can thread it through skill
+    # execution (when AUTH_KEY_THREADING_ENABLED).
+    set_current_context(RequestContext(user_id=user_id, source="web", api_key=x_api_key))
 
     intent = _detect_intent(body.text, body.intent)
     model = body.model or "matrix-gemma4-moe"
