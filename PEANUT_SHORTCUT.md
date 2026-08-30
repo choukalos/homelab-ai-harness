@@ -37,21 +37,32 @@ shortcut sends in the `X-API-Key` header. It's also what makes Peanut's
 # Part 1 — MVP Shortcut (spoken answers)
 
 **Goal:** "Hey Siri, Peanut" → Peanut asks your question → Peanut answers
-out loud. ~10 minutes, one-time.
+out loud. ~10 minutes, one-time. **Build it on your Mac** — it syncs to your
+iPhone via iCloud, and the same shortcut works on both.
 
-## 1.1 Create the shortcut
+> ### ⚠️ Action names: Mac vs iPhone
+> The Mac Shortcuts app calls the text-input action **`Ask for Input`** — on
+> iPhone the same action shows up as **`Ask for Text`**. Every other action
+> in this guide has the **same name on both platforms**. If you can't find an
+> action, type its name in the **search field at the top of the action
+> library** (click the **+** button in the editor to open it).
 
-1. Open the **Shortcuts** app on iPhone → **+** (top right) → **New Shortcut**.
+## 1.1 Create the shortcut (on your Mac)
+
+1. Open the **Shortcuts** app on your Mac → **+** (top right) → **New Shortcut**.
 2. Name it **`Peanut`**.
-   - The voice trigger becomes **"Hey Siri, Peanut"**.
+   - Siri triggers a shortcut by its **exact name**: "Hey Siri, Peanut".
    - If "Peanut" (a common word) ever mis-triggers, rename it **`Ask Peanut`**
      and use "Hey Siri, Ask Peanut".
-3. Tap **Add Action** and add the following, **in order**:
+3. Click the **+** button (top right, "Add Action") to open the action
+   library, and add the following, **in order** (search for each bold name):
 
-### Action 1 — `Ask for Text`
-*(iOS 18+. On older iOS use **Dictate Text** instead.)*
-- **Prompt Text:** `What do you want to ask Peanut?`
-- This captures your spoken question.
+### Action 1 — `Ask for Input`
+*(This is the Mac name for the iPhone "Ask for Text" action.)*
+- When you add it, make sure it's set to **Ask for Text** (it has a prompt field).
+- **Prompt:** `What do you want to ask Peanut?`
+- Run it normally → a dialog where you type. **Triggered by Siri → it asks
+  you to SPEAK the answer instead** — no extra setup, that's the magic.
 
 ### Action 2 — `Text`
 *(builds the JSON request body — Shortcuts can't build JSON natively)*
@@ -59,22 +70,22 @@ out loud. ~10 minutes, one-time.
   ```
   {"text": ""}
   ```
-- Delete the empty `""` and tap the **`Ask for Text` variable chip**
-  (top of the screen) so it reads:
+- Delete the empty `""` and click the **`Ask for Input` variable chip**
+  (in the variable bar at the top of the editor) so it reads:
   ```
-  {"text": "[Ask for Text]"}
+  {"text": "[Ask for Input]"}
   ```
 
 ### Action 3 — `Send HTTP Request`
 - **URL:** `https://siri.choukalos.com/siri/api/chat`
 - **Method:** `POST`
-- **Headers** → tap **Add Header**:
+- **Headers** → click **Add Header**:
   - Name: `X-API-Key`
   - Value: *your key* (`sk-…` — from `.env` on the homelab, or send it to
     yourself via Messages from the Mac. **Do not put it in a note anyone else
-    can see.**)
-- **Body** → tap **Add Body** → type: `JSON`
-  - **Body:** tap the variable bar and select the **`Text`** action's output
+    can see.**) 
+- **Body** → click **Add Body** → type: `JSON`
+  - **Body:** click the variable bar and select the **`Text`** action's output
     (the `{"text": …}` variable).
 - *(Show More → Timeout: leave the default; sync answers usually come back in
   < 15 s.)*
@@ -91,17 +102,28 @@ out loud. ~10 minutes, one-time.
 - Input: add a `Get Dictionary Value` for key `display` first, then show it.
 - Gives you the full answer on screen while Siri speaks the short version.
 
-4. **Add to Siri:** tap the **⋯** menu next to the shortcut → **Add to Siri**
-   (hold the on-screen button to confirm).
-   - Or: Settings → Siri & Search → "Hey Siri, Peanut".
+4. **Siri trigger:** on the Mac there is **no "Add to Siri" step** —
+   "Hey Siri, Peanut" works as soon as the shortcut exists. On your iPhone
+   (after it syncs), add it properly: Shortcuts → **⋯** menu next to the
+   shortcut → **Add to Siri** (hold the on-screen button to confirm).
 
 ## 1.2 Test it
+
+**From your Mac:**
+- Click the **▶ Run** button in the editor (or press **⌘R**) — a dialog asks
+  for your question (type it), and Peanut answers out loud from your Mac's
+  speakers.
+- Or say **"Hey Siri, Peanut"** — the same shortcut then prompts you to
+  **speak** your question.
 
 | You say | What happens |
 |---|---|
 | "Hey Siri, Peanut" → *what time is it in Chicago?* | Fast spoken answer (default `chat` intent — direct LLM, no tools) |
 | "Hey Siri, Peanut" → *remember that the garage door code is 4415* | `remember` intent → stores it in **your** memory ("Got it — I'll remember that.") |
 | "Hey Siri, Peanut" → *what did I tell you about the garage door?* | LLM answers from your retrieved memories |
+
+**From your iPhone:** once the shortcut has synced (it appears in the
+Shortcuts app), say "Hey Siri, Peanut" and speak your question.
 
 ## 1.3 What you can ask (intent cheat sheet)
 
@@ -150,11 +172,12 @@ with the URL can open them (no auth). Don't generate sensitive images.
 **Reminders is the CarPlay-friendly inbox** — it's a first-class CarPlay app,
 Siri can read it hands-free, and links open in Safari on the car's screen.
 
-**One-time setup:** open the Reminders app → create a list named **`Peanut`**.
+**One-time setup:** open the Reminders app (Mac or iPhone — they sync via
+iCloud) → create a list named **`Peanut`**.
 
 ## 2.3 Extend the shortcut (after Action 5, `Speak Text`)
 
-Add these actions in order:
+Add these actions in order (same names on Mac — search for each one):
 
 ### Action 7 — `Get List Items`
 - **From:** the `Send HTTP Request` result
@@ -176,7 +199,7 @@ Add these actions in order:
 
 ### Action 11 — (inside If) `Add to Reminders`
 - **List:** `Peanut`
-- **Name:** `Peanut: ` + the `Ask for Text` variable (so you know what each
+- **Name:** `Peanut: ` + the `Ask for Input` variable (so you know what each
   reminder was for)
 - **Notes:** the `Combine Text` output (the URLs)
 
@@ -208,14 +231,13 @@ Those are **async**: the POST returns `job_id` + "I've started processing…".
 To get the real answer in the shortcut, add a **second shortcut**
 (name it **`Peanut Brain`** — trigger "Hey Siri, Peanut Brain"):
 
-1. `Ask for Text` — prompt: *What do you want Peanut to dig into?*
-2. `Text` — body: `{"text": "[Ask for Text]", "intent": "siri-chat"}`
+1. `Ask for Input` (Mac) / `Ask for Text` (iPhone) — prompt: *What do you want Peanut to dig into?*
+2. `Text` — body: `{"text": "[Ask for Input]", "intent": "siri-chat"}`
 3. `Send HTTP Request` — same URL/headers as the MVP; body = that Text
 4. `Get Dictionary Value` — key `job_id`
 5. `Repeat` (up to 12 times — i.e. ~60 s; raise for deep research):
    - `Wait` 5 seconds
-   - `Send HTTP Request` — **GET** `https://siri.choukalos.com/siri/skills/jobs/[job_id]`
-     (same `X-API-Key` header)
+   - `Send HTTP Request` — **GET** `https://siri.choukalos.com/siri/skills/jobs/` + the `job_id` variable (same `X-API-Key` header)
    - `Get Dictionary Value` — key `status`
    - `If` status **is** `completed` **or** `failed` → `Break`
 6. `Get Dictionary Value` — key `summary` (from the last job poll)
@@ -297,7 +319,8 @@ curl -s -X POST https://siri.choukalos.com/siri/api/chat \
 ## 3.2 Their iPhone (10 min)
 
 1. Send them the key (securely — Messages from the Mac, not a group chat).
-2. Follow **Part 1** on their iPhone with *their* key.
+2. Follow **Part 1** with *their* key — build on your Mac (it syncs to their
+   iPhone if you share the shortcut) or on their iPhone directly.
 3. Done — "Hey Siri, Peanut" works for them, with *their* memory.
 
 ## 3.3 Safety notes (kids)
@@ -328,6 +351,7 @@ curl -s -X POST https://siri.choukalos.com/siri/api/chat \
 
 | Symptom | Likely cause / fix |
 |---|---|
+| **Can't find an action** in the Mac app | Use the **search field** at the top of the action library. The Mac calls the input action **`Ask for Input`** (iPhone: "Ask for Text"); everything else keeps its name |
 | Shortcut shows **401** | Key wrong, or not in the Caddy allowlist (Part 3, Step 3) |
 | Shortcut shows **403 "Invalid API key"** | Key passes Caddy but missing from `SKILL_RUNNER_API_KEY` (Part 3, Step 4) |
 | Siri says *"couldn't complete the request"* | Timeout — long intents are async; use the Part 2.5 polling shortcut or check the job later |
