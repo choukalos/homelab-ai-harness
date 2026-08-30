@@ -871,6 +871,38 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Cached Tokens (per-user)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (api_key_alias) (increase(litellm_cached_tokens_metric_total{api_key_alias!=\"\"}[5m]))",
+          "legendFormat": "{{api_key_alias}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
       "id": 7,
       "title": "Services",
       "type": "row",
