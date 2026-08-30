@@ -64,6 +64,9 @@ class RequestContext:
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     source: str = "web"
     agent_id: Optional[str] = None
+    # Key threading (auth_todo.md Phase 2.2): the caller's X-API-Key value,
+    # used to thread the per-user LiteLLM key through skill execution.
+    api_key: Optional[str] = None
 
 
 def set_current_context(ctx: RequestContext) -> object:
