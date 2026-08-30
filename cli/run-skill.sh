@@ -30,7 +30,15 @@ elif [[ -f "${SCRIPT_DIR}/.env" ]]; then
 fi
 
 # Endpoint config — default to local, use --public for remote
-SIRI_API_KEY="${SIRI_API_KEY:?SIRI_API_KEY is not set (needs .env or env var)}"
+# Per-user key selection (auth_todo.md Phase 5.2): --user <chuck|dylan|legacy>
+# or SKILL_USER env var. Default: legacy (SIRI_API_KEY).
+SKILL_USER="${SKILL_USER:-legacy}"
+case "$SKILL_USER" in
+  chuck)  SKILL_API_KEY="${LITELLM_KEY_CHUCK:?LITELLM_KEY_CHUCK not set}" ;;
+  dylan)  SKILL_API_KEY="${LITELLM_KEY_DYLAN:?LITELLM_KEY_DYLAN not set}" ;;
+  legacy) SKILL_API_KEY="${SIRI_API_KEY:?SIRI_API_KEY not set}" ;;
+  *) echo "ERROR: unknown --user '$SKILL_USER' (chuck|dylan|legacy)" >&2; exit 1 ;;
+esac
 BASE_SKILL_RUNNER="${BASE_SKILL_RUNNER:-http://${THOR_IP:-192.168.4.54}:8091}"
 BASE_PUBLIC="https://siri.choukalos.com"
 
@@ -125,7 +133,7 @@ poll_job() {
         local http_code
         http_code=$(curl -sS -o "${poll_resp}" -w "%{http_code}" \
             -X GET "${BASE_SKILL_RUNNER}/api/jobs/${job_id}" \
-            -H "X-API-Key: ${SIRI_API_KEY}" \
+            -H "X-API-Key: ${SKILL_API_KEY}" \
             --max-time 30 2>/dev/null) || http_code="000"
 
         if [[ "$http_code" != "200" ]]; then
@@ -299,7 +307,7 @@ json.dump(payload, sys.stdout)
     http_code=$(curl -sS -o "${_RESP_FILE}" -w "%{http_code}" \
         -X POST "${BASE_SKILL_RUNNER}/api/chat" \
         -H "Content-Type: application/json" \
-        -H "X-API-Key: ${SIRI_API_KEY}" \
+        -H "X-API-Key: ${SKILL_API_KEY}" \
         -d "@${_PAYLOAD_FILE}" \
         --max-time "${timeout}" 2>/dev/null) || http_code="000"
 
