@@ -428,6 +428,12 @@ _SKILL_TIMEOUTS = {
 }
 _DEFAULT_TIMEOUT = 120  # fallback
 
+# Default chat model for /api/chat when the request omits `model`.
+# Env-configurable so model renames in litellm/config.yml don't break the
+# Siri path (was hardcoded to matrix-gemma4-moe, which was replaced by
+# matrix-coder in the 2026-08-30 config update).
+DEFAULT_CHAT_MODEL = os.environ.get("SKILL_RUNNER_DEFAULT_MODEL", "matrix-coder")
+
 
 def dispatch_job(
     skill: str,
@@ -1618,7 +1624,7 @@ def serve_media_file(filepath: str):
 class ChatRequest(BaseModel):
     text: str = Field(..., description="User query or command")
     intent: Optional[str] = Field(None, description="Override intent detection")
-    model: Optional[str] = Field(None, description="Model alias override (default: matrix-gemma4-moe).")
+    model: Optional[str] = Field(None, description="Model alias override (default: $SKILL_RUNNER_DEFAULT_MODEL, fallback matrix-coder).")
     memory: Optional[dict] = Field(
         None,
         description=(
@@ -2283,7 +2289,7 @@ async def api_chat(
     set_current_context(RequestContext(user_id=user_id, source="web", api_key=x_api_key))
 
     intent = _detect_intent(body.text, body.intent)
-    model = body.model or "matrix-gemma4-moe"
+    model = body.model or DEFAULT_CHAT_MODEL
 
     # Per-request memory switch (Phase 4): {"memory": {"enabled": false}}
     # disables retrieval for this request only.

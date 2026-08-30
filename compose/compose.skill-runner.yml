@@ -19,6 +19,9 @@ services:
       - SKILL_RUNNER_LOG_DIR=/home/chuck/homelab/logs/skill_runner
       - SKILL_RUNNER_PORT=8091
       - SKILL_RUNNER_HOST=0.0.0.0
+      # Default chat model for /api/chat (see DEFAULT_CHAT_MODEL in main.py).
+      # Keep in sync with model names in litellm/config.yml.
+      - SKILL_RUNNER_DEFAULT_MODEL=${SKILL_RUNNER_DEFAULT_MODEL:-matrix-coder}
       - MCP_SERVER_SEARCH_URL=http://mcp_search:8000
       - MCP_SERVER_KNOWLEDGE_URL=http://mcp_knowledge:8000
       - MCP_SERVER_CRAWL_URL=http://mcp_crawl:8000
