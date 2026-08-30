@@ -45,7 +45,14 @@ run_skill() {
   local job_id
   job_id=$(echo "$resp" | jq -r '.job_id // empty')
   if [[ -z "$job_id" ]]; then
-    echo "  $label: FAILED (no job_id): $resp"
+    # Synchronous skill (job_id is null) — check the response directly
+    local speak
+    speak=$(echo "$resp" | jq -r '.speak // .display // empty')
+    if [[ -n "$speak" ]]; then
+      echo "  $label: COMPLETED (sync) speak=$speak"
+      return 0
+    fi
+    echo "  $label: FAILED (no job_id, no speak): $resp"
     return 1
   fi
   # Poll for completion
