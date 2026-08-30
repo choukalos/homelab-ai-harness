@@ -1,11 +1,11 @@
 ---
 name: investment-brief
-description: Investment brief: portfolio status, dividend highlights, market news. Configurable per user.
+description: Investment brief — portfolio status, dividend highlights, market news. Configurable per user.
 ---
 
 # Investment Brief
 
-Investment brief: portfolio status, dividend highlights, market news. Configurable per user.
+Investment brief — portfolio status, dividend highlights, market news. Configurable per user.
 
 ## How to run
 

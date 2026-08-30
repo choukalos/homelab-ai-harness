@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Pre-commit hook: validate skills YAML (agents-skills/*/SKILL.md + skills/*/skill.yml).
+#
+# Guards against the 2026-09-01 pi.dev bug: an unquoted `: ` inside a SKILL.md
+# frontmatter `description` value is invalid YAML ("Nested mappings are not
+# allowed in compact mappings") and breaks clients that parse the frontmatter.
+#
+# Activated via: git config core.hooksPath .githooks
+# (run that once per clone; see docs/thor_cross_client_skills.md, Layer 3.)
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Only run when skill files are staged (fast no-op otherwise)
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(agents-skills/|skills/|tests/test_skills_yaml\.py)'; then
+    if ! python3 tests/test_skills_yaml.py; then
+        echo ""
+        echo "pre-commit: skills YAML validation FAILED — fix the errors above."
+        echo "  - SKILL.md frontmatter must be strict-parseable YAML (quote or reword values containing ': ')"
+        echo "  - SKILL.md description must match skills/<name>/skill.yml"
+        exit 1
+    fi
+fi
+
+exit 0

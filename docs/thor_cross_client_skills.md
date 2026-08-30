@@ -117,7 +117,7 @@ Skills layout — portable across pi / Claude Code / OpenCode / Codex).
 ```markdown
 ---
 name: morning-brief          # hyphenated (Agent Skills rule)
-description: <from skill.yml>
+description: <from skill.yml>   # MUST be strict-parseable YAML — see rule below
 ---
 # Morning Brief
 <description>
@@ -129,6 +129,18 @@ Call the `mcp_skills` MCP tool `run_skill` with `name: morning_brief` (underscor
 ## Example
 /skill:morning-brief <topic>
 ```
+
+**YAML frontmatter rule (2026-09-01):** the frontmatter is parsed by clients
+(pi, Claude Code, …) with a strict YAML parser. A `description` value containing
+an unquoted `: ` (colon + space) is invalid — YAML reads it as a nested mapping
+(`"Nested mappings are not allowed in compact mappings"`), and the client fails
+to load the skill. Either **quote** the value or **reword** it (the repo
+convention is to reword with an em dash, e.g. `Investment brief — portfolio
+status, …`). Keep the SKILL.md description identical to the `skills/<name>/
+skill.yml` source of truth. Guardrail: `tests/test_skills_yaml.py` (7 checks:
+strict YAML parse, name/dir match, skill.yml validity, source/wrapper
+description parity, regression cases) is wired into the pre-commit hook
+(`.githooks/pre-commit`, activate with `git config core.hooksPath .githooks`).
 
 **Install on a machine (pi):** `~/.pi/agent/settings.json`
 ```json
@@ -235,3 +247,12 @@ point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
 - Restart LiteLLM to pick up `mcp_servers.mcp_skills` (config change).
 - Restart pi session to pick up the `agents-skills/` SKILL.md wrappers.
 - Per-user keys (`auth_todo.md` Phase 1) for per-user attribution.
+
+## Fix log
+
+- **2026-09-01 — pi.dev `[Skill conflicts]` / YAML parse failure.**
+  `investment-brief` + `morning-brief` SKILL.md frontmatter had unquoted `: `
+  in `description` → strict YAML parsers rejected the file. Reworded both
+  descriptions (em dash instead of colon) in SKILL.md + skill.yml, re-registered
+  the two Skill Hub plugins with the new descriptions, added
+  `tests/test_skills_yaml.py` + `.githooks/pre-commit` guardrail.

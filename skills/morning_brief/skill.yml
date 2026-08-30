@@ -1,6 +1,6 @@
 name: morning_brief
 version: "1.0"
-description: "Daily morning brief: news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary."
+description: "Daily morning brief — news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary."
 inputs:
   - name: interests
     type: string
