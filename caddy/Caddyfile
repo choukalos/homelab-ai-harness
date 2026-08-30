@@ -109,16 +109,18 @@
 		}
 
 		# Siri API — authenticated proxy to skill-runner
+		# OR-gate over 3 keys (auth_todo.md Phase 3): legacy SIRI_API_KEY,
+		# LITELLM_KEY_CHUCK, LITELLM_KEY_DYLAN. Caddy `header` matches ANY value.
 		handle /siri/* {
 			uri strip_prefix /siri
-			@noAuth not header X-API-Key {$SIRI_API_KEY}
+			@noAuth not header X-API-Key {$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
 
 		# Chat Gateway API — authenticated proxy to skill-runner
 		handle /api/* {
-			@noAuth not header X-API-Key {$SIRI_API_KEY}
+			@noAuth not header X-API-Key {$SIRI_API_KEY} {$LITELLM_KEY_CHUCK} {$LITELLM_KEY_DYLAN}
 			respond @noAuth "Unauthorized" 401
 			reverse_proxy http://skill-runner:8091
 		}
