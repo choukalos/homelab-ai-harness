@@ -146,8 +146,10 @@
   `SKILL_RUNNER_API_KEY` = `${SIRI_API_KEY},${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}`
   in both compose files.)
 - 2.2 Code: `LiteLLMClient` key threading (optional `api_key` / `user_id`),
-  flag `AUTH_KEY_THREADING_ENABLED`.
-- 2.3 Tests (unit + disposable container).
+  flag `AUTH_KEY_THREADING_ENABLED`. ✅ (2026-08-29: `RequestContext.api_key`
+  set in `/api/chat`; `LiteLLMClient` threads caller key + user_id when flag
+  on; `LiteLLM-User-Id` header added. Flag off by default.)
+- 2.3 Tests (unit + disposable container). ⚠️ Pending (after manual step B).
 - 2.4 Commit; **manual step B** (rebuild skill-only).
 - 2.5 Live: T5–T8 (per-user attribution, isolation).
 
