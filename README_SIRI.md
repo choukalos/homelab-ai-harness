@@ -19,8 +19,7 @@ Every request needs **one** of these headers:
 
 | Header | Value |
 |---|---|
-| `X-API-Key` | your `SIRI_API_KEY` (see `.env`) |
-| `Authorization` | `Bearer <SIRI_API_KEY>` |
+| `X-API-Key` | your `CHUCK_LLM_KEY` (see `.env`) |
 
 ### Request Format (JSON body)
 
@@ -488,37 +487,37 @@ This tests health (local + public), Siri chat (local + public), and auth rejecti
 # Quick chat test
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"What services run in my AI harness?"}'
 
 # Research
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"research best local embedding models"}'
 
 # Image (will take 30-60 sec)
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"generate image of a futuristic server room"}'
 
 # Demo (async — returns immediately)
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"build a demo for a pet adoption app"}'
 
 # Force intent override
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"something ambiguous", "intent":"research"}'
 
 # Update a presentation (async)
 curl -X POST https://siri.choukalos.com/siri/chat \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_SIRI_API_KEY" \
+  -H "X-API-Key: LITELLM_KEY_CHUCK (see .env)" \
   -d '{"text":"update the AI homelab to be more casual"}'
 ```
 
@@ -532,7 +531,7 @@ curl -X POST https://siri.choukalos.com/siri/chat \
 |---|---|
 | **Method** | `POST` |
 | **URL** | `https://siri.choukalos.com/siri/chat` |
-| **Header** | `X-API-Key: <your SIRI_API_KEY>` |
+| **Header** | `X-API-Key: <LITELLM_KEY_CHUCK (see .env)>` |
 | **Body** | `{"text": "<user input variable>"}` |
 | **Content-Type** | `application/json` |
 
@@ -585,7 +584,7 @@ After the "Get WF Content" action, use **"Get Dictionary Value"** to extract:
 
 | Symptom | Fix |
 |---|---|
-| **401 Unauthorized** | Check your `X-API-Key` header matches `SIRI_API_KEY` in `.env` |
+| **401 Unauthorized** | Check your `X-API-Key` header matches `LITELLM_KEY_CHUCK` in `.env` |
 | **Caddy blocks the request** | Ensure `X-API-Key` is sent; Caddy validates before proxying |
 | **Siri says "I couldn't complete your request"** | The shortcut's HTTPS request may be timing out — increase timeout or use async patterns |
 | **Deep research hangs** | The 180-second timeout may not be enough; consider using a simpler `research` intent |
