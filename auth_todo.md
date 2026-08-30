@@ -168,16 +168,21 @@
   by `api_key_alias`).
 - 4.2 (optional) add a cached-tokens panel (small JSON edit, auto-provisioned).
 
-### Phase 5 — Tooling & scripts (old Phase 9)
-- 5.1 `cli/litellm-keys.sh` helper (list / generate / delete; one-time value
-  display; no raw values in logs).
-- 5.2 `run-skill.sh`: `--user` flag / `SKILL_USER` env → per-user key.
+### Phase 5 — Tooling & scripts (old Phase 9) — **DONE 2026-08-29**
+- 5.1 `cli/litellm-keys.sh` helper. ✅ (list/generate/delete; one-time value
+  display; no raw values in logs. Tested: list shows 7 masked tokens.)
+- 5.2 `run-skill.sh`: `--user` flag / `SKILL_USER` env → per-user key. ✅
+  (`--user <chuck|dylan|legacy>`; default legacy. X-API-Key headers use
+  `SKILL_API_KEY`.)
 - 5.3 Fix the 6 `skill.yml` aliases + 2 `skill.py` defaults + `main.py`
-  docstring (`local/qwen-coder` → `matrix-coder`).
-- 5.4 `PRESENTON_BASE_URL` → `PRESENTON_URL` rename.
-- 5.5 **Presenton passwordless**: `DISABLE_AUTH=true`, drop `AUTH_*`,
-  recreate [**manual step G**].
-- 5.6 Rebuild skill-only (manual step B) + e2e (`create-demo`).
+  docstring. ✅ (done in skills-todo Phase A: `local/qwen-coder` →
+  `matrix-coder`.)
+- 5.4 `PRESENTON_BASE_URL` → `PRESENTON_URL` rename. ✅ (already done.)
+- 5.5 **Presenton passwordless**: `DISABLE_AUTH=true` ✅ (compose), drop
+  `AUTH_*` ✅, skill-runner `PRESENTON_PASSWORDLESS` flag ✅ (skip Basic header).
+  **Manual step G:** recreate Presenton container.
+- 5.6 Rebuild skill-only (manual step B) + e2e (`create-demo`). ⚠️ **Manual
+  step B** (owner): `./homelab.sh rebuild skill-only`.
 
 ### Phase 6 — Device migration (owner, later)
 - 6.1 Siri shortcut: `X-API-Key` = chuck's key; verify URL (`/api/chat` vs
