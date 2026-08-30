@@ -197,11 +197,14 @@
 - 6.3 Mac pi: new chuck key (if regenerated).
 - 6.4 Observe 24–48h.
 
-### Phase 7 — Legacy key retirement (owner, after migration)
+### Phase 7 — Legacy key retirement (owner, after migration) — **IN PROGRESS 2026-08-29**
 - 7.1 Remove `SIRI_API_KEY` from the list + Caddy; update the Siri shortcut
-  first.
-- 7.2 Delete the old `chuck-remote` / `dylan` keys (if regenerated).
-- 7.3 Docs: `README_SIRI.md`, `README.md`.
+  to `LITELLM_KEY_CHUCK`. ✅ (2026-08-29: `SKILL_RUNNER_API_KEY` + Caddy
+  OR-gate updated. Siri shortcut already uses `LITELLM_KEY_CHUCK`.)
+  **Manual step:** recreate Caddy + rebuild skill-only.
+- 7.2 Delete the old `chuck-remote` / `dylan` keys (if regenerated). ⚠️
+  Pending (owner, via `cli/litellm-keys.sh delete <token>`).
+- 7.3 Docs: `README_SIRI.md`, `README.md`. ⚠️ Pending.
 
 ## 4. Flags & rollback
 - `AUTH_KEY_THREADING_ENABLED` (default false) — off = master key (today's
