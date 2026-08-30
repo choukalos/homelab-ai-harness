@@ -149,9 +149,13 @@
   flag `AUTH_KEY_THREADING_ENABLED`. ✅ (2026-08-29: `RequestContext.api_key`
   set in `/api/chat`; `LiteLLMClient` threads caller key + user_id when flag
   on; `LiteLLM-User-Id` header added. Flag off by default.)
-- 2.3 Tests (unit + disposable container). ⚠️ Pending (after manual step B).
-- 2.4 Commit; **manual step B** (rebuild skill-only).
-- 2.5 Live: T5–T8 (per-user attribution, isolation).
+- 2.3 Tests (unit + disposable container). ✅ (2026-08-29: 10 unit tests in
+  `tests/test_key_threading.py` — resolve_user_id, RequestContext, LiteLLMClient
+  headers. All pass. `cli/verify_attribution.sh` for live T5–T7.)
+- 2.4 Commit; **manual step B** (rebuild skill-only). ✅ (commit `0dd59dde`;
+  manual step B done by owner.)
+- 2.5 Live: T5–T8 (per-user attribution, isolation). ⚠️ Pending (requires
+  `AUTH_KEY_THREADING_ENABLED=true` + rebuild).
 
 ### Phase 3 — Caddy OR-gate (hot reload, no manual step) — **DONE 2026-08-29**
 - 3.1 `@noAuth not header X-API-Key (chuck|dylan|legacy)`. ✅
