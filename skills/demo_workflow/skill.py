@@ -163,7 +163,21 @@ def _generate_demo_html(prompt: str) -> tuple[str, str]:
         max_tokens=16000,
     )
 
-    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    msg = resp.get("choices", [{}])[0].get("message", {}) or {}
+    content = msg.get("content") or ""
+    # Reasoning models (e.g. matrix-coder) may return content=None and put the
+    # output in reasoning_content. Fall back to it, but only as a last resort.
+    if not content.strip():
+        content = msg.get("reasoning_content") or ""
+    content = content.strip()
+
+    if not content:
+        raise RuntimeError(
+            "LLM returned empty content (finish_reason="
+            f"{resp.get('choices', [{}])[0].get('finish_reason')}). "
+            "The reasoning model likely exhausted its token budget on "
+            "reasoning_content. Try a simpler prompt or a non-reasoning model."
+        )
 
     # Strip markdown code fences if present
     if content.startswith("```"):

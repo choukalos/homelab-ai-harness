@@ -1,0 +1,44 @@
+name: content_writer
+version: "1.0"
+description: "Multi-format content generation — produces publish-ready social posts (Twitter/X thread, LinkedIn, short-form), a full blog post (hook -> context -> sections -> CTA), and a video script + visual seeds (shot list), optionally grounded in real research via mcp_search. Output is a Markdown content pack."
+inputs:
+  - name: prompt
+    type: string
+    required: true
+    description: "Topic to write content about."
+  - name: format
+    type: string
+    required: false
+    default: "all"
+    description: "Content format: 'social', 'blog', 'video', 'all', or comma-separated (e.g. 'social,video')."
+  - name: platform
+    type: string
+    required: false
+    description: "Optional comma-separated list of target platforms (e.g. 'Twitter/X, LinkedIn, YouTube')."
+  - name: tone
+    type: string
+    required: false
+    default: "professional, clear, engaging"
+    description: "Tone of voice for the content."
+  - name: brand
+    type: string
+    required: false
+    default: "neutral, helpful, credible"
+    description: "Brand voice / positioning to write in."
+  - name: research
+    type: boolean
+    required: false
+    default: true
+    description: "Whether to ground the content in real web research via mcp_search."
+  - name: max_research
+    type: integer
+    required: false
+    default: 3
+    description: "Maximum number of research web searches to run (0-6)."
+tools:
+  - mcp_search
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/content/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 300

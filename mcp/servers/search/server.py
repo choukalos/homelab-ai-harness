@@ -24,6 +24,10 @@ from mcp.server import FastMCP
 
 SEARXNG_URL: str = os.environ.get("SEARXNG_URL", "http://searxng:8080")
 HTTP_TIMEOUT: float = float(os.environ.get("SEARXNG_TIMEOUT", "10"))
+# Optional comma-separated engine list to pass to SearXNG (e.g. "google,bing,mojeek").
+# Empty = let SearXNG use its default engine set. Useful when the default set is
+# rate-limited / CAPTCHA-blocked and you want to pin healthy engines.
+SEARXNG_ENGINES: str = os.environ.get("SEARXNG_ENGINES", "").strip()
 MAX_RESULTS_CAP: int = 20
 SNIPPET_MAX_CHARS: int = 200
 
@@ -80,6 +84,8 @@ async def _searxng_search(
     }
     if time_range:
         params["time_range"] = time_range
+    if SEARXNG_ENGINES:
+        params["engines"] = SEARXNG_ENGINES
 
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:

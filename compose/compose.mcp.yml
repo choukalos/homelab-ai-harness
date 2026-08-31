@@ -43,6 +43,9 @@ services:
     environment:
       - SEARXNG_URL=http://searxng:8080
       - SEARXNG_TIMEOUT=10
+      # Pin healthy search engines (brave/duckduckgo/startpage are frequently
+      # rate-limited / CAPTCHA-blocked from this instance). Adjust as engines recover.
+      - SEARXNG_ENGINES=google,bing,mojeek
     restart: unless-stopped
     networks:
       - ai-net
@@ -81,6 +84,10 @@ services:
       - LITELLM_API_KEY=${LITELLM_API_KEY}
       - LITELLM_MODEL=matrix-coder
       - CSV_OUTPUT_DIR=/home/chuck/data/media/csv
+      # Allow analytical full-table scans for the business_analyst skill.
+      # Other safety guards remain: MAX_ROWS_EXAMINED, MAX_JOIN_TABLES,
+      # 500-row result cap, 30s timeout, SELECT-only.
+      - BLOCK_FULL_TABLE_SCANS=false
     volumes:
       - /home/chuck/data/media/csv:/home/chuck/data/media/csv
       # Curated NL-to-SQL domain hints — mount so edits take effect on restart, no rebuild
