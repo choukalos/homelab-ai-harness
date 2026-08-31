@@ -429,6 +429,9 @@ _SKILL_TIMEOUTS = {
     "morning_brief": 60,
     "homelab_report": 60,
     "investment_brief": 60,
+    "business_analyst": 330,
+    "content_writer": 510,
+    "marketing_strategy": 330,
     "code_review": 120,
     "repo_maintenance": 120,
 }
@@ -1668,8 +1671,20 @@ _INTENT_SKILL_MAP = {
     "research-brief": "research_brief",
     "investment-brief": "investment_brief",
     "morning-brief": "morning_brief",
+    "business-analyst": "business_analyst",
+    "content-writer": "content_writer",
+    "marketing-strategy": "marketing_strategy",
     "media-generate": "mcp_media",
     "list-images": "list_images",
+}
+
+# Skills whose primary required input is 'prompt' (vs 'query'). The Siri chat
+# dispatch maps the user text to the right param name for each skill.
+_PROMPT_INPUT_SKILLS = {
+    "demo_workflow",
+    "business_analyst",
+    "content_writer",
+    "marketing_strategy",
 }
 
 
@@ -1709,6 +1724,15 @@ def _detect_intent(text: str, override: Optional[str]) -> str:
         return "morning-brief"
     if any(k in text_lower for k in ("research brief", "research summary", "brief research")):
         return "research-brief"
+    # --- business-analyst: data/SQL analysis over the family MySQL (before the broad 'research' catch-all) ---
+    if any(k in text_lower for k in ("business analyst", "business analysis", "product analysis", "data analysis", "analyze my data", "run a business analysis", "analyze my stocks", "analyze the portfolio", "run a data analysis")):
+        return "business-analyst"
+    # --- marketing-strategy: GTM / go-to-market planning ---
+    if any(k in text_lower for k in ("marketing strategy", "marketing plan", "market strategy", "gtm strategy", "gtm plan", "go-to-market", "go to market", "gtm")):
+        return "marketing-strategy"
+    # --- content-writer: social / blog / video content generation ---
+    if any(k in text_lower for k in ("content writer", "write content", "content pack", "write a blog", "write a post", "write social", "write social media", "social media post", "video script", "draft content", "write me a")):
+        return "content-writer"
     if any(k in text_lower for k in ("generate image", "create image", "image generate", "media generate", "generate media", "make image", "create media", "draw image", "render image")):
         return "media-generate"
     if re.search(r"(?:generate|create|make|draw|render)\s+(?:an\s+)?image", text_lower) or \
@@ -2350,8 +2374,9 @@ async def api_chat(
         # Unknown intent — fall back to direct chat
         return await _chat_direct(body.text, model, memory_enabled=mem_on)
 
-    # demo_workflow expects 'prompt', others expect 'query'
-    params = {"prompt": body.text} if skill_name == "demo_workflow" else {"query": body.text}
+    # demo_workflow + the Phase 2 skills (business_analyst, content_writer,
+    # marketing_strategy) expect 'prompt'; the others expect 'query'
+    params = {"prompt": body.text} if skill_name in _PROMPT_INPUT_SKILLS else {"query": body.text}
 
     job = dispatch_job(
         skill_name,
