@@ -1,0 +1,19 @@
+name: business_analyst
+version: "1.0"
+description: "Business/product data analyst — answers natural-language questions against MySQL (mcp_mysql): translates the question to SQL, executes it, synthesizes insights (key takeaways, interpretation, follow-ups, Grafana suggestions) and produces a Markdown report with the SQL and results."
+inputs:
+  - name: prompt
+    type: string
+    required: true
+    description: "Natural-language question to answer with data analysis."
+  - name: database
+    type: string
+    required: false
+    description: "Target MySQL database (e.g. 'investorhub', 'homelab'). Auto-detected if omitted."
+tools:
+  - mcp_mysql
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/analyses/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 300
