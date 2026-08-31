@@ -432,7 +432,10 @@ def _synthesize_strategy(client: Any, brief: str, research: list[dict],
     choices = result.get("choices", [])
     if not choices:
         return "# GTM Strategy\n\n**No strategy generated.** LLM returned no content.\n"
-    content = (choices[0].get("message") or {}).get("content")
+    msg = choices[0].get("message") or {}
+    # Reasoning models (matrix-coder) sometimes return content=None with the
+    # actual output in reasoning_content. Fall back to it before giving up.
+    content = msg.get("content") or msg.get("reasoning_content")
     if not content:
         return "# GTM Strategy\n\n**No strategy generated.** LLM returned empty content.\n"
     return content.strip()
@@ -584,7 +587,7 @@ def run(params: dict[str, Any], job, litellm_client=None) -> dict[str, Any]:
         return {"summary": f"GTM strategy failed: {msg}", "error": msg, "model_alias": MODEL_ALIAS}
 
     except Exception as exc:
-        msg = f"Unexpected error: {exc}"
+        msg = f"Unexpected error: {type(exc).__name__}: {exc}"
         if hasattr(job, "add_log"):
             job.add_log(msg)
         return {"summary": f"GTM strategy failed: {msg}", "error": msg, "model_alias": MODEL_ALIAS}

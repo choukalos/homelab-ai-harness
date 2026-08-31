@@ -166,8 +166,10 @@ services:
       # client only ever reaches LiteLLM.
       - SKILL_RUNNER_URL=http://skill-runner:8091
       # Service key (fallback when no caller key is forwarded via the
-      # Authorization header). Same value as skill-runner's SKILL_RUNNER_API_KEY.
-      - SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
+      # Authorization header). MUST be a SINGLE key that is in skill-runner's
+      # SKILL_RUNNER_API_KEY allow-list — the skill-runner does an exact-match
+      # against its comma-split list, so a comma-joined value is rejected.
+      - SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK}
       # run_skill blocks up to the skill's max_runtime; default wait budget.
       - SKILL_RUNNER_TIMEOUT=180
     restart: unless-stopped

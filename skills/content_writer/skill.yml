@@ -41,4 +41,4 @@ model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/content/
 approval_gates: []
 channels: [cli, pi, n8n]
-max_runtime: 300
+max_runtime: 480
