@@ -15,5 +15,5 @@ tools:
 model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/analyses/
 approval_gates: []
-channels: [cli, pi, n8n]
+channels: [cli, pi, n8n, siri]
 max_runtime: 300
