@@ -53,7 +53,10 @@ from typing import Any, Optional
 ARTIFACT_DIR = Path(
     os.environ.get("CONTENT_WRITER_ARTIFACT_DIR", "/home/chuck/data/media/content")
 )
-MAX_RUNTIME_SECS = int(os.environ.get("CONTENT_WRITER_MAX_RUNTIME", "300"))
+# 3 sequential format calls (social/blog/video) with a reasoning model
+# (matrix-coder) run ~110s each -> ~340s total + research. 480s gives headroom.
+# Env-overridable via CONTENT_WRITER_MAX_RUNTIME.
+MAX_RUNTIME_SECS = int(os.environ.get("CONTENT_WRITER_MAX_RUNTIME", "480"))
 
 LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
@@ -480,7 +483,10 @@ def _generate_section(client: Any, fmt: str, topic: str, platforms: list[str],
     choices = result.get("choices", [])
     if not choices:
         return f"## {fmt}\n\n*(No content generated — LLM returned no content.)*\n"
-    content = (choices[0].get("message") or {}).get("content")
+    msg = choices[0].get("message") or {}
+    # Reasoning models (matrix-coder) sometimes return content=None with the
+    # actual output in reasoning_content. Fall back to it before giving up.
+    content = msg.get("content") or msg.get("reasoning_content")
     if not content:
         return f"## {fmt}\n\n*(No content generated — LLM returned empty content.)*\n"
     return content.strip()
@@ -639,7 +645,7 @@ def run(params: dict[str, Any], job, litellm_client=None) -> dict[str, Any]:
         return {"summary": f"Content generation failed: {msg}", "error": msg, "model_alias": MODEL_ALIAS}
 
     except Exception as exc:
-        msg = f"Unexpected error: {exc}"
+        msg = f"Unexpected error: {type(exc).__name__}: {exc}"
         if hasattr(job, "add_log"):
             job.add_log(msg)
         return {"summary": f"Content generation failed: {msg}", "error": msg, "model_alias": MODEL_ALIAS}

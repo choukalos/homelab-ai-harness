@@ -137,6 +137,12 @@ LITELLM_BASE_URL = os.environ.get(
     "LITELLM_BASE_URL", "http://litellm-proxy:4000"
 )
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
+# Per-LLM-call timeout (seconds) for the client passed to skills. Heavy
+# synthesis calls (marketing_strategy GTM, content_writer multi-format)
+# with a reasoning model (matrix-coder) can exceed the old 120s default,
+# so this is raised to 240s and made env-configurable. Keep below each
+# skill's max_runtime so the skill's own SIGALRM is the final backstop.
+LLM_CALL_TIMEOUT = float(os.environ.get("SKILL_RUNNER_LLM_TIMEOUT", "240"))
 # Key threading (auth_todo.md Phase 2): when enabled, the caller's per-user
 # LiteLLM key is used instead of the master key, so LiteLLM metrics show
 # per-user attribution. Default off (master key = today's behaviour).
@@ -1253,10 +1259,12 @@ def _execute_skill(job: Job) -> None:
     litellm_client = LiteLLMClient(
         api_key=_caller_key,
         user_id=_caller_user,
+        timeout=LLM_CALL_TIMEOUT,
     )
     sync_client = _SyncLiteLLMWrapper(litellm_client)
     job.add_log(
-        f"LiteLLM client initialised: base_url={litellm_client.base_url}"
+        f"LiteLLM client initialised: base_url={litellm_client.base_url} "
+        f"llm_timeout={LLM_CALL_TIMEOUT:.0f}s"
     )
 
     try:
