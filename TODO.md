@@ -51,7 +51,7 @@
   intentional — every valid key may call every MCP tool; no scoped grants
   planned (the old "per-key access hardening" deferral is dropped).
 - **Skill Runner** containerized & deployed (`compose.skill-runner.yml`,
-  port 8091); 13 skills; chat gateway with intent detection
+  port 8091); 15 skills; chat gateway with intent detection
   (`POST /api/chat`, `GET /api/jobs/{job_id}`); lightweight cron scheduler
   with REST API.
 - **Siri API** on `siri.choukalos.com` → Skill Runner (Caddy cutover).

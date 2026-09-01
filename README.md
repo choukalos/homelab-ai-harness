@@ -171,6 +171,9 @@ NOT committed to GitHub.
     presentation_update/    # Update existing presentations
     demo_browse/            # Search/browse demos by keyword
     research_brief/         # Lightweight web research + summarization
+    business_analyst/       # NL→SQL data analysis over the family MySQL (mcp_mysql)
+    content_writer/         # Multi-format content generation (social/blog/video)
+    marketing_strategy/     # Go-To-Market (GTM) strategy generation
 
   mcp/                      # MCP server implementations
     servers/                # Individual MCP server dirs
@@ -507,6 +510,15 @@ Skills compose MCP tools into controlled agentic workflows. The skill runner cal
 any MCP client can list + run skills through LiteLLM. See
 [Cross-Client Skills](docs/thor_cross_client_skills.md).
 
+**Agentic capabilities (Phase 2, 2026-08-31):** three new agent skills turn the
+homelab into a self-serve analytics + content + marketing backend — ask a
+natural-language data question and get a Markdown report back
+(`business_analyst`, NL→SQL over the family MySQL), generate publish-ready
+social/blog/video content from live research (`content_writer`), or produce a
+full Go-To-Market launch plan (`marketing_strategy`). All three are reachable
+from every client (Siri, pi, Claude Code, n8n, CLI) and write Markdown
+artifacts to `/home/chuck/data/media/`.
+
 **Built-in scheduler:** A background thread (`scheduler.py`) checks a JSON config file every 60 seconds and dispatches matching scheduled jobs.
 
 ### Skills Inventory
@@ -529,6 +541,9 @@ any MCP client can list + run skills through LiteLLM. See
 | `list-demos` | Local filesystem | No | Siri, CLI | List all demos with accessible URLs |
 | `list-presentations` | Presenton API | No | Siri, CLI | List presentations with view/edit URLs |
 | `list-images` | Local filesystem | No | Siri, CLI | List generated images with accessible URLs |
+| `business_analyst` | mcp_mysql | No | CLI, Pi, n8n, Siri | NL→SQL data analysis + Markdown report + Grafana suggestions (Phase 2, 2026-08-31) |
+| `content_writer` | mcp_search | No | CLI, Pi, n8n, Siri | Multi-format content (social/blog/video) from research (Phase 2, 2026-08-31) |
+| `marketing_strategy` | mcp_search | No | CLI, Pi, n8n, Siri | GTM strategy generation — TAM/SAM/SOM, 30/60/90 plan (Phase 2, 2026-08-31) |
 
 Skills with **approval gates** (`repo_maintenance`) pause at `awaiting_approval` until explicitly approved via the API.
 
@@ -547,7 +562,7 @@ Connected to LiteLLM.
 | Service | Purpose | Status |
 |---|---|---|
 | LiteLLM | Model gateway + MCP gateway | ✅ Running |
-| MCP servers | Reusable tool providers (standalone containers) | ✅ 8 deployed (29 tools) |
+| MCP servers | Reusable tool providers (standalone containers) | ✅ 10 deployed (56 tools) |
 | Skill runner | Agentic workflow orchestration + chat gateway + scheduler | ✅ Running (:8091) |
 | AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ⏳ Decommission pending |
 | Open Web UI | Family/local AI chat interface | ✅ Running |
@@ -583,6 +598,9 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **list-presentations** — List existing presentations
 - **list-images** — List generated images with accessible URLs
 - **media-generate** — Generate an image via `mcp_media.media_generate_image` (GPU-host media-pipeline) + `media_fetch`
+- **business-analyst** — NL→SQL data analysis over the family MySQL (~300s; returns a Markdown report + Grafana suggestions)
+- **content-writer** — Multi-format content generation (social/blog/video, ~480s)
+- **marketing-strategy** — Go-To-Market (GTM) strategy generation (~300s)
 
 ### Media Generation (Image)
 
@@ -1003,10 +1021,14 @@ Long-term backups stored on NAS.
 # Future Expansion
 
 Potential future additions:
-- Home automation MCP server (read-only)
+- Home automation MCP server (`mcp_home`, Homebridge/Lego — read-only)
 - Code MCP server (repo listing, git operations)
-- More skill implementations (investment_brief, code_review, morning_brief, etc.)
-- MCP server containerization (all remaining servers)
+- `mcp_stocks` MCP server (external market-data APIs)
+- Google Analytics / Amplitude integration for `business_analyst`
+- More skill implementations (`code_review`, `repo_maintenance` — currently TODO placeholders)
+- Consider a non-reasoning model (e.g. `studio-gemma4-26b`) for the slower
+  content/GTM skills — `matrix-coder` is slow (~110s/call) and intermittently
+  returns `content: None`
 - CI/CD for MCP servers and skills
 - Remote client deployment patterns
 

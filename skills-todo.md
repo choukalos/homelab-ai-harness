@@ -102,3 +102,27 @@ This is the path pi / Siri / Claude Code all use to invoke skills server-side.
 - [ ] Consider a shared MCP-response normalizer helper (skills currently duplicate the robust parser per the self-contained convention).
 - [ ] Re-enable SearXNG blocked engines (brave/duckduckgo/startpage) once rate-limits clear; then widen `SEARXNG_ENGINES`.
 - [ ] Consider a non-reasoning model (e.g. `studio-gemma4-26b`) for `marketing_strategy`/`content_writer`/`demo_workflow` production use — `matrix-coder` is slow (~110s/call) and intermittently returns `content: None`.
+
+## 📚 Documentation Pass (2026-08-31)
+Recorded the Phase 2/3 build + cross-client QA across the homelab docs so the
+human-readable surface matches what's actually live (15 skills, 3 new agent
+skills, Siri intent dispatch, marketplace registration, infra fixes):
+- [x] `docs/thor_cross_client_skills.md` — live-state reference: 12→15 skills,
+  3 new rows in the skills table (+"Added" column), Layer 2 registration note
+  (15 plugins + `POST /claude-code/plugins` path), Phase 2/3 in the Verified
+  section, 6 new fix-log entries (gateway key, LLM timeout, max_runtime,
+  reasoning fallback, Siri dispatch, Skill Hub 401), manual-steps note on
+  rebuild-vs-mount.
+- [x] `README.md` — directory structure (+3 skill dirs), skills inventory
+  (+3 rows), Siri intent routing (+3 intents), AI-services MCP table
+  (8/29→10/56), Future Expansion (GA/Amplitude, mcp_stocks, non-reasoning
+  model, remaining TODO placeholders).
+- [x] `README_SIRI.md` — async intents table (+business-analyst,
+  +content-writer, +marketing-strategy).
+- [x] `docs/thor_skill_architecture.md` — current-state header 12→15 + Phase 2
+  note; skill-discovery + cross-client counts.
+- [x] `docs/thor_mcp_architecture.md` — `mcp_skills` notes (15 skills, new
+  run_skill verifications).
+- [x] `docs/thor_integration_readiness.md` + `docs/thor_ai_inventory.md` —
+  12→15 launchable skills.
+- [x] `TODO.md` — 13→15 skills.

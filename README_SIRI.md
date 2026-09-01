@@ -158,6 +158,9 @@ first match wins). Override with the `intent` field.
 | `list-images` | "list image(s)", "show my images", "what images …" | seconds |
 | `investment-brief` | "investment brief", "stock brief", "market brief" | 30–60s |
 | `morning-brief` | "morning brief", "daily brief", "daily summary" | 30–60s |
+| `business-analyst` | "analyze …", "how many …", "top … by …", "show me … data" | ~300s (NL→SQL over family MySQL; Markdown report + Grafana suggestions) |
+| `content-writer` | "write …", "draft …", "create a … post/script" | ~480s (social/blog/video content pack) |
+| `marketing-strategy` | "go-to-market", "GTM", "launch plan", "market strategy" | ~300s (GTM launch plan) |
 
 **Async pattern for shortcuts:** POST → get `job_id` → loop
 (`Wait 5s` → `GET /siri/skills/jobs/{job_id}`) until `status == completed`

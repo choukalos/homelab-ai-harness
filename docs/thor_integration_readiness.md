@@ -5,8 +5,8 @@
 > Status: **Superseded** — integration long since complete. July status kept
 > for reference; current-state deltas marked inline.
 
-**Current state (2026-08-29):**
-- Skill runner is in production (`THOR_IP:8091`), 12 launchable skills (+2 TODO
+**Current state (2026-08-31):**
+- Skill runner is in production (`THOR_IP:8091`), 15 launchable skills (+2 TODO
   placeholders), `/api/chat` gateway, durable MySQL job index, long-term memory
   (Phases 0–9 complete — see `docs/memory/IMPLEMENTATION_STATE.md`), admin REST +
   CLI + `/metrics`. Cross-client access via the `mcp_skills` MCP server (3

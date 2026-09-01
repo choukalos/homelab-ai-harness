@@ -5,16 +5,20 @@
 > Status: **Implemented and evolved** — skill runner is in production. The July
 > inventory below is historical; current state is marked inline.
 
-**Current state (2026-08-29)**
-- **12 skills** live (the July 9-skill inventory has grown; `local/*` model
+**Current state (2026-08-31)**
+- **15 skills** live (the July 9-skill inventory has grown; `local/*` model
   aliases were never implemented — skills use live aliases, primarily
   `matrix-coder`; the stale `local/qwen-coder` references broke 7 skills and
   were fixed in `auth_todo.md` Phase 9, 2026-08-25). `code_review` / `repo_maintenance`
   are TODO placeholders (no `skill.py`/`skill.yml`, excluded from `GET /skills`).
+  Phase 2 (2026-08-31) added 3 agent skills: `business_analyst` (NL→SQL over
+  `mcp_mysql`), `content_writer` (multi-format content via `mcp_search`),
+  `marketing_strategy` (GTM via `mcp_search`). All 3 verified end-to-end and
+  wired into Siri intent dispatch. See `docs/thor_cross_client_skills.md`.
 - **Chat gateway:** `POST /api/chat` (intent dispatch → skills / direct LLM /
   MCP tools) + `GET /api/jobs/{job_id}`; Siri via `siri.choukalos.com`
   (Caddy, `X-API-Key`).
-- **Skill discovery:** `GET /skills` lists the 12 skills (name, description,
+- **Skill discovery:** `GET /skills` lists the 15 skills (name, description,
   inputs, max_runtime, channels). Auth mirrors `/api/chat` (enforced when
   `SKILL_RUNNER_API_KEY` set, open when unset). Added 2026-08-29 (skills-todo
   Phase A).
@@ -25,7 +29,7 @@
   `docs/thor_cross_client_skills.md`.
 - **Cross-client access (2026-08-29, skills-todo A–D):** the `mcp_skills` MCP
   server (3 meta-tools) wraps the skill-runner so any MCP client lists + runs
-  skills through LiteLLM; 12 skills registered in the LiteLLM Skill Hub
+  skills through LiteLLM; 15 skills registered in the LiteLLM Skill Hub
   (`/claude-code/marketplace.json`); `agents-skills/` SKILL.md wrappers for
   per-machine `/skill:name` slash commands. See `docs/thor_cross_client_skills.md`.
 - **Identity:** `X-API-Key` → `user_id` map (`memory/identity.py`;
