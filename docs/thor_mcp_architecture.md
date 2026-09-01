@@ -282,7 +282,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | **Security** | ai-net only (NOT exposed to host). No client ever talks to skill-runner directly. Per-user attribution via the caller key (Phase 1 of `auth_todo.md` will point the `chuck` pair at a personal key). |
 | **LiteLLM** | `allow_all_keys: true`, `extra_headers: [Authorization]`, `timeout: 7200` (run_skill blocks up to max_runtime; deep_research=900s) |
 | **Deps** | `mcp>=1.10,<2`, `httpx>=0.27`. Transport: streamable-http, path `/mcp`. |
-| **Notes** | Verified through LiteLLM 2026-08-29: `mcp_skills-list_skills` (12 skills), `mcp_skills-run_skill` (morning_brief, siri_ask completed), `mcp_skills-get_skill_job` (job retrieval), identity threading (X-API-Key → `service`). See `mcp/servers/skills/README.md` + `docs/thor_cross_client_skills.md`. |
+| **Notes** | Verified through LiteLLM 2026-08-29: `mcp_skills-list_skills` (15 skills as of 2026-08-31), `mcp_skills-run_skill` (morning_brief, siri_ask, business_analyst, content_writer, marketing_strategy completed), `mcp_skills-get_skill_job` (job retrieval), identity threading (X-API-Key → `service`). See `mcp/servers/skills/README.md` + `docs/thor_cross_client_skills.md`. |
 
 ---
 

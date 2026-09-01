@@ -2,7 +2,7 @@
 
 > How any client (pi, Claude Code, OpenCode, Open WebUI, Siri, n8n, any MCP
 > client) lists and runs the homelab's skills through LiteLLM.
-> Date: 2026-08-29 (Phases A–D complete)
+> Date: 2026-08-31 (Phases A–D + Phase 2/3 skills complete)
 > Plan: `skills-todo.md` · this doc is the live-state reference.
 
 **TL;DR** — skills are **server-side** (they run on `skill-runner`, never on the
@@ -32,7 +32,7 @@ mcp_skills MCP server (:8000, ai-net)  ── 3 tools
 skill-runner (:8091)  ── GET /skills · POST /skills/{name} · GET /skills/jobs/{id}
    │  (identity: resolve_user_id(X-API-Key) → user_id)
    ▼
-skills (deep_research, morning_brief, siri_ask, … 12 total)
+skills (deep_research, morning_brief, siri_ask, business_analyst, … 15 total)
 ```
 
 Only **LiteLLM** is a public surface. `skill-runner` (8091) and `mcp_skills`
@@ -88,9 +88,16 @@ Tools appear in LiteLLM prefixed with the server name: `mcp_skills-list_skills`,
 (POST register / GET list), `/claude-code/plugins/{name}/enable|disable`,
 `/claude-code/plugins/{name}` (DELETE). Stored in `LiteLLM_ClaudeCodePluginTable`.
 
-**Registered (2026-08-29):** all 12 skills, `source: git-subdir` →
+**Registered (2026-08-29; +3 on 2026-08-31):** all 15 skills, `source: git-subdir` →
 `https://github.com/choukalos/homelab-ai-harness.git` / `agents-skills/<name>`,
-`version: 1.0.0`, all **enabled**. `marketplace.json` lists 12 plugins.
+`version: 1.0.0`, all **enabled**. `marketplace.json` lists 15 plugins.
+
+**Registration note (2026-08-31):** the `litellm_skill_create` MCP tool
+401s on create (its auth differs from the list endpoint). The working path is
+the direct `POST /claude-code/plugins` endpoint with the LiteLLM master key
+(payload: `name`, `version`, `description`, `source`, `keywords`, `category`).
+The 3 Phase-2 skills (`business-analyst`, `content-writer`,
+`marketing-strategy`) were registered this way on 2026-08-31.
 
 **Effect:**
 - **pi** (`pi-provider-litellm` `listSkills()`): fetches
@@ -207,29 +214,32 @@ point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
 
 ---
 
-## The 12 skills
+## The 15 skills
 
-| Skill | Primary input | max_runtime | Channels |
-|---|---|---|---|
-| `deep_research` | `query` | 900s | cli, pi, n8n |
-| `demo_browse` | `query` | 30s | cli, pi, n8n |
-| `demo_workflow` | `prompt` | 600s | cli, pi, n8n |
-| `homelab_report` | `scope` | 120s | cli, pi, n8n |
-| `investment_brief` | `user_email` | 300s | cli, pi, n8n |
-| `morning_brief` | `interests` | 180s | cli, pi, n8n |
-| `presentation_build` | `topic` | 300s | cli, pi, n8n |
-| `presentation_update` | `presentation_title` | 300s | cli, pi, n8n |
-| `publish_file` | `source_path` | 60s | cli, pi, n8n |
-| `research_brief` | `topic` | 120s | cli, pi, n8n |
-| `siri_ask` | `query` | 30s | siri |
-| `siri_chat` | `query` | 120s | siri |
+| Skill | Primary input | max_runtime | Channels | Added |
+|---|---|---|---|---|
+| `deep_research` | `query` | 900s | cli, pi, n8n | baseline |
+| `demo_browse` | `query` | 30s | cli, pi, n8n | baseline |
+| `demo_workflow` | `prompt` | 600s | cli, pi, n8n | baseline |
+| `homelab_report` | `scope` | 120s | cli, pi, n8n | baseline |
+| `investment_brief` | `user_email` | 300s | cli, pi, n8n | baseline |
+| `morning_brief` | `interests` | 180s | cli, pi, n8n | baseline |
+| `presentation_build` | `topic` | 300s | cli, pi, n8n | baseline |
+| `presentation_update` | `presentation_title` | 300s | cli, pi, n8n | baseline |
+| `publish_file` | `source_path` | 60s | cli, pi, n8n | baseline |
+| `research_brief` | `topic` | 120s | cli, pi, n8n | baseline |
+| `siri_ask` | `query` | 30s | siri | baseline |
+| `siri_chat` | `query` | 120s | siri | baseline |
+| `business_analyst` | `prompt` | 300s | cli, pi, n8n, siri | 2026-08-31 (Phase 2) |
+| `content_writer` | `prompt` | 480s | cli, pi, n8n, siri | 2026-08-31 (Phase 2) |
+| `marketing_strategy` | `prompt` | 300s | cli, pi, n8n, siri | 2026-08-31 (Phase 2) |
 
 (`code_review` / `repo_maintenance` are TODO placeholders — no `skill.py`/
 `skill.yml`, excluded from `GET /skills`.)
 
 ---
 
-## Verified (2026-08-29)
+## Verified (2026-08-29 + 2026-08-31)
 
 - **Phase A:** durable MySQL job index (persist-at-start, restart survival,
   interrupted-marking) — live-verified against the real `homelab` DB.
@@ -241,12 +251,30 @@ point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
   + `skills` array).
 - **Phase D:** 12 skills registered + enabled in the LiteLLM Skill Hub
   (`marketplace.json`).
+- **Phase 2 (2026-08-31):** 3 new agent skills added — `business_analyst`
+  (NL→SQL over `mcp_mysql`, Markdown report + Grafana suggestions),
+  `content_writer` (social/blog/video content packs via `mcp_search` research),
+  `marketing_strategy` (GTM launch plan via `mcp_search` research). All 3
+  verified end-to-end through the MCP gateway (`run_skill` → completed, artifact
+  saved) and via the Siri `/api/chat` intent dispatch (jobs `06ffabc27f37`,
+  `4be340c16ba9`, `62f5250b9f43` — all completed with artifacts).
+- **Phase 3 (2026-08-31):** cross-client QA — all 3 new skills registered in the
+  LiteLLM Skill Hub (`marketplace.json` now 15 plugins) + `agents-skills/`
+  SKILL.md wrappers on `origin/main`; verified in pi's skill list +
+  `<litellm_skills>` prompt section and the Claude Code marketplace. Siri intent
+  dispatch wired (see fix log).
 
 ## Manual steps (owner)
 
 - Restart LiteLLM to pick up `mcp_servers.mcp_skills` (config change).
 - Restart pi session to pick up the `agents-skills/` SKILL.md wrappers.
 - Per-user keys (`auth_todo.md` Phase 1) for per-user attribution.
+- Rebuild the skill-runner after `skills/runner/main.py` changes
+  (`./homelab.sh rebuild skill-only`) — `main.py` is baked into the image
+  (`COPY main.py .`), not volume-mounted. Skill modules under
+  `skills/<name>/` ARE mounted (live edits, no rebuild).
+- Register new skills in the LiteLLM Skill Hub via `POST /claude-code/plugins`
+  (the `litellm_skill_create` MCP tool 401s on create).
 
 ## Fix log
 
@@ -256,3 +284,29 @@ point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
   descriptions (em dash instead of colon) in SKILL.md + skill.yml, re-registered
   the two Skill Hub plugins with the new descriptions, added
   `tests/test_skills_yaml.py` + `.githooks/pre-commit` guardrail.
+- **2026-08-31 — `mcp_skills` stale + malformed service key.** Container held a
+  pre-rotation key AND sent the comma-joined allow-list as a single
+  `X-API-Key` (skill-runner exact-matches the split list → 403). Fix:
+  `compose/compose.mcp.yml` `SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK}` (single
+  key) + container recreated.
+- **2026-08-31 — runner LLM per-call timeout too short.** The runner's
+  `LiteLLMClient` (gateway mode) defaulted to **120s**, but heavy `matrix-coder`
+  synthesis calls exceed it. Fix: `skills/runner/main.py` `LLM_CALL_TIMEOUT` env
+  (default **240s**), passed to the client. Skill-runner rebuilt.
+- **2026-08-31 — `content_writer` max_runtime too short.** 3 sequential format
+  calls (~110s each) exceeded the 300s budget. Fix: `MAX_RUNTIME_SECS` default
+  **480s** (`skill.py` + `skill.yml`).
+- **2026-08-31 — reasoning-model empty content.** `matrix-coder` sometimes
+  returns `content: None` (output in `reasoning_content`). Fix:
+  `content_writer` + `marketing_strategy` LLM-output extraction falls back to
+  `reasoning_content` (same fix as `demo_workflow`).
+- **2026-08-31 — Siri intent dispatch for the 3 new skills.** Added
+  `business-analyst` / `content-writer` / `marketing-strategy` to
+  `_INTENT_SKILL_MAP` + keyword detection + `_PROMPT_INPUT_SKILLS` (dispatch
+  `prompt` not `query`) + `_SKILL_TIMEOUTS` (business_analyst 330s,
+  content_writer 510s, marketing_strategy 330s — the default 120s watchdog
+  killed the slow reasoning-model jobs). `siri` added to the 3 skills'
+  `channels`. Skill-runner rebuilt.
+- **2026-08-31 — Skill Hub registration 401.** `litellm_skill_create` MCP tool
+  401s on create; the direct `POST /claude-code/plugins` endpoint with the
+  master key works. The 3 Phase-2 skills were registered this way.
