@@ -99,6 +99,55 @@ def main():
     r6 = IdentityResolver("", environ={"ENV_A": "k"})
     check("empty map -> unknown", r6.resolve("k") == USER_UNKNOWN)
 
+    # ── Phase 3.1: overlapping key claims (shadowing) ─────────────────
+    print("Phase 3.1: overlapping claims warn + fixed map resolves...")
+    cap3 = _LogCapture()
+    log = logging.getLogger("memory.identity")
+    log.addHandler(cap3)
+    try:
+        # Legacy shape that caused the 2026-09-02 bug: a shared comma-list
+        # env var (SKILL_RUNNER_API_KEY = chuck+dylan keys) mapped to chuck
+        # FIRST, shadowing dylan's own entry.
+        r7 = IdentityResolver(
+            "chuck=ENV_SHARED,chuck=ENV_CHUCK,dylan=ENV_DYLAN",
+            environ={
+                "ENV_SHARED": "k-chuck,k-dylan",
+                "ENV_CHUCK": "k-chuck",
+                "ENV_DYLAN": "k-dylan",
+            },
+        )
+        check("shadowed key resolves to first user (documented first-match)",
+              r7.resolve("k-dylan") == "chuck")
+        check("conflict warning logged at construction",
+              any("MEMORY_USER_KEYS CONFLICT" in rec for rec in cap3.records))
+        conflict_recs = [r for r in cap3.records if "CONFLICT" in r]
+        check("conflict names both users",
+              any("chuck" in r and "dylan" in r for r in conflict_recs))
+        check("conflict names env var names (not values)",
+              any("ENV_SHARED" in r and "ENV_DYLAN" in r for r in conflict_recs))
+        check("conflict leaks no raw key values",
+              not any("k-dylan" in r or "k-chuck" in r for r in conflict_recs))
+    finally:
+        log.removeHandler(cap3)
+
+    # Fixed per-user shape (post-Phase 3.1): disjoint pools, no warning.
+    r8 = IdentityResolver(
+        "chuck=ENV_CHUCK,dylan=ENV_DYLAN,service=ENV_SVC",
+        environ={"ENV_CHUCK": "k-chuck", "ENV_DYLAN": "k-dylan", "ENV_SVC": "k-svc"},
+    )
+    check("fixed map: chuck key -> chuck", r8.resolve("k-chuck") == "chuck")
+    check("fixed map: dylan key -> dylan", r8.resolve("k-dylan") == "dylan")
+    check("fixed map: service key -> service", r8.resolve("k-svc") == USER_SERVICE)
+    check("fixed map: unmapped -> unknown", r8.resolve("k-other") == USER_UNKNOWN)
+    cap4 = _LogCapture()
+    log.addHandler(cap4)
+    try:
+        r8.resolve("k-dylan")
+    finally:
+        log.removeHandler(cap4)
+    check("fixed map: no conflict warning",
+          not any("CONFLICT" in rec for rec in cap4.records))
+
     # ── Raw key values never appear in logs ───────────────────────────
     print("no raw key in log output...")
     cap = _LogCapture()

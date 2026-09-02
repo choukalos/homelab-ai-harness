@@ -1579,6 +1579,70 @@ def memory_delete_user(
     }
 
 
+# ── Scoped memory retrieval (Phase 11) ─────────────────────────────────
+# User-key auth: the caller retrieves ONLY their own memories (+ household).
+# Deliberately NOT admin-key auth — the admin key has no user scope and must
+# not be usable for retrieval. Unmapped keys get 403 (no anonymous search).
+
+class MemorySearchRequest(BaseModel):
+    query: str
+    top_k: Optional[int] = None  # clamped to 1..20
+
+
+class MemoryListRequest(BaseModel):
+    limit: int = 20  # clamped to 1..100
+
+
+@app.post("/api/memory/search")
+def memory_search_scoped(
+    body: MemorySearchRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Semantic search over the CALLER's own memories (Phase 11).
+
+    Auth: caller's own ``X-API-Key`` → ``resolve_user_id()``. Returns the
+    caller's private + household hits (same path as chat retrieval). This is
+    the endpoint external MCP surfaces (mcp_memory → pi, Open WebUI, …) use
+    to answer "what do you know about me" without exposing other users.
+    """
+    if not SKILL_RUNNER_API_KEY:
+        raise HTTPException(status_code=503, detail="API keys not configured")
+    allowed = [k.strip() for k in SKILL_RUNNER_API_KEY.split(",") if k.strip()]
+    if x_api_key not in allowed:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    user_id = resolve_user_id(x_api_key)
+    if user_id == USER_UNKNOWN:
+        raise HTTPException(status_code=403, detail="Key not mapped to a user")
+    k = None
+    if body.top_k is not None:
+        try:
+            k = max(1, min(int(body.top_k), 20))
+        except (TypeError, ValueError):
+            k = None
+    hits = interface.search_memory(user_id, body.query, top_k=k)
+    return {"user_id": user_id, "count": len(hits), "memories": hits}
+
+
+@app.post("/api/memory/list")
+def memory_list_scoped(
+    body: MemoryListRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List the CALLER's stored memories (Phase 11). Same auth model as
+    ``/api/memory/search`` — per-user, never cross-user."""
+    if not SKILL_RUNNER_API_KEY:
+        raise HTTPException(status_code=503, detail="API keys not configured")
+    allowed = [k.strip() for k in SKILL_RUNNER_API_KEY.split(",") if k.strip()]
+    if x_api_key not in allowed:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    user_id = resolve_user_id(x_api_key)
+    if user_id == USER_UNKNOWN:
+        raise HTTPException(status_code=403, detail="Key not mapped to a user")
+    limit = max(1, min(int(body.limit or 20), 100))
+    hits = interface.list_memories(user_id, limit=limit)
+    return {"user_id": user_id, "count": len(hits), "memories": hits}
+
+
 @app.get("/metrics")
 def memory_metrics() -> Response:
     """Prometheus metrics for the memory module (Phase 8).

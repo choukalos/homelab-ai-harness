@@ -121,6 +121,38 @@ class IdentityResolver:
                 len(self._entries),
                 ", ".join(env for _, env in self._entries),
             )
+        self._warn_on_conflicts()
+
+    def _warn_on_conflicts(self) -> None:
+        """Phase 3.1: detect key values claimed by more than one user_id.
+
+        ``resolve()`` is first-match-wins, so when a key value appears in the
+        env-var pools of two different users the later entry is SHADOWED and
+        silently resolves to the earlier user (privacy bug 2026-09-02: the
+        legacy ``chuck=SKILL_RUNNER_API_KEY`` entry shadowed
+        ``dylan=LITELLM_KEY_DYLAN`` because SKILL_RUNNER_API_KEY held both
+        users' keys). We cannot change resolution semantics without breaking
+        the documented first-match contract, so we make the conflict loud at
+        startup instead. Key VALUES are never logged — only env var names and
+        key positions (ordinal within the pool).
+        """
+        claimed: dict[str, list[tuple[str, str]]] = {}  # value -> [(user, env)]
+        for user_id, env_name in self._entries:
+            raw = self._environ.get(env_name, "")
+            for candidate in (v.strip() for v in raw.split(",")):
+                if candidate:
+                    claimed.setdefault(candidate, []).append((user_id, env_name))
+        for value, claims in claimed.items():
+            users = {u for u, _ in claims}
+            if len(users) > 1:
+                logger.warning(
+                    "MEMORY_USER_KEYS CONFLICT: a key value claimed by %s "
+                    "(%s) resolves to the FIRST user in map order — later "
+                    "entries are shadowed. Make each key value map to exactly "
+                    "one user_id (e.g. user=LITELLM_KEY_<USER> per user).",
+                    ", ".join(sorted(users)),
+                    ", ".join(f"{u}={e}" for u, e in claims),
+                )
 
     def resolve(self, x_api_key: Optional[str]) -> str:
         """Return the user_id for an incoming key value.

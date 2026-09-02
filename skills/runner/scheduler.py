@@ -247,17 +247,40 @@ class ScheduleEntry:
             "next_run_at": self.next_run_at,
         }
 
+    def _local_now(self, now_utc: datetime) -> datetime:
+        """Convert a UTC datetime into this schedule's configured timezone.
+
+        Cron matching is done in the entry's local time so that
+        ``cron: 0 17 * * *`` + ``timezone: America/Chicago`` fires at 17:00
+        CDT, not 17:00 UTC. Invalid/missing timezones fall back to UTC.
+        """
+        if not self.timezone or self.timezone == "UTC":
+            return now_utc
+        try:
+            from zoneinfo import ZoneInfo
+            return now_utc.astimezone(ZoneInfo(self.timezone))
+        except Exception as exc:  # noqa: BLE001 - degrade to UTC
+            logger.warning(
+                "Schedule '%s': invalid timezone '%s' (%s) — using UTC.",
+                self.id, self.timezone, exc,
+            )
+            return now_utc
+
     def matches_now(self, now: datetime) -> bool:
-        """Check if this schedule should fire at the given datetime."""
+        """Check if this schedule should fire at the given datetime (UTC).
+
+        The datetime is converted to the schedule's local timezone before
+        cron matching (see ``_local_now``).
+        """
         if not self.enabled or self.expression is None:
             return False
-        return self.expression.matches_datetime(now)
+        return self.expression.matches_datetime(self._local_now(now))
 
     def compute_next_run(self, after: datetime) -> Optional[str]:
-        """Compute next run time as ISO string."""
+        """Compute next run time as ISO string (local-time wall clock)."""
         if self.expression is None:
             return None
-        next_dt = self.expression.next_trigger(after)
+        next_dt = self.expression.next_trigger(self._local_now(after))
         if next_dt:
             self.next_run_at = next_dt.isoformat()
         else:

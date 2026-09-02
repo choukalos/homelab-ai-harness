@@ -1,0 +1,30 @@
+name: recent_activity
+version: "1.0"
+description: "Distill each user's recent activity — conversations with the assistant (skill jobs + recent memories) and GitHub commits ONLY for users with a known GitHub identity — into a dated 'recent activity' fact, written to kb_user and Mem0 so 'what have I been doing recently' has a durable answer on every surface."
+inputs:
+  - name: user
+    type: string
+    required: false
+    description: "User to summarize (e.g. 'chuck'). Omit = every user in the identity map with recent activity."
+  - name: days
+    type: integer
+    required: false
+    default: 7
+    description: "Lookback window in days."
+config:
+  # GitHub identity is known ONLY for users listed here (login). Users not
+  # listed (e.g. dylan — no known GitHub account/token) get conversation-only
+  # summaries; we never scan a GitHub account we don't have access to.
+  github_users:
+    chuck: choukalos
+  kb_name: user  # kb_user collection
+  max_jobs: 40
+  max_memories: 25
+  max_github_events: 30
+tools:
+  - mcp_knowledge
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/homelab_reports/
+approval_gates: []
+channels: [cli, pi, n8n, scheduler]
+max_runtime: 240  # seconds
