@@ -30,6 +30,10 @@ services:
       - MCP_SERVER_FILESYSTEM_URL=http://mcp_filesystem:8000
       - MCP_SERVER_MEDIA_URL=http://mcp_media:8000
       - SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
+      # Scheduler persistence: point at the mounted volume so schedules
+      # survive container recreation (default ~/.thor/scheduler.json is
+      # ephemeral inside the container).
+      - SCHEDULER_CONFIG_PATH=/app/data/scheduler/scheduler.json
       # Presenton passwordless (auth_todo.md Phase 5.5): skip Basic auth header.
       - PRESENTON_PASSWORDLESS=true
       # Key threading (auth_todo.md Phase 2.2): off by default (master key).

@@ -1,0 +1,17 @@
+{
+  "schedules": [
+    {
+      "id": "05ab224fed61",
+      "name": "daily-recent-activity",
+      "cron": "0 17 * * *",
+      "skill": "recent_activity",
+      "params": {
+        "days": 7
+      },
+      "enabled": true,
+      "timezone": "America/Chicago",
+      "last_run_at": null,
+      "next_run_at": "2026-09-02T17:00:00-05:00"
+    }
+  ]
+}

@@ -176,6 +176,32 @@ services:
     networks:
       - ai-net
 
+  # --- Memory (Phase 11): per-user long-term memory retrieval --------------
+  # Thin client over skill-runner's scoped endpoints (POST /api/memory/search,
+  # POST /api/memory/list). Identity: caller's LiteLLM key forwarded via
+  # Authorization (when routed through LiteLLM), else MEMORY_USER_KEY.
+  # MEMORY_USER_KEY MUST be a SINGLE key in skill-runner's
+  # SKILL_RUNNER_API_KEY allow-list (exact-match semantics). Cross-user
+  # isolation is enforced server-side by skill-runner's IdentityResolver.
+  mcp_memory:
+    build:
+      context: ../mcp/servers/memory
+    container_name: mcp_memory
+    environment:
+      - SKILL_RUNNER_URL=http://skill-runner:8091
+      # Fallback identity when the caller sends no Authorization header.
+      # Serves Chuck's pi (Mac) deployment: resolves to user_id=chuck only.
+      # Callers that DO send Authorization: Bearer <their LiteLLM key> are
+      # forwarded to skill-runner and resolved per-user (dylan -> dylan, etc.).
+      - MEMORY_USER_KEY=${LITELLM_KEY_CHUCK}
+    ports:
+      # LAN-published so pi (Mac) can connect directly with the user's own
+      # LiteLLM key; skill-runner enforces per-user scoping server-side.
+      - "8005:8000"
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:
