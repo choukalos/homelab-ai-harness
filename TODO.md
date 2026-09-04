@@ -1,7 +1,7 @@
 # Thor AI Platform — Status
 
-> Updated: 2026-08-29 (memory workstream closed; mcp_vision live; **KB
-> rebuild COMPLETE — K0–K7 done 2026-08-29**)>
+> Updated: 2026-09-04 (credential rotation closed; presenton LAN-only;
+> pre-commit secrets guard added)>
 > **Workstreams:** `auth_todo.md` v2 (per-user LiteLLM keys, per-user
 > usage attribution, tooling/scripts — old Phase 9 folded into Phase 5)
 > is the only active plan. The three completed plans
@@ -15,6 +15,28 @@
 
 ## Completed (July 2026)
 
+- **Credential rotation — COMPLETE 2026-09-04** (trigger: leaked
+  credentials zip, 2026-09-02). All `.env` values re-issued and synced to
+  every backing store: LiteLLM (master + per-user keys, proxy DB re-seeded —
+  exactly 3 virtual keys remain), MySQL `investor`/`ai`/root, Postgres
+  `plausible` (peer-auth `ALTER USER`), Caddy Presenton basic-auth. Fixed
+  fallout: `plausible` (`PLAUSIBLE_DB_PASS` was missing from `.env`),
+  invest-hub 502s (MySQL `investor` password drift), `LITELLM_API_KEY`
+  (was a self-referential `${LITELLM_MASTER_KEY}` placeholder), github-runner
+  (GitHub had deleted the stale registration; re-registered + updated image,
+  runner v2.337.0). Leaked/intermediate secret artifacts removed from `/tmp`
+  and the repo. Tracked files scanned clean (no live secret values).
+- **Presenton LAN-only, passwordless — 2026-09-04.** Public
+  `siri.choukalos.com/presentations/*` Caddy route removed; port bound to
+  `${THOR_IP}:5000` (LAN only, `DISABLE_AUTH=true`). Family use:
+  `http://thor.local:5000`. (Closes auth_todo.md Phase 5.5 manual step G +
+  Q3.)
+- **Pre-commit secrets guard — 2026-09-04.** `.githooks/pre-commit` (via
+  `core.hooksPath .githooks`) now blocks staged `.env`/key/keystore files by
+  name, known token formats (AWS, OpenAI/LiteLLM `sk-`, GitHub, Slack), PEM
+  private keys, base64 Basic-auth blobs, and high-entropy literals assigned
+  to secret-looking variable names. `${VAR}` references and placeholders
+  pass. Bypass: `git commit --no-verify` (then rotate).
 - **Family KB rebuild (K0–K7) — COMPLETE 2026-08-29.** mcp_knowledge v2
   live (Qdrant `kb_*` collections, 768-dim, 11 tools, `kb_` prefix
   code-gate); legacy `family_kb` (384-dim) snapshotted + dropped;
@@ -104,7 +126,9 @@ scheduled for deletion). Phases:
 - **Phase 6 — Device migration (owner, later):** Siri shortcut, son's
   laptop, Mac pi; 24–48 h observation.
 - **Phase 7 — Legacy key retirement (owner, after migration):** remove
-  `SIRI_API_KEY` from list + Caddy, delete old keys, docs.
+  `SIRI_API_KEY` from list + Caddy, delete old keys, docs. **COMPLETE
+  2026-09-04** (verified: proxy DB holds exactly the 3 current keys —
+  chuck, dylan, memory; no legacy/stray keys).
 
 The old "Frontier Integration Plan" (OWUI MCP + OpenAPI tools,
 2026-07-22) is **dropped** — the capability survives anyway: all 9 MCP
@@ -125,5 +149,8 @@ servers are registered in LiteLLM, so any OpenAI-compatible client
 7. MCP containers: all containers `Up`
 8. Skill Runner: `GET http://thor.local:8091/health` returns `{"status": "ok"}`
 9. Skills: test each via `POST /api/chat` with appropriate intent
-10. Caddy: after any Caddyfile change, verify public endpoints (Caddy
-    auto-reloads the bind-mounted Caddyfile — confirm in `docker logs caddy`)
+10. Caddy: after any Caddyfile change, verify public endpoints. **Gotcha
+    (2026-09-04):** editors that replace the file atomically (rename over the
+    inode) break Caddy's inotify watch — the running config goes stale. If
+    `docker logs caddy` shows no reload, run
+    `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`.
