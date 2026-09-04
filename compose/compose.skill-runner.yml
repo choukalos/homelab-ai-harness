@@ -30,10 +30,11 @@ services:
       - MCP_SERVER_FILESYSTEM_URL=http://mcp_filesystem:8000
       - MCP_SERVER_MEDIA_URL=http://mcp_media:8000
       - SKILL_RUNNER_API_KEY=${LITELLM_KEY_CHUCK},${LITELLM_KEY_DYLAN}
-      # Scheduler persistence: point at the mounted volume so schedules
-      # survive container recreation (default ~/.thor/scheduler.json is
-      # ephemeral inside the container).
-      - SCHEDULER_CONFIG_PATH=/app/data/scheduler/scheduler.json
+      # Scheduler persistence (2026-09-04): definitions are git-tracked and
+      # mounted read-only (hot-reloaded on change); run state (last_run_at /
+      # next_run_at) lives in /home/chuck/data, outside git.
+      - SCHEDULER_CONFIG_PATH=/app/scheduler/schedules.json
+      - SCHEDULER_STATE_PATH=/app/data/scheduler/state.json
       # Presenton passwordless (auth_todo.md Phase 5.5): skip Basic auth header.
       - PRESENTON_PASSWORDLESS=true
       # Key threading (auth_todo.md Phase 2.2): off by default (master key).
@@ -88,7 +89,8 @@ services:
       - /home/chuck/data/media:/home/chuck/data/media
       - /home/chuck/workspace:/home/chuck/workspace
       - /home/chuck/homelab/logs/skill_runner:/home/chuck/homelab/logs/skill_runner
-      - /home/chuck/homelab/data/scheduler:/app/data/scheduler
+      - /home/chuck/homelab/scheduler:/app/scheduler:ro
+      - /home/chuck/data/scheduler:/app/data/scheduler
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
     # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
     # supported by Docker Compose.

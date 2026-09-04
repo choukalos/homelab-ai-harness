@@ -11,6 +11,16 @@ inputs:
     required: false
     default: 5
     description: "Maximum number of news items per interest category."
+  - name: publish
+    type: boolean
+    required: false
+    default: false
+    description: "Also publish the brief to the public drop zone (single-file retention: overwrites the target)."
+  - name: publish_path
+    type: string
+    required: false
+    default: "/home/chuck/data/media/public/briefs/latest.md"
+    description: "Destination file for the published brief (public drop zone)."
 config:
   default_interests:
     - "technology news"

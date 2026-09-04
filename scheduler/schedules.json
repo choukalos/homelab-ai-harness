@@ -1,0 +1,26 @@
+{
+  "schedules": [
+    {
+      "id": "daily-recent-activity",
+      "name": "Daily Recent Activity",
+      "cron": "0 17 * * *",
+      "skill": "recent_activity",
+      "params": {
+        "days": 7
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
+      "id": "weekday-morning-brief",
+      "name": "Weekday Morning Brief",
+      "cron": "0 9 * * 1-5",
+      "skill": "morning_brief",
+      "params": {
+        "publish": true
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    }
+  ]
+}
