@@ -46,7 +46,7 @@ The skill communicates with Presenton over the internal Docker network:
 - **Docker network endpoint:** `http://presenton:80` (default)
 - **Host endpoint:** `http://192.168.4.54:5000` (for host-based testing)
 - **Configurable via env:** `PRESENTON_URL` environment variable
-- **Authentication:** HTTP Basic Auth (username/password from `PRESENTON_AUTH_USERNAME`/`PRESENTON_AUTH_PASSWORD` env vars)
+- **Authentication:** none — Presenton runs passwordless (`DISABLE_AUTH=true`). The skill still sends a Basic header when `PRESENTON_AUTH_USERNAME`/`PRESENTON_AUTH_PASSWORD` are set, but Presenton ignores it.
 
 The skill uses Presenton's async API to avoid holding open long-lived HTTP connections:
 1. `POST /api/v1/ppt/presentation/generate/async` — submit generation job
@@ -97,7 +97,7 @@ See [skill.yml](skill.yml) for the full manifest.
 |---|---|---|
 | `PRESENTON_URL` | `http://presenton:80` | Presenton base URL |
 | `PRESENTON_AUTH_USERNAME` | `presenton` | Presenton HTTP Basic auth username |
-| `PRESENTON_AUTH_PASSWORD` | `${PRESENTON_AUTH_PASSWORD}` | Presenton HTTP Basic auth password |
+| `PRESENTON_AUTH_PASSWORD` | *(none)* | Presenton HTTP Basic auth password — **unused in the current deployment** (passwordless: `DISABLE_AUTH=true`; the header is ignored by Presenton) |
 | `PRESENTON_GENERATION_TIMEOUT` | `240` | Timeout (seconds) for Presenton generation polling |
 | `PRESENTATION_BUILD_MAX_RUNTIME` | `300` | Total skill max runtime in seconds |
 | `PRESENTATION_BUILD_ARTIFACT_DIR` | `/home/chuck/data/media/presentations` | Artifact output directory |

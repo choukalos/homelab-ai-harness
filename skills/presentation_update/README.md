@@ -45,7 +45,7 @@ The skill communicates with Presenton over the internal Docker network:
 
 - **Docker network endpoint:** `http://presenton:80` (default)
 - **Configurable via env:** `PRESENTON_URL` environment variable
-- **Authentication:** HTTP Basic Auth (username/password from env vars)
+- **Authentication:** none — Presenton runs passwordless (`DISABLE_AUTH=true`); any Basic header the skill sends is ignored server-side.
 
 ### API Endpoints Used
 
@@ -96,7 +96,7 @@ See [skill.yml](skill.yml) for the full manifest.
 |---|---|---|
 | `PRESENTON_URL` | `http://presenton:80` | Presenton base URL |
 | `PRESENTON_AUTH_USERNAME` | `presenton` | Presenton HTTP Basic auth username |
-| `PRESENTON_AUTH_PASSWORD` | *(env)* | Presenton HTTP Basic auth password |
+| `PRESENTON_AUTH_PASSWORD` | *(unset)* | Presenton HTTP Basic auth password — **unused**: Presenton runs passwordless (`DISABLE_AUTH=true`); the header is ignored server-side |
 | `LITELLM_BASE_URL` | `http://localhost:4000` | LiteLLM endpoint |
 | `LITELLM_API_KEY` | *(empty)* | LiteLLM API key |
 | `PRESENTATION_UPDATE_MODEL_ALIAS` | `local/qwen-coder` | Model alias for instruction parsing |
