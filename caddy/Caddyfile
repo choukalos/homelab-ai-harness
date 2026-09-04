@@ -83,7 +83,7 @@
 	handle @siri_presentations {
 		uri strip_prefix /presentations
 		reverse_proxy http://presenton:80 {
-			header_up Authorization "Basic cHByZHNlbnRvbjpjaGFuZ2VtZTEyMw=="
+			header_up Authorization "Basic cHByZHNlbnRvbjoxOGIzYjY3ZTJiYzlmOWFl"
 		}
 	}
 
