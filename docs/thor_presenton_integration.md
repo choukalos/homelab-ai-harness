@@ -102,6 +102,10 @@ Already implemented in `skills/presentation_build/`:
 
 ### Presenton Auth Hardening
 
+> **SUPERSEDED 2026-09-04** — Presenton is now passwordless + LAN-only
+> (`DISABLE_AUTH=true`, no public route, port bound to `${THOR_IP}:5000`).
+> `PRESENTON_AUTH_PASSWORD` removed from `.env`; this task no longer applies.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:

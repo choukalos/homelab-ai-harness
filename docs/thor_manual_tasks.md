@@ -86,6 +86,11 @@ curl with each key to verify allowed/denied model access is correct.
 
 ## Phase 11 - Presenton Auth Hardening
 
+> **SUPERSEDED 2026-09-04** — Presenton is now passwordless + LAN-only
+> (`DISABLE_AUTH=true`, no public route, port bound to `${THOR_IP}:5000`).
+> `PRESENTON_AUTH_PASSWORD` removed from `.env`; this task no longer applies.
+> Family access: `http://thor.local:5000`.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
