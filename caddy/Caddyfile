@@ -75,17 +75,8 @@
 		reverse_proxy http://skill-runner:8091
 	}
 
-	# Presenton web portal — user logs in to view/edit presentations
-	@siri_presentations {
-		host siri.choukalos.com
-		path /presentations/*
-	}
-	handle @siri_presentations {
-		uri strip_prefix /presentations
-		reverse_proxy http://presenton:80 {
-			header_up Authorization "Basic cHByZHNlbnRvbjoxOGIzYjY3ZTJiYzlmOWFl"
-		}
-	}
+	# Presenton is LAN-only (family use, passwordless): http://thor.local:5000
+	# (compose/compose.ai-core.yml, DISABLE_AUTH=true). No public route on purpose.
 
 	@siri host siri.choukalos.com
 	handle @siri {

@@ -165,7 +165,8 @@ services:
     networks:
       - ai-net
     ports:
-      - "5000:80"
+      # LAN-only (family use): bind to the LAN IP, not 0.0.0.0
+      - "${THOR_IP}:5000:80"
     volumes:
       - /home/chuck/data/presenton:/app_data
     environment:
