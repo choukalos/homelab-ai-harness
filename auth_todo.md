@@ -91,7 +91,9 @@
 ### Presenton (old Phase 9 — passwordless)
 - Deployed `:latest` (2026-08-28) has a **native `DISABLE_AUTH` env var**
   (truthy → auth middleware skipped entirely; verified in the running image).
-- LAN-only :5000. Currently Basic auth (`AUTH_USERNAME` / `AUTH_PASSWORD`).
+- LAN-only :5000. **Passwordless since 2026-09-04:** `DISABLE_AUTH=true`, no
+  public route (the `siri.choukalos.com/presentations/*` Caddy route was
+  removed; port bound to `${THOR_IP}:5000`). Family use: `http://thor.local:5000`.
 - Skill code (`main.py:1745`, `presentation_build/skill.py:63`) always sends a
   Basic header — must skip it when passwordless.
 
@@ -186,7 +188,9 @@
 - 5.4 `PRESENTON_BASE_URL` → `PRESENTON_URL` rename. ✅ (already done.)
 - 5.5 **Presenton passwordless**: `DISABLE_AUTH=true` ✅ (compose), drop
   `AUTH_*` ✅, skill-runner `PRESENTON_PASSWORDLESS` flag ✅ (skip Basic header).
-  **Manual step G:** recreate Presenton container.
+  **Manual step G:** recreate Presenton container. ✅ (2026-09-04: recreated,
+  running, verified 200 passwordless on `http://192.168.4.54:5000`; public
+  Caddy route removed same day.)
 - 5.6 Rebuild skill-only (manual step B) + e2e (`create-demo`). ⚠️ **Manual
   step B** (owner): `./homelab.sh rebuild skill-only`.
 
@@ -197,13 +201,19 @@
 - 6.3 Mac pi: new chuck key (if regenerated).
 - 6.4 Observe 24–48h.
 
-### Phase 7 — Legacy key retirement (owner, after migration) — **IN PROGRESS 2026-08-29**
+### Phase 7 — Legacy key retirement (owner, after migration) — **COMPLETE 2026-09-04**
 - 7.1 Remove `SIRI_API_KEY` from the list + Caddy; update the Siri shortcut
   to `LITELLM_KEY_CHUCK`. ✅ (2026-08-29: `SKILL_RUNNER_API_KEY` + Caddy
   OR-gate updated. Siri shortcut already uses `LITELLM_KEY_CHUCK`.)
-  **Manual step:** recreate Caddy + rebuild skill-only.
-- 7.2 Delete the old `chuck-remote` / `dylan` keys (if regenerated). ⚠️
-  Pending (owner, via `cli/litellm-keys.sh delete <token>`).
+  **Manual step:** recreate Caddy + rebuild skill-only. ✅ (2026-09-04: done
+  during the credential-rotation cleanup — Caddy reloaded, skill-runner
+  rebuilt on the new keys.)
+- 7.2 Delete the old `chuck-remote` / `dylan` keys (if regenerated). ✅
+  (2026-09-04: the 2026-09-04 credential rotation re-issued all keys and the
+  LiteLLM proxy DB was re-seeded. Verified via `/key/list`: exactly 3 virtual
+  keys remain — `LITELLM_KEY_CHUCK`, `LITELLM_KEY_DYLAN`, `MEMORY_LITELLM_KEY`
+  (all current post-rotation values, matched by SHA-256 against `.env`). No
+  legacy/stray keys. `simba` gone.)
 - 7.3 Docs: `README_SIRI.md`, `README.md`. ✅ (2026-08-29: updated to
   reflect the new per-user key setup.)
 
@@ -258,6 +268,7 @@
    attribution, or keep the scheduler on the master key?
 3. **Q3 — Presenton**: `DISABLE_AUTH=true` is verified in the deployed image —
    confirm go (fallback: a shared family password if a future image update
-   regresses it).
+   regresses it). ✅ (2026-09-04: go — running passwordless, LAN-only, no
+   public route.)
 4. **Q4 — Siri shortcut URL**: is it `/api/chat` or `/siri/chat`? (verify on
    the device in Phase 6; `README_SIRI.md` is fixed either way.)
