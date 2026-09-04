@@ -311,17 +311,28 @@ class SimpleScheduler:
     def __init__(
         self,
         config_path: Optional[str] = None,
+        state_path: Optional[str] = None,
         dispatch_fn: Optional[Callable[[str, dict[str, Any], dict[str, Any]], None]] = None,
         check_interval: float = 60.0,
     ) -> None:
         """
         Args:
-            config_path: Path to JSON config file. Defaults to ``~/.thor/scheduler.json``.
+            config_path: Path to the schedule DEFINITIONS file (git-tracked,
+                         read-only in production). Defaults to
+                         ``~/.thor/schedules.json``.
+            state_path: Path to the run STATE file (last_run_at / next_run_at
+                        per schedule id; not git-tracked). Defaults to
+                        ``<config stem>-state.json`` next to the definitions.
             dispatch_fn: Callback called as ``dispatch_fn(skill, params, meta)`` for each
                          scheduled job. If None, the scheduler logs but does not dispatch.
             check_interval: Seconds between schedule checks (default 60).
         """
         self.config_path = Path(config_path or DEFAULT_CONFIG_PATH)
+        self.state_path = (
+            Path(state_path)
+            if state_path
+            else self.config_path.with_name(self.config_path.stem + "-state.json")
+        )
         self.dispatch_fn = dispatch_fn
         self.check_interval = check_interval
         self._running = False
@@ -330,6 +341,8 @@ class SimpleScheduler:
         self._lock = threading.Lock()
         self._last_check_time: Optional[str] = None
         self._shutdown_event = threading.Event()
+        self._state_dirty = False
+        self._config_mtime: Optional[int] = None
 
     # -----------------------------------------------------------------------
     # Lifecycle — start / stop / run loop
@@ -348,6 +361,15 @@ class SimpleScheduler:
         self.load_config()
 
         while not self._shutdown_event.is_set():
+            # Hot reload: pick up definitions edited on disk (git-tracked file)
+            # within one check interval — no container restart needed.
+            try:
+                if self._file_signature() != self._config_mtime:
+                    logger.info("Definitions file changed — reloading schedules.")
+                    self.load_config()
+            except OSError:
+                pass
+
             now = datetime.now(timezone.utc)
             self._last_check_time = now.isoformat()
 
@@ -364,6 +386,7 @@ class SimpleScheduler:
                     )
                     sched.last_run_at = now.isoformat()
                     sched.compute_next_run(now)
+                    self._state_dirty = True
 
                     # Dispatch via callback if available
                     if self.dispatch_fn is not None:
@@ -379,8 +402,9 @@ class SimpleScheduler:
                                 sched.id, exc, exc_info=True,
                             )
 
-            # Persist updated state (last_run_at, next_run_at)
-            self.save_config()
+            # Persist updated state (last_run_at, next_run_at) if anything changed
+            if self._state_dirty:
+                self.save_state()
 
             # Wait for next check interval or until shutdown
             self._shutdown_event.wait(self.check_interval)
@@ -428,7 +452,7 @@ class SimpleScheduler:
                 logger.warning("Scheduler thread did not stop within 10s timeout.")
 
         # Final persistence
-        self.save_config()
+        self.save_state()
         self._thread = None
         logger.info("Scheduler stopped.")
 
@@ -438,70 +462,109 @@ class SimpleScheduler:
 
     def load_config(self) -> int:
         """
-        Load schedule definitions from the JSON config file.
+        Load schedule DEFINITIONS from the config file and merge in run STATE
+        from the state file (keyed by schedule id).
 
-        Returns the number of schedules loaded (including pre-existing ones
-        that were already in memory).
+        Returns the number of schedules loaded. If the definitions file does
+        not exist, creates a default empty one.
 
-        If the file does not exist, creates a default empty config.
+        Backward compatibility: definition entries that still carry
+        ``last_run_at``/``next_run_at`` (old single-file format) are migrated
+        into the state file.
         """
-        new_entries: list[dict[str, Any]] = []
-
         if self.config_path.is_file():
             try:
                 raw = self.config_path.read_text(encoding="utf-8")
                 data = json.loads(raw)
             except (json.JSONDecodeError, OSError) as exc:
-                logger.error("Failed to read scheduler config: %s", exc)
+                logger.error("Failed to read scheduler definitions: %s", exc)
                 self._create_default_config()
                 data = {"schedules": []}
-
-            # Preserve in-memory state for existing entries (last_run_at)
-            existing = {sid: s for sid, s in self._schedules.items()}
-
-            for entry in data.get("schedules", []):
-                sid = entry.get("id", uuid.uuid4().hex[:12])
-                if sid in existing:
-                    # Preserve runtime state
-                    prev = existing[sid]
-                    entry.setdefault("last_run_at", prev.last_run_at)
-                    entry.setdefault("next_run_at", prev.next_run_at)
-
-                params = entry.get("params", {})
-                enabled = entry.get("enabled", True)
-                tz_str = entry.get("timezone", "UTC")
-
-                schedule = ScheduleEntry(
-                    id=sid,
-                    name=entry.get("name", sid),
-                    cron=entry.get("cron", "* * * * *"),
-                    skill=entry.get("skill", ""),
-                    params=params,
-                    enabled=enabled,
-                    timezone=tz_str,
-                )
-                schedule.last_run_at = entry.get("last_run_at")
-                schedule.next_run_at = entry.get("next_run_at")
-
-                self._schedules[sid] = schedule
-                new_entries.append(entry)
-                logger.info(
-                    "Loaded schedule: id=%s name=%s cron=%s skill=%s enabled=%s",
-                    sid, schedule.name, schedule.cron, schedule.skill, enabled,
-                )
-
-            # Compute next run for all schedules
-            now = datetime.now(timezone.utc)
-            for sched in self._schedules.values():
-                sched.compute_next_run(now)
-
         else:
-            logger.info("Config file not found at %s — creating default config.", self.config_path)
+            logger.info(
+                "Definitions file not found at %s — creating default.",
+                self.config_path,
+            )
             self._create_default_config()
+            data = {"schedules": []}
 
+        state = self._load_state()
+        loaded_ids: set[str] = set()
+
+        for entry in data.get("schedules", []):
+            sid = entry.get("id", uuid.uuid4().hex[:12])
+            loaded_ids.add(sid)
+
+            # Backward compat: migrate runtime fields out of the definitions
+            for field in ("last_run_at", "next_run_at"):
+                if entry.get(field) is not None:
+                    state.setdefault(sid, {})[field] = entry[field]
+
+            existing = self._schedules.get(sid)
+            schedule = ScheduleEntry(
+                id=sid,
+                name=entry.get("name", sid),
+                cron=entry.get("cron", "* * * * *"),
+                skill=entry.get("skill", ""),
+                params=entry.get("params", {}),
+                enabled=entry.get("enabled", True),
+                timezone=entry.get("timezone", "UTC"),
+            )
+            if existing is not None and (existing.last_run_at or existing.next_run_at):
+                # Hot reload: keep the fresher in-memory runtime state
+                schedule.last_run_at = existing.last_run_at
+                schedule.next_run_at = existing.next_run_at
+            else:
+                run_state = state.get(sid, {})
+                schedule.last_run_at = run_state.get("last_run_at")
+                schedule.next_run_at = run_state.get("next_run_at")
+
+            self._schedules[sid] = schedule
+            logger.info(
+                "Loaded schedule: id=%s name=%s cron=%s skill=%s enabled=%s",
+                sid, schedule.name, schedule.cron, schedule.skill, schedule.enabled,
+            )
+
+        # Prune schedules removed from the definitions file
+        for sid in list(self._schedules.keys()):
+            if sid not in loaded_ids:
+                del self._schedules[sid]
+                logger.info("Pruned schedule no longer in definitions: id=%s", sid)
+
+        # Compute next run for all schedules
+        now = datetime.now(timezone.utc)
+        for sched in self._schedules.values():
+            sched.compute_next_run(now)
+
+        self._config_mtime = self._file_signature()
+        self._state_dirty = True  # persist merged/migrated state
         self._last_check_time = datetime.now(timezone.utc).isoformat()
         logger.info("Scheduler config loaded: %d schedule(s).", len(self._schedules))
         return len(self._schedules)
+
+    def _load_state(self) -> dict[str, dict[str, Any]]:
+        """Load run state from the state file. Missing/corrupt file -> {}."""
+        if not self.state_path.is_file():
+            return {}
+        try:
+            data = json.loads(self.state_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {k: v for k, v in data.items() if isinstance(v, dict)}
+            logger.warning(
+                "Scheduler state file %s has unexpected shape — ignoring.",
+                self.state_path,
+            )
+            return {}
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Scheduler state file unreadable (%s) — starting fresh.", exc)
+            return {}
+
+    def _file_signature(self) -> Optional[int]:
+        """mtime-ns signature of the definitions file (None if missing)."""
+        try:
+            return self.config_path.stat().st_mtime_ns
+        except OSError:
+            return None
 
     def _create_default_config(self) -> None:
         """Create a default empty config file."""
@@ -511,20 +574,67 @@ class SimpleScheduler:
             json.dumps(default, indent=2), encoding="utf-8"
         )
 
-    def save_config(self) -> None:
-        """Persist current schedule state (including last_run_at) back to JSON."""
-        with self._lock:
-            schedules_data = [s.to_dict() for s in self._schedules.values()]
+    def save_state(self) -> None:
+        """
+        Persist run state (last_run_at / next_run_at per schedule id) to the
+        state file — atomically. Never touches the definitions file.
 
-        data = {"schedules": schedules_data}
+        Only writes when ``_state_dirty`` is set, then clears the flag.
+        """
+        if not self._state_dirty:
+            return
+        with self._lock:
+            state = {
+                s.id: {"last_run_at": s.last_run_at, "next_run_at": s.next_run_at}
+                for s in self._schedules.values()
+            }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.state_path.with_name(self.state_path.name + ".tmp")
+            tmp.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+            os.replace(tmp, self.state_path)
+            self._state_dirty = False
+            logger.debug("Scheduler state saved to %s", self.state_path)
+        except OSError as exc:
+            logger.error("Failed to save scheduler state: %s", exc)
+
+    def _save_definitions(self) -> None:
+        """
+        Persist current schedule definitions (without runtime fields) back to
+        the definitions file. Used by the runtime add/update/remove endpoints.
+
+        In production the definitions file is a read-only bind mount — edits
+        belong in the git-tracked scheduler/schedules.json, which the running
+        scheduler picks up automatically (hot reload).
+        """
+        with self._lock:
+            definitions = {
+                "schedules": [
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "cron": s.cron,
+                        "skill": s.skill,
+                        "params": s.params,
+                        "enabled": s.enabled,
+                        "timezone": s.timezone,
+                    }
+                    for s in self._schedules.values()
+                ]
+            }
         try:
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            self.config_path.write_text(
-                json.dumps(data, indent=2, default=str), encoding="utf-8"
-            )
-            logger.debug("Scheduler config saved to %s", self.config_path)
+            tmp = self.config_path.with_name(self.config_path.name + ".tmp")
+            tmp.write_text(json.dumps(definitions, indent=2, default=str), encoding="utf-8")
+            os.replace(tmp, self.config_path)
+            self._config_mtime = self._file_signature()
+            logger.info("Scheduler definitions saved to %s", self.config_path)
         except OSError as exc:
-            logger.error("Failed to save scheduler config: %s", exc)
+            logger.error(
+                "Could not persist definitions to %s (%s). In production this file is "
+                "read-only — edit scheduler/schedules.json in the repo instead.",
+                self.config_path, exc,
+            )
 
     # -----------------------------------------------------------------------
     # Schedule management
@@ -559,7 +669,9 @@ class SimpleScheduler:
 
         now = datetime.now(timezone.utc)
         schedule.compute_next_run(now)
-        self.save_config()
+        self._save_definitions()
+        self._state_dirty = True
+        self.save_state()
         logger.info("Added schedule: id=%s name=%s", sid, name)
         return sid
 
@@ -568,7 +680,9 @@ class SimpleScheduler:
         with self._lock:
             removed = self._schedules.pop(schedule_id, None)
         if removed:
-            self.save_config()
+            self._save_definitions()
+            self._state_dirty = True
+            self.save_state()
             logger.info("Removed schedule: id=%s", schedule_id)
             return True
         logger.warning("Schedule not found for removal: id=%s", schedule_id)
@@ -623,7 +737,9 @@ class SimpleScheduler:
             if "cron" in updates:
                 sched.compute_next_run(datetime.now(timezone.utc))
 
-        self.save_config()
+        self._save_definitions()
+        self._state_dirty = True
+        self.save_state()
         logger.info("Updated schedule: id=%s fields=%s", schedule_id, list(updates.keys()))
         return sched.to_dict()
 
@@ -662,7 +778,8 @@ class SimpleScheduler:
 
             schedule.last_run_at = meta["triggered_at"]
             schedule.compute_next_run(datetime.now(timezone.utc))
-            self.save_config()
+            self._state_dirty = True
+            self.save_state()
 
             logger.info(
                 "Dispatched scheduled job: schedule=%s skill=%s job_id=%s",
@@ -675,6 +792,21 @@ class SimpleScheduler:
                 "Error dispatching scheduled job '%s': %s", schedule.id, exc
             )
             return None
+
+    def record_manual_run(self, schedule_id: str) -> bool:
+        """
+        Record a manual (run-now) execution: update ``last_run_at`` without
+        shifting ``next_run_at`` (the cron grid is unchanged). Persists state.
+        """
+        with self._lock:
+            sched = self._schedules.get(schedule_id)
+            if sched is None:
+                return False
+            sched.last_run_at = datetime.now(timezone.utc).isoformat()
+            self._state_dirty = True
+        self.save_state()
+        logger.info("Recorded manual run for schedule: id=%s", schedule_id)
+        return True
 
     def run_now(self, schedule_id: str) -> Optional[str]:
         """
@@ -712,6 +844,7 @@ class SimpleScheduler:
         return {
             "running": self._running,
             "config_path": str(self.config_path),
+            "state_path": str(self.state_path),
             "schedules_count": len(self._schedules),
             "enabled_count": sum(1 for s in self._schedules.values() if s.enabled),
             "last_check_time": self._last_check_time,

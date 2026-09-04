@@ -47,6 +47,11 @@ from typing import Any, Optional
 ARTIFACT_DIR = Path(
     os.environ.get("MORNING_BRIEF_ARTIFACT_DIR", "/home/chuck/data/media/homelab_reports")
 )
+# Public drop zone (single-file retention: latest brief, overwritten each run).
+# Served at https://choukalos.com/files/briefs/latest.md
+PUBLISH_PATH = Path(
+    os.environ.get("MORNING_BRIEF_PUBLISH_PATH", "/home/chuck/data/media/public/briefs/latest.md")
+)
 MAX_RUNTIME_SECS = int(os.environ.get("MORNING_BRIEF_MAX_RUNTIME", "180"))
 
 # LiteLLM endpoint (set by skill runner or environment)
@@ -653,6 +658,29 @@ def _write_artifact(report: str) -> Optional[str]:
         return None
 
 
+def _publish_brief(report: str, publish_path: Path, job) -> Optional[str]:
+    """
+    Atomically publish the brief to the public drop zone.
+
+    Single-file retention: the target is overwritten on every run, so the
+    public folder always holds exactly one brief (the latest).
+    """
+    try:
+        publish_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = publish_path.with_name(publish_path.name + ".tmp")
+        tmp.write_text(report, encoding="utf-8")
+        os.replace(tmp, publish_path)  # atomic on POSIX
+        logger.info("Brief published: %s", publish_path)
+        if hasattr(job, "add_log"):
+            job.add_log(f"Published to {publish_path}")
+        return str(publish_path)
+    except OSError as exc:
+        logger.error("Could not publish brief to %s: %s", publish_path, exc)
+        if hasattr(job, "add_log"):
+            job.add_log(f"Publish FAILED ({publish_path}): {exc}")
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Public entrypoint
 # ---------------------------------------------------------------------------
@@ -758,6 +786,12 @@ def run(
             else:
                 job.add_log("Warning: artifact save failed, report returned inline only")
 
+        # Phase 6: Publish to public drop zone (optional; single-file retention)
+        published_path = None
+        if params.get("publish"):
+            target = Path(params.get("publish_path", str(PUBLISH_PATH)))
+            published_path = _publish_brief(report, target, job)
+
         # Extract summary (first few lines)
         summary_lines = report.strip().split("\n")[:5]
         summary = " ".join(summary_lines).strip()
@@ -779,6 +813,7 @@ def run(
             "summary": summary,
             "report": report,
             "artifact_path": artifact_path,
+            "published_path": published_path,
             "categories": list(interests),
             "item_count": len(all_items),
             "model_alias": MODEL_ALIAS,

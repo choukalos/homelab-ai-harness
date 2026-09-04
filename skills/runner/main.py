@@ -513,8 +513,9 @@ from scheduler import SimpleScheduler  # noqa: F401 — imported for type awaren
 scheduler = SimpleScheduler(
     config_path=os.environ.get(
         "SCHEDULER_CONFIG_PATH",
-        os.path.join(os.path.expanduser("~"), ".thor", "scheduler.json"),
+        os.path.join(os.path.expanduser("~"), ".thor", "schedules.json"),
     ),
+    state_path=os.environ.get("SCHEDULER_STATE_PATH"),
     dispatch_fn=None,  # set in lifespan handler (below)
     check_interval=60.0,
 )
@@ -2967,6 +2968,9 @@ def run_schedule_now(schedule_id: str) -> dict[str, Any]:
         user_id=USER_SERVICE,
     )
     job.add_log(f"Run-now trigger for schedule '{schedule_id}' ({sched.name})")
+    # Record the manual run in scheduler state (last_run_at only —
+    # next_run_at stays on the cron grid).
+    scheduler.record_manual_run(schedule_id)
     _execute_skill(job)
     jobs[job.job_id] = job
     logger.info("Run-now job %s launched for schedule '%s'.", job.job_id, schedule_id)
