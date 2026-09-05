@@ -28,6 +28,7 @@ All skill-generated artifacts are stored under this root, organized by type.
 | `code_reviews/` | Code review reports | Review summaries, findings, recommendations |
 | `homelab_reports/` | Homelab status/health reports | System health, usage stats, incident logs |
 | `siri_outputs/` | Siri skill outputs | Short responses, quick results, status artifacts |
+| `public/` | **Public drop zone** (served at `choukalos.com/files/`) | `briefs/latest.md` — weekday morning brief (single-file retention, overwritten by the `weekday-morning-brief` schedule) |
 
 Future directories can be added as new skills are created.
 
@@ -75,3 +76,8 @@ Examples:
 - **Selected artifacts can be retrieved publicly** through the Siri `/media/files/*` endpoint. Siri returns both a short summary and the artifact link when available.
 - **Chuck manually promotes** artifacts into the KB when appropriate.
 - Artifact filenames use opaque or timestamped slugs to prevent enumeration.
+- **`public/` is the only artifact subtree served to the internet** (via the
+  Hugo portal's `/files/` route). Anything written there is world-readable —
+  only publish content that is safe to expose. The `publish-file` skill is
+  the validated path for ad-hoc publications; scheduled jobs (e.g.
+  `weekday-morning-brief` → `public/briefs/latest.md`) write directly.

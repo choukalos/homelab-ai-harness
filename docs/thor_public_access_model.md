@@ -107,6 +107,7 @@ Deliberately public web applications. Not AI platform tools — they share infra
 |---|---|---|---|
 | `choukalos.com` | None | `portal:8080` (Hugo static site + `/files/` drop zone + `/status/`) | Family blog / public face |
 | `choukalos.com/media/files/*` | None | `skill-runner:8091` | Same-origin generated artifacts (charts, demos, video) |
+| `choukalos.com/files/briefs/latest.md` | None | portal static (→ `/home/chuck/data/media/public/briefs/latest.md`) | Weekday morning brief — overwritten each weekday 09:00 CT (single-file retention, `weekday-morning-brief` schedule) |
 
 Standard public static site. No AI capabilities, no secrets in the serving container. (Ghost removed 2026-08-28 after the Hugo cutover — `blog-todo.md` B7.)
 

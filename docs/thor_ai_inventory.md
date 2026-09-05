@@ -28,7 +28,10 @@
   prefix code-gate). Legacy `family_kb` (384-dim) dropped 2026-08-29.
   Port 0.0.0.0:6333 unchanged (decision §0.5).
 - **Skill Runner** is the production normalized AI gateway (`THOR_IP:8091`):
-  `POST /api/chat` intent dispatch, 15 launchable skills (+2 TODO placeholders), cron scheduler, 8 MCP dispatch,
+  `POST /api/chat` intent dispatch, 15 launchable skills (+2 TODO placeholders), cron scheduler
+  (definitions git-tracked in `homelab/scheduler/schedules.json`, hot-reloaded;
+  run state in untracked `/home/chuck/data/scheduler/state.json` — split 2026-09-04),
+  8 MCP dispatch,
   **in-process long-term memory** (Mem0 OSS → Qdrant `mem0_memories`, identity
   map, retrieval/writeback, admin REST + CLI, `/metrics`) — see
   `memory_todo.md` + `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete
