@@ -80,6 +80,14 @@ Notes:
   mcp-only or skill-only will NOT restart litellm or other ai-core
   services, so your LLM connection stays alive.
 
+  The skill-runner CORE (main.py, scheduler.py) is baked into the
+  skill-runner:local image at build time; the bind-mounted ../skills
+  volume is for dynamic skills only. `rebuild` (ai, skill-only, all,
+  all-n8n) therefore rebuilds the image first (docker build -t
+  skill-runner:local skills/runner) before recreating the container.
+  `restart`/`up` do NOT rebuild the image — if you change runner core
+  code, use `rebuild`, not `restart`.
+
   blog and invest are also separate projects. Rebuilding blog-only or
   invest-only will NOT restart Caddy or Cloudflare Tunnel.
 
@@ -119,6 +127,17 @@ run_compose_single() {
   docker compose --env-file "${BASE_DIR}/.env" ${files} ${command} "$@"
 }
 
+# The skill-runner core (main.py, scheduler.py) is BAKED INTO the image at
+# build time (skills/runner/Dockerfile COPY) — the bind-mounted ../skills
+# volume is for dynamic skills only. Recreating the container WITHOUT
+# rebuilding the image silently keeps running stale core code (2026-09-04:
+# a Sept-1 image shadowed live scheduler changes for days). Every skill-runner
+# rebuild therefore builds the image first.
+build_skill_runner_image() {
+  echo "Building skill-runner image from ${BASE_DIR}/skills/runner ..."
+  docker build -q -t skill-runner:local "${BASE_DIR}/skills/runner"
+}
+
 run_ai_stack() {
   local command="$1"
   shift
@@ -148,7 +167,8 @@ run_ai_stack() {
       run_compose_single down "-f ${AI_CORE}" "$@"
       run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
       run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
-      run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
+      build_skill_runner_image
+      run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
       ;;
     pull)
       run_compose_single pull "-f ${AI_CORE}" "$@"
@@ -363,7 +383,8 @@ do_dispatch() {
         down|restart|rebuild)
           run_compose_single down "-f ${SKILL_RUNNER}" "$@"
           if [[ "${cmd}" == "restart" || "${cmd}" == "rebuild" ]]; then
-            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
+            [[ "${cmd}" == "rebuild" ]] && build_skill_runner_image
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
@@ -413,7 +434,8 @@ do_dispatch() {
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
+            build_skill_runner_image
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
@@ -468,7 +490,8 @@ do_dispatch() {
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
-            run_compose_single up "-f ${SKILL_RUNNER}" -d --build --force-recreate --remove-orphans "$@"
+            build_skill_runner_image
+            run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${N8N}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi

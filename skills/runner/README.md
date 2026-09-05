@@ -48,8 +48,9 @@ Skills never touch MCP servers directly — the runner is the single gateway.
 
 Proxied publicly via Caddy at `https://siri.choukalos.com/media/files/*`.
 
-Presentations use a separate Presenton web portal (proxied via Caddy at
-`https://siri.choukalos.com/presentations/*`).
+Presenton runs passwordless and LAN-only (`http://thor.local:5000`); the
+former public `siri.choukalos.com/presentations/*` route was removed
+2026-09-04 (see `docs/thor_presenton_integration.md`).
 
 ### Chat Gateway — `POST /api/chat`
 
@@ -160,7 +161,48 @@ Environment variables (set in compose file):
 - `SKILL_RUNNER_PORT=8091`
 - `ARTIFACT_ROOT=/home/chuck/data/media`
 
-The `skills/` directory is mounted read-only at `/app/skills/` so new skills are picked up without rebuilding.
+The `skills/` directory is mounted read-only at `/app/skills/` so new skills
+are picked up without rebuilding. **However, the runner core (`main.py`,
+`scheduler.py`) is baked into the image** (`skills/runner/Dockerfile` COPYs
+them into `/app/`, which shadows the bind mount on `sys.path`). Core changes
+require rebuilding the image:
+
+```bash
+# canonical (rebuilds image + recreates container):
+./homelab.sh rebuild skill-only
+# manual equivalent:
+docker build -t skill-runner:local skills/runner/ \
+  && docker compose -f compose/compose.skill-runner.yml up -d --force-recreate skill-runner
+```
+
+`restart` / `up` do NOT rebuild the image — a stale image silently runs old
+core code (2026-09-04 incident: a Sept-1 image shadowed scheduler changes
+for days). Verify the running code with
+`docker exec skill-runner grep -c save_state /app/scheduler.py`
+or check a known-new log line.
+
+### Scheduler
+
+Cron-like scheduler for recurring skill jobs (see `scheduler/README.md`):
+
+- **Definitions** — git-tracked `homelab/scheduler/schedules.json`, mounted
+  read-only at `/app/scheduler/schedules.json`
+  (`SCHEDULER_CONFIG_PATH`). Hot-reloaded on file change (mtime, ~60s) —
+  edit + save, no restart.
+- **Run state** — `last_run_at` / `next_run_at` per job id, persisted
+  atomically to `/home/chuck/data/scheduler/state.json`
+  (`SCHEDULER_STATE_PATH`), outside git.
+
+Current jobs: `daily-recent-activity` (17:00 America/Chicago) and
+`weekday-morning-brief` (09:00 America/Chicago Mon–Fri, `publish: true` →
+`/home/chuck/data/media/public/briefs/latest.md` →
+`https://choukalos.com/files/briefs/latest.md`).
+
+The runtime `POST /api/schedule` / `DELETE /api/schedule/{id}` endpoints
+attempt to write the definitions file, which is read-only in production —
+they log an error there. The git-tracked file is the source of truth.
+`POST /api/schedule/{id}/run-now` records the manual run in state
+(`last_run_at` only; the cron grid is unchanged).
 
 ### Laptop Dev Mode (LAN)
 
@@ -213,6 +255,9 @@ Set `dry_run: true` in the request body or set `SKILL_RUNNER_DRY_RUN=true` globa
 | `ARTIFACT_ROOT` | `/home/chuck/data/media` | Base directory for artifacts |
 | `SKILL_RUNNER_LOG_DIR` | `/home/chuck/homelab/logs/skill_runner` | Log file directory |
 | `SKILL_RUNNER_DRY_RUN` | `""` | Global dry-run toggle (`true`/`1`/`yes`) |
+| `SCHEDULER_CONFIG_PATH` | `~/.thor/schedules.json` | Schedule definitions file (git-tracked, read-only mount in container) |
+| `SCHEDULER_STATE_PATH` | `<config dir>/state.json` | Scheduler run-state file (untracked; container: `/app/data/scheduler/state.json`) |
+| `PRESENTON_PASSWORDLESS` | `false` | Skip Basic auth for Presenton API calls (passwordless mode) |
 | `MCP_SERVER_SEARCH_URL` | `http://mcp_search:8000` | MCP search server URL |
 | `MCP_SERVER_KNOWLEDGE_URL` | `http://mcp_knowledge:8000` | MCP knowledge server URL |
 | `MCP_SERVER_CRAWL_URL` | `http://mcp_crawl:8000` | MCP crawl server URL |

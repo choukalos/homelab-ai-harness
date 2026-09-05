@@ -1,7 +1,7 @@
 # Thor AI Platform — Status
 
 > Updated: 2026-09-04 (credential rotation closed; presenton LAN-only;
-> pre-commit secrets guard added)>
+> pre-commit secrets guard added; scheduler split + weekday morning brief)>
 > **Workstreams:** `auth_todo.md` v2 (per-user LiteLLM keys, per-user
 > usage attribution, tooling/scripts — old Phase 9 folded into Phase 5)
 > is the only active plan. The three completed plans
@@ -15,6 +15,21 @@
 
 ## Completed (July 2026)
 
+- **Scheduler definitions/state split + weekday morning brief — 2026-09-04.**
+  Skill-runner scheduler now reads git-tracked definitions from
+  `homelab/scheduler/schedules.json` (read-only mount, hot-reloaded on file
+  change — no restart) and persists run state (`last_run_at`/`next_run_at`) to
+  untracked `/home/chuck/data/scheduler/state.json` (atomic writes). Old
+  `data/scheduler/scheduler.json` (runtime churn in the working tree) removed
+  from git; legacy single-file format auto-migrates. New job
+  `weekday-morning-brief` (Mon–Fri 09:00 `America/Chicago`) runs
+  `morning_brief` with `publish: true` → atomically overwrites
+  `/home/chuck/data/media/public/briefs/latest.md` →
+  `https://choukalos.com/files/briefs/latest.md` (single-file retention).
+  `homelab.sh` rebuild paths now rebuild the `skill-runner:local` image first
+  (runner core is baked into the image; `restart`/`up` do NOT rebuild — a
+  stale Sept-1 image had silently shadowed live core code until the image
+  was rebuilt).
 - **Credential rotation — COMPLETE 2026-09-04** (trigger: leaked
   credentials zip, 2026-09-02). All `.env` values re-issued and synced to
   every backing store: LiteLLM (master + per-user keys, proxy DB re-seeded —
