@@ -23,7 +23,9 @@ DCGM (NVIDIA) ──────────────────────
 | LiteLLM | `host.docker.internal` | 4000 | LLM proxy: requests, tokens, spend, latency, key budgets |
 | Node Exporter | `thor`, `matrix`, `athena` | 9100 | CPU, memory, disk, network per host |
 | cAdvisor | `thor`, `athena` | 8080/9080 | Container resource usage |
-| DCGM | `matrix` | 9400 | GPU utilization, temperature, power, VRAM |
+| DCGM | `matrix` | 9400 | GPU utilization, temperature, power, VRAM (live since DCGM fix 2026-09-09) |
+| vLLM | `matrix` | 8000 | LLM engine: tokens, cache, queue, latency (operational, engine-wide) |
+| Media pipeline | `matrix` | 8189 | Media work meter: jobs, work units, cost $, per user (live 2026-09-09) |
 
 Prometheus scrapes all sources every **15 seconds** and feeds Grafana for visualization.
 
@@ -102,7 +104,70 @@ The "cost" is just GPU time — adjust in `litellm/config.yml` if needed.
 
 ---
 
+## Media Work Metering (v2)
+
+GPU work from the media pipeline (ComfyUI diffusion: Flux images, LTXV video,
+SeedVR2 upscale, ACE-Step music, MMAudio SFX) is priced as **deterministic
+work units × a rate table** (energy-based synthetic tokens were abandoned —
+the GPU/driver has no NVML energy counter).
+
+**Status (2026-09-09): LIVE end-to-end.** Identity threading, pipeline
+`/metrics` + `jobs.jsonl`, scrape, and the `AI Work & Spend` dashboard are
+all operational. Rates calibrated on Matrix (energy-based full cost):
+images ≈ $5.3e-5/mpix-step, audio ≈ $3.1e-5/s (placeholder defaults were
+~20× higher).
+
+**Cost model (per user):**
+- **LLM $** = `litellm_spend_metric_total{user=...}` — the canonical LLM cost
+  source. **Includes the pipeline's storyboard LLM**, which routes through
+  this proxy with the caller's key (verified 2026-09-09).
+- **Media $** = `media_cost_usd_total{user, stage}` — work-unit pricing
+  (steps×MP, frames×MP, audio-seconds) at full cost (electricity + GPU
+  amortization). Storyboard stage = real vLLM tokens at matrix-coder rates
+  ($0.75/M in, $4.50/M out — mirrors the live LiteLLM config; permanent rule:
+  if the LiteLLM rate changes, `MEDIA_MATRIX_CODER_IN_USD`/`_OUT_USD` follow).
+- **Total work $ = LLM $ + Media ${stage != "storyboard"}** — the storyboard
+  exclusion avoids double counting (it is already inside LLM $). The
+  pipeline's storyboard cost remains a cross-check panel only.
+- **No double-counting rule:** vLLM engine metrics (`vllm:*_tokens`) are
+  operational (engine-wide, not per-user) — never sum them into $ totals.
+
+**Identity chain:** pi → LiteLLM `/mcp-rest/tools/call` (caller's key) →
+mcp_media (key → user via `GET /key/info`, `MEDIA_USER=chuck` fallback) →
+pipeline job POST (`user` + `client` fields; JSON body or multipart form).
+
+---
+
 ## Grafana Dashboards
+
+### Dashboard 3: AI Work & Spend (uid `ai-work-spend`)
+
+Total work $ = LLM + media, by user, plus GPU payback. File:
+`grafana/dashboards/ai-work-spend.json` (generator: `grafana/dashboards/gen_ai_work_spend.py`).
+Variables: `user` (multi), `ELEC_USD_PER_KWH=0.15`, `GPU_AVG_W=200`,
+`GPU_COST_USD=4000`, `GPU_LIFETIME_HOURS=43800`.
+
+```
+  Row 1  LLM — via LiteLLM proxy (per user): spend/tokens/requests (range),
+         spend by user (5m), vLLM engine tokens (operational cross-check)
+  Row 2  Media — pipeline metering (per user): cost/jobs/tokens (range),
+         media_up online indicator, cost by user×stage, work units by kind
+  Row 3  Total work $ (LLM + media, by user): range total (storyboard
+         excluded from media side, `or` fallback while media metric absent),
+         by user (range barchart + 5m rate)
+  Row 4  GPU $ & payback: GPU $ (range, MEASURED DCGM power with GPU_AVG_W
+         fallback), amortization $/h, payback ratio (work $ / GPU $), DCGM
+         power/util
+  Row 5  Pipeline operational: queue depth, active jobs, duration by stage,
+         jobs by status
+```
+
+**DCGM note:** DCGM field polling was frozen on Matrix (driver/DCGM bug) and
+showed stale values; fixed 2026-09-09 (pinned older dcgm-exporter image,
+DCGM 3.x). Power now moves live (≈14 W idle → ~300 W under load). Row 4's
+GPU $ uses measured power with a `GPU_AVG_W` estimate fallback. Legacy
+dashboards' DCGM panels (dcgm.json, llm-gpu-monitor.json,
+homelab-overview.json incl. "GPU Investment ROI") are live again.
 
 ### Dashboard 1: LLM & GPU Monitor
 
@@ -205,5 +270,10 @@ count(count by (api_key_alias)
 | `prometheus/prometheus.yml` | Scrape configs for all data sources |
 | `grafana/dashboards/llm-gpu-monitor.json` | Dashboard 1 JSON |
 | `grafana/dashboards/homelab-overview.json` | Dashboard 2 JSON |
+| `grafana/dashboards/ai-work-spend.json` | Dashboard 3 (AI Work & Spend) JSON |
 | `compose/compose.ai-core.yml` | LiteLLM + Prometheus + Grafana stack |
+| `compose/compose.mcp.yml` | MCP servers (incl. `mcp_media` identity threading) |
 | `homelab.sh` | CLI for key management (`key info`, `key list`, etc.) |
+
+(Metering plan files `thor_media_work.md` / `matrix_media_work.md` were
+completed 2026-09-09 and deleted — state lives in this file + `TODO.md`.)

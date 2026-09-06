@@ -33,10 +33,12 @@ import logging
 import os
 import tempfile
 import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import List, Optional
 
 from mcp.server import FastMCP
+from mcp.server.fastmcp import Context
 
 from media_pipeline_client import MediaPipelineClient, _JOB_PREFIX
 
@@ -55,6 +57,60 @@ PIPELINE = MediaPipelineClient()
 PIPELINE_FETCH_DIR: str = os.environ.get(
     "MEDIA_PIPELINE_FETCH_DIR", "/home/chuck/data/media/generated/pipeline"
 )
+
+# ---------------------------------------------------------------------------
+# Identity threading (same pattern as mcp_memory)
+# ---------------------------------------------------------------------------
+# When a call routes through LiteLLM (pi -> /mcp-rest/tools/call -> mcp_media),
+# the caller's LiteLLM API key is forwarded in the Authorization header.
+# We resolve key -> user via the proxy's /key/info and stamp the job with it,
+# so the GPU-host pipeline can attribute work + cost per user.
+LITELLM_PROXY_URL: str = os.environ.get(
+    "LITELLM_PROXY_URL", "http://litellm-proxy:4000").rstrip("/")
+# Fallback identity when no Authorization header is present (e.g. pi connecting
+# directly). Single value — this deployment serves Chuck.
+MEDIA_USER: str = os.environ.get("MEDIA_USER", "unknown")
+# Calling-app label stamped on jobs (pipeline defaults to "mcp" if absent).
+MEDIA_CLIENT: str = os.environ.get("MEDIA_CLIENT", "pi")
+_USER_CACHE: dict[str, str] = {}
+
+
+def _caller_key(ctx: Optional[Context]) -> Optional[str]:
+    """Extract the caller's API key from the forwarded Authorization header."""
+    try:
+        request = ctx.request_context.request
+        auth = request.headers.get("authorization")
+        if not auth:
+            return None
+        if auth.lower().startswith("bearer "):
+            return auth[7:].strip()
+        return auth.strip()
+    except Exception:  # no request context / not an HTTP request
+        return None
+
+
+def _resolve_user(ctx: Optional[Context]) -> str:
+    """key -> user via LiteLLM /key/info (cached); fallback MEDIA_USER."""
+    key = _caller_key(ctx)
+    if not key:
+        return MEDIA_USER
+    if key in _USER_CACHE:
+        return _USER_CACHE[key]
+    try:
+        req = urllib.request.Request(
+            f"{LITELLM_PROXY_URL}/key/info",
+            headers={"Authorization": f"Bearer {key}"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            info = json.loads(r.read()).get("info", {})
+        user = (info.get("user_id") or "").strip()
+        if user:
+            _USER_CACHE[key] = user
+            return user
+        logger.warning("key/info returned no user_id; falling back to %r", MEDIA_USER)
+    except Exception as exc:
+        logger.warning("key->user resolution failed (%s); falling back to %r",
+                       exc, MEDIA_USER)
+    return MEDIA_USER
 
 # ---------------------------------------------------------------------------
 # FastMCP instance
@@ -132,10 +188,13 @@ def _pipeline_error(exc: Exception, context: dict) -> dict:
         "via the GPU-host media pipeline. Returns {\"shots\": [{id, visual, vo}, ...]}."
     ),
 )
-async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9") -> dict:
+async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
+                           ctx: Context = None) -> dict:
     """LLM shot list from a brief (GPU-host VLLM)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        return await asyncio.to_thread(PIPELINE.storyboard, brief, n_shots, aspect)
+        return await asyncio.to_thread(PIPELINE.storyboard, brief, n_shots, aspect,
+                                       user=user, client=MEDIA_CLIENT)
     except Exception as exc:
         return _pipeline_error(exc, {"brief": brief})
 
@@ -155,11 +214,14 @@ async def media_generate_image(
     height: int = 720,
     seed: int = 42,
     steps: int = 4,
+    ctx: Context = None,
 ) -> dict:
     """Text -> keyframe image (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         path = await asyncio.to_thread(
-            PIPELINE.generate_image, prompt, width, height, seed, steps
+            PIPELINE.generate_image, prompt, width, height, seed, steps,
+            user=user, client=MEDIA_CLIENT
         )
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
@@ -174,13 +236,16 @@ async def media_generate_image(
         "Returns {path, location='gpu_host'}."
     ),
 )
-async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 8) -> dict:
+async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 8,
+                           ctx: Context = None) -> dict:
     """Image + text -> edited image (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         local_image = await _ensure_local(image)
         if not os.path.isfile(local_image):
             return {"error": f"Image not found (local or on GPU host): {image}"}
-        path = await asyncio.to_thread(PIPELINE.edit_image, local_image, prompt, seed, steps)
+        path = await asyncio.to_thread(PIPELINE.edit_image, local_image, prompt, seed, steps,
+                                       user=user, client=MEDIA_CLIENT)
     except Exception as exc:
         return _pipeline_error(exc, {"image": image, "prompt": prompt})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
@@ -206,15 +271,17 @@ async def media_generate_shot(
     fps: float = 24.0,
     seed: int = 42,
     strength: float = 0.7,
+    ctx: Context = None,
 ) -> dict:
     """Keyframe -> ~4s I2V clip (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         local_kf = await _ensure_local(keyframe)
         if not os.path.isfile(local_kf):
             return {"error": f"Keyframe not found (local or on GPU host): {keyframe}"}
         path = await asyncio.to_thread(
             PIPELINE.generate_shot, local_kf, prompt, width, height, frames, fps,
-            seed, strength,
+            seed, strength, user=user, client=MEDIA_CLIENT,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"keyframe": keyframe, "prompt": prompt})
@@ -229,10 +296,13 @@ async def media_generate_shot(
         "the GPU host). Returns {path, location='gpu_host'}."
     ),
 )
-async def media_text_to_speech(text: str, voice: str = "trailer") -> dict:
+async def media_text_to_speech(text: str, voice: str = "trailer",
+                               ctx: Context = None) -> dict:
     """Script -> voice-over wav (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(PIPELINE.text_to_speech, text, voice)
+        path = await asyncio.to_thread(PIPELINE.text_to_speech, text, voice,
+                                       user=user, client=MEDIA_CLIENT)
     except Exception as exc:
         return _pipeline_error(exc, {"text": text[:80], "voice": voice})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
@@ -245,10 +315,13 @@ async def media_text_to_speech(text: str, voice: str = "trailer") -> dict:
         "`lyrics` optional. Returns {path, location='gpu_host'}."
     ),
 )
-async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30, seed: int = 42) -> dict:
+async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30, seed: int = 42,
+                               ctx: Context = None) -> dict:
     """Prompt (+lyrics) -> song/instrumental wav (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(PIPELINE.generate_music, prompt, lyrics, duration, seed)
+        path = await asyncio.to_thread(PIPELINE.generate_music, prompt, lyrics, duration, seed,
+                                       user=user, client=MEDIA_CLIENT)
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
@@ -262,13 +335,16 @@ async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30
         "Returns {path, location='gpu_host'}."
     ),
 )
-async def media_sfx(video: str, description: str = "", duration: float = 8.0) -> dict:
+async def media_sfx(video: str, description: str = "", duration: float = 8.0,
+                    ctx: Context = None) -> dict:
     """Video -> synced SFX bed (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
-        path = await asyncio.to_thread(PIPELINE.sfx, local_video, description, duration)
+        path = await asyncio.to_thread(PIPELINE.sfx, local_video, description, duration,
+                                       user=user, client=MEDIA_CLIENT)
     except Exception as exc:
         return _pipeline_error(exc, {"video": video})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
@@ -289,14 +365,17 @@ async def media_upscale_video(
     resolution: int = 1080,
     noise_scale: float = 0.0,
     seed: int = 42,
+    ctx: Context = None,
 ) -> dict:
     """Video -> upscaled (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
         path = await asyncio.to_thread(
-            PIPELINE.upscale, local_video, pipeline, resolution, noise_scale, seed
+            PIPELINE.upscale, local_video, pipeline, resolution, noise_scale, seed,
+            user=user, client=MEDIA_CLIENT
         )
     except Exception as exc:
         return _pipeline_error(exc, {"video": video, "pipeline": pipeline})
@@ -325,12 +404,15 @@ async def media_assemble(
     vo_volume: float = 1.0,
     music_volume: float = 0.35,
     sfx_volume: float = 0.9,
+    ctx: Context = None,
 ) -> dict:
     """Concat shots + mix audio -> final mp4 (GPU host)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         path = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
             width, height, fps, vo_volume, music_volume, sfx_volume,
+            user=user, client=MEDIA_CLIENT,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"shots": shots})
@@ -381,6 +463,8 @@ def main() -> None:
     logger.info("Starting mcp_media")
     logger.info("Media pipeline URL: %s", PIPELINE.base)
     logger.info("Pipeline fetch directory: %s", PIPELINE_FETCH_DIR)
+    logger.info("Identity: LITELLM_PROXY_URL=%s MEDIA_USER=%s MEDIA_CLIENT=%s",
+                LITELLM_PROXY_URL, MEDIA_USER, MEDIA_CLIENT)
     try:
         health = asyncio.run(asyncio.to_thread(PIPELINE.health))
         logger.info("Pipeline health: %s", health)

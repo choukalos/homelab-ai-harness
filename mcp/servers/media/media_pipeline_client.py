@@ -60,14 +60,24 @@ class MediaPipelineClient:
         self.poll = poll
 
     # ------------------------------------------------------------ low level
-    def _post_json(self, endpoint: str, payload: dict) -> str:
+    def _post_json(self, endpoint: str, payload: dict,
+                   user: str | None = None, client: str | None = None) -> str:
+        if user:
+            payload["user"] = user
+        if client:
+            payload["client"] = client
         req = urllib.request.Request(
             f"{self.base}{endpoint}", data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.loads(r.read())["job_id"]
 
-    def _post_multipart(self, endpoint: str, filepath: str, fields: dict) -> str:
+    def _post_multipart(self, endpoint: str, filepath: str, fields: dict,
+                        user: str | None = None, client: str | None = None) -> str:
+        if user:
+            fields["user"] = user
+        if client:
+            fields["client"] = client
         boundary = "----mpb" + uuid.uuid4().hex
         fname = os.path.basename(filepath)
         ctype = mimetypes.guess_type(fname)[0] or "application/octet-stream"
@@ -119,32 +129,41 @@ class MediaPipelineClient:
 
     # ----------------------------------------------------------- high level
     def storyboard(self, brief: str, n_shots: int = 5, aspect: str = "16:9",
+                   user: str | None = None, client: str | None = None,
                    timeout: float = 300) -> dict:
         """LLM shot list -> {"shots": [{"id","visual","vo"}]}."""
         out = self._wait(self._post_json("/storyboard",
                                          {"brief": brief, "n_shots": n_shots,
-                                          "aspect": aspect}), timeout)
+                                          "aspect": aspect},
+                                         user, client), timeout)
         local = self.fetch(out["storyboard"], "/tmp")
         return json.loads(Path(local).read_text())
 
     def generate_image(self, prompt: str, width: int = 1344, height: int = 768,
-                       seed: int = 42, steps: int = 4, timeout: float = 600) -> str:
+                       seed: int = 42, steps: int = 4,
+                       user: str | None = None, client: str | None = None,
+                       timeout: float = 600) -> str:
         """Text -> image (keyframe). Returns GPU-host path of the PNG."""
         return self._wait(self._post_json("/images",
                                           {"prompt": prompt, "width": width,
                                            "height": height, "seed": seed,
-                                           "steps": steps}), timeout)["image"]
+                                           "steps": steps},
+                                          user, client), timeout)["image"]
 
     def edit_image(self, image: str, prompt: str, seed: int = 42, steps: int = 8,
+                   user: str | None = None, client: str | None = None,
                    timeout: float = 600) -> str:
         """Image+text -> edited image. `image` is a LOCAL path (uploaded)."""
         return self._wait(self._post_multipart("/images/edit", image,
                                                {"prompt": prompt, "seed": str(seed),
-                                                "steps": str(steps)}), timeout)["image"]
+                                                "steps": str(steps)},
+                                               user, client), timeout)["image"]
 
     def generate_shot(self, keyframe: str, prompt: str, width: int = 768,
                       height: int = 512, frames: int = 97, fps: float = 24.0,
-                      seed: int = 42, strength: float = 0.7, timeout: float = 3600) -> str:
+                      seed: int = 42, strength: float = 0.7,
+                      user: str | None = None, client: str | None = None,
+                      timeout: float = 3600) -> str:
         """Keyframe (LOCAL path) + style prompt -> ~4s I2V clip. Returns host path.
 
         strength: how strongly the keyframe anchors the clip. Lower = less
@@ -156,48 +175,58 @@ class MediaPipelineClient:
                                                 "height": str(height),
                                                 "frames": str(frames), "fps": str(fps),
                                                 "seed": str(seed),
-                                                "strength": str(strength)}), timeout)["video"]
+                                                "strength": str(strength)},
+                                               user, client), timeout)["video"]
 
     def text_to_speech(self, text: str, voice: str = "trailer",
+                       user: str | None = None, client: str | None = None,
                        timeout: float = 1800) -> str:
         """Script -> voice-over wav. Returns GPU-host path."""
-        return self._wait(self._post_json("/tts", {"text": text, "voice": voice}),
+        return self._wait(self._post_json("/tts", {"text": text, "voice": voice},
+                                          user, client),
                           timeout)["audio"]
 
     def generate_music(self, prompt: str, lyrics: str = "", duration: int = 30,
-                       seed: int = 42, timeout: float = 3600) -> str:
+                       seed: int = 42, user: str | None = None,
+                       client: str | None = None, timeout: float = 3600) -> str:
         """Prompt(+lyrics) -> song/instrumental wav. Returns GPU-host path."""
         return self._wait(self._post_json("/music",
                                           {"prompt": prompt, "lyrics": lyrics,
-                                           "duration": duration, "seed": seed}),
+                                           "duration": duration, "seed": seed},
+                                          user, client),
                           timeout)["audio"]
 
     def sfx(self, video: str, description: str = "", duration: float = 8.0,
             steps: int = 25, cfg: float = 4.5, seed: int = 42,
+            user: str | None = None, client: str | None = None,
             timeout: float = 3600) -> str:
         """Video (LOCAL path) -> synced SFX bed. Returns GPU-host path."""
         return self._wait(self._post_multipart("/sfx", video,
                                                {"duration": str(duration),
                                                 "steps": str(steps), "cfg": str(cfg),
                                                 "seed": str(seed), "prompt": description,
-                                                "negative_prompt": "", "fps": "24"}),
+                                                "negative_prompt": "", "fps": "24"},
+                                               user, client),
                           timeout)["audio"]
 
     def upscale(self, video: str, pipeline: str = "b", resolution: int = 1080,
                 noise_scale: float = 0.0, fps: int = 24, seed: int = 42,
+                user: str | None = None, client: str | None = None,
                 timeout: float = 7200) -> str:
         """Video (LOCAL path) -> upscaled. pipeline 'b'=SeedVR2 | 'a2'=fast."""
         return self._wait(self._post_multipart("/upscale", video,
                                                {"pipeline": pipeline,
                                                 "resolution": str(resolution),
                                                 "noise_scale": str(noise_scale),
-                                                "fps": str(fps), "seed": str(seed)}),
+                                                "fps": str(fps), "seed": str(seed)},
+                                               user, client),
                           timeout)["video"]
 
     def assemble(self, shots: list, vo: str | None = None, music: str | None = None,
                  sfx: str | None = None, width: int = 1920, height: int = 1080,
                  fps: int = 24, vo_volume: float = 1.0, music_volume: float = 0.35,
-                 sfx_volume: float = 0.9, timeout: float = 1800) -> str:
+                 sfx_volume: float = 0.9, user: str | None = None,
+                 client: str | None = None, timeout: float = 1800) -> str:
         """Concat shots + mix audio -> final mp4. `shots` are GPU-host paths."""
         payload = {"shots": shots, "width": width, "height": height, "fps": fps,
                    "vo_volume": vo_volume, "music_volume": music_volume,
@@ -205,7 +234,8 @@ class MediaPipelineClient:
         for k, v in (("vo", vo), ("music", music), ("sfx", sfx)):
             if v:
                 payload[k] = v
-        return self._wait(self._post_json("/assemble", payload), timeout)["video"]
+        return self._wait(self._post_json("/assemble", payload, user, client),
+                          timeout)["video"]
 
 
 # Convenience singleton (reads MEDIA_PIPELINE_URL from env)

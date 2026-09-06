@@ -848,6 +848,23 @@ Monitoring infrastructure:
 - MySQL Exporter (bare-metal MySQL monitoring)
 
 Shares `public-net` with apps so Victoria Metrics can scrape `/metrics` endpoints.
+
+**Scraped remote targets (Matrix, 192.168.4.55):** node-exporter :9100,
+dcgm-exporter :9400 (GPU power/util/VRAM — live since the 2026-09-09 DCGM
+fix), vLLM :8000 (LLM engine tokens/latency, operational), media-pipeline
+:8189 (per-user media work meter: jobs, work units, cost $, real storyboard
+tokens). Scrape config: `prometheus/prometheus.yml` (hot-reloads in 30 s).
+
+**Key dashboards (Grafana, file-provisioned from `grafana/dashboards/`):**
+- **AI Work & Spend** (`/d/ai-work-spend`) — per-user AI cost: LLM spend
+  (LiteLLM), media pipeline cost (work-unit pricing), total work $ = LLM +
+  media (no double count — storyboard LLM is inside the LiteLLM figure),
+  GPU $ & payback (measured DCGM power), pipeline operational. Generator:
+  `grafana/dashboards/gen_ai_work_spend.py`. Full metric reference:
+  `METRICS.md` ("Media Work Metering (v2)").
+- LLM/GPU Monitor, DCGM, Homelab Overview (incl. "GPU Investment ROI"),
+  Key Usage (per-user LiteLLM spend).
+
 Admin UI for Plausible is LAN-only at `192.168.4.54:8082`.
 
 ---

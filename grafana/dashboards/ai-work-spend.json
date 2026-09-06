@@ -1,0 +1,1494 @@
+{
+ "annotations": {
+  "list": []
+ },
+ "editable": true,
+ "fiscalYearStartMonth": 0,
+ "graphTooltip": 1,
+ "id": null,
+ "links": [],
+ "liveNow": false,
+ "panels": [
+  {
+   "id": 1,
+   "type": "row",
+   "title": "LLM \u2014 via LiteLLM proxy (per user)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 1
+   },
+   "panels": [],
+   "description": "litellm_spend_metric_total is the canonical LLM cost source: it is per-user (user label from /key/info) and includes the pipeline storyboard LLM, which routes through the proxy with the caller's key. vLLM engine metrics below are operational cross-checks only (engine-wide, not per-user) \u2014 never sum vllm:*_tokens into $ totals."
+  },
+  {
+   "id": 10,
+   "title": "LLM spend (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 2
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(litellm_spend_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "All LLM work billed through the proxy, selected users."
+  },
+  {
+   "id": 11,
+   "title": "LLM input tokens (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 2
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(litellm_input_tokens_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 12,
+   "title": "LLM output tokens (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 2
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(litellm_output_tokens_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 13,
+   "title": "LLM chat requests (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 2
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(litellm_proxy_total_requests_metric_total{user=~\"$user\", route=\"/v1/chat/completions\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 14,
+   "title": "LLM spend by user (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (user) (increase(litellm_spend_metric_total[5m]))",
+     "legendFormat": "{{user}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "Per-user LLM spend rate. Storyboard LLM shows up here (model qwen38-27b) \u2014 that is why Row 3 excludes stage=storyboard from the media side."
+  },
+  {
+   "id": 15,
+   "title": "vLLM engine tokens (operational cross-check)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 7
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(vllm:prompt_tokens_total{instance=\"matrix\"}[5m]))",
+     "legendFormat": "prompt",
+     "refId": "A"
+    },
+    {
+     "expr": "sum(increase(vllm:generation_tokens_total{instance=\"matrix\"}[5m]))",
+     "legendFormat": "generation",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "Engine-wide (all users incl. non-proxy work). Should roughly track the LiteLLM token panels; divergence = work bypassing the proxy."
+  },
+  {
+   "id": 2,
+   "type": "row",
+   "title": "Media \u2014 pipeline metering (per user)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 15
+   },
+   "panels": [],
+   "description": "Work-unit pricing (steps\u00d7MP, frames\u00d7MP, audio-seconds) \u00d7 calibrated rates = full cost (electricity + GPU amortization). Panels light up once Matrix ships the pipeline /metrics endpoint (media_up = 1)."
+  },
+  {
+   "id": 20,
+   "title": "Media cost (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 16
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(media_cost_usd_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "All media stages incl. storyboard LLM cost as measured by the pipeline (cross-check vs Row 1)."
+  },
+  {
+   "id": 21,
+   "title": "Media jobs done (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 16
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(media_jobs_total{user=~\"$user\", status=\"done\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 22,
+   "title": "Media LLM tokens (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 16
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(media_tokens_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "storyboard stage only (kind=prompt|completion)."
+  },
+  {
+   "id": 23,
+   "title": "Metering online",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 16
+   },
+   "targets": [
+    {
+     "expr": "media_up",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "1 = pipeline /metrics endpoint up (Matrix v2 metering live)."
+  },
+  {
+   "id": 24,
+   "title": "Media cost by user & stage (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 21
+   },
+   "targets": [
+    {
+     "expr": "sum by (user, stage) (increase(media_cost_usd_total[5m]))",
+     "legendFormat": "{{user}} / {{stage}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 25,
+   "title": "Media work units by user & kind (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 21
+   },
+   "targets": [
+    {
+     "expr": "sum by (user, kind) (increase(media_work_units_total[5m]))",
+     "legendFormat": "{{user}} / {{kind}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "mpix_steps (images), mpix_frames (video), audio_seconds (TTS/music/SFX)."
+  },
+  {
+   "id": 3,
+   "type": "row",
+   "title": "Total work $ (LLM + media, by user)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 29
+   },
+   "panels": [],
+   "description": "Total work $ = litellm_spend (all LLM, per user) + media_cost{stage != storyboard}. The storyboard LLM is already inside litellm_spend (routed via the proxy with the user's key) \u2014 excluding it from the media side avoids double counting. If the pipeline ever stops routing storyboard through LiteLLM, drop the stage filter."
+  },
+  {
+   "id": 30,
+   "title": "Total work $ (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 8,
+    "x": 0,
+    "y": 30
+   },
+   "targets": [
+    {
+     "expr": "(sum(increase(litellm_spend_metric_total{user=~\"$user\"}[$__range])) + sum(increase(media_cost_usd_total{user=~\"$user\", stage!=\"storyboard\"}[$__range]))) or sum(increase(litellm_spend_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "Everything the AI stack produced, priced."
+  },
+  {
+   "id": 31,
+   "title": "Total work $ by user (range)",
+   "type": "barchart",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 30
+   },
+   "targets": [
+    {
+     "expr": "(sum by (user) (increase(litellm_spend_metric_total[$__range])) + sum by (user) (increase(media_cost_usd_total{stage!=\"storyboard\"}[$__range]))) or sum by (user) (increase(litellm_spend_metric_total[$__range]))",
+     "legendFormat": "{{user}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "Bar-style: use a barchart view for a per-user split."
+  },
+  {
+   "id": 32,
+   "title": "Total work $ by user (5m rate)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 30
+   },
+   "targets": [
+    {
+     "expr": "(sum by (user) (increase(litellm_spend_metric_total[5m])) + sum by (user) (increase(media_cost_usd_total{stage!=\"storyboard\"}[5m]))) or sum by (user) (increase(litellm_spend_metric_total[5m]))",
+     "legendFormat": "{{user}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 4,
+   "type": "row",
+   "title": "GPU $ & payback",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 38
+   },
+   "panels": [],
+   "description": "Denominator uses MEASURED DCGM power (avg over range) since the DCGM fix (2026-09-09); falls back to the GPU_AVG_W estimate if no samples in range."
+  },
+  {
+   "id": 40,
+   "title": "GPU $ (range, measured)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 39
+   },
+   "targets": [
+    {
+     "expr": "(sum(avg_over_time(DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}[$__range])) / 1000 * ($__range_s / 3600) * $ELEC_USD_PER_KWH) or (($__range_s / 3600) * ($GPU_AVG_W / 1000) * $ELEC_USD_PER_KWH)",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "avg_over_time(DCGM_FI_DEV_POWER_USAGE) \u00d7 range \u00d7 ELEC_USD_PER_KWH; falls back to GPU_AVG_W estimate."
+  },
+  {
+   "id": 41,
+   "title": "GPU amortization $/h",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 39
+   },
+   "targets": [
+    {
+     "expr": "$GPU_COST_USD / $GPU_LIFETIME_HOURS",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "$4,000 GPU / 5 yr (43,800 h) = $0.0913/h."
+  },
+  {
+   "id": 42,
+   "title": "Payback ratio (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 12,
+    "y": 39
+   },
+   "targets": [
+    {
+     "expr": "((sum(increase(litellm_spend_metric_total[$__range])) + sum(increase(media_cost_usd_total{stage!=\"storyboard\"}[$__range]))) or sum(increase(litellm_spend_metric_total[$__range]))) / (sum(avg_over_time(DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}[$__range])) / 1000 * ($__range_s / 3600) * $ELEC_USD_PER_KWH) or (($__range_s / 3600) * ($GPU_AVG_W / 1000) * $ELEC_USD_PER_KWH)",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "Total work $ / GPU $. >1 = the AI work in the range out-earned the GPU's cost (at retail LLM rates)."
+  },
+  {
+   "id": 43,
+   "title": "GPU power (DCGM)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 18,
+    "y": 39
+   },
+   "targets": [
+    {
+     "expr": "DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}",
+     "legendFormat": "W",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "Live since the DCGM fix (2026-09-09). Idle \u2248 14 W; spikes to ~300 W under diffusion/audio load."
+  },
+  {
+   "id": 44,
+   "title": "GPU util (DCGM)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 47
+   },
+   "targets": [
+    {
+     "expr": "DCGM_FI_DEV_GPU_UTIL{instance=\"matrix\"}",
+     "legendFormat": "%",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 5,
+   "type": "row",
+   "title": "Pipeline operational",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 55
+   },
+   "panels": [],
+   "description": "Queue/active/duration from the pipeline metering endpoint. max_concurrent=1, max_queue=5."
+  },
+  {
+   "id": 50,
+   "title": "Queue depth",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 56
+   },
+   "targets": [
+    {
+     "expr": "media_queue_depth",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 51,
+   "title": "Active jobs",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 6,
+    "y": 56
+   },
+   "targets": [
+    {
+     "expr": "media_jobs_active",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   }
+  },
+  {
+   "id": 52,
+   "title": "Job duration avg by stage (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 56
+   },
+   "targets": [
+    {
+     "expr": "sum by (stage) (rate(media_job_duration_seconds_sum[5m])) / sum by (stage) (rate(media_job_duration_seconds_count[5m]))",
+     "legendFormat": "{{stage}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 53,
+   "title": "Jobs by status (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 64
+   },
+   "targets": [
+    {
+     "expr": "sum by (status) (increase(media_jobs_total[5m]))",
+     "legendFormat": "{{status}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette"
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  }
+ ],
+ "refresh": "30s",
+ "schemaVersion": 39,
+ "tags": [
+  "ai",
+  "cost",
+  "llm",
+  "media",
+  "gpu"
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "DS_PROMETHEUS",
+    "label": "Datasource",
+    "type": "datasource",
+    "query": "prometheus",
+    "current": {},
+    "hide": 0
+   },
+   {
+    "name": "user",
+    "label": "User",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS_PROMETHEUS}"
+    },
+    "query": "label_values(litellm_spend_metric_total, user)",
+    "refresh": 2,
+    "includeAll": true,
+    "multi": true,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    },
+    "hide": 0
+   },
+   {
+    "name": "ELEC_USD_PER_KWH",
+    "label": "Elec $/kWh",
+    "type": "constant",
+    "query": "0.15",
+    "current": {
+     "text": "0.15",
+     "value": "0.15"
+    },
+    "hide": 1
+   },
+   {
+    "name": "GPU_AVG_W",
+    "label": "GPU avg W (est.)",
+    "type": "constant",
+    "query": "200",
+    "current": {
+     "text": "200",
+     "value": "200"
+    },
+    "hide": 1
+   },
+   {
+    "name": "GPU_COST_USD",
+    "label": "GPU cost $",
+    "type": "constant",
+    "query": "4000",
+    "current": {
+     "text": "4000",
+     "value": "4000"
+    },
+    "hide": 1
+   },
+   {
+    "name": "GPU_LIFETIME_HOURS",
+    "label": "GPU lifetime h",
+    "type": "constant",
+    "query": "43800",
+    "current": {
+     "text": "43800",
+     "value": "43800"
+    },
+    "hide": 1
+   }
+  ]
+ },
+ "time": {
+  "from": "now-1h",
+  "to": "now"
+ },
+ "timepicker": {},
+ "timezone": "browser",
+ "title": "AI Work & Spend",
+ "uid": "ai-work-spend",
+ "version": 1,
+ "weekStart": ""
+}
