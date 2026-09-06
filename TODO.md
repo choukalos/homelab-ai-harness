@@ -1,7 +1,10 @@
 # Thor AI Platform — Status
 
-> Updated: 2026-09-04 (credential rotation closed; presenton LAN-only;
-> pre-commit secrets guard added; scheduler split + weekday morning brief)>
+> Updated: 2026-09-09 (media work metering v2 complete — plan files
+> `thor_media_work.md`/`matrix_media_work.md` deleted; DCGM fix verified;
+> "AI Work & Spend" dashboard live). 2026-09-04: credential rotation closed;
+> presenton LAN-only; pre-commit secrets guard added; scheduler split +
+> weekday morning brief.>
 > **Workstreams:** `auth_todo.md` v2 (per-user LiteLLM keys, per-user
 > usage attribution, tooling/scripts — old Phase 9 folded into Phase 5)
 > is the only active plan. The three completed plans
@@ -14,6 +17,34 @@
 ---
 
 ## Completed (July 2026)
+
+- **Media work metering v2 (LLM + media cost, per user) — COMPLETE 2026-09-09.**
+  GPU work from the Matrix media pipeline (ComfyUI diffusion: Flux images,
+  LTXV video, SeedVR2 upscale, ACE-Step music, MMAudio SFX) is priced as
+  deterministic work units (steps×MP, frames×MP, audio-seconds) × a rate
+  table, attributed to the user who kicked off each job. Identity chain:
+  pi → LiteLLM `/mcp-rest/tools/call` (caller's key) → `mcp_media` (key →
+  user via `GET /key/info`, `MEDIA_USER=chuck` fallback) → pipeline job POST
+  (`user` + `client` fields; JSON body or multipart form). Pipeline v2
+  `/metrics` + `jobs.jsonl` on Matrix; scraped by VictoriaMetrics
+  (`vllm-matrix` :8000 + `media-pipeline-matrix` :8189 scrape jobs). New
+  Grafana dashboard **"AI Work & Spend"** (`ai-work-spend.json`, 29 panels,
+  5 rows): LLM per-user (LiteLLM), media per-user (pipeline meter), total
+  work $ = LLM + media (storyboard stage excluded from the media side —
+  the storyboard LLM routes through LiteLLM with the caller's key, so it's
+  already in `litellm_spend_metric_total`; pipeline's storyboard cost is a
+  cross-check at mirrored rates, verified exact), GPU $ & payback (measured
+  DCGM power), pipeline operational. **DCGM fix verified:**
+  `DCGM_FI_DEV_POWER_USAGE`/`_GPU_UTIL` were frozen (stale) —
+  DCGM-version/driver bug (driver 595.71.05, RTX PRO 5000 72GB); pinned
+  older dcgm-exporter image (DCGM 3.x) → live again (≈14 W idle → ~300 W
+  under load), all legacy DCGM panels incl. "GPU Investment ROI" live. Rates
+  calibrated on Matrix (full cost: electricity $0.15/kWh + GPU amortization
+  $4,000/5 yr): images ≈ $5.3e-5/mpix-step, audio ≈ $3.1e-5/s. Verified
+  end-to-end via the production path (TTS + storyboard jobs metered with
+  correct `user`/`client` attribution). Plan files
+  (`thor_media_work.md`, `matrix_media_work.md`) deleted 2026-09-09; state:
+  `METRICS.md` ("Media Work Metering (v2)") + `mcp/servers/media/README.md`.
 
 - **Scheduler definitions/state split + weekday morning brief — 2026-09-04.**
   Skill-runner scheduler now reads git-tracked definitions from

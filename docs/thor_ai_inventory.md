@@ -40,9 +40,15 @@
   `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
   `hf-sd3`. 9 MCP servers / **46 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
-- **Observability:** VictoriaMetrics now scrapes skill-runner `/metrics`
+- **Observability:** VictoriaMetrics scrapes skill-runner `/metrics`
   (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
   resolve to 127.0.1.1 from inside containers); 12 `memory_*` series live.
+  **Matrix remote scrapes (2026-09-09):** vLLM engine metrics (`matrix:8000`,
+  operational tokens/latency), media-pipeline work meter (`matrix:8189`,
+  per-user `media_*` cost/work series), DCGM (`matrix:9400`, GPU power/util —
+  live again after the DCGM 3.x pin fix). New **"AI Work & Spend"** Grafana
+  dashboard (`/d/ai-work-spend`): per-user LLM + media cost, total work $,
+  GPU $ & payback. See `METRICS.md` ("Media Work Metering (v2)").
 - **Backups:** `scripts/backup-memory.sh` (.env copy + `mem0_memories` snapshot,
   restore-tested) + git for config/code. The July "backup NOT DONE" gap is closed.
 - **MCP servers (9 live):** search (3), crawl (1), knowledge (4, read-only Qdrant
@@ -76,8 +82,8 @@
 | **n8n** | `compose/compose.n8n.yml` (NOT RUNNING) | Workflow automation platform | **As-is (future)** — re-enable when needed for scheduled/automated workflows | Low | Compose file exists but project not running. Keep for future automation needs. |
 | **Caddy** | `compose/compose.core.yml`, `caddy/Caddyfile` | Reverse proxy on ports 80/443, routes all public services, on 3 networks | **As-is (foundation)** — routing layer for all public access | Low | Production core. New routes drafted separately, never edited in-place. |
 | **Cloudflare Tunnel** | `compose/compose.edge.yml` | `cloudflared` with tunnel token, routes HTTPS → Caddy | **As-is (foundation)** — zero-trust internet ingress | Low | Production core. Tunnel routes managed in Cloudflare dashboard. |
-| **Victoria Metrics** | `compose/compose.monitoring.yml` | Metrics backend on :9090, scrapes LiteLLM prometheus + node/cadvisor | **As-is** — observability backend; will add skill runner + MCP metrics later | Low | Already scraping LiteLLM. Extend scrape config for new services. |
-| **Grafana** | `compose/compose.monitoring.yml` | Dashboards on :3001, provisioned datasources/dashboards | **As-is** — observability UI; will add skill runner/MCP dashboards later | Low | Provisioned config stays. New dashboards added, not edited. |
+| **Victoria Metrics** | `compose/compose.monitoring.yml` | Metrics backend on :9090; scrapes LiteLLM, node/cadvisor, skill-runner, + Matrix remotes (vLLM :8000, media-pipeline :8189, DCGM :9400) | **As-is** — observability backend; scrape config extended 2026-09-09 for AI-work metering | Low | `prometheus/prometheus.yml` (hot-reloads in 30 s). |
+| **Grafana** | `compose/compose.monitoring.yml` | Dashboards on :3001, file-provisioned from `grafana/dashboards/`; incl. **AI Work & Spend** (per-user LLM + media cost, GPU $ & payback) | **As-is** — observability UI; new dashboards added, not edited | Low | Provisioned config stays. Generator: `grafana/dashboards/gen_ai_work_spend.py`. |
 | **Invest Hub** | `compose/compose.invest-hub.yml` | Client + server on public-net, GitHub runner for CI/CD | **Not Thor** — separate project (invest-hub), not part of AI platform refactor | N/A | Out of scope. Leave untouched. |
 | **Hugo Portal** | `compose/compose.portal.yml` | Static blog portal (git-sync + portal) on public-net, serves choukalos.com; replaced Ghost 2026-08-28 (blog-todo.md) | **Not Thor** — content site, not AI platform | N/A | Out of scope. Leave untouched. |
 | **Plausible** | `compose/compose.monitoring.yml` | Analytics (postgres + clickhouse), admin on LAN :8082, narrow public routes | **Not Thor** — analytics, not AI platform | N/A | Out of scope. Leave untouched. |

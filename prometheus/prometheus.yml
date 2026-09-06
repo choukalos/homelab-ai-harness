@@ -48,6 +48,22 @@ scrape_configs:
     - matrix:9400
     labels:
       instance: matrix
+- job_name: vllm-matrix
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - matrix:8000
+    labels:
+      instance: matrix
+      service: vllm
+- job_name: media-pipeline-matrix
+  metrics_path: /metrics
+  static_configs:
+  - targets:
+    - matrix:8189
+    labels:
+      instance: matrix
+      service: media-pipeline
 - job_name: node-exporter-athena
   static_configs:
   - targets:

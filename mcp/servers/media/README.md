@@ -45,11 +45,39 @@ Typical commercial flow: `media_storyboard` → per shot
 |---|---|---|
 | `MEDIA_PIPELINE_URL` | `http://127.0.0.1:8189` | GPU-host pipeline base URL |
 | `MEDIA_PIPELINE_FETCH_DIR` | `/home/chuck/data/media/generated/pipeline` | `media_fetch` download dir |
+| `LITELLM_PROXY_URL` | `http://litellm-proxy:4000` | Proxy used to resolve caller key → user |
+| `MEDIA_USER` | `unknown` | Fallback user when no Authorization header (Thor: `chuck`) |
+| `MEDIA_CLIENT` | `pi` | Calling-app label stamped on jobs |
 
 Transport: streamable-http on `0.0.0.0:8000` (`/mcp`).
 
+## Identity threading (per-user cost attribution)
+
+Every job POST (except `media_fetch`, which downloads only) is stamped with
+`user` + `client` so the GPU-host pipeline can attribute work and cost per
+user (metered in the pipeline's `/metrics` + `jobs.jsonl`):
+
+1. When the call routes through LiteLLM (pi → `/mcp-rest/tools/call` →
+   mcp_media), the caller's LiteLLM API key is forwarded in the
+   `Authorization` header (same pattern as `mcp_memory`).
+2. `server.py` resolves key → user via `GET {LITELLM_PROXY_URL}/key/info`
+   (`info.user_id`), cached in-process; falls back to `MEDIA_USER` on any
+   failure (a job is never blocked by identity resolution).
+3. JSON endpoints carry `user`/`client` in the body; multipart endpoints
+   (`/images/edit`, `/shots`, `/sfx`) carry them as form fields.
+
+Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
+`"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
+
 ## History
 
+2026-09-09: identity threading — `user`/`client` stamped on every job POST
+(caller's LiteLLM key → `/key/info` → user; `MEDIA_USER` fallback). Enables
+per-user media cost attribution in the pipeline metering — **live
+end-to-end 2026-09-09**: pipeline v2 `/metrics` + `jobs.jsonl` on Matrix,
+scraped by VictoriaMetrics, surfaced in the Grafana "AI Work & Spend"
+dashboard (see `/home/chuck/homelab/METRICS.md`, "Media Work Metering
+(v2)").
 2026-08-28: legacy ComfyUI/HF tools (`generate_image`, `edit_image`,
 `image_info`, `list_images`) removed — old ComfyUI flows decommissioned.
 The `media-generate` skill now uses `media_generate_image` + `media_fetch`.

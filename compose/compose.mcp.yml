@@ -127,6 +127,14 @@ services:
       # workers on Matrix. Thin HTTP client — no GPU work in this container.
       - MEDIA_PIPELINE_URL=http://192.168.4.55:8189
       - MEDIA_PIPELINE_FETCH_DIR=/home/chuck/data/media/generated/pipeline
+      # Identity threading (2026-07-09): caller's LiteLLM key (forwarded in
+      # Authorization header when the call routes through LiteLLM) is resolved
+      # to a user via /key/info and stamped on every job POST, so the
+      # GPU-host pipeline can attribute work + cost per user. Fallback when
+      # no Authorization header is present: MEDIA_USER (this deployment = chuck).
+      - LITELLM_PROXY_URL=http://litellm-proxy:4000
+      - MEDIA_USER=chuck
+      - MEDIA_CLIENT=pi
     volumes:
       - /home/chuck/data/media/generated:/home/chuck/data/media/generated
     restart: unless-stopped
