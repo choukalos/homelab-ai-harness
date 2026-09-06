@@ -208,9 +208,15 @@ POST /api/schedule/{id}/run-now       — trigger a schedule immediately
 set, open when unset). `GET /skills` mirrors `/api/chat` auth.
 
 **Identity:** `X-API-Key` → `user_id` via `memory/identity.py`
-(`MEMORY_USER_KEYS`). See `auth_todo.md` for per-user key work (Phase 1 will
-point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
-`service`).
+(`MEMORY_USER_KEYS`). Per-user key attribution is **complete (2026-09-04/06;
+plan closed 2026-09-10)**: one key per user (`LITELLM_KEY_CHUCK` → `chuck`,
+`LITELLM_KEY_DYLAN` → `dylan`) — the same value works for LiteLLM and
+Siri/skills; Caddy OR-gate accepts chuck / dylan / legacy keys;
+`AUTH_KEY_THREADING_ENABLED=true` threads the caller's key to LiteLLM so spend
+is attributed per user (verified live: `user="chuck"` series in LiteLLM
+metrics incl. pi + skill-runner traffic; scheduler/n8n stays on the master key
+by owner decision). Plan file `auth_todo.md` deleted 2026-09-10 — state lives
+here + `docs/memory/IMPLEMENTATION_STATE.md`.
 
 ---
 
@@ -263,12 +269,18 @@ point the `chuck` pair at a personal key; currently `SIRI_API_KEY` resolves to
   SKILL.md wrappers on `origin/main`; verified in pi's skill list +
   `<litellm_skills>` prompt section and the Claude Code marketplace. Siri intent
   dispatch wired (see fix log).
+- **Per-user keys & attribution (2026-09-04/06, plan closed 2026-09-10):**
+  one key per user (chuck/dylan) for LiteLLM + Siri/skills; proxy DB holds
+  exactly 3 keys (chuck, dylan, memory-service); Caddy OR-gate (chuck/dylan/
+  legacy → 200, invalid → 401); `AUTH_KEY_THREADING_ENABLED=true` live-verified
+  (per-user `user="chuck"` series in LiteLLM metrics, incl. Mac pi +
+  skill-runner traffic); Grafana per-user Key Usage panels in place. Plan files
+  `auth_todo.md` + `TODO.md` deleted 2026-09-10.
 
 ## Manual steps (owner)
 
 - Restart LiteLLM to pick up `mcp_servers.mcp_skills` (config change).
 - Restart pi session to pick up the `agents-skills/` SKILL.md wrappers.
-- Per-user keys (`auth_todo.md` Phase 1) for per-user attribution.
 - Rebuild the skill-runner after `skills/runner/main.py` changes
   (`./homelab.sh rebuild skill-only`) — `main.py` is baked into the image
   (`COPY main.py .`), not volume-mounted. Skill modules under
