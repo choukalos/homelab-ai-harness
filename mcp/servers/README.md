@@ -9,4 +9,4 @@ Standalone MCP server implementations. Each server runs in its own container wit
 - `crawl/` — Web page crawling via Crawl4AI
 - `filesystem_readonly/` — Read-only filesystem access
 
-See [TODO.md](../../TODO.md) Phase 4.5 for architecture details.
+See [`docs/thor_mcp_architecture.md`](../../docs/thor_mcp_architecture.md) for architecture details.

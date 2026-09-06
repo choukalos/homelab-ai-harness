@@ -139,9 +139,12 @@
   production use before building. Design notes: Qdrant JWT RBAC evaluates
   access BEFORE the existence check (403 not 404); a scoped read-only key
   per the auth workstream is the natural credential.
-- **Identity map is now shared with the auth workstream** (`auth_todo.md` v2):
+- **Identity map is shared with the per-user key workstream** (complete
+  2026-09-04/06; plan file `auth_todo.md` deleted 2026-09-10):
   `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for
-  both memory and per-user LiteLLM attribution.
+  both memory and per-user LiteLLM attribution. Key threading is live
+  (`AUTH_KEY_THREADING_ENABLED=true`) — per-user spend series verified in
+  LiteLLM metrics (`user="chuck"`).
 - **Embedding migration runbook**: `docs/memory/embedding-migration.md`
   (follow it if the embedding model changes again).
 
@@ -262,8 +265,9 @@ migration readiness) or Phase 6 (optional MCP).
   scroll. All separate workstreams — do NOT fix in this project.
 
 **Auth / entry points**
-- `siri.choukalos.com` → Caddy → `skill-runner:8091` with `X-API-Key: $SIRI_API_KEY`
-  (single shared key; skill-runner accepts a comma-separated key list).
+- `siri.choukalos.com` → Caddy → `skill-runner:8091` with `X-API-Key` —
+  Caddy OR-gate accepts chuck / dylan / legacy keys; `MEMORY_USER_KEYS` maps
+  each to a `user_id` (per-user attribution live since 2026-09-06).
 - `llm.choukalos.com` → `litellm-proxy:4000` (`LITELLM_PUBLIC_API_KEY`).
 - Scheduler jobs: `dispatch_job()` hardcodes `requester="siri"` (D10 → `service`).
 
@@ -271,7 +275,6 @@ migration readiness) or Phase 6 (optional MCP).
 
 | File | Why |
 |---|---|
-| `auth_todo.md` | Active workstream: per-user keys + LiteLLM attribution (shares this plan's identity layer) |
 | `skills/runner/main.py` | `api_chat` (~1893), `_chat_direct` (~1986, memory injection), `ChatRequest` (~1251, `memory` switch), `dispatch_job` (~254, `memory_enabled`) |
 | `skills/siri_chat/skill.py` | `SYSTEM_PROMPT` (~99) — second injection point |
 | `skills/runner/scheduler.py` | jobs (service identity) |

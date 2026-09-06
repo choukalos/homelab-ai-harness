@@ -30,6 +30,12 @@
   `allow_all_keys: true` is intentional (every valid key may call every tool).
 - Caddy/Cloudflare: `siri.choukalos.com` → skill-runner:8091 live; public
   routes stable.
+- **Per-user key attribution — COMPLETE (2026-09-04/06, closed 2026-09-10):**
+  one key per user (chuck/dylan) for LiteLLM + Siri/skills; Caddy OR-gate;
+  `AUTH_KEY_THREADING_ENABLED=true`; live-verified per-user series in LiteLLM
+  metrics; proxy DB holds exactly 3 keys. Plan files `auth_todo.md` +
+  `TODO.md` deleted 2026-09-10 — state lives in
+  `docs/thor_cross_client_skills.md` + `docs/memory/IMPLEMENTATION_STATE.md`.
 
 ---
 

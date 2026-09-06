@@ -276,4 +276,4 @@ count(count by (api_key_alias)
 | `homelab.sh` | CLI for key management (`key info`, `key list`, etc.) |
 
 (Metering plan files `thor_media_work.md` / `matrix_media_work.md` were
-completed 2026-09-09 and deleted — state lives in this file + `TODO.md`.)
+completed 2026-09-09 and deleted — state lives in this file.)

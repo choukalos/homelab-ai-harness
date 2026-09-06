@@ -9,7 +9,7 @@
 - **15 skills** live (the July 9-skill inventory has grown; `local/*` model
   aliases were never implemented — skills use live aliases, primarily
   `matrix-coder`; the stale `local/qwen-coder` references broke 7 skills and
-  were fixed in `auth_todo.md` Phase 9, 2026-08-25). `code_review` / `repo_maintenance`
+  were fixed in the per-user-keys workstream, 2026-08-25). `code_review` / `repo_maintenance`
   are TODO placeholders (no `skill.py`/`skill.yml`, excluded from `GET /skills`).
   Phase 2 (2026-08-31) added 3 agent skills: `business_analyst` (NL→SQL over
   `mcp_mysql`), `content_writer` (multi-format content via `mcp_search`),

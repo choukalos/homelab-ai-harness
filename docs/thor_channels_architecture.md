@@ -3,7 +3,8 @@
 > Phase 2 — Document all user-facing channels. None of them owns the platform.
 > Date: 2026-07-03 (design baseline)
 > Status: **Mostly current** — Siri via `siri.choukalos.com` (Caddy) and n8n/
-> CLI are live; Open WebUI removal is in progress (auth_todo workstream).
+> CLI are live; Open WebUI removal is **on hold** (owner decision 2026-08-29,
+> not scheduled).
 
 ---
 

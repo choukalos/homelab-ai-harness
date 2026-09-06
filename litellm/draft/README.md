@@ -2,7 +2,7 @@
 
 Draft configuration files for LiteLLM. Not applied to production until manually reviewed and tested.
 
-See [TODO.md](../../TODO.md) for integration details and remaining work.
+See [`docs/thor_mcp_architecture.md`](../../docs/thor_mcp_architecture.md) for integration details.
 
 ## Current State
 
