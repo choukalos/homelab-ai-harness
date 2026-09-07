@@ -5,6 +5,11 @@
 > Status: **Implemented** — `siri.choukalos.com` (skill-runner chat) and
 > `llm.choukalos.com` (LiteLLM public key) are live via Caddy + Cloudflare
 > Tunnel; no admin endpoints public. July text kept as historical context.
+> **Security plan (2026-09-06 audit):** [`../security_todo.md`](../security_todo.md)
+> — public-access audit + hardening phases (Caddy key gate on `llm.choukalos.com`,
+> per-key MCP scoping, key hygiene, port rebinds, ufw). DRAFT — not yet applied;
+> several claims in this doc (e.g. the `$LITELLM_PUBLIC_API_KEY` gate) are stale
+> pending that plan's Phase 7 doc sync.
 
 ---
 
@@ -131,6 +136,26 @@ Two domains, same app. Client and server are separate containers. App-level auth
 
 Only two narrow paths are proxied. The Plausible admin login and dashboard are **blocked from the internet** (returns 404). Chuck accesses them via LAN.
 
+#### Media Pipeline Signed URLs (2026-09-07)
+
+| Route | Auth | Backend | Purpose |
+|---|---|---|---|
+| `siri.choukalos.com/media/pipeline/dl/<token>` | None (the signed token IS the credential) | `192.168.4.55:8189` (matrix media-pipeline) | Off-LAN retrieval of media-pipeline results (Range supported) |
+| `siri.choukalos.com/media/pipeline/upload` | `X-Api-Key` (chuck/dylan LiteLLM key) | `192.168.4.55:8189` | Push a local file to `media_jobs/uploads/` (500MB cap) |
+| *everything else under `/media/pipeline/*`* | — | `404` | Rest of the pipeline API stays LAN-only (incl. `/dl_token` minting) |
+
+**Rules:**
+- Option C of `media_pipeline_gaps.md` Part 2: served under the existing
+  `siri.choukalos.com` tunnel hostname — no new Cloudflare DNS record.
+- Tokens are minted **LAN-only** by the pipeline's `/dl_token` (TTL 1–168h,
+  default 24h) via the `mcp_media.media_pull` tool; the token embeds the
+  absolute file path and is signed — a token is a short-lived capability,
+  not a filesystem listing.
+- The Cloudflare cache rule for `/media/pipeline/dl/*` is a **manual
+  dashboard task** — see `docs/thor_manual_tasks.md` ("Media pipeline
+  public route — Cloudflare cache rule").
+- Off-LAN acceptance (device outside the LAN) is a manual step for Chuck.
+
 ---
 
 ## Current Public Routes (As-Of Audit)
@@ -143,7 +168,7 @@ Verified against `caddy/Caddyfile`:
 | `www.choukalos.com` | Redirect to `choukalos.com` | — | — |
 | `invest.choukalos.com` | `/api/*` + rest | App-level (downstream) | `invest-hub-server:4000` / `invest-hub-client:80` |
 | `api.choukalos.com` | All | App-level (downstream) | `invest-hub-server:4000` |
-| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*` | `X-API-Key` on `/siri/*` | `skill-runner:8091` |
+| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*`, `/media/pipeline/*` | `X-API-Key` on `/siri/*` and `/media/pipeline/upload`; `/media/pipeline/dl/<token>` public (token is the credential) | `skill-runner:8091` (`/media/pipeline/*` → matrix `192.168.4.55:8189`) |
 | `llm.choukalos.com` | All paths | `X-API-Key` (all requests) | `litellm-proxy:4000` |
 | `plausible.choukalos.com` | `/js/*`, `/api/event` only | None | `plausible:8000` |
 

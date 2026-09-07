@@ -53,6 +53,7 @@ Examples:
 |---|---|---|
 | LAN (direct file access) | All artifacts | Local user permissions |
 | Siri `/media/files/*` | Selected artifacts | Public (opaque filenames prevent guessing) |
+| Media-pipeline signed URL `/media/pipeline/dl/<token>` | Pipeline results (off-LAN) | Signed token (short-lived capability, TTL 1–168h) |
 | Open WebUI | Upload + retrieval | LAN only |
 | CLI | Full read/write | LAN only |
 | n8n | Read + write (curated) | LAN only |
@@ -81,3 +82,11 @@ Examples:
   only publish content that is safe to expose. The `publish-file` skill is
   the validated path for ad-hoc publications; scheduled jobs (e.g.
   `weekday-morning-brief` → `public/briefs/latest.md`) write directly.
+- **Media-pipeline results have a second, non-publishing public path**
+  (2026-09-07): `mcp_media.media_pull` mints a signed URL
+  (`siri.choukalos.com/media/pipeline/dl/<token>`) for off-LAN retrieval
+  without promoting to `public/`. Tokens are short-lived (TTL 1–168h) and
+  the file is not world-listable. Local-file inputs for pipeline tools
+  (`media_put`, trim/freeze/caption) stage in `/home/chuck/workspace/media`
+  (scratch, cleaned by `scripts/cleanup-media-staging.sh`,
+  `MEDIA_STAGING_MAX_AGE_DAYS` default 7d) — not in the artifact root.

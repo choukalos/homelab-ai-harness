@@ -127,6 +127,12 @@ services:
       # workers on Matrix. Thin HTTP client — no GPU work in this container.
       - MEDIA_PIPELINE_URL=http://192.168.4.55:8189
       - MEDIA_PIPELINE_FETCH_DIR=/home/chuck/data/media/generated/pipeline
+      # Staging root for local-file inputs (media_put, trim/freeze/caption;
+      # 2026-09-07). Scratch space — cleaned by scripts/cleanup-media-staging.sh
+      # (MEDIA_STAGING_MAX_AGE_DAYS in .env, default 7d).
+      - MEDIA_STAGING_DIR=/home/chuck/workspace/media
+      # Public base for media_pull signed URLs (Caddy route, see Caddyfile).
+      - MEDIA_PUBLIC_URL=https://siri.choukalos.com/media/pipeline
       # Identity threading (2026-07-09): caller's LiteLLM key (forwarded in
       # Authorization header when the call routes through LiteLLM) is resolved
       # to a user via /key/info and stamped on every job POST, so the
@@ -137,6 +143,7 @@ services:
       - MEDIA_CLIENT=pi
     volumes:
       - /home/chuck/data/media/generated:/home/chuck/data/media/generated
+      - /home/chuck/workspace/media:/home/chuck/workspace/media
     restart: unless-stopped
     networks:
       - ai-net

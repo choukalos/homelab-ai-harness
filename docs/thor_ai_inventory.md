@@ -38,7 +38,7 @@
   2026-08-28). Admin endpoints use the `X-Api-Key` header.
 - **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
   `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
-  `hf-sd3`. 9 MCP servers / **46 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28).
+  `hf-sd3`. 10 MCP servers / **64 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28; 46 → 56 with `mcp_knowledge` v2 + `mcp_skills` on 2026-08-29; 56 → 64 with the 8 media post-gen edit/file-movement tools on 2026-09-07).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
 - **Observability:** VictoriaMetrics scrapes skill-runner `/metrics`
   (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
@@ -51,10 +51,12 @@
   GPU $ & payback. See `METRICS.md` ("Media Work Metering (v2)").
 - **Backups:** `scripts/backup-memory.sh` (.env copy + `mem0_memories` snapshot,
   restore-tested) + git for config/code. The July "backup NOT DONE" gap is closed.
-- **MCP servers (9 live):** search (3), crawl (1), knowledge (4, read-only Qdrant
-  key), filesystem_readonly (3), filesystem (5), homelab_status (4), media (10),
+- **MCP servers (10 live):** search (3), crawl (1), knowledge (11, v2 Qdrant
+  `kb_*`), filesystem_readonly (3), filesystem (5), homelab_status (4),
+  media (18 — 10 generation + 8 post-gen edit/file movement),
   mysql (11), vision (5 — image/video analysis via matrix-coder; artifacts are
-  ephemeral + non-public in `workspace/vision/`). See `docs/thor_mcp_architecture.md`.
+  ephemeral + non-public in `workspace/vision/`), skills (3). See
+  `docs/thor_mcp_architecture.md`.
 
 ---
 

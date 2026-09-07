@@ -10,7 +10,7 @@
 **Current state (2026-08-29)**
 - 10 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (11),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (10), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3) — 56 tools total.
+  `mcp_media` (18), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3) — 64 tools total.
 - **`mcp_knowledge` v2 (2026-08-29 — D6 closed):** family KB rebuilt on Qdrant
   `kb_*` collections (one per domain, 768-dim nomic, created on the fly;
   11 tools: `kb_search`, `kb_get_document`, `kb_list_documents`, `kb_overview`,
@@ -28,10 +28,12 @@
   OPS-only (backups, ops scripts) and is NOT held by any runtime service.
   Qdrant is pinned `qdrant/qdrant:v1.18.1`.
 - `mcp_media` now runs the **GPU-host media-pipeline** (192.168.4.55:8189) —
-  10 `media_*` tools (storyboard, image gen/edit, I2V shots, TTS, music, SFX,
-  upscale, assemble, fetch) live 2026-08-28. Legacy ComfyUI/HF tools removed the
-  same day (old flows decommissioned). See `mcp/servers/media/README.md` for the
-  full tool table and pipeline endpoint reference.
+  18 `media_*` tools: 10 generation (storyboard, image gen/edit, I2V shots,
+  TTS, music, SFX, upscale, assemble, fetch) live 2026-08-28 + 8 post-gen edit
+  & file movement (trim, freeze, caption, info, upload, download, put, pull)
+  live 2026-09-07 (media_pipeline_gaps.md Part 2). Legacy ComfyUI/HF tools
+  removed 2026-08-28 (old flows decommissioned). See `mcp/servers/media/README.md`
+  for the full tool table and pipeline endpoint reference.
 - `mcp_mysql` gained **schema intelligence** (2026-08-28): new `schema_overview`
   tool (all columns, FKs, inferred soft relations, join graph, curated hints,
   samples); fixed three key-casing bugs that made the NL-to-SQL schema context
@@ -84,7 +86,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_filesystem` | Writable file ops (workspace/media) — 5 tools | same mounts |
 | `mcp_mysql` | Read-mostly MySQL introspection + guarded queries — 10 tools | host MySQL |
 | `mcp_homelab_status` | Homelab health, metrics, Docker state | `docker`, `victoria-metrics` |
-| `mcp_media` | Media ops: **GPU media-pipeline (10 tools, live 2026-08-28)** | GPU host `:8189` |
+| `mcp_media` | Media ops: **GPU media-pipeline (18 tools: 10 generation + 8 post-gen edit/file movement, live 2026-08-28 / 2026-09-07)** | GPU host `:8189` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
 | `mcp_skills` | Cross-client skill gateway: list/run/get skill jobs (3 tools, live 2026-08-29) | skill-runner `:8091` |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
@@ -211,12 +213,12 @@ retired skill. Restore E2E-verified (`kb_gaming` snapshot → disposable node �
 | Field | Value |
 |---|---|
 | **Purpose** | Media operations via the GPU-host media-pipeline |
-| **Tools (live)** | **10** — `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch` |
+| **Tools (live)** | **18** — generation: `media_storyboard`, `media_generate_image`, `media_edit_image`, `media_generate_shot`, `media_text_to_speech`, `media_generate_music`, `media_sfx`, `media_upscale_video`, `media_assemble`, `media_fetch`; post-gen edit + file movement (2026-09-07): `media_trim`, `media_freeze`, `media_caption`, `media_info`, `media_upload`, `media_download`, `media_put`, `media_pull` |
 | **Backends** | **GPU-host media-pipeline `192.168.4.55:8189` (live 2026-08-28)** — ComfyUI + VLLM + TTS/music/SFX workers on Matrix |
-| **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
-| **Read/write** | Write (generate/edit/assemble to GPU host) + `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/` |
-| **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. |
-| **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. |
+| **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. `media_put` + local trim/freeze/caption sources read the **staging dir** `/home/chuck/workspace/media` (`MEDIA_STAGING_DIR`, rw-mounted; scratch — `scripts/cleanup-media-staging.sh`, `MEDIA_STAGING_MAX_AGE_DAYS` default 7d) and auto-upload. `media_pull` mints a **signed public URL** (`MEDIA_PUBLIC_URL` = `https://siri.choukalos.com/media/pipeline/dl/<token>`, TTL 1–168h) — off-LAN retrieval without publishing. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
+| **Read/write** | Write (generate/edit/assemble to GPU host) + `media_fetch`/`media_pull(local_dir=)` downloads to `/home/chuck/data/media/generated/pipeline/` + `media_put` uploads from staging |
+| **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. Public route `siri.choukalos.com/media/pipeline/*` (Caddy): `/dl/<token>` public (token is the credential), `/upload` requires `X-Api-Key` (chuck/dylan LiteLLM key); everything else (incl. `/dl_token`) 404 / LAN-only |
+| **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. `media_assemble` M4 extensions (2026-09-07): object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm` (backward compatible). |
 
 **Media pipeline (GPU host, `192.168.4.55:8189`)** — the service `mcp_media` wraps. Stdlib-only client (`media_pipeline_client.py`, vendored verbatim; no auth, LAN-only). Endpoints, each mapped 1:1 to an MCP tool:
 
@@ -230,11 +232,21 @@ retired skill. Restore E2E-verified (`kb_gaming` snapshot → disposable node �
 | `POST /music` | `media_generate_music` | ACE-Step | 10–30 min |
 | `POST /sfx` | `media_sfx` | MMAudio (synced to a clip) | 10–30 min |
 | `POST /upscale` | `media_upscale_video` | SeedVR2 (`b`) / 4xUltrasharp (`a2`) | 1–5 min |
-| `POST /assemble` | `media_assemble` | ffmpeg concat + audio mix | 1–10 min |
+| `POST /assemble` | `media_assemble` | ffmpeg concat + audio mix (M4: object shots, ts sfx, `vo_start`, `loudnorm`) | 1–10 min |
 | `GET /files/{name}` | `media_fetch` | — (download) | seconds |
+| `POST /trim` | `media_trim` | ffmpeg trim (libx264 crf 18) | seconds–1 min |
+| `POST /freeze` | `media_freeze` | ffmpeg freeze-frame (no generative model) | seconds |
+| `POST /caption` | `media_caption` | ffmpeg drawtext (textfile-based) | seconds–1 min |
+| `GET /info?path=` | `media_info` | ffprobe (sync) | <1s |
+| `POST /upload_local` | `media_upload` | matrix basedir → media_jobs (sync; 400 outside basedir) | seconds |
+| `POST /download` | `media_download` | URL → media_jobs (sync) | seconds–1 min |
+| `POST /upload` | `media_put` | multipart file → `media_jobs/uploads/` (sync; 500MB cap) | seconds |
+| `POST /dl_token` + `GET /dl/<token>` | `media_pull` | signed public URL (TTL 1–168h); public via Caddy `siri.choukalos.com/media/pipeline/dl/*` | <1s |
 | `GET /health` | — (probes only) | — | — |
 
 Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue returns 503 with `retry_after_seconds` — the MCP tools surface it as a structured error. Job artifacts live under `/home/chuck/data/comfyui/run/media_jobs/{job_id}/` on Matrix. Typical video flow: `media_storyboard` → per-shot `media_generate_image` → `media_generate_shot` → `media_text_to_speech` + `media_generate_music` → `media_assemble` (shots must stay GPU-host paths) → `media_fetch` for the final mp4.
+
+**Public route (2026-09-07, `caddy/Caddyfile` `@siri_pipeline`)** — `https://siri.choukalos.com/media/pipeline/*` proxies to matrix `:8189` (option C: under the existing `siri.choukalos.com` tunnel hostname — no new CF DNS record). Exposed: `GET /dl/<token>` (public — the signed token IS the credential; Range supported) and `POST /upload` (`X-Api-Key` = chuck/dylan LiteLLM key). Everything else under the prefix → 404; `/dl_token` (token minting) and the rest of the API stay **LAN-only**. `media_pull` returns `MEDIA_PUBLIC_URL + url_path`.
 
 ### 7b. `mcp_mysql` (added after the July design)
 

@@ -12,6 +12,14 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
   - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
   - media_fetch(host_path, subdirectory)          Download a pipeline result locally
+  - media_trim(source, start, end|duration, ...)  Cut a clip to a time range (ffmpeg)
+  - media_freeze(source, frame, duration, ...)    Image/frame -> static N-s clip (ffmpeg)
+  - media_caption(source, text, ...)              Burn text into a clip (drawtext)
+  - media_info(path)                              ffprobe metadata (sync)
+  - media_upload(source, subdirectory)            Matrix basedir file -> media_jobs (sync)
+  - media_download(url, ...)                      URL -> media_jobs (sync)
+  - media_put(local_file, subdirectory)           Local staging file -> media_jobs (sync)
+  - media_pull(path|job_id, ttl_hours, local_dir) Signed public URL (+ optional local copy)
 
 All GPU work happens on the pipeline host (ComfyUI + VLLM + TTS/music/SFX
 workers); this container only POSTs jobs, polls, and downloads results.
@@ -21,6 +29,10 @@ Path model (Thor has NO shared filesystem with the GPU host):
   - pipeline tools return GPU-HOST paths (required so media_assemble can chain)
   - media_fetch downloads any result to MEDIA_PIPELINE_FETCH_DIR (local)
   - tools taking local-file inputs auto-fetch GPU-host paths before uploading
+  - media_put / local sources for trim/freeze/caption read from the staging
+    dir MEDIA_STAGING_DIR (thor /home/chuck/workspace/media, rw-mounted)
+  - media_pull returns a signed public URL (MEDIA_PUBLIC_URL) usable from
+    anywhere — no homelab access, no publishing to the website
 
 Transport: streamable-http (HTTP, default 0.0.0.0:8000)
 """
@@ -35,7 +47,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 
 from mcp.server import FastMCP
 from mcp.server.fastmcp import Context
@@ -57,6 +69,18 @@ PIPELINE = MediaPipelineClient()
 PIPELINE_FETCH_DIR: str = os.environ.get(
     "MEDIA_PIPELINE_FETCH_DIR", "/home/chuck/data/media/generated/pipeline"
 )
+# Staging dir for local-file inputs (media_put, trim/freeze/caption local
+# sources). rw-mounted from thor /home/chuck/workspace/media — the only
+# thor-local input root this container can read. Scratch space: cleaned by
+# scripts/cleanup-media-staging.sh (MEDIA_STAGING_MAX_AGE_DAYS, default 7d).
+MEDIA_STAGING_DIR: str = os.environ.get(
+    "MEDIA_STAGING_DIR", "/home/chuck/workspace/media"
+)
+# Public base for signed pull URLs (media_pull). Caddy route on thor
+# (siri.choukalos.com/media/pipeline/*) proxies to matrix :8189.
+MEDIA_PUBLIC_URL: str = os.environ.get(
+    "MEDIA_PUBLIC_URL", "https://siri.choukalos.com/media/pipeline"
+).rstrip("/")
 
 # ---------------------------------------------------------------------------
 # Identity threading (same pattern as mcp_memory)
@@ -127,7 +151,14 @@ mcp = FastMCP(
         "PATH MODEL: tools return GPU-HOST paths. Pass them straight to "
         "media_assemble or other pipeline tools (inputs are auto-fetched); call "
         f"media_fetch to download a result to the local media library "
-        f"({PIPELINE_FETCH_DIR})."
+        f"({PIPELINE_FETCH_DIR}).\n"
+        f"LOCAL INPUTS: media_put (and local sources for media_trim/"
+        f"media_freeze/media_caption) read thor-local files from the staging "
+        f"dir {MEDIA_STAGING_DIR} (auto-uploaded to the pipeline). "
+        "RETRIEVAL: media_pull mints a signed public URL "
+        f"({MEDIA_PUBLIC_URL}/dl/<token>) anyone can curl — no homelab access, "
+        "no website publishing; optional local_dir copies it to the local "
+        "media library instead."
     ),
     host=MCPS_HOST,
 )
@@ -174,6 +205,27 @@ def _pipeline_error(exc: Exception, context: dict) -> dict:
         return out
     out["error"] = str(exc)
     return out
+
+
+def _staging_error(path: str, what: str = "file") -> Optional[dict]:
+    """Error dict if `path` is a LOCAL path outside the staging root (or not a
+    file). None if the path is a GPU-host path or a readable file under
+    MEDIA_STAGING_DIR. Local files outside staging can't be read by this
+    container (the staging mount is the only thor-local input root)."""
+    if _is_host_path(path):
+        return None
+    if not os.path.isfile(path):
+        return {"error": f"{what} not found (local or on GPU host): {path}"}
+    rp = os.path.realpath(path)
+    root = os.path.realpath(MEDIA_STAGING_DIR)
+    if not rp.startswith(root + os.sep):
+        return {
+            "error": f"{what} must live under the staging dir {MEDIA_STAGING_DIR}: {path}",
+            "hint": ("Stage the file there first (e.g. copy it to "
+                     f"{MEDIA_STAGING_DIR}/) — it is the only thor-local input "
+                     "root the media pipeline container can read."),
+        }
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -389,21 +441,27 @@ async def media_upscale_video(
         "GPU-host media pipeline. `shots` MUST be GPU-host paths (as returned by "
         "media_generate_shot / media_upscale_video) — do NOT pass locally downloaded "
         "paths. vo/music/sfx are optional GPU-host paths. For 1080p quality, B-upscale "
-        "each shot first. Returns {path, location='gpu_host'}; call media_fetch to "
-        "download the final mp4."
+        "each shot first. M4 extensions (backward compatible): `shots` entries may be "
+        "objects {path, in?, out?, duration?} to trim/hold a shot (still image + "
+        "duration renders a static clip); `sfx` may be a list [{path, at}] for "
+        "timestamped placement; `vo_start` offsets the VO from t=0; `loudnorm` applies "
+        "EBU R128 to the final mix. Returns {path, location='gpu_host'}; call "
+        "media_fetch to download the final mp4 or media_pull for a signed public URL."
     ),
 )
 async def media_assemble(
-    shots: List[str],
+    shots: List[Union[str, dict]],
     vo: str = "",
     music: str = "",
-    sfx: str = "",
+    sfx: Union[str, List[dict]] = "",
     width: int = 1920,
     height: int = 1080,
     fps: int = 24,
     vo_volume: float = 1.0,
     music_volume: float = 0.35,
     sfx_volume: float = 0.9,
+    vo_start: Optional[float] = None,
+    loudnorm: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Concat shots + mix audio -> final mp4 (GPU host)."""
@@ -412,6 +470,7 @@ async def media_assemble(
         path = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
             width, height, fps, vo_volume, music_volume, sfx_volume,
+            vo_start=vo_start, loudnorm=loudnorm,
             user=user, client=MEDIA_CLIENT,
         )
     except Exception as exc:
@@ -450,6 +509,220 @@ async def media_fetch(host_path: str, subdirectory: str = "") -> dict:
         }
     except Exception as exc:
         return _pipeline_error(exc, {"host_path": host_path})
+
+
+@mcp.tool(
+    name="media_trim",
+    description=(
+        "Cut a clip to a time range via the GPU-host media pipeline (ffmpeg trim; "
+        "always re-encodes, libx264 crf 18). `source` may be a GPU-host path OR a "
+        f"local file under the staging dir {MEDIA_STAGING_DIR} (auto-uploaded). "
+        "Exactly one of `end` or `duration`. Optional fps/width/height. Returns "
+        "{path, location='gpu_host'}; verify with media_info."
+    ),
+)
+async def media_trim(
+    source: str,
+    start: float = 0.0,
+    end: Optional[float] = None,
+    duration: Optional[float] = None,
+    fps: Optional[int] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    ctx: Context = None,
+) -> dict:
+    """Cut a clip to a time range (GPU host, ffmpeg)."""
+    err = _staging_error(source, "source")
+    if err:
+        return err
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        path = await asyncio.to_thread(
+            PIPELINE.trim, source, start, end, duration, fps, width, height,
+            user=user, client=MEDIA_CLIENT,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"source": source})
+    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+@mcp.tool(
+    name="media_freeze",
+    description=(
+        "Turn a still image or a video frame into a pixel-static N-second clip via "
+        "the GPU-host media pipeline (ffmpeg — NO generative model, so faces and "
+        "overlaid text don't warp). `source` may be a GPU-host path OR a local file "
+        f"under the staging dir {MEDIA_STAGING_DIR} (auto-uploaded). `frame` is a "
+        "frame INDEX (0-based) when source is a video. Returns {path, "
+        "location='gpu_host'}; accepted by media_assemble."
+    ),
+)
+async def media_freeze(
+    source: str,
+    frame: int = 0,
+    duration: float = 2.0,
+    width: int = 1280,
+    height: int = 720,
+    fps: int = 24,
+    ctx: Context = None,
+) -> dict:
+    """Image/frame -> static N-s clip (GPU host, ffmpeg)."""
+    err = _staging_error(source, "source")
+    if err:
+        return err
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        path = await asyncio.to_thread(
+            PIPELINE.freeze, source, frame, duration, width, height, fps,
+            user=user, client=MEDIA_CLIENT,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"source": source})
+    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+@mcp.tool(
+    name="media_caption",
+    description=(
+        "Burn text into a clip via the GPU-host media pipeline (ffmpeg drawtext, "
+        "textfile-based — reliable where generative text is not; multiline OK). "
+        "`source` may be a GPU-host path OR a local file under the staging dir "
+        f"{MEDIA_STAGING_DIR} (auto-uploaded). `end` defaults to clip end. Returns "
+        "{path, location='gpu_host'}; verify with media_info + a vision frame read."
+    ),
+)
+async def media_caption(
+    source: str,
+    text: str,
+    start: float = 0.0,
+    end: Optional[float] = None,
+    position: str = "bottom",
+    font_size: Optional[int] = None,
+    font: str = "DejaVuSans-Bold.ttf",
+    color: str = "white",
+    outline: int = 3,
+    ctx: Context = None,
+) -> dict:
+    """Burn text into a clip (GPU host, ffmpeg drawtext)."""
+    err = _staging_error(source, "source")
+    if err:
+        return err
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        path = await asyncio.to_thread(
+            PIPELINE.caption, source, text, start, end, position, font_size,
+            font, color, outline, user=user, client=MEDIA_CLIENT,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"source": source, "text": text[:80]})
+    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+@mcp.tool(
+    name="media_info",
+    description=(
+        "ffprobe metadata for a media_jobs file on the GPU host (sync, instant): "
+        "{duration_s, width, height, fps, video_codec, audio_codecs[], size_bytes, "
+        "bitrate_bps}. Use it to measure duration/codec/resolution through the "
+        "pipeline (e.g. verify trims, check VO-vs-cut fit)."
+    ),
+)
+async def media_info(path: str, ctx: Context = None) -> dict:
+    """ffprobe metadata (GPU host, sync)."""
+    try:
+        return await asyncio.to_thread(PIPELINE.info, path)
+    except Exception as exc:
+        return _pipeline_error(exc, {"path": path})
+
+
+@mcp.tool(
+    name="media_upload",
+    description=(
+        "Copy a file from the MATRIX host into media_jobs (sync): e.g. pull a "
+        "ComfyUI output/ artifact into the pipeline. `source` MUST be under the "
+        "ComfyUI basedir on matrix (400 otherwise). Returns {path} — the "
+        "media_jobs path to use in subsequent tools."
+    ),
+)
+async def media_upload(source: str, subdirectory: str = "",
+                       ctx: Context = None) -> dict:
+    """Matrix basedir file -> media_jobs (sync)."""
+    try:
+        p = await asyncio.to_thread(PIPELINE.upload_local, source, subdirectory or None)
+        return {"path": p, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    except Exception as exc:
+        return _pipeline_error(exc, {"source": source})
+
+
+@mcp.tool(
+    name="media_download",
+    description=(
+        "Fetch a URL into media_jobs on the GPU host (sync): ingests external or "
+        "LAN-hosted media the pipeline can then use. Returns {path} — the "
+        "media_jobs path to use in subsequent tools."
+    ),
+)
+async def media_download(url: str, subdirectory: str = "", filename: str = "",
+                         ctx: Context = None) -> dict:
+    """URL -> media_jobs (sync)."""
+    try:
+        p = await asyncio.to_thread(
+            PIPELINE.download, url, subdirectory or None, filename or None)
+        return {"path": p, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    except Exception as exc:
+        return _pipeline_error(exc, {"url": url})
+
+
+@mcp.tool(
+    name="media_put",
+    description=(
+        f"Push a thor-local file to the GPU-host media pipeline (sync, multipart): "
+        f"`local_file` must live under the staging dir {MEDIA_STAGING_DIR} (the "
+        "only thor-local input root this container can read). 500MB cap. Returns "
+        "{path} — the media_jobs path to use in subsequent tools. GPU-host paths "
+        "are returned unchanged (already on the pipeline). Off-LAN clients that "
+        "can't stage a file here use the raw public route "
+        "https://siri.choukalos.com/media/pipeline/upload (X-Api-Key) instead."
+    ),
+)
+async def media_put(local_file: str, subdirectory: str = "",
+                   ctx: Context = None) -> dict:
+    """Local staging file -> media_jobs (sync)."""
+    if _is_host_path(local_file):
+        return {"path": local_file, "location": "gpu_host",
+                "note": "Already a GPU-host path — no upload needed.",
+                "note2": _HOST_PATH_NOTE}
+    err = _staging_error(local_file, "local_file")
+    if err:
+        return err
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        p = await asyncio.to_thread(PIPELINE.put, local_file, subdirectory or None)
+        return {"path": p, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    except Exception as exc:
+        return _pipeline_error(exc, {"local_file": local_file})
+
+
+@mcp.tool(
+    name="media_pull",
+    description=(
+        "Mint a signed public URL for a media_jobs file (or job_id): returns "
+        f"{MEDIA_PUBLIC_URL}/dl/<token> with expiry — anyone anywhere can curl it "
+        "(the token IS the credential; no homelab access, no website publishing). "
+        "TTL 1–168h (default 24). Optional local_dir also copies the file to the "
+        "local media library (LAN fetch, like media_fetch). Use this to get a "
+        "finished video back without publishing it."
+    ),
+)
+async def media_pull(path: str, ttl_hours: float = 24, local_dir: str = "",
+                    ctx: Context = None) -> dict:
+    """media_jobs path/job_id -> signed public URL (+ optional local copy)."""
+    try:
+        out = await asyncio.to_thread(
+            PIPELINE.pull, path, ttl_hours, local_dir or None)
+        return out
+    except Exception as exc:
+        return _pipeline_error(exc, {"path": path})
 
 
 # ---------------------------------------------------------------------------
