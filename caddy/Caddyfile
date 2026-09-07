@@ -75,6 +75,35 @@
 		reverse_proxy http://skill-runner:8091
 	}
 
+	# Media pipeline public route (2026-09-07, media_pipeline_gaps.md T3;
+	# option C — served under siri.choukalos.com, no new CF DNS record):
+	#   /media/pipeline/dl/<token>  signed-token file download — PUBLIC.
+	#                               The token IS the credential (minted
+	#                               LAN-only by the pipeline's /dl_token;
+	#                               TTL 1–168h). Range requests supported.
+	#   /media/pipeline/upload      local-file upload — authenticated
+	#                               (X-Api-Key = chuck/dylan LiteLLM key).
+	# Everything else under /media/pipeline/* -> 404: the rest of the
+	# pipeline API (jobs, /files/*, /dl_token, ...) stays LAN-only.
+	@siri_pipeline {
+		host siri.choukalos.com
+		path /media/pipeline/*
+	}
+	handle @siri_pipeline {
+		uri strip_prefix /media/pipeline
+		# Signed-token download (public; token is the credential).
+		handle /dl/* {
+			reverse_proxy http://192.168.4.55:8189
+		}
+		# Upload (authenticated, multipart, 500MB cap enforced by matrix).
+		handle /upload {
+			@noAuth expression {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
+			respond @noAuth "Unauthorized" 401
+			reverse_proxy http://192.168.4.55:8189
+		}
+		respond "Not Found" 404
+	}
+
 	# Presenton is LAN-only (family use, passwordless): http://thor.local:5000
 	# (compose/compose.ai-core.yml, DISABLE_AUTH=true). No public route on purpose.
 
@@ -137,4 +166,3 @@
 
 	respond "Not Found" 404
 }
-

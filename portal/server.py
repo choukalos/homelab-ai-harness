@@ -34,6 +34,7 @@ import shutil
 import sys
 import time
 import urllib.parse
+from email.utils import formatdate, parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,8 @@ LISTEN_HOST = os.environ.get("PORTAL_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORTAL_PORT", "8080"))
 
 SITE_CACHE_MAX_AGE = 3600      # site assets (hashed filenames are immutable)
-FILES_CACHE_MAX_AGE = 3600     # drop-zone files
+FILES_CACHE_MAX_AGE = 60       # drop-zone files (T1: was 3600 — re-published
+                               # files were invisible behind Cloudflare up to 4h)
 CHUNK_SIZE = 256 * 1024
 
 # MIME types the stdlib table doesn't know (or gets wrong).
@@ -337,8 +339,30 @@ class PortalHandler(BaseHTTPRequestHandler):
     def _send_file(self, target: str, status: int, ctype: str,
                    extra: dict[str, str] | None = None) -> None:
         """Stream a file with correct headers, honoring a single Range
-        request (needed for <video>/<audio> seeking in the drop zone)."""
+        request (needed for <video>/<audio> seeking in the drop zone).
+        Sends Last-Modified and honors If-Modified-Since (304, no body) so
+        revalidation — e.g. by the Cloudflare edge — costs bytes, not the
+        full file (media_pipeline_gaps.md T1)."""
         size = os.path.getsize(target)
+        mtime = os.path.getmtime(target)
+        last_modified = formatdate(timeval=mtime, usegmt=True)
+        # Conditional request (T1): unmodified → 304, no body. Cache headers
+        # are repeated so the edge/browser can update its cache entry.
+        if status == 200:
+            ims = self.headers.get("If-Modified-Since")
+            if ims:
+                try:
+                    ims_ts = parsedate_to_datetime(ims).timestamp()
+                except (TypeError, ValueError):
+                    ims_ts = None
+                if ims_ts is not None and int(mtime) <= ims_ts:
+                    self.send_response(304)
+                    self.send_header("Last-Modified", last_modified)
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    for k, v in (extra or {}).items():
+                        self.send_header(k, v)
+                    self.end_headers()
+                    return
         start, length, range_status = 0, size, 200
         rng = self.headers.get("Range")
         if rng and rng.startswith("bytes="):
@@ -371,6 +395,7 @@ class PortalHandler(BaseHTTPRequestHandler):
         self.send_response(range_status if status == 200 else status)
         self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Last-Modified", last_modified)
         self.send_header("Content-Length", str(length))
         if range_status == 206:
             self.send_header("Content-Range", f"bytes {start}-{start + length - 1}/{size}")
@@ -470,7 +495,7 @@ class PortalHandler(BaseHTTPRequestHandler):
                 self._not_found()
             return
         self._send_file(target, 200, guess_type(target),
-                        extra={"Cache-Control": f"max-age={FILES_CACHE_MAX_AGE}"})
+                        extra={"Cache-Control": f"max-age={FILES_CACHE_MAX_AGE}, must-revalidate"})
 
     # -- /status/ — runtime artifacts ------------------------------------------
 

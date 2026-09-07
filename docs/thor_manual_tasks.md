@@ -197,6 +197,68 @@ New endpoint works from outside. No admin endpoints exposed.
 
 ---
 
+## Phase 15 - Media Pipeline Public Route + Portal /files/*: Cloudflare Cache Rules (2026-09-07)
+
+```text
+MANUAL TASK FOR CHUCK (Cloudflare dashboard — no API/DNS change needed):
+Reason:
+Two public paths need correct edge-cache behavior after the 2026-09-07
+origin changes:
+  1. GET /media/pipeline/dl/<token> on siri.choukalos.com (new public
+     signed-URL route, Caddy @siri_pipeline → matrix :8189).
+  2. /files/* on choukalos.com (portal T1: origin now sends
+     max-age=60, must-revalidate + Last-Modified and answers
+     If-Modified-Since with 304 — re-published files were previously
+     invisible behind the CF edge for up to 4h).
+Dashboard steps:
+1. Cloudflare dashboard → choukalos.com → Rules → Cache Rules → Create rule.
+2. Rule name: "Media pipeline signed URLs".
+3. Expression (host + path prefix):
+     host equals siri.choukalos.com AND
+     starts_with(http.request.uri.path, "/media/pipeline/dl/")
+4. Behavior: "Cache eligible", Edge TTL = 1 hour (or "Default TTL").
+   Signed URLs are safe to edge-cache: the token is in the URL and a cached
+   copy serves the same bytes. If you prefer zero edge caching, use
+   "Bypass cache" instead — downloads still work (slower repeat fetches).
+   Do NOT create a rule caching POST /media/pipeline/upload (POSTs are
+   never cached by CF; informational).
+5. Second rule: name "Portal files drop zone", expression:
+     host equals choukalos.com AND
+     starts_with(http.request.uri.path, "/files/")
+   Behavior: "Cache eligible", Edge TTL = 60 seconds (matches the origin's
+   new max-age=60, must-revalidate; the origin answers revalidation with
+   304, so it costs bytes, not the full file).
+6. Purge the stale edge entry for the video (otherwise the old copy with
+   the 4h TTL keeps being served until it expires): Caching → Manage Cache
+   → Purge → Custom URL(s):
+     https://choukalos.com/files/video/peanut_doc_final.mp4
+   (or "Purge everything by hostname" for choukalos.com if you prefer).
+7. Save. No tunnel/DNS change required — both routes already exist
+   (Caddy @siri_pipeline + portal /files/, verified 2026-09-07).
+Expected impact:
+  - /media/pipeline/dl/*: repeat fetches served from edge (faster, less
+    LAN load). No new exposure: /dl_token and the rest of the pipeline API
+    are not proxied publicly (Caddy 404s them).
+  - /files/*: re-published files visible at the edge within ~1 min
+    (origin revalidates every 60s, 304 when unchanged).
+Rollback:
+Delete the cache rule(s) in the dashboard. Signed URLs and /files/* keep
+working via origin (Caddy → matrix / portal).
+Validation:
+  # media pipeline (token from mcp_media.media_pull):
+  curl -sI "https://siri.choukalos.com/media/pipeline/dl/<token>" | grep -i cf-cache-status
+  #   first fetch: MISS/DYNAMIC; second fetch: HIT if the rule is active
+  # portal:
+  curl -sI "https://choukalos.com/files/video/peanut_doc_final.mp4" | grep -iE "cf-cache-status|content-length"
+  #   after the purge: revalidation flow (HIT within 60s, MISS after)
+  # T1 acceptance (needs sudo — root-owned file):
+  #   sudo cp peanut_doc_final.mp4 /tmp/ ; write a different-sized test
+  #   copy; within ~2 min the bare public URL shows the new content-length;
+  #   restore the original (sha256-verify).
+```
+
+---
+
 ## Summary of Pending Manual Tasks
 
 | # | Phase | Task | Priority |
@@ -211,3 +273,4 @@ New endpoint works from outside. No admin endpoints exposed.
 | 8 | 12 | Create Grafana dashboards | Low — nice to have |
 | 9 | 14 | Skill runner Caddy routing | High — LAN access |
 | 10 | 14 | Cloudflare tunnel (if needed) | Low — depends on remote needs |
+| 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Medium — dashboard-only; unblocks T1 public acceptance |

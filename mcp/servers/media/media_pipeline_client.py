@@ -46,6 +46,11 @@ def _load_dotenv(path: str | None = None) -> None:
 if "MEDIA_PIPELINE_URL" not in os.environ:
     _load_dotenv()
 DEFAULT_URL = os.environ.get("MEDIA_PIPELINE_URL", "http://127.0.0.1:8189")
+# Public base for signed pull URLs (media_pull). Served by the thor Caddy
+# public route (2026-09-07: siri.choukalos.com/media/pipeline/* — option C,
+# no media.choukalos.com subdomain). Token IS the credential; no API key.
+PUBLIC_URL = os.environ.get(
+    "MEDIA_PUBLIC_URL", "https://siri.choukalos.com/media/pipeline").rstrip("/")
 # /files/{name} is relative to the pipeline's job dir (JOB_DIR on the GPU host).
 _JOB_PREFIX = "/home/chuck/data/comfyui/run/media_jobs/"
 
@@ -97,6 +102,66 @@ class MediaPipelineClient:
             method="POST")
         with urllib.request.urlopen(req, timeout=300) as r:
             return json.loads(r.read())["job_id"]
+
+    def _post_multipart_sync(self, endpoint: str, filepath: str, fields: dict,
+                             timeout: float = 900) -> dict:
+        """Multipart POST that returns the FULL JSON (sync endpoints like
+        /upload, which return {path} instead of {job_id})."""
+        boundary = "----mpb" + uuid.uuid4().hex
+        fname = os.path.basename(filepath)
+        ctype = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+        body = b""
+        for k, v in fields.items():
+            body += (f"--{boundary}\r\nContent-Disposition: form-data; "
+                     f"name=\"{k}\"\r\n\r\n{v}\r\n").encode()
+        with open(filepath, "rb") as f:
+            fdata = f.read()
+        body += (f"--{boundary}\r\nContent-Disposition: form-data; "
+                 f"name=\"file\"; filename=\"{fname}\"\r\n"
+                 f"Content-Type: {ctype}\r\n\r\n").encode()
+        body += fdata + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            f"{self.base}{endpoint}", data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+
+    def _get_json(self, path: str, timeout: float = 60) -> dict:
+        with urllib.request.urlopen(f"{self.base}{path}", timeout=timeout) as r:
+            return json.loads(r.read())
+
+    def _post_json_sync(self, endpoint: str, payload: dict,
+                        timeout: float = 300) -> dict:
+        """JSON POST for SYNC endpoints (no job_id; returns the full JSON)."""
+        req = urllib.request.Request(
+            f"{self.base}{endpoint}", data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+
+    def _ensure_source(self, source: str) -> str:
+        """Return a matrix media_jobs path for trim/freeze/caption `source`:
+        GPU-host paths pass through; LOCAL files are uploaded via /upload
+        (multipart, sync) and the resulting media_jobs path is returned."""
+        if source.startswith(_JOB_PREFIX):
+            return source
+        if not os.path.isfile(source):
+            raise PipelineError(f"source not found (local or on GPU host): {source}")
+        return self._post_multipart_sync("/upload", source, {})["path"]
+
+    def _resolve_path(self, ref: str) -> str:
+        """Accept a media_jobs path OR a job_id (resolved via GET /jobs/{id})."""
+        if ref.startswith("/"):
+            return ref
+        j = self._get_json(f"/jobs/{ref}")
+        if j.get("status") == "error":
+            raise PipelineError(f"job {ref} failed: {j.get('error')}")
+        out = j.get("output") or {}
+        for k in ("video", "image", "audio", "storyboard"):
+            if k in out:
+                return out[k]
+        raise PipelineError(f"job {ref} has no resolvable output path: {out}")
 
     def _wait(self, jid: str, timeout: float) -> dict:
         deadline = time.time() + timeout
@@ -225,17 +290,137 @@ class MediaPipelineClient:
     def assemble(self, shots: list, vo: str | None = None, music: str | None = None,
                  sfx: str | None = None, width: int = 1920, height: int = 1080,
                  fps: int = 24, vo_volume: float = 1.0, music_volume: float = 0.35,
-                 sfx_volume: float = 0.9, user: str | None = None,
+                 sfx_volume: float = 0.9, vo_start: float | None = None,
+                 loudnorm: bool = False, user: str | None = None,
                  client: str | None = None, timeout: float = 1800) -> str:
-        """Concat shots + mix audio -> final mp4. `shots` are GPU-host paths."""
+        """Concat shots + mix audio -> final mp4. `shots` are GPU-host paths.
+
+        M4 extensions (backward compatible): `shots` entries may be objects
+        {path, in?, out?, duration?} (trim/hold a shot; still image + duration
+        renders a static clip); `sfx` may be a list [{path, at}] for
+        timestamped placement; `vo_start` offsets the VO from t=0; `loudnorm`
+        applies EBU R128 to the final mix.
+        """
         payload = {"shots": shots, "width": width, "height": height, "fps": fps,
                    "vo_volume": vo_volume, "music_volume": music_volume,
                    "sfx_volume": sfx_volume}
         for k, v in (("vo", vo), ("music", music), ("sfx", sfx)):
             if v:
                 payload[k] = v
+        if vo_start is not None:
+            payload["vo_start"] = vo_start
+        if loudnorm:
+            payload["loudnorm"] = True
         return self._wait(self._post_json("/assemble", payload, user, client),
                           timeout)["video"]
+
+    # ------------------------------------------------- post-gen edit tools (M1–M8)
+    def trim(self, source: str, start: float = 0.0, end: float | None = None,
+             duration: float | None = None, fps: int | None = None,
+             width: int | None = None, height: int | None = None,
+             user: str | None = None, client: str | None = None,
+             timeout: float = 1800) -> str:
+        """Cut a clip to a time range (ffmpeg, always re-encodes libx264 crf 18).
+        Exactly one of `end`/`duration`. `source` = GPU-host path OR local file
+        (auto-uploaded). Returns GPU-host path of the trimmed video."""
+        if (end is None) == (duration is None):
+            raise PipelineError("exactly one of end/duration is required")
+        payload = {"source": self._ensure_source(source), "start": start}
+        if end is not None:
+            payload["end"] = end
+        else:
+            payload["duration"] = duration
+        for k, v in (("fps", fps), ("width", width), ("height", height)):
+            if v is not None:
+                payload[k] = v
+        return self._wait(self._post_json("/trim", payload, user, client),
+                          timeout)["video"]
+
+    def freeze(self, source: str, frame: int = 0, duration: float = 2.0,
+               width: int = 1280, height: int = 720, fps: int = 24,
+               user: str | None = None, client: str | None = None,
+               timeout: float = 1800) -> str:
+        """Still image or video frame -> pixel-static N-second clip (NO generative
+        model). `frame` is a frame INDEX (0-based) when source is a video.
+        `source` = GPU-host path OR local file (auto-uploaded)."""
+        payload = {"source": self._ensure_source(source), "frame": frame,
+                   "duration": duration, "width": width, "height": height,
+                   "fps": fps}
+        return self._wait(self._post_json("/freeze", payload, user, client),
+                          timeout)["video"]
+
+    def caption(self, source: str, text: str, start: float = 0.0,
+                end: float | None = None, position: str = "bottom",
+                font_size: int | None = None, font: str = "DejaVuSans-Bold.ttf",
+                color: str = "white", outline: int = 3,
+                user: str | None = None, client: str | None = None,
+                timeout: float = 1800) -> str:
+        """Burn text into a clip (ffmpeg drawtext, textfile-based; multiline OK).
+        `source` = GPU-host path OR local file (auto-uploaded). `end` defaults
+        to clip end. Returns GPU-host path of the captioned video."""
+        payload = {"source": self._ensure_source(source), "text": text,
+                   "start": start, "position": position, "font": font,
+                   "color": color, "outline": outline}
+        if end is not None:
+            payload["end"] = end
+        if font_size is not None:
+            payload["font_size"] = font_size
+        return self._wait(self._post_json("/caption", payload, user, client),
+                          timeout)["video"]
+
+    def info(self, path: str, timeout: float = 60) -> dict:
+        """ffprobe metadata for a matrix path (sync).
+        -> {duration_s, width, height, fps, video_codec, audio_codecs[],
+            size_bytes, bitrate_bps}"""
+        return self._get_json(f"/info?path={urllib.parse.quote(path, safe='')}",
+                              timeout)
+
+    def upload_local(self, source: str, subdirectory: str | None = None,
+                     timeout: float = 300) -> str:
+        """Copy a file from the MATRIX host into media_jobs (sync). `source`
+        MUST be under the ComfyUI basedir (400 otherwise). Returns the
+        media_jobs path."""
+        payload = {"source": source}
+        if subdirectory:
+            payload["subdirectory"] = subdirectory
+        return self._post_json_sync("/upload_local", payload, timeout)["path"]
+
+    def download(self, url: str, subdirectory: str | None = None,
+                 filename: str | None = None, timeout: float = 600) -> str:
+        """Fetch a URL into media_jobs on the matrix host (sync).
+        Returns the media_jobs path."""
+        payload = {"url": url}
+        if subdirectory:
+            payload["subdirectory"] = subdirectory
+        if filename:
+            payload["filename"] = filename
+        return self._post_json_sync("/download", payload, timeout)["path"]
+
+    def put(self, local_file: str, subdirectory: str | None = None,
+            timeout: float = 900) -> str:
+        """Push a LOCAL file to media_jobs/uploads/ (multipart, sync).
+        500MB cap (413). Returns the media_jobs path to use in subsequent tools."""
+        fields = {}
+        if subdirectory:
+            fields["subdirectory"] = subdirectory
+        return self._post_multipart_sync("/upload", local_file, fields,
+                                         timeout)["path"]
+
+    def pull(self, path: str, ttl_hours: float = 24, local_dir: str | None = None,
+             timeout: float = 60) -> dict:
+        """Mint a signed public URL for a media_jobs path (or job_id).
+        -> {url, expires_at, token, path} (+ local_path when local_dir given;
+        the local copy uses the LAN /files fetch)."""
+        if not (0 < ttl_hours <= 168):
+            raise PipelineError("ttl_hours must be in (0, 168]")
+        p = self._resolve_path(path)
+        d = self._post_json_sync("/dl_token", {"path": p, "ttl_hours": ttl_hours},
+                                 timeout)
+        out = {"url": PUBLIC_URL + d["url_path"], "expires_at": d["expires_at"],
+               "token": d["token"], "path": p}
+        if local_dir:
+            out["local_path"] = self.fetch(p, local_dir)
+        return out
 
 
 # Convenience singleton (reads MEDIA_PIPELINE_URL from env)

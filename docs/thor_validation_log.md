@@ -287,5 +287,54 @@
 | matrix | 192.168.4.55 | vLLM | 8000 |
 | matrix | 192.168.4.55 | Ollama | 11434 |
 | matrix | 192.168.4.55 | ComfyUI | 8188 |
+| matrix | 192.168.4.55 | media-pipeline | 8189 |
 | macstudio | 192.168.4.56 | LM Studio | 1234 |
 | host.docker.internal | — | MySQL (Ghost) | 3306 |
+
+---
+
+## Validation Entry — 2026-09-07: Media Pipeline Gap-Fill (Part 2, T2/T3)
+
+Source plan: `/home/chuck/media_pipeline_gaps.md` (updated from v2 contract).
+Matrix side (M1–M9) pre-verified live; thor side implemented + verified:
+
+| Check | Result |
+|---|---|
+| Matrix `/openapi.json` — all 9 new endpoints present (`/trim /freeze /caption /info /upload_local /download /upload /dl_token /dl/{token}` + extended `/assemble`) | ✅ PASS |
+| Client conformance `mcp/servers/media/test_client_t2.py` (18 checks: info/trim×3/freeze/caption/upload 400-gate/download/dl_token+byte-identical LAN pull/assemble M4/put/pull+job-id resolution) | ✅ 18/18 PASS |
+| `mcp_media` tools/list — 18 tools, schemas correct (`media_pull`: path/ttl_hours/local_dir; `media_assemble`: vo_start/loudnorm; `media_trim`: source/start/end/duration/fps/width/height) | ✅ PASS |
+| E2E `tools/call`: `media_put` staging→matrix, `media_pull` signed URL, GPU-path passthrough, staging-gate error for file outside `/home/chuck/workspace/media` | ✅ PASS |
+| Caddy `@siri_pipeline` route (option C, `siri.choukalos.com/media/pipeline/*`): `/dl/<token>` 200 + sha256 byte-identical to direct matrix fetch; `/upload` 401 without key / 200 with chuck key; `/dl_token` + `/health` → 404 (LAN-only); bad token → 404 | ✅ 7/7 PASS (LAN) |
+| Same checks through the public URL `https://siri.choukalos.com/media/pipeline/*` (Cloudflare tunnel) | ✅ PASS (200/401/404; sha256 match) |
+| Staging cleanup script `scripts/cleanup-media-staging.sh` (dry-run + real; `MEDIA_STAGING_MAX_AGE_DAYS=7` in `.env`) | ✅ PASS |
+| Off-LAN device acceptance | ⏳ PENDING — manual step for Chuck (see `docs/thor_manual_tasks.md` Phase 15 + plan file) |
+
+Caddyfile change: `@siri_pipeline` matcher + `handle` block (public `/dl/*`,
+key-auth `/upload`, 404 catch-all) — `caddy validate` + reload clean.
+Compose change: `mcp_media` env `MEDIA_STAGING_DIR` + `MEDIA_PUBLIC_URL` +
+rw mount `/home/chuck/workspace/media:/home/chuck/workspace/media`.
+Surgical rebuild: `docker compose --env-file .env -f compose/compose.mcp.yml
+build mcp_media && up -d --force-recreate mcp_media` (avoids rebuilding all
+10 MCP servers).
+
+**T1 — portal `/files/` cache fix (implemented 2026-09-07, ordered last per
+decision):** `portal/server.py` — `FILES_CACHE_MAX_AGE` 3600→60;
+`/files/` now sends `Cache-Control: max-age=60, must-revalidate`;
+`_send_file()` sends `Last-Modified` (mtime) and answers
+`If-Modified-Since` with `304` (no body; cache headers repeated). Deployed
+via surgical rebuild of `portal:local` only.
+
+| Check | Result |
+|---|---|
+| Origin headers: `Cache-Control: max-age=60, must-revalidate` + `Last-Modified` on `/files/video/peanut_doc_final.mp4` | ✅ PASS |
+| `If-Modified-Since` = mtime / future → `304` (0 bytes); old date → `200` full body | ✅ PASS |
+| Range regression: `Range: bytes=0-99` → `206`, 100 bytes | ✅ PASS |
+| Overwrite public file with different size → new content-length at origin immediately | ⏳ MANUAL — file is root-owned; needs Chuck's sudo (backup/restore procedure in plan file) |
+| Public URL serves new size within ~2 min | ⏳ BLOCKED on CF cache rule + purge (Phase 15, dashboard) — CF edge currently serves the stale entry (`cf-cache-status: HIT`, old `max-age=14400`) |
+
+**Pending (manual, outside this session):**
+- Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*`
+  (portal, 60s edge TTL) + purge the stale video entry — dashboard-only;
+  see `docs/thor_manual_tasks.md` Phase 15.
+- T1 overwrite acceptance (sudo — root-owned file).
+- Off-LAN device acceptance (Chuck, from a network outside the LAN).
