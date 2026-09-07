@@ -151,10 +151,12 @@ Only two narrow paths are proxied. The Plausible admin login and dashboard are *
   default 24h) via the `mcp_media.media_pull` tool; the token embeds the
   absolute file path and is signed — a token is a short-lived capability,
   not a filesystem listing.
-- The Cloudflare cache rule for `/media/pipeline/dl/*` is a **manual
-  dashboard task** — see `docs/thor_manual_tasks.md` ("Media pipeline
-  public route — Cloudflare cache rule").
-- Off-LAN acceptance (device outside the LAN) is a manual step for Chuck.
+- The Cloudflare cache rule for `/media/pipeline/dl/*` is **in place**
+  (manual dashboard task, done 2026-09-07 — `docs/thor_manual_tasks.md`
+  Phase 15). Observed: `cf-cache-status: DYNAMIC` (edge does not cache —
+  bypass); downloads are served from origin.
+- Off-LAN acceptance (device outside the LAN) is the remaining manual step
+  for Chuck.
 
 ---
 
