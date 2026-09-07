@@ -197,10 +197,22 @@ New endpoint works from outside. No admin endpoints exposed.
 
 ---
 
-## Phase 15 - Media Pipeline Public Route + Portal /files/*: Cloudflare Cache Rules (2026-09-07)
+## Phase 15 - Media Pipeline Public Route + Portal /files/*: Cloudflare Cache Rules (Done — 2026-09-07)
 
 ```text
-MANUAL TASK FOR CHUCK (Cloudflare dashboard — no API/DNS change needed):
+COMPLETED 2026-09-07 (Cloudflare dashboard — no API/DNS change needed).
+Verified same day:
+  - /files/*: edge revalidates every ~60s (cf-cache-status EXPIRED/
+    REVALIDATED at 60–71s after cache, HIT within); new origin
+    Last-Modified propagates; stale entry purged. T1 overwrite test
+    passed: new content-length live at the bare public URL within 15s.
+  - /media/pipeline/dl/*: cf-cache-status DYNAMIC (edge does not cache —
+    bypass); downloads served from origin. Fine as-is; switch the rule to
+    "Cache eligible, 1h" if edge caching is ever wanted.
+  - Note: browser-facing header shows max-age=14400 (pre-existing CF
+    zone-level browser-TTL override), but the edge itself revalidates on
+    the 60s origin TTL — re-published files appear at the edge within ~60s.
+Original task (kept for rollback reference):
 Reason:
 Two public paths need correct edge-cache behavior after the 2026-09-07
 origin changes:
@@ -273,4 +285,4 @@ Validation:
 | 8 | 12 | Create Grafana dashboards | Low — nice to have |
 | 9 | 14 | Skill runner Caddy routing | High — LAN access |
 | 10 | 14 | Cloudflare tunnel (if needed) | Low — depends on remote needs |
-| 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Medium — dashboard-only; unblocks T1 public acceptance |
+| 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |

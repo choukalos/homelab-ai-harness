@@ -307,7 +307,7 @@ Matrix side (M1–M9) pre-verified live; thor side implemented + verified:
 | Caddy `@siri_pipeline` route (option C, `siri.choukalos.com/media/pipeline/*`): `/dl/<token>` 200 + sha256 byte-identical to direct matrix fetch; `/upload` 401 without key / 200 with chuck key; `/dl_token` + `/health` → 404 (LAN-only); bad token → 404 | ✅ 7/7 PASS (LAN) |
 | Same checks through the public URL `https://siri.choukalos.com/media/pipeline/*` (Cloudflare tunnel) | ✅ PASS (200/401/404; sha256 match) |
 | Staging cleanup script `scripts/cleanup-media-staging.sh` (dry-run + real; `MEDIA_STAGING_MAX_AGE_DAYS=7` in `.env`) | ✅ PASS |
-| Off-LAN device acceptance | ⏳ PENDING — manual step for Chuck (see `docs/thor_manual_tasks.md` Phase 15 + plan file) |
+| Off-LAN device acceptance | ⏳ PENDING — manual step for Chuck (only remaining item; CF rules + T1 done 2026-09-07) |
 
 Caddyfile change: `@siri_pipeline` matcher + `handle` block (public `/dl/*`,
 key-auth `/upload`, 404 catch-all) — `caddy validate` + reload clean.
@@ -329,12 +329,13 @@ via surgical rebuild of `portal:local` only.
 | Origin headers: `Cache-Control: max-age=60, must-revalidate` + `Last-Modified` on `/files/video/peanut_doc_final.mp4` | ✅ PASS |
 | `If-Modified-Since` = mtime / future → `304` (0 bytes); old date → `200` full body | ✅ PASS |
 | Range regression: `Range: bytes=0-99` → `206`, 100 bytes | ✅ PASS |
-| Overwrite public file with different size → new content-length at origin immediately | ⏳ MANUAL — file is root-owned; needs Chuck's sudo (backup/restore procedure in plan file) |
-| Public URL serves new size within ~2 min | ⏳ BLOCKED on CF cache rule + purge (Phase 15, dashboard) — CF edge currently serves the stale entry (`cf-cache-status: HIT`, old `max-age=14400`) |
+| Overwrite public file with different size → new content-length at origin immediately | ✅ PASS (2026-09-07 17:19) — 10MB test copy swapped in; no sudo needed (`video/` dir is chuck-writable, delete+recreate) |
+| Public URL serves new size within ~2 min | ✅ PASS — bare public URL served the new content-length within 15s (edge `EXPIRED` → revalidated); original restored sha256-verified and live again within ~75s |
 
 **Pending (manual, outside this session):**
-- Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*`
-  (portal, 60s edge TTL) + purge the stale video entry — dashboard-only;
-  see `docs/thor_manual_tasks.md` Phase 15.
-- T1 overwrite acceptance (sudo — root-owned file).
-- Off-LAN device acceptance (Chuck, from a network outside the LAN).
+- Off-LAN device acceptance (Chuck, from a network outside the LAN) — the
+  only remaining item. CF cache rules + purge were completed 2026-09-07
+  (dashboard; see `docs/thor_manual_tasks.md` Phase 15): `/files/*` edge
+  revalidates every ~60s; `/media/pipeline/dl/*` serves
+  `cf-cache-status: DYNAMIC` (edge does not cache — bypass; downloads via
+  origin).

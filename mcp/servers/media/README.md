@@ -94,8 +94,10 @@ matrix `:8189` and exposes exactly two paths:
 
 Everything else under `/media/pipeline/*` → 404. In particular
 `/dl_token` (token minting) and the rest of the pipeline API stay
-**LAN-only**. Cloudflare cache rule for `/media/pipeline/dl/*`: see
-`docs/thor_manual_tasks.md` (manual dashboard step).
+**LAN-only**. Cloudflare cache rule for `/media/pipeline/dl/*` is in place
+(2026-09-07, dashboard): the edge does not cache (`cf-cache-status:
+DYNAMIC` — bypass); downloads are served from origin. See
+`docs/thor_manual_tasks.md` Phase 15.
 
 ## Identity threading (per-user cost attribution)
 
