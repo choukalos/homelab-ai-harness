@@ -258,6 +258,18 @@ LLM is the operator and ingests via `kb_ingest_file` / `kb_add_fact`.
 - Retired 2026-08-29: legacy `family_kb` collection (384-dim,
   snapshotted + dropped) and the MkDocs family-wiki container
 
+**Digests (document comprehension):** beyond factual retrieval, the KB now
+supports **digests** — a structured *model* of a document (rules, formulas,
+tables, beats) with source refs, so a downstream task (generate a character,
+implement an algorithm, compute scales, analyze a film) runs *from the digest*
+and is independently verified. `mcp_knowledge` adds 5 tools (`kb_digest`,
+`kb_get_pages`, `kb_digest_store`, `kb_digest_get`, `kb_digest_list`); digests
+are stored at `/home/chuck/data/ai-kb/digests/<type>/<slug>.md` + as
+`kind=digest` facts in the source doc's KB. The LLM builds them via the
+`digest` pi skill; applier skills (`ttrpg`, `digest-book`, `digest-algo`,
+`digest-music`, `digest-media`) run tasks from them. Types: `game_system`,
+`story`, `whitepaper`, `music_theory`, `media`.
+
 ---
 
 # Networking Model

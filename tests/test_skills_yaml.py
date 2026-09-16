@@ -19,9 +19,11 @@ Checks:
      (yaml.safe_load) and has string `name` + non-empty string `description`.
   2. SKILL.md `name` matches its directory name (hyphenated, Agent Skills rule).
   3. Every skills/*/skill.yml parses as YAML and has `name` + `description`.
-  4. Cross-check: each agents-skills/<hyphenated> wrapper has a matching
-     skills/<underscored>/skill.yml, and the descriptions match exactly
-     (catches source/wrapper drift).
+  4. Cross-check: each agents-skills/<hyphenated> wrapper that HAS a
+     skills/<underscored>/skill.yml runner source must match its description
+     exactly (catches source/wrapper drift). Wrappers without a runner source
+     are pure pi-native agent workflows (the digest family: the agent does the
+     work from SKILL.md; no skill-runner job by design) and are allowed.
   5. Regression: the unquoted-colon pattern from the bug is detected.
 
 Run: python3 -m pytest tests/test_skills_yaml.py -v
@@ -147,7 +149,12 @@ class TestSkillYmlManifest(unittest.TestCase):
 
 
 class TestSourceWrapperConsistency(unittest.TestCase):
-    """Check 4: SKILL.md wrapper description matches skill.yml source of truth."""
+    """Check 4: SKILL.md wrapper description matches skill.yml source of truth.
+
+    Only applies to runner-backed skills (those with a skills/<name>/skill.yml).
+    Pure pi-native agent workflows (digest, ttrpg, digest-algo/book/media/music)
+    have no runner source by design and are exempt.
+    """
 
     def test_descriptions_match(self):
         failures = []
@@ -159,9 +166,7 @@ class TestSourceWrapperConsistency(unittest.TestCase):
             skill_dir_underscored = skill_dir.replace("-", "_")
             skill_yml = os.path.join(SKILLS_DIR, skill_dir_underscored, "skill.yml")
             if not os.path.isfile(skill_yml):
-                failures.append(
-                    f"{skill_dir}: no skills/{skill_dir_underscored}/skill.yml source"
-                )
+                # No runner source: pure pi-native agent workflow (allowed).
                 continue
             with open(skill_md, encoding="utf-8") as f:
                 fm = yaml.safe_load(extract_frontmatter(f.read()))

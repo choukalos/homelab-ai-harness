@@ -88,6 +88,16 @@ KB_ALLOWED_ROOTS: list[str] = [
 # Writable backup target (mounted rw from /home/chuck/data/backups/kb).
 KB_BACKUP_DIR: str = os.environ.get("KB_BACKUP_DIR", "/backups/kb")
 
+# Digest storage (rw mount; host /home/chuck/data/ai-kb/digests). Digests are
+# a higher-level *model* of a document (procedural/systemic understanding) that
+# complements the KB's factual chunks. File = source of truth; section facts
+# (kind=digest) are embedded into the source doc's KB for search.
+DIGEST_DIR: str = os.environ.get("DIGEST_DIR", "/data/ai-kb/digests")
+DIGEST_HOST_DIR: str = os.environ.get(
+    "DIGEST_HOST_DIR", "/home/chuck/data/ai-kb/digests")
+DIGEST_SAMPLE_PAGES: int = int(os.environ.get("KB_DIGEST_SAMPLE_PAGES", "3"))
+DIGEST_SAMPLE_CHARS: int = int(os.environ.get("KB_DIGEST_SAMPLE_CHARS", "4000"))
+
 MAX_TOP_K: int = 20
 DEFAULT_TOP_K: int = 5
 SNIPPET_MAX_CHARS: int = 400
@@ -578,7 +588,144 @@ def _chunk_markdown(markdown: str) -> list[dict]:
             "page_range": [min(p), max(p)] if p else None,
         }
         for i, (t, p) in enumerate(chunks)
-    ]# ---------------------------------------------------------------------------
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Digest helpers (work order, page reads, storage, section split)
+# ---------------------------------------------------------------------------
+
+_DIGEST_TYPE_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+_DIGEST_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,60}$")
+
+# Light keyword heuristic for candidate-type hints (the LLM makes the call).
+_TYPE_HINTS: dict[str, list[str]] = {
+    "game_system": ["character", "combat", "attribute", "skill", "game master",
+                    "player", "dice", "encounter", "adventur"],
+    "whitepaper": ["abstract", "introduction", "method", "experiments",
+                   "conclusion", "algorithm", "evaluation", "related work"],
+    "music_theory": ["scale", "chord", "interval", "harmony", "key signature",
+                     "tonic", "mode"],
+    "story": ["chapter", "prologue", "epilogue", "part one", "part two"],
+}
+
+
+def _digest_root() -> Path:
+    p = Path(DIGEST_DIR)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _digest_path(slug: str, dtype: str) -> Path:
+    if not _DIGEST_SLUG_RE.fullmatch(slug):
+        raise ValueError(f"invalid digest slug '{slug}' (use [a-z0-9_-]).")
+    if not _DIGEST_TYPE_RE.fullmatch(dtype):
+        raise ValueError(f"invalid digest type '{dtype}'.")
+    return _digest_root() / dtype / f"{slug}.md"
+
+
+def _host_path(p: Path) -> str:
+    """Map a container digest path to its host path (for the agent/skill)."""
+    s = str(p)
+    if s.startswith(DIGEST_DIR):
+        return DIGEST_HOST_DIR + s[len(DIGEST_DIR):]
+    return s
+
+
+def _extract_toc(p: Path) -> list[dict]:
+    """TOC/bookmarks for a source doc. PDF → fitz.get_toc(); markdown/text →
+    heading lines. Returns [{level, title, page|line}]."""
+    if p.suffix.lower() == ".pdf":
+        import fitz
+        doc = fitz.open(str(p))
+        try:
+            toc = doc.get_toc()  # [[level, title, page], ...]
+            return [{"level": lv, "title": t, "page": pg}
+                    for lv, t, pg in toc]
+        finally:
+            doc.close()
+    try:
+        text = p.read_text(errors="replace")
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[dict] = []
+    for i, line in enumerate(text.splitlines(), start=1):
+        m = re.match(r"^(#{1,6})\s+(.*)", line.strip())
+        if m:
+            out.append({"level": len(m.group(1)),
+                        "title": m.group(2).strip(), "line": i})
+    return out
+
+
+def _sample_text(p: Path) -> str:
+    """First few pages (PDF) or first N chars (text) for classification."""
+    if p.suffix.lower() == ".pdf":
+        import fitz
+        doc = fitz.open(str(p))
+        try:
+            n = min(DIGEST_SAMPLE_PAGES, len(doc))
+            return "\n\n".join(
+                doc[i].get_text("text").strip() for i in range(n)
+            )[:DIGEST_SAMPLE_CHARS]
+        finally:
+            doc.close()
+    try:
+        return p.read_text(errors="replace")[:DIGEST_SAMPLE_CHARS]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _read_pages(p: Path, pages: list[int]) -> list[dict]:
+    """Read specific pages (1-based) from a source doc. PDF → fitz exact
+    pages (re-read, not chunk-filtered); non-PDF → whole text as one page."""
+    if p.suffix.lower() == ".pdf":
+        import fitz
+        doc = fitz.open(str(p))
+        try:
+            n = len(doc)
+            out = []
+            for pg in pages:
+                if 1 <= pg <= n:
+                    out.append({"page": pg,
+                                "text": doc[pg - 1].get_text("text").strip()})
+                else:
+                    out.append({"page": pg, "text": "",
+                                "error": f"page {pg} out of range (1-{n})"})
+            return out
+        finally:
+            doc.close()
+    try:
+        text = p.read_text(errors="replace")
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"could not read {p}: {e}")
+    return [{"page": None, "text": text}]
+
+
+def _split_sections(md: str) -> list[tuple[str, str]]:
+    """Split digest markdown on '## ' headings → [(section, content)].
+    The preamble (title + intro) becomes the 'overview' section."""
+    sections: list[tuple[str, str]] = []
+    cur_title = "overview"
+    cur: list[str] = []
+
+    def _flush() -> None:
+        body = "\n".join(cur).strip()
+        if body:
+            sections.append((cur_title, body))
+
+    for line in md.splitlines():
+        m = re.match(r"^##\s+(.*)", line)
+        if m:
+            _flush()
+            cur_title = m.group(1).strip()
+            cur = []
+        else:
+            cur.append(line)
+    _flush()
+    return sections
+
+
+# ---------------------------------------------------------------------------
 # MCP server + tools
 # ---------------------------------------------------------------------------
 
@@ -593,7 +740,10 @@ mcp = FastMCP(
         "add facts with kb_add_fact, query with kb_search. A 'description' "
         "is required when creating a new KB. kb_forget is two-step (matches "
         "first, confirm=true + ids to delete). kb_correct supersedes a "
-        "matched fact. kb_backup snapshots all kb_* collections."
+        "matched fact. kb_backup snapshots all kb_* collections. Digests "
+        "(structured models for procedural/systemic understanding) via "
+        "kb_digest (work order) + kb_get_pages (page reads) + "
+        "kb_digest_store / kb_digest_get / kb_digest_list."
     ),
     host=MCPS_HOST,
 )
@@ -601,7 +751,7 @@ mcp = FastMCP(
 
 def _format_hit(p, col: str, score: float | None = None) -> dict:
     pl = p.payload or {}
-    return {
+    out = {
         "id": str(p.id),
         "kb": col,
         "score": round(score, 4) if score is not None else None,
@@ -610,6 +760,11 @@ def _format_hit(p, col: str, score: float | None = None) -> dict:
         "page_range": pl.get("page_range"),
         "snippet": _truncate(pl.get("text", "")),
     }
+    if pl.get("digest_section"):
+        out["digest_section"] = pl.get("digest_section")
+        out["digest_slug"] = pl.get("digest_slug")
+        out["digest_type"] = pl.get("digest_type")
+    return out
 
 
 async def _vector_search(
@@ -1323,6 +1478,228 @@ async def kb_backup(include_sources: bool = False) -> dict:
         }
     finally:
         await client.close()
+
+
+# ---------------------------------------------------------------------------
+# Digest tools (kb_digest, kb_get_pages, kb_digest_store/get/list)
+# ---------------------------------------------------------------------------
+
+@mcp.tool(
+    name="kb_digest",
+    description=(
+        "Work order for digesting a document into a structured model. "
+        "Extracts the TOC/bookmarks, a content sample, and page count. If "
+        "`type` is given, returns a note for that template; if omitted, "
+        "returns candidate type hints for the agent to classify. The agent "
+        "(skill) then reads pages via kb_get_pages, fills the template, and "
+        "stores via kb_digest_store."
+    ),
+)
+async def kb_digest(source: str, type: Optional[str] = None) -> dict:
+    """Return a work order for digesting `source`.
+
+    Args:
+        source: Absolute container path under an allowed root (the doc
+            should already be ingested, or at least readable).
+        type: Optional digest type (game_system/story/whitepaper/
+            music_theory). Omit to get classification material.
+    """
+    p = _validate_source_path(source)
+    if not p.is_file():
+        raise ValueError(f"File not found: {source}")
+    toc = await asyncio.to_thread(_extract_toc, p)
+    page_count: Optional[int] = None
+    if p.suffix.lower() == ".pdf":
+        import fitz
+        d = fitz.open(str(p))
+        try:
+            page_count = len(d)
+        finally:
+            d.close()
+    sample = await asyncio.to_thread(_sample_text, p)
+    haystack = " ".join(t["title"] for t in toc[:120]).lower()
+    candidate_types = sorted(
+        (ty for ty, kws in _TYPE_HINTS.items()
+         if any(k in haystack for k in kws)),
+        key=len, reverse=True)
+    out: dict = {
+        "source": str(p), "doc_format": p.suffix.lower().lstrip("."),
+        "page_count": page_count, "toc_entries": len(toc),
+        "toc": toc[:200], "sample": sample,
+        "candidate_types": candidate_types,
+    }
+    if type:
+        out["type"] = type
+        out["note"] = ("Read the template for this type (skill-side), then "
+                       "kb_get_pages on the TOC-guided pages, fill the "
+                       "template, verify load-bearing claims, and "
+                       "kb_digest_store.")
+    else:
+        out["note"] = ("Classify the type from toc+sample (LLM judgment), "
+                       "then proceed to kb_get_pages and kb_digest_store.")
+    return out
+
+
+@mcp.tool(
+    name="kb_get_pages",
+    description=(
+        "Read specific pages (1-based) from a source document for the "
+        "digest map-reduce. PDF pages are re-read exactly via pymupdf (not "
+        "chunk-filtered). Non-PDF returns the whole text as one page. Use "
+        "the page numbers from kb_digest's TOC."
+    ),
+)
+async def kb_get_pages(source: str, pages: list[int]) -> dict:
+    """Read specific pages from `source`.
+
+    Args:
+        source: Absolute container path under an allowed root.
+        pages: 1-based page numbers to read (e.g. [15, 16, 17]).
+    """
+    p = _validate_source_path(source)
+    if not p.is_file():
+        raise ValueError(f"File not found: {source}")
+    if not pages:
+        raise ValueError("pages is required (a non-empty list of ints).")
+    result = await asyncio.to_thread(_read_pages, p, [int(x) for x in pages])
+    return {"source": str(p), "pages": result}
+
+
+@mcp.tool(
+    name="kb_digest_store",
+    description=(
+        "Store a digest: write the markdown file (source of truth) under "
+        "DIGEST_DIR/<type>/<slug>.md (+ optional .json), and split it into "
+        "section facts (kind=digest, shared digest_id) embedded into the "
+        "source doc's KB so kb_search finds it. `kb` (the source doc's KB) "
+        "is required."
+    ),
+)
+async def kb_digest_store(slug: str, type: str, md: str,
+                          json_str: Optional[str] = None,
+                          page_refs: Optional[dict] = None,
+                          kb: str = "", source: Optional[str] = None) -> dict:
+    """Store a digest (file + section facts).
+
+    Args:
+        slug: Short identifier (e.g. 'gurps_basic_4e').
+        type: Digest type (game_system/story/whitepaper/music_theory).
+        md: The digest markdown ('## ' sections become searchable facts).
+        json_str: Optional structured digest (stored as <slug>.json).
+        page_refs: Optional {section_title: page_range} for grounding.
+        kb: REQUIRED — the KB the source document lives in (e.g. 'gaming').
+        source: Optional source doc path (stored for linking).
+    """
+    if not kb or not kb.strip():
+        raise ValueError(
+            "kb is required (the source document's KB, e.g. 'gaming').")
+    dpath = _digest_path(slug, type)
+    dpath.parent.mkdir(parents=True, exist_ok=True)
+    dpath.write_text(md, encoding="utf-8")
+    if json_str:
+        dpath.with_suffix(".json").write_text(
+            json_str if isinstance(json_str, str)
+            else json.dumps(json_str, indent=2),
+            encoding="utf-8")
+    sections = _split_sections(md)
+    if not sections:
+        raise ValueError(
+            "digest produced no sections (need at least one '## ' heading).")
+    col = _kb_name(kb)
+    digest_id = hashlib.sha256(f"{slug}:{type}".encode()).hexdigest()
+    vecs = await _embed([s[1] for s in sections])
+    now = _now()
+    client = _client()
+    try:
+        await _ensure_collection(client, col,
+                                 f"Digests for documents in {col}")
+        points = []
+        for i, (title, content) in enumerate(sections):
+            pr = (page_refs or {}).get(title)
+            points.append({
+                "id": _point_id(f"digest:{digest_id}:{i}", 0),
+                "vector": vecs[i],
+                "payload": {
+                    "text": content, "kind": "digest", "source": str(dpath),
+                    "chunk_index": i, "page_range": pr, "sha256": None,
+                    "ingested_at": now, "updated_at": now,
+                    "digest_id": digest_id, "digest_type": type,
+                    "digest_slug": slug, "digest_section": title,
+                    "digest_source": source,
+                },
+            })
+        for i in range(0, len(points), 256):
+            await client.upsert(col, points=points[i:i + 256])
+        return {
+            "file_path": str(dpath), "host_path": _host_path(dpath),
+            "kb": col, "digest_id": digest_id, "sections": len(sections),
+            "fact_ids": [str(_point_id(f"digest:{digest_id}:{i}", 0))
+                         for i in range(len(sections))],
+        }
+    finally:
+        await client.close()
+
+
+@mcp.tool(
+    name="kb_digest_get",
+    description=(
+        "Retrieve a stored digest (the markdown file = source of truth, "
+        "plus optional .json). Use kb_digest_list to find slugs."
+    ),
+)
+async def kb_digest_get(slug: str, type: str) -> dict:
+    """Retrieve a digest by slug + type.
+
+    Args:
+        slug: Digest slug (e.g. 'gurps_basic_4e').
+        type: Digest type (game_system/story/whitepaper/music_theory).
+    """
+    dpath = _digest_path(slug, type)
+    if not dpath.is_file():
+        raise ValueError(f"No digest at {dpath}. Use kb_digest_list to find "
+                         f"slugs.")
+    md = dpath.read_text(encoding="utf-8")
+    out: dict = {"file_path": str(dpath), "host_path": _host_path(dpath),
+                 "type": type, "slug": slug, "md": md}
+    jpath = dpath.with_suffix(".json")
+    if jpath.is_file():
+        out["json"] = json.loads(jpath.read_text(encoding="utf-8"))
+    return out
+
+
+@mcp.tool(
+    name="kb_digest_list",
+    description=(
+        "List stored digests (by type, or all). Returns slug, type, host "
+        "path, mtime, and section count."
+    ),
+)
+async def kb_digest_list(type: Optional[str] = None) -> dict:
+    """List digests.
+
+    Args:
+        type: Optional digest type filter. Omit = all types.
+    """
+    root = _digest_root()
+    if type:
+        dirs = [root / type] if (root / type).is_dir() else []
+    else:
+        dirs = [d for d in root.iterdir() if d.is_dir()]
+    out: list[dict] = []
+    for d in dirs:
+        for f in sorted(d.glob("*.md")):
+            try:
+                nsec = len(_split_sections(f.read_text(encoding="utf-8")))
+            except Exception:  # noqa: BLE001
+                nsec = 0
+            out.append({
+                "slug": f.stem, "type": d.name,
+                "file_path": str(f), "host_path": _host_path(f),
+                "updated_at": datetime.fromtimestamp(
+                    f.stat().st_mtime, tz=timezone.utc).isoformat(),
+                "sections": nsec,
+            })
+    return {"digests": out, "count": len(out)}
 
 
 # ---------------------------------------------------------------------------

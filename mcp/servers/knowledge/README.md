@@ -53,12 +53,12 @@ mcp_knowledge (python:3.12-slim, :8000)
 - `kb_search` / `kb_forget` filter out `kind=manifest` and
   `superseded_by` points.
 
-## Tools (11)
+## Tools (16)
 
 | tool | purpose |
 |---|---|
 | `kb_overview` | Map of all KBs: descriptions, doc/chunk counts, last ingested. Call first. |
-| `kb_search` | Vector search (nomic 768-dim) across all KBs or one; keyword fallback; filters manifest + superseded. |
+| `kb_search` | Vector search (nomic 768-dim) across all KBs or one; keyword fallback; filters manifest + superseded. Surfaces `digest_section`/`digest_slug`/`digest_type` when a digest fact hits. |
 | `kb_get_document` | All chunks of one document, ordered, with page ranges. |
 | `kb_list_documents` | Per-document metadata per KB (or all KBs). |
 | `kb_recent_changes` | Ingested/updated within N days. |
@@ -68,6 +68,34 @@ mcp_knowledge (python:3.12-slim, :8000)
 | `kb_forget` | **Two-step** semantic delete: step 1 returns matches (deletes nothing); step 2 `confirm=true` + `ids` deletes. |
 | `kb_correct` | Supersede a matched fact (score gate) and store the correction. |
 | `kb_backup` | Snapshot all `kb_*` collections to `/home/chuck/data/backups/kb/` (+ optional source tar). |
+| `kb_digest` | **Digest work order**: TOC/bookmarks + content sample + page count + `candidate_types` (for a document, before building a digest). |
+| `kb_get_pages` | Read exact 1-based pages (PDF via pymupdf; whole text for non-PDF) — the targeted page reads a digest uses. |
+| `kb_digest_store` | Write a digest file + store each `## ` section as a searchable fact (`kind=digest`) in the source doc's KB. |
+| `kb_digest_get` | Retrieve a stored digest (md + optional json). |
+| `kb_digest_list` | List stored digests (by type), with mtime + section count. |
+
+## Digests (document-comprehension layer)
+
+A **digest** is a structured *model* of a document (not a summary) — the
+action-relevant structure (rules, formulas, tables, beats, components) with
+source refs — so a downstream task (generate a character, implement an
+algorithm, compute scales, analyze a film) can be run **from the digest** and
+**independently verified**. The LLM builds the digest (the `digest` pi skill);
+these MCP tools provide the deterministic scaffolding.
+
+- **Storage**: `/home/chuck/data/ai-kb/digests/<type>/<slug>.md` (host) =
+  `/data/ai-kb/digests` (container, read-write mount). Each `## ` section is
+  also stored as a `kind=digest` fact in the **source doc's KB**, so
+  `kb_search` finds digest sections alongside raw chunks.
+- **Digest point payload**: adds `digest_id` (sha256 of `slug:type`),
+  `digest_type`, `digest_slug`, `digest_section`, `digest_source` to the
+  standard point schema. `kb_search` surfaces these on hits.
+- **Types**: `game_system`, `story`, `whitepaper`, `music_theory`, `media`
+  (film/TV via vision frame analysis; refs are timecodes/chapters).
+- **Env**: `DIGEST_DIR` (container), `DIGEST_HOST_DIR` (host),
+  `KB_DIGEST_SAMPLE_PAGES`, `KB_DIGEST_SAMPLE_CHARS`.
+- **Re-digest** overwrites the file + re-embeds the section facts (same
+  `digest_id`). Files are written by the container (root-owned, world-readable).
 
 ## Ingestion rules
 
