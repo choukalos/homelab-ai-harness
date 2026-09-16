@@ -79,6 +79,10 @@ If the user asked for one lens, lead with it; offer the others.
   interpretive — say so, and ground them in what the frames actually show.
 
 ## Notes
+- **`vision_extract_frames` fps param**: takes `"full"` or a number, **not**
+  `"scene"` (that errors). Scene detection is automatic for videos under 5
+  min (single-pass scene extraction); longer videos use chunked scene
+  extraction. Omit `fps` for the default behavior.
 - Long videos: `vision_analyze_video` is long-running (minutes). For very long
   works, analyze in chunks or sample scenes.
 - The digest is stored under `/home/chuck/data/ai-kb/digests/media/<slug>.md`

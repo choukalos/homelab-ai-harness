@@ -50,6 +50,11 @@ Every template has a `## Downstream Task` and a `## Verification` section —
 verification is not optional (a confident-but-wrong digest is otherwise
 indistinguishable from a correct one).
 
+**Status:** all five types are stress-tested end-to-end (harness:
+`/home/chuck/workspace/tm_test/run_all.sh`, 5/5 PASS) with one exemplar
+digest per type stored in the KB via `kb_digest_store` (`attention_transformer`,
+`gurps_basic_4e`, `music_theory_core`, `time_machine`, `peanut_doc`).
+
 ## Skills
 
 ### Comprehension
@@ -89,7 +94,24 @@ indistinguishable from a correct one).
   `digest-algo/references/transformer_from_digest.py`,
   `ttrpg/scripts/{dice,state}.py`.
 - **Stress-test harness**: `/home/chuck/workspace/tm_test/run_all.sh` (proves
-  the digest capability across all four non-media domains).
+  the digest capability across all five domains, incl. media).
+
+## Extending the digest layer (add a new type, e.g. `recipe`)
+
+1. **Template** — add `digest/references/templates/<type>.md`; copy an
+   existing one and keep the `## Downstream Task` and `## Verification`
+   sections. Update `digest/references/templates/README.md`.
+2. **Applier skill** — new dir `digest-<name>/` with a `SKILL.md`
+   (pi-native: no `skill.yml`; frontmatter `name` must match the dir name —
+   lowercase a-z, 0-9, hyphens only). It reads the digest via
+   `kb_digest_get`/`kb_digest` and runs the downstream task.
+3. **Verification pattern** — a per-type independent check (script or
+   grounded re-read); wire it into the tm_test harness (`run_all.sh`).
+4. **Docs** — update the type tables here and in the main `README.md`, and
+   the `digest` skill's type list.
+5. **KB** — store exemplar digests with `kb_digest_store` (type = new type;
+   they land at `/home/chuck/data/ai-kb/digests/<type>/<slug>.md` +
+   `kind=digest` facts in the source doc's KB).
 
 ## Notes
 - **Skills are distributed via this dir** — pi's settings already point at
