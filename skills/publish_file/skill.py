@@ -7,6 +7,10 @@ Purpose:
   /home/chuck/data/media/public/{subdirectory}/, where the portal container
   serves it at https://choukalos.com/files/{subdirectory}/{name}.
 
+  URL formula: the subdirectory is APPENDED to the /files/ base —
+  e.g. subdirectory=ai → https://choukalos.com/files/ai/<name>.
+  'files' is not a valid subdirectory (it would produce /files/files/<name>).
+
 Security (blog-todo.md B5 / §2.3):
   - Source must be a regular file under an approved root
     (/home/chuck/data/media/ or /home/chuck/workspace/) — no traversal,
@@ -44,7 +48,10 @@ SOURCE_ROOTS = [
     Path("/home/chuck/data/media"),
     Path("/home/chuck/workspace"),
 ]
-SUBDIRS = ("ai", "files", "images", "audio", "video")
+# NOTE: 'files' is intentionally NOT in the allowlist — the drop zone itself
+# is served at https://choukalos.com/files/, so a 'files' subdirectory would
+# produce a confusing /files/files/<name> URL (see 2026-09-16 kaelen incident).
+SUBDIRS = ("ai", "images", "audio", "video")
 MAX_BYTES = int(os.environ.get("PUBLISH_FILE_MAX_BYTES", str(500 * 1024 * 1024)))
 PUBLIC_BASE = os.environ.get("PUBLISH_FILE_PUBLIC_BASE", "https://choukalos.com/files")
 MAX_NAME_LEN = 150
@@ -91,6 +98,12 @@ def _validate_source(source_path: str) -> Path:
 
 def _validate_destination(subdirectory: str, destination_name: str) -> Path:
     """Validate and build the destination path (always inside PUBLISH_ROOT)."""
+    if subdirectory == "files":
+        raise PublishError(
+            "subdirectory 'files' is not allowed: the drop zone is already "
+            "served at https://choukalos.com/files/, so it would produce a "
+            f"/files/files/... URL. Use one of {list(SUBDIRS)} (default: 'ai')."
+        )
     if subdirectory not in SUBDIRS:
         raise PublishError(f"subdirectory must be one of {list(SUBDIRS)}")
     if "/" in destination_name or "\\" in destination_name:
