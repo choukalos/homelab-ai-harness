@@ -14,9 +14,36 @@ Cost model (v2.2, see /home/chuck/homelab/METRICS.md "Media Work Metering
                remains visible in Row 2 as a cross-check)
 """
 import json
+import re
 
 DS = {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
 SCHEMA = 39
+
+# Per-user colors, fixed across every panel so a user is recognizable
+# anywhere on the dashboard. Add new users here when they appear.
+USER_COLORS = {
+    "chuck": "#73BF69",           # green
+    "dylan": "#1F60FC",           # blue
+    "memory-service": "#F2C94C",  # yellow
+    "default_user_id": "#EA62AF", # pink (master-key traffic)
+    "None": "#666666",            # gray (unattributed traffic)
+}
+
+
+def user_overrides():
+    """Field overrides pinning each user's series to a fixed color.
+
+    Matches display names like 'chuck' or 'chuck / image' (legendFormat
+    '{{user}}', '{{user}} / {{stage}}', '{{user}} / in', ...).
+    Options use Grafana's documented /pattern/flags form so the regex is
+    used verbatim (plain strings get wrapped in ^...$ by the UI parser).
+    """
+    return [{
+        "matcher": {"id": "byRegexp",
+                    "options": "/^" + re.escape(user) + r"( \/ .+)?$/"},
+        "properties": [{"id": "color",
+                        "value": {"mode": "fixed", "fixedColor": color}}],
+    } for user, color in USER_COLORS.items()]
 
 # ---------------------------------------------------------------- helpers
 def stat(pid, title, expr, unit="currencyUSD", w=6, x=0, y=0, legend="A",
@@ -43,8 +70,36 @@ def stat(pid, title, expr, unit="currencyUSD", w=6, x=0, y=0, legend="A",
     return p
 
 
+def bar(pid, title, targets, unit="short", w=8, x=0, y=0, desc=None,
+        decimals=0, by_user=False):
+    p = {
+        "id": pid, "title": title, "type": "barchart", "datasource": DS,
+        "gridPos": {"h": 8, "w": w, "x": x, "y": y},
+        "targets": targets,
+        "fieldConfig": {"defaults": {
+            "unit": unit, "decimals": decimals,
+            "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": None}]},
+        }},
+        "options": {
+            "legend": {"displayMode": "list", "placement": "bottom",
+                       "calcs": []},
+            "tooltip": {"mode": "multi"},
+            "stacking": {"mode": "none"},
+            "showValue": "auto",
+            "orientation": "vertical",
+            "barWidth": 0.6, "groupWidth": 0.7, "barRadius": 0,
+        },
+    }
+    if desc:
+        p["description"] = desc
+    if by_user:
+        p["fieldConfig"]["overrides"] = user_overrides()
+    return p
+
+
 def ts(pid, title, targets, unit="short", w=12, x=0, y=0, desc=None,
-       fill="0.1"):
+       fill="0.1", by_user=False):
     p = {
         "id": pid, "title": title, "type": "timeseries", "datasource": DS,
         "gridPos": {"h": 8, "w": w, "x": x, "y": y},
@@ -54,13 +109,14 @@ def ts(pid, title, targets, unit="short", w=12, x=0, y=0, desc=None,
                                       "lineWidth": 2, "spanNulls": False},
             "thresholds": {"mode": "absolute", "steps": [
                 {"color": "green", "value": None}]},
-            "color": {"mode": "palette"},
         }},
         "options": {"legend": {"displayMode": "list", "placement": "bottom",
                                "calcs": []}, "tooltip": {"mode": "multi"}},
     }
     if desc:
         p["description"] = desc
+    if by_user:
+        p["fieldConfig"]["overrides"] = user_overrides()
     return p
 
 
@@ -86,6 +142,28 @@ MEDIA_COST = 'sum(increase(media_cost_usd_total{user=~"$user"}[$__range]))'
 MEDIA_JOBS = ('sum(increase(media_jobs_total{user=~"$user", status="done"}'
               '[$__range]))')
 MEDIA_TOK = 'sum(increase(media_tokens_total{user=~"$user"}[$__range]))'
+# Row 6: per-user token & spend breakdown (LiteLLM side only).
+TOK_IN_BY_USER = ('sum by (user) (increase(litellm_input_tokens_metric_total'
+                  '{user=~"$user"}[$__range]))')
+TOK_OUT_BY_USER = ('sum by (user) (increase(litellm_output_tokens_metric_total'
+                   '{user=~"$user"}[$__range]))')
+LLM_SPEND_BY_USER = ('sum by (user) (increase(litellm_spend_metric_total'
+                     '{user=~"$user"}[$__range]))')
+REQ_BY_USER_5M = ('sum by (user) (increase(litellm_proxy_total_requests_metric_total'
+                  '{user=~"$user"}[5m]))')
+# Row 7: model breakdown + LLM performance (migrated 2026-09-16 from the
+# retired 'LLM & GPU Monitor' dashboard — the only panels with no other home).
+FAILED_RANGE = 'sum(increase(litellm_proxy_failed_requests_metric_total[$__range]))'
+LATENCY_AVG = ('sum(rate(litellm_request_total_latency_metric_sum[$__range])) / '
+               'sum(rate(litellm_request_total_latency_metric_count[$__range]))')
+TTFT_AVG = ('sum(rate(litellm_llm_api_time_to_first_token_metric_sum[$__range])) / '
+            'sum(rate(litellm_llm_api_time_to_first_token_metric_count[$__range]))')
+REQ_BY_MODEL = ('sum by (requested_model) (increase(litellm_proxy_total_requests_metric_total'
+                '{status_code="200"}[$__range]))')
+TOK_IN_BY_MODEL = ('sum by (requested_model) (increase(litellm_input_tokens_metric_total'
+                   '[$__range]))')
+TOK_OUT_BY_MODEL = ('sum by (requested_model) (increase(litellm_output_tokens_metric_total'
+                    '[$__range]))')
 # Total work $: LLM (incl. storyboard) + media excluding storyboard (no double count).
 # `or` fallback: while media_cost_usd_total doesn't exist yet (Matrix v2 not
 # shipped), the A+B vector op yields empty — `or A` keeps the panel alive with
@@ -133,6 +211,7 @@ panels.append(stat(13, "LLM chat requests (range)", LLM_REQ, unit="short",
 panels.append(ts(14, "LLM spend by user (5m)",
                  [tgt('sum by (user) (increase(litellm_spend_metric_total[5m]))',
                       "{{user}}", "A")], unit="currencyUSD", w=12, x=0, y=7,
+                 by_user=True,
                  desc="Per-user LLM spend rate. Storyboard LLM shows up here "
                       "(model qwen38-27b) — that is why Row 3 excludes "
                       "stage=storyboard from the media side."))
@@ -170,11 +249,11 @@ panels.append(stat(23, "Metering online", "media_up", unit="short", w=6, x=18,
 panels.append(ts(24, "Media cost by user & stage (5m)",
                  [tgt('sum by (user, stage) (increase(media_cost_usd_total[5m]))',
                       "{{user}} / {{stage}}", "A")],
-                 unit="currencyUSD", w=12, x=0, y=21))
+                 unit="currencyUSD", w=12, x=0, y=21, by_user=True))
 panels.append(ts(25, "Media work units by user & kind (5m)",
                  [tgt('sum by (user, kind) (increase(media_work_units_total[5m]))',
                       "{{user}} / {{kind}}", "A")],
-                 unit="short", w=12, x=12, y=21,
+                 unit="short", w=12, x=12, y=21, by_user=True,
                  desc="mpix_steps (images), mpix_frames (video), "
                       "audio_seconds (TTS/music/SFX)."))
 
@@ -190,12 +269,12 @@ panels.append(stat(30, "Total work $ (range)", TOTAL_RANGE, w=8, x=0, y=30,
                    desc="Everything the AI stack produced, priced."))
 panels.append(ts(31, "Total work $ by user (range)",
                  [tgt(TOTAL_BY_USER_RANGE, "{{user}}", "A")],
-                 unit="currencyUSD", w=8, x=8, y=30,
+                 unit="currencyUSD", w=8, x=8, y=30, by_user=True,
                  desc="Bar-style: use a barchart view for a per-user split."))
 panels[ -1]["type"] = "barchart"
 panels.append(ts(32, "Total work $ by user (5m rate)",
                  [tgt(TOTAL_BY_USER_5M, "{{user}}", "A")],
-                 unit="currencyUSD", w=8, x=16, y=30))
+                 unit="currencyUSD", w=8, x=16, y=30, by_user=True))
 
 # --- Row 4: GPU $ & payback
 panels.append(row(4, "GPU $ & payback", 38,
@@ -239,6 +318,69 @@ panels.append(ts(53, "Jobs by status (5m)",
                       "{{status}}", "A")],
                  unit="short", w=12, x=0, y=64))
 
+# --- Row 6: Token & Spend usage by user
+# Note: barchart x-axis is the (single) time point of the range query, so each
+# series renders as its own bar — input/output are paired bars per user, not
+# stacked segments (stacking would merge all users into one bar).
+panels.append(row(6, "Token & Spend usage by user", 72,
+                  "Per-user breakdown for the selected time range (honors the "
+                  "User variable). Tokens = LiteLLM input+output only — the "
+                  "pipeline's media_tokens_total is excluded because storyboard "
+                  "LLM tokens already count here (routed via the proxy with the "
+                  "user's key). Spend = LLM-only (litellm_spend_metric_total); "
+                  "the LLM+media total work $ is in the 'Total work $' row. "
+                  "Requests cover all proxy routes (chat, embeddings, MCP, "
+                  "skills); default_user_id = master-key traffic."))
+panels.append(bar(60, "Token usage by user (range)",
+                  [tgt(TOK_IN_BY_USER, "{{user}} / in", "A"),
+                   tgt(TOK_OUT_BY_USER, "{{user}} / out", "B")],
+                  unit="short", w=8, x=0, y=73, by_user=True,
+                  desc="LLM tokens billed through the proxy for the selected "
+                       "range: input and output shown as paired bars per user."))
+panels.append(bar(61, "LLM spend by user (range)",
+                  [tgt(LLM_SPEND_BY_USER, "{{user}}", "A")],
+                  unit="currencyUSD", w=8, x=8, y=73, decimals=4, by_user=True,
+                  desc="LLM-only spend (litellm_spend_metric_total). LLM + "
+                       "media total work $: see the 'Total work $' row."))
+panels.append(ts(62, "Requests over time by user (5m)",
+                 [tgt(REQ_BY_USER_5M, "{{user}}", "A")],
+                 unit="short", w=8, x=16, y=73, by_user=True,
+                 desc="All proxy routes (chat, embeddings, MCP, skills), 5m "
+                      "windows. Includes default_user_id (master-key traffic)."))
+
+# --- Row 7: Models & performance (migrated from the retired LLM & GPU Monitor)
+panels.append(row(7, "Models & performance (LiteLLM)", 81,
+                  "Which models drive usage, and how fast/unreliable the proxy "
+                  "is. Migrated from the 'LLM & GPU Monitor' dashboard on "
+                  "2026-09-16 (that dashboard was retired: per-user spend was "
+                  "superseded by this dashboard, GPU temp/VRAM is in the DCGM "
+                  "dashboard, and its key-budget row was dead — no budgets are "
+                  "configured and litellm_api_key_max_budget_metric no longer "
+                  "emits)."))
+panels.append(stat(70, "Failed requests (range)", FAILED_RANGE, unit="short",
+                   w=8, x=0, y=82, decimals=0,
+                   desc="Failed proxy requests in the selected range "
+                        "(litellm_proxy_failed_requests_metric_total)."))
+panels.append(stat(71, "Avg latency (range)", LATENCY_AVG, unit="s",
+                   w=8, x=8, y=82, decimals=2,
+                   desc="Total latency / request count over the range "
+                        "(litellm_request_total_latency_metric)."))
+panels.append(stat(72, "Time to first token (range)", TTFT_AVG, unit="s",
+                   w=8, x=16, y=82, decimals=2,
+                   desc="Avg TTFT over the range "
+                        "(litellm_llm_api_time_to_first_token_metric)."))
+panels.append(bar(73, "Requests by model (range)",
+                  [tgt(REQ_BY_MODEL, "{{requested_model}}", "A")],
+                  unit="short", w=12, x=0, y=87, decimals=0,
+                  desc="Successful proxy requests per model in the range. "
+                       "Embedding models dominate request COUNT but not tokens."))
+panels.append(bar(74, "Tokens by model (range, in/out)",
+                  [tgt(TOK_IN_BY_MODEL, "{{requested_model}} / in", "A"),
+                   tgt(TOK_OUT_BY_MODEL, "{{requested_model}} / out", "B")],
+                  unit="short", w=12, x=12, y=87, decimals=0,
+                  desc="Input/output tokens per model in the range (paired "
+                       "bars). matrix-coder dominates output tokens."))
+
 # ---------------------------------------------------------------- dashboard
 dash = {
     "annotations": {"list": []},
@@ -272,12 +414,12 @@ dash = {
          "type": "constant", "query": "43800",
          "current": {"text": "43800", "value": "43800"}, "hide": 1},
     ]},
-    "time": {"from": "now-1h", "to": "now"},
+    "time": {"from": "now-30d", "to": "now"},
     "timepicker": {},
     "timezone": "browser",
     "title": "AI Work & Spend",
     "uid": "ai-work-spend",
-    "version": 1,
+    "version": 3,
     "weekStart": "",
 }
 

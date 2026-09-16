@@ -277,11 +277,85 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
-    }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -337,9 +411,6 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
     }
    },
@@ -629,11 +700,85 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
-    }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -683,11 +828,85 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
-    }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -807,11 +1026,85 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
-    }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -862,11 +1155,85 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
-    }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -1095,9 +1462,6 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
     }
    },
@@ -1150,9 +1514,6 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
     }
    },
@@ -1326,9 +1687,6 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
     }
    },
@@ -1380,9 +1738,6 @@
         "value": null
        }
       ]
-     },
-     "color": {
-      "mode": "palette"
      }
     }
    },
@@ -1396,6 +1751,716 @@
      "mode": "multi"
     }
    }
+  },
+  {
+   "id": 6,
+   "type": "row",
+   "title": "Token & Spend usage by user",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 72
+   },
+   "panels": [],
+   "description": "Per-user breakdown for the selected time range (honors the User variable). Tokens = LiteLLM input+output only \u2014 the pipeline's media_tokens_total is excluded because storyboard LLM tokens already count here (routed via the proxy with the user's key). Spend = LLM-only (litellm_spend_metric_total); the LLM+media total work $ is in the 'Total work $' row. Requests cover all proxy routes (chat, embeddings, MCP, skills); default_user_id = master-key traffic."
+  },
+  {
+   "id": 60,
+   "title": "Token usage by user (range)",
+   "type": "barchart",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 0,
+    "y": 73
+   },
+   "targets": [
+    {
+     "expr": "sum by (user) (increase(litellm_input_tokens_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "{{user}} / in",
+     "refId": "A"
+    },
+    {
+     "expr": "sum by (user) (increase(litellm_output_tokens_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "{{user}} / out",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    },
+    "stacking": {
+     "mode": "none"
+    },
+    "showValue": "auto",
+    "orientation": "vertical",
+    "barWidth": 0.6,
+    "groupWidth": 0.7,
+    "barRadius": 0
+   },
+   "description": "LLM tokens billed through the proxy for the selected range: input and output shown as paired bars per user."
+  },
+  {
+   "id": 61,
+   "title": "LLM spend by user (range)",
+   "type": "barchart",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 8,
+    "y": 73
+   },
+   "targets": [
+    {
+     "expr": "sum by (user) (increase(litellm_spend_metric_total{user=~\"$user\"}[$__range]))",
+     "legendFormat": "{{user}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    },
+    "stacking": {
+     "mode": "none"
+    },
+    "showValue": "auto",
+    "orientation": "vertical",
+    "barWidth": 0.6,
+    "groupWidth": 0.7,
+    "barRadius": 0
+   },
+   "description": "LLM-only spend (litellm_spend_metric_total). LLM + media total work $: see the 'Total work $' row."
+  },
+  {
+   "id": 62,
+   "title": "Requests over time by user (5m)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 8,
+    "x": 16,
+    "y": 73
+   },
+   "targets": [
+    {
+     "expr": "sum by (user) (increase(litellm_proxy_total_requests_metric_total{user=~\"$user\"}[5m]))",
+     "legendFormat": "{{user}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 10,
+      "lineWidth": 2,
+      "spanNulls": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^chuck( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#73BF69"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^dylan( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#1F60FC"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^memory\\-service( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2C94C"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^default_user_id( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#EA62AF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^None( \\/ .+)?$/"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#666666"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "description": "All proxy routes (chat, embeddings, MCP, skills), 5m windows. Includes default_user_id (master-key traffic)."
+  },
+  {
+   "id": 7,
+   "type": "row",
+   "title": "Models & performance (LiteLLM)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 81
+   },
+   "panels": [],
+   "description": "Which models drive usage, and how fast/unreliable the proxy is. Migrated from the 'LLM & GPU Monitor' dashboard on 2026-09-16 (that dashboard was retired: per-user spend was superseded by this dashboard, GPU temp/VRAM is in the DCGM dashboard, and its key-budget row was dead \u2014 no budgets are configured and litellm_api_key_max_budget_metric no longer emits)."
+  },
+  {
+   "id": 70,
+   "title": "Failed requests (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 8,
+    "x": 0,
+    "y": 82
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(litellm_proxy_failed_requests_metric_total[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "Failed proxy requests in the selected range (litellm_proxy_failed_requests_metric_total)."
+  },
+  {
+   "id": 71,
+   "title": "Avg latency (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 8,
+    "x": 8,
+    "y": 82
+   },
+   "targets": [
+    {
+     "expr": "sum(rate(litellm_request_total_latency_metric_sum[$__range])) / sum(rate(litellm_request_total_latency_metric_count[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "Total latency / request count over the range (litellm_request_total_latency_metric)."
+  },
+  {
+   "id": 72,
+   "title": "Time to first token (range)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 8,
+    "x": 16,
+    "y": 82
+   },
+   "targets": [
+    {
+     "expr": "sum(rate(litellm_llm_api_time_to_first_token_metric_sum[$__range])) / sum(rate(litellm_llm_api_time_to_first_token_metric_count[$__range]))",
+     "legendFormat": "A",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    }
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "auto"
+   },
+   "description": "Avg TTFT over the range (litellm_llm_api_time_to_first_token_metric)."
+  },
+  {
+   "id": 73,
+   "title": "Requests by model (range)",
+   "type": "barchart",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 87
+   },
+   "targets": [
+    {
+     "expr": "sum by (requested_model) (increase(litellm_proxy_total_requests_metric_total{status_code=\"200\"}[$__range]))",
+     "legendFormat": "{{requested_model}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    },
+    "stacking": {
+     "mode": "none"
+    },
+    "showValue": "auto",
+    "orientation": "vertical",
+    "barWidth": 0.6,
+    "groupWidth": 0.7,
+    "barRadius": 0
+   },
+   "description": "Successful proxy requests per model in the range. Embedding models dominate request COUNT but not tokens."
+  },
+  {
+   "id": 74,
+   "title": "Tokens by model (range, in/out)",
+   "type": "barchart",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 87
+   },
+   "targets": [
+    {
+     "expr": "sum by (requested_model) (increase(litellm_input_tokens_metric_total[$__range]))",
+     "legendFormat": "{{requested_model}} / in",
+     "refId": "A"
+    },
+    {
+     "expr": "sum by (requested_model) (increase(litellm_output_tokens_metric_total[$__range]))",
+     "legendFormat": "{{requested_model}} / out",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    }
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "multi"
+    },
+    "stacking": {
+     "mode": "none"
+    },
+    "showValue": "auto",
+    "orientation": "vertical",
+    "barWidth": 0.6,
+    "groupWidth": 0.7,
+    "barRadius": 0
+   },
+   "description": "Input/output tokens per model in the range (paired bars). matrix-coder dominates output tokens."
   }
  ],
  "refresh": "30s",
@@ -1482,13 +2547,13 @@
   ]
  },
  "time": {
-  "from": "now-1h",
+  "from": "now-30d",
   "to": "now"
  },
  "timepicker": {},
  "timezone": "browser",
  "title": "AI Work & Spend",
  "uid": "ai-work-spend",
- "version": 1,
+ "version": 3,
  "weekStart": ""
 }
