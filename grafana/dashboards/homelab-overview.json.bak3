@@ -1226,8 +1226,7 @@
     {
      "expr": "100 * (1 - (sum by (instance) (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|cifs|rootfs|iso9660|vfat\", device!~\"loop.*\"}) / sum by (instance) (node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs|cifs|rootfs|iso9660|vfat\", device!~\"loop.*\"})))",
      "legendFormat": "{{instance}}",
-     "refId": "A",
-     "instant": true
+     "refId": "A"
     }
    ],
    "fieldConfig": {
@@ -1290,19 +1289,25 @@
     {
      "expr": "sum by (instance) (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|cifs|rootfs|iso9660|vfat\", device!~\"loop.*\"})",
      "legendFormat": "{{instance}}",
-     "refId": "A",
-     "instant": true
+     "refId": "A"
     }
    ],
    "fieldConfig": {
     "defaults": {
      "unit": "bytes",
      "thresholds": {
-      "mode": "absolute",
       "steps": [
        {
         "color": "green",
         "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 50
+       },
+       {
+        "color": "red",
+        "value": 80
        }
       ]
      },
@@ -1311,105 +1316,7 @@
      "color": {
       "mode": "thresholds"
      }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byRegexp",
-       "options": "/^athena$/"
-      },
-      "properties": [
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 5757618408653
-          }
-         ]
-        }
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byRegexp",
-       "options": "/^lego$/"
-      },
-      "properties": [
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 8542049218355
-          }
-         ]
-        }
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byRegexp",
-       "options": "/^matrix$/"
-      },
-      "properties": [
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 359486608179
-          }
-         ]
-        }
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byRegexp",
-       "options": "/^thor$/"
-      },
-      "properties": [
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 47848403763
-          }
-         ]
-        }
-       }
-      ]
-     }
-    ]
+    }
    },
    "options": {
     "colorMode": "background",
