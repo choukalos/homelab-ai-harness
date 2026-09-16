@@ -93,6 +93,9 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SERVER_ROOT_URL=http://localhost:3001
+      # Land users on Homelab Overview instead of the default (unified) home page.
+      # Applies to users without a personal home-dashboard preference (incl. anonymous).
+      - GF_USERS_HOME_PAGE=/d/homelab-overview-dashboard
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     depends_on:
       - victoria-metrics

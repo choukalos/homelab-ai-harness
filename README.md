@@ -358,7 +358,9 @@ Config:
 | `llm.choukalos.com` | LiteLLM proxy | `X-API-Key` |
 | `plausible.choukalos.com` | Plausible script + API only (admin blocked from internet) | None (script/API); admin via LAN only at `192.168.4.54:8082` |
 
-Grafana is LAN-only (port 3001, SSH tunnel only).
+Grafana is LAN-only (port 3001, SSH tunnel only). Anonymous read-only
+(Viewer) access is enabled, and `/` lands on the Homelab Overview dashboard
+(`GF_USERS_HOME_PAGE`); see `grafana/dashboards/README.md` for details.
 
 ---
 
