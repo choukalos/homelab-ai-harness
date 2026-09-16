@@ -26,6 +26,11 @@ services:
       - KB_ALLOWED_ROOTS=/data/media,/data/workspace,/data/ai-kb/raw
       # Writable backup target for kb_backup (host: /home/chuck/data/backups/kb).
       - KB_BACKUP_DIR=/backups/kb
+      # Digest storage (host: /home/chuck/data/ai-kb/digests). Digests are a
+      # higher-level model of a doc; file = source of truth, section facts go
+      # into the source doc's KB.
+      - DIGEST_DIR=/data/ai-kb/digests
+      - DIGEST_HOST_DIR=/home/chuck/data/ai-kb/digests
       - QDRANT_TIMEOUT=60
     restart: unless-stopped
     networks:
@@ -35,6 +40,7 @@ services:
       - /home/chuck/data/media:/data/media:ro
       - /home/chuck/data/workspace:/data/workspace:ro
       - /home/chuck/data/backups/kb:/backups/kb:rw
+      - /home/chuck/data/ai-kb/digests:/data/ai-kb/digests:rw
 
   mcp_search:
     build:
