@@ -265,10 +265,29 @@ implement an algorithm, compute scales, analyze a film) runs *from the digest*
 and is independently verified. `mcp_knowledge` adds 5 tools (`kb_digest`,
 `kb_get_pages`, `kb_digest_store`, `kb_digest_get`, `kb_digest_list`); digests
 are stored at `/home/chuck/data/ai-kb/digests/<type>/<slug>.md` + as
-`kind=digest` facts in the source doc's KB. The LLM builds them via the
-`digest` pi skill; applier skills (`ttrpg`, `digest-book`, `digest-algo`,
-`digest-music`, `digest-media`) run tasks from them. Types: `game_system`,
-`story`, `whitepaper`, `music_theory`, `media`.
+`kind=digest` facts in the source doc's KB (semantically searchable via
+`kb_search`). The LLM builds them via the `digest` pi skill; applier skills
+(`ttrpg`, `digest-book`, `digest-algo`, `digest-music`, `digest-media`) run
+tasks from them. Types: `game_system`, `story`, `whitepaper`, `music_theory`,
+`media`.
+
+**Status:** all five types are stress-tested end-to-end (harness:
+`/home/chuck/workspace/tm_test/run_all.sh`, 5/5 PASS) and one exemplar digest
+per type is stored in the KB (`attention_transformer`, `gurps_basic_4e`,
+`music_theory_core`, `time_machine`, `peanut_doc`). Every digest carries a
+`## Verification` section — the stress test proved a digest can be
+confident-but-wrong (the music test caught a real sign error), so verification
+of load-bearing claims is mandatory, not optional.
+
+**Extending the digest layer** (add a new type, e.g. `recipe`):
+1. Add a template at `agents-skills/digest/references/templates/<type>.md`
+   (copy an existing one; keep `Downstream Task` + `Verification` sections).
+2. Add an applier skill `digest-<name>` under `agents-skills/` (pi-native,
+   no `skill.yml`; frontmatter `name` = dir name, lowercase/hyphens).
+3. Write the per-type verification pattern (a script or a grounded re-read)
+   and wire it into the tm_test harness.
+4. Update the type tables here + in `agents-skills/README.md`, and the
+   `digest` skill's type list.
 
 ---
 
