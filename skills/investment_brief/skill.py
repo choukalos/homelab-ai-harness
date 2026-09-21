@@ -323,29 +323,97 @@ def _run_sql(client: Any, query: str, database: str = DATABASE) -> list[dict]:
         logger.warning("SQL returned no results: %s", query[:120])
         return []
 
-    # Handle various response formats from LiteLLM MCP gateway
-    # The gateway may return: {result: {...}}, {rows: [...]}, {data: [...]}, {output: [...]}
-    rows = result.get("result", result.get("rows", result.get("data", result.get("output", []))))
-    if isinstance(result.get("result"), dict):
+    # Handle various response formats from the LiteLLM MCP gateway:
+    # - raw MCP CallToolResult: {"content": [{type: text, text: json}], "structuredContent": ...}
+    # - runner-normalized: {"result": {...}, "output": [{type: text, ...}]}
+    # - flat: {"rows": [...]} / {"data": [...]}
+    rows: Any = None
+
+    # 1. structuredContent (raw MCP)
+    sc = result.get("structuredContent")
+    if isinstance(sc, dict):
+        rows = sc.get("rows", sc.get("data", sc.get("results")))
+
+    # 2. runner-normalized result key
+    if rows is None and isinstance(result.get("result"), dict):
         inner = result["result"]
-        # The inner dict may have 'rows', 'data', or be wrapped as {results: ...}
-        rows = inner.get("rows", inner.get("data", inner.get("results", inner)))
-    # If rows is a list of {type: 'text', text: json_str} (MCP content format), extract the JSON
-    if isinstance(rows, list) and len(rows) > 0 and isinstance(rows[0], dict) and rows[0].get("type") == "text":
-        try:
-            extracted = json.loads(rows[0].get("text", "[]"))
-            if isinstance(extracted, list):
-                rows = extracted
-            elif isinstance(extracted, dict):
-                # run_query returns {rows: [...], columns: [...], count: N}
-                rows = extracted.get("rows", extracted.get("data", [extracted]))
-        except (json.JSONDecodeError, TypeError):
-            pass
+        rows = inner.get("rows", inner.get("data", inner.get("results")))
+
+    # 3. flat top-level
+    if rows is None:
+        rows = result.get("rows", result.get("data"))
+
+    # 4. JSON embedded in text content items (raw "content" or runner "output")
+    if not isinstance(rows, list):
+        for key in ("content", "output"):
+            items = result.get(key)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not (isinstance(item, dict) and item.get("type") == "text"):
+                    continue
+                try:
+                    extracted = json.loads(item.get("text", "[]"))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(extracted, list):
+                    rows = extracted
+                    break
+                if isinstance(extracted, dict):
+                    # run_query returns {rows: [...], columns: [...], count: N}
+                    rows = extracted.get("rows", extracted.get("data", [extracted]))
+                    break
+            if isinstance(rows, list):
+                break
+
     # If rows is a single dict (not a list), wrap it
     if isinstance(rows, dict):
         rows = [rows]
 
     return rows if isinstance(rows, list) else []
+
+
+def _extract_news_items(result: Any) -> list:
+    """
+    Extract the list of news items from an MCP search_news response.
+
+    Handles the raw MCP CallToolResult shape
+    ({"content": [...], "structuredContent": {...}}) as well as the
+    runner-normalized shape ({"result": {...}, "output": [...]}).
+    """
+    if not isinstance(result, dict):
+        return []
+
+    candidates: list[dict] = []
+    if isinstance(result.get("structuredContent"), dict):
+        candidates.append(result["structuredContent"])
+    if isinstance(result.get("result"), dict):
+        candidates.append(result["result"])
+    candidates.append(result)
+
+    for cand in candidates:
+        for key in ("result", "results", "data", "items", "matches"):
+            val = cand.get(key)
+            if isinstance(val, list) and val and isinstance(val[0], dict):
+                return val
+
+    # Last resort: JSON embedded in text content items
+    for key in ("content", "output"):
+        for item in result.get(key) or []:
+            if not (isinstance(item, dict) and item.get("type") == "text"):
+                continue
+            try:
+                parsed = json.loads(item.get("text", ""))
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                return parsed
+            if isinstance(parsed, dict):
+                for k in ("result", "results", "data", "items", "matches"):
+                    val = parsed.get(k)
+                    if isinstance(val, list) and val and isinstance(val[0], dict):
+                        return val
+    return []
 
 
 def _search_news(client: Any, query: str, max_results: int = 5) -> list[dict]:
@@ -364,9 +432,7 @@ def _search_news(client: Any, query: str, max_results: int = 5) -> list[dict]:
         return []
 
     items: list[dict] = []
-    results_list = result.get("result", result.get("results", []))
-    if isinstance(result.get("result"), dict):
-        results_list = result["result"].get("results", result["result"].get("data", []))
+    results_list = _extract_news_items(result)
 
     for item in results_list:
         if len(items) >= max_results:

@@ -23,7 +23,7 @@ Design (kb-todo.md §3):
 - Vision (page-render fallback + standalone images) via LiteLLM
   `matrix-coder` (≤5 images/call, thinking OFF).
 
-Transport: streamable-http 0.0.0.0:8000 (ai-net only, no published ports).
+Transport: SSE 0.0.0.0:8000 (path /sse; ai-net only, no published ports).
 """
 
 import asyncio
@@ -1707,7 +1707,7 @@ async def kb_digest_list(type: Optional[str] = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP knowledge server over streamable-http (0.0.0.0:8000)."""
+    """Run the MCP knowledge server over SSE (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_knowledge v2 (family KB) — Qdrant %s, "
                 "LiteLLM %s, embed=%s (%d-dim), vision=%s",
@@ -1718,8 +1718,8 @@ def main() -> None:
     if not KB_API_KEY:
         logger.warning("KB_API_KEY is EMPTY — all tools will fail "
                        "(Qdrant requires auth).")
-    mcp.run(transport="streamable-http")  # 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # 0.0.0.0:8000
+    mcp.run(transport="sse")
 
 if __name__ == "__main__":
     main()

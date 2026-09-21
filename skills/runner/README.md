@@ -13,9 +13,23 @@ Skill Runner (laptop :8091 on LAN)       →  http://192.168.4.54:4000  (LAN)
 
 The skill runner talks to LiteLLM for:
 - **LLM generation** via `/v1/chat/completions`
-- **MCP tool calls** via SSE transport to MCP servers on `ai-net`
+- **MCP tool calls** via LiteLLM's `/mcp-rest/tools/call` (LiteLLM speaks
+  SSE to the MCP servers; the runner no longer connects to MCP servers
+  directly — retired 2026-09-20 when the servers migrated to the SSE transport)
 
 Skills never touch MCP servers directly — the runner is the single gateway.
+`mcp_call` normalizes LiteLLM's raw CallToolResult for skill code:
+`structuredContent` is surfaced as `result`, a `results` alias is added when
+the structured payload is a list under result/results/data/items/matches, and
+JSON-in-text output (tools with `structuredContent: null`, e.g.
+`system_info`, `kb_search`, `crawl_page`) is parsed into `result`.
+
+**MCP response shape:** `/mcp-rest/tools/call` returns the raw FastMCP
+CallToolResult — `{content: [{type: text, text}], structuredContent: <dict|null>,
+isError}`. The runner's `mcp_call` normalizes this for skill code: `result`
+= `structuredContent` (or the parsed JSON of the text content when
+`structuredContent` is null), plus a `results` alias when the payload is a
+list under result/results/data/items/matches.
 
 ## API Endpoints
 
@@ -258,10 +272,10 @@ Set `dry_run: true` in the request body or set `SKILL_RUNNER_DRY_RUN=true` globa
 | `SCHEDULER_CONFIG_PATH` | `~/.thor/schedules.json` | Schedule definitions file (git-tracked, read-only mount in container) |
 | `SCHEDULER_STATE_PATH` | `<config dir>/state.json` | Scheduler run-state file (untracked; container: `/app/data/scheduler/state.json`) |
 | `PRESENTON_PASSWORDLESS` | `false` | Skip Basic auth for Presenton API calls (passwordless mode) |
-| `MCP_SERVER_SEARCH_URL` | `http://mcp_search:8000` | MCP search server URL |
-| `MCP_SERVER_KNOWLEDGE_URL` | `http://mcp_knowledge:8000` | MCP knowledge server URL |
-| `MCP_SERVER_CRAWL_URL` | `http://mcp_crawl:8000` | MCP crawl server URL |
-| `MCP_SERVER_FILESYSTEM_READONLY_URL` | `http://mcp_filesystem_readonly:8000` | MCP filesystem server URL |
+| `MCP_SERVER_SEARCH_URL` | `http://mcp_search:8000` | (retired 2026-09-20 — direct MCP connections replaced by LiteLLM `/mcp-rest`; kept for reference) |
+| `MCP_SERVER_KNOWLEDGE_URL` | `http://mcp_knowledge:8000` | (retired 2026-09-20 — see above) |
+| `MCP_SERVER_CRAWL_URL` | `http://mcp_crawl:8000` | (retired 2026-09-20 — see above) |
+| `MCP_SERVER_FILESYSTEM_READONLY_URL` | `http://mcp_filesystem_readonly:8000` | (retired 2026-09-20 — see above) |
 
 ## Rules
 

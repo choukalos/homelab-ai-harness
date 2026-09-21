@@ -19,7 +19,7 @@ LiteLLM and synthesizing a concise Markdown report through the LLM.
 ## Workflow
 
 1. Call `mcp_homelab_status.docker_ps()` and `system_info()` via the
-   LiteLLM MCP proxy (streamable-http transport).
+   LiteLLM MCP proxy (SSE transport, `/mcp-rest/tools/call`).
 2. If scope is `full`, collect logs for unhealthy/exited containers.
 3. Format raw data into a plain-text summary.
 4. Send the summary to the LLM (`local/qwen-coder`) with a system prompt

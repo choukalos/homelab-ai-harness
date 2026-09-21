@@ -19,7 +19,7 @@ Pipeline (ported from the owner's video-analyze pi skill):
 Artifacts: VISION_OUTPUT_ROOT/<slug>/ (NOT public; cleaned via
 vision_cleanup / scripts/cleanup-vision.sh).
 
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 from __future__ import annotations
@@ -951,7 +951,7 @@ async def vision_probe(n: int = 6) -> dict:
 
 
 def main() -> None:
-    """Run the MCP vision server over streamable-http transport."""
+    """Run the MCP vision server over SSE transport."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_vision")
     logger.info("LiteLLM: %s model=%s max_images=%d",
@@ -960,8 +960,9 @@ def main() -> None:
                 VISION_OUTPUT_ROOT, [str(r) for r in VISION_ALLOWED_ROOTS])
     if shutil.which("ffmpeg") is None:
         logger.error("ffmpeg not found in PATH — extraction will fail")
-    mcp.run(transport="streamable-http")
-
+    #mcp.run(transport="sse")
+    mcp.run(transport="sse")
+    
 
 if __name__ == "__main__":
     main()

@@ -337,6 +337,116 @@ def _resolve_litellm_client(litellm_client=None) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _extract_result_list(result: Any, keys: tuple[str, ...] = ("results", "result", "data", "items", "matches")) -> list:
+    """
+    Extract a list of items from an MCP tool response.
+
+    Handles the raw MCP CallToolResult shape
+    ({"content": [...], "structuredContent": {...}}), the
+    runner-normalized shape ({"result": {...}, "output": [...]}),
+    and JSON embedded in text content items (the only channel when
+    structuredContent is null).
+    """
+    if not isinstance(result, dict):
+        return []
+
+    candidates: list[dict] = []
+    if isinstance(result.get("structuredContent"), dict):
+        candidates.append(result["structuredContent"])
+    if isinstance(result.get("result"), dict):
+        candidates.append(result["result"])
+    candidates.append(result)
+
+    for cand in candidates:
+        for key in keys:
+            val = cand.get(key)
+            if isinstance(val, list) and val and isinstance(val[0], dict):
+                return val
+
+    # Last resort: JSON embedded in text content items
+    for key in ("content", "output"):
+        for item in result.get(key) or []:
+            if not (isinstance(item, dict) and item.get("type") == "text"):
+                continue
+            try:
+                parsed = json.loads(item.get("text", ""))
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                return parsed
+            if isinstance(parsed, dict):
+                for k in keys:
+                    val = parsed.get(k)
+                    if isinstance(val, list) and val and isinstance(val[0], dict):
+                        return val
+    return []
+
+
+def _unwrap_text(value: Any, depth: int = 0) -> Optional[str]:
+    """Peel nested JSON (crawl double-encodes: outer.content -> inner JSON -> markdown)."""
+    if depth > 3:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        # Try to parse as JSON and dig deeper
+        if text[0] in "[{":
+            try:
+                parsed = json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                return text
+            if isinstance(parsed, dict):
+                for k in ("markdown", "content", "text", "html"):
+                    inner = _unwrap_text(parsed.get(k), depth + 1)
+                    if inner:
+                        return inner
+                # No text key — fall back to the raw string
+                return text
+            if isinstance(parsed, str):
+                return _unwrap_text(parsed, depth + 1)
+        return text
+    if isinstance(value, (dict, list)):
+        for k in ("markdown", "content", "text", "html"):
+            inner = _unwrap_text(value.get(k) if isinstance(value, dict) else None, depth + 1)
+            if inner:
+                return inner
+        return json.dumps(value, ensure_ascii=False)
+    return None
+
+
+def _extract_text_payload(result: Any) -> Optional[str]:
+    """
+    Extract a text payload from an MCP tool response (e.g. crawl page text).
+
+    Handles raw MCP CallToolResult (JSON-in-text content items),
+    runner-normalized output, and structured payloads with content/text keys.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    # JSON-in-text content items (raw MCP shape; structuredContent may be null)
+    for key in ("content", "output"):
+        for item in result.get(key) or []:
+            if not (isinstance(item, dict) and item.get("type") == "text"):
+                continue
+            text = item.get("text", "")
+            if not text:
+                continue
+            unwrapped = _unwrap_text(text)
+            if unwrapped:
+                return unwrapped
+
+    # Structured / normalized shapes
+    for cand in (result.get("structuredContent"), result.get("result"), result):
+        if isinstance(cand, dict):
+            for k in ("markdown", "content", "text", "html"):
+                val = cand.get(k)
+                if isinstance(val, str) and val.strip():
+                    return _unwrap_text(val) or val
+    return None
+
+
 def _search_web(client: Any, query: str, max_results: int = 10) -> list[Source]:
     """
     Search the web via mcp_search through LiteLLM.
@@ -353,11 +463,7 @@ def _search_web(client: Any, query: str, max_results: int = 10) -> list[Source]:
 
     # Handle various response formats from LiteLLM MCP gateway
     sources: list[Source] = []
-    results_list = result.get("result", result.get("results", []))
-
-    # If result is a dict with a "result" key containing the actual data
-    if isinstance(result.get("result"), dict):
-        results_list = result["result"].get("results", result["result"].get("data", []))
+    results_list = _extract_result_list(result)
 
     for item in results_list:
         if len(sources) >= max_results:
@@ -387,9 +493,7 @@ def _search_recent(client: Any, query: str, days: int = 30, max_results: int = 1
         return []
 
     sources: list[Source] = []
-    results_list = result.get("result", result.get("results", []))
-    if isinstance(result.get("result"), dict):
-        results_list = result["result"].get("results", result["result"].get("data", []))
+    results_list = _extract_result_list(result)
 
     for item in results_list:
         if len(sources) >= max_results:
@@ -417,9 +521,7 @@ def _search_news(client: Any, query: str, max_results: int = 10) -> list[Source]
         return []
 
     sources: list[Source] = []
-    results_list = result.get("result", result.get("results", []))
-    if isinstance(result.get("result"), dict):
-        results_list = result["result"].get("results", result["result"].get("data", []))
+    results_list = _extract_result_list(result)
 
     for item in results_list:
         if len(sources) >= max_results:
@@ -459,9 +561,7 @@ def _search_knowledge(
         if not result:
             continue
 
-        matches = result.get("result", result.get("results", result.get("matches", [])))
-        if isinstance(result.get("result"), dict):
-            matches = result["result"].get("matches", result["result"].get("results", []))
+        matches = _extract_result_list(result, ("matches", "results", "data", "items"))
 
         for item in matches:
             if isinstance(item, dict):
@@ -491,11 +591,8 @@ def _crawl_url(client: Any, url: str, max_chars: int = 5000) -> Optional[str]:
     )
     if not result:
         return None
-    # Handle nested result formats
-    data = result.get("result", result)
-    if isinstance(data, dict):
-        return data.get("content", data.get("text", data.get("html", "")))
-    return str(data) if data else None
+    # Handle nested result formats (raw MCP / runner-normalized / structured)
+    return _extract_text_payload(result)
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +764,18 @@ def _call_litellm_completion(client: Any, messages: list[dict[str, str]], max_to
     choices = result.get("choices", [])
     if not choices:
         return "No response generated."
-    return choices[0].get("message", {}).get("content", "No content in response.")
+    # message.content can be an explicit null (reasoning model hit the
+    # token budget) — .get()'s default does not cover that; a None return
+    # would crash the caller at len(report).
+    content = choices[0].get("message", {}).get("content")
+    if content:
+        return content
+    finish = choices[0].get("finish_reason", "unknown")
+    return (
+        "No response generated. (LLM returned null content; "
+        f"finish_reason={finish} — the reasoning model likely exhausted "
+        "its token budget on internal reasoning.)"
+    )
 
 
 def _synthesize_report(client: Any, query: str, sources: list[Source]) -> str:

@@ -1,6 +1,6 @@
 # MCP Homelab Status Server
 
-Docker and system monitoring tools. Lists containers, checks service health, reports CPU/memory/disk usage, and retrieves container logs. Runs as an MCP server over streamable-http transport.
+Docker and system monitoring tools. Lists containers, checks service health, reports CPU/memory/disk usage, and retrieves container logs. Runs as an MCP server over SSE transport.
 
 ## Tools
 
@@ -16,7 +16,7 @@ Docker and system monitoring tools. Lists containers, checks service health, rep
 | Environment Variable | Default | Description |
 |---|---|---|
 | `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker daemon socket |
-| `MCPS_HOST` | `0.0.0.0` | Bind address for streamable-http |
+| `MCPS_HOST` | `0.0.0.0` | Bind address for SSE |
 
 ## Safety
 

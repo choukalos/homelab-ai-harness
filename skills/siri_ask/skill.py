@@ -34,7 +34,11 @@ ARTIFACT_DIR = Path(
     os.environ.get("ARTIFACT_DIR", "/home/chuck/data/media/siri_outputs")
 )
 MAX_RUNTIME_SECS = int(os.environ.get("SIRI_ASK_MAX_RUNTIME", "30"))
-MAX_OUTPUT_TOKENS = int(os.environ.get("SIRI_ASK_MAX_TOKENS", "500"))
+# 2026-09-21: default raised 500 -> 2048. The default model (matrix-coder /
+# Qwen3.8-27B) is a reasoning model: with 500 it exhausts the budget on
+# internal reasoning and returns content=null, which crashed the skill at
+# len(response). Siri asks are short; 2048 leaves headroom for reasoning.
+MAX_OUTPUT_TOKENS = int(os.environ.get("SIRI_ASK_MAX_TOKENS", "2048"))
 MODEL_ALIAS = os.environ.get("SIRI_ASK_MODEL_ALIAS", "matrix-coder")
 
 # LiteLLM endpoint (set by skill runner or environment)
@@ -200,7 +204,17 @@ def _call_litellm(messages: list[dict[str, str]]) -> str:
             choices = body.get("choices", [])
             if not choices:
                 return "No response generated."
-            return choices[0].get("message", {}).get("content", "No content in response.")
+            # message.content can be an explicit null (reasoning model hit
+            # the token budget) — .get()'s default does not cover that.
+            content = choices[0].get("message", {}).get("content")
+            if content:
+                return content
+            finish = choices[0].get("finish_reason", "unknown")
+            return (
+                f"Sorry — I couldn't produce an answer "
+                f"(finish_reason={finish}; the model likely exhausted its "
+                f"token budget on internal reasoning)."
+            )
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
         raise RuntimeError(f"LiteLLM HTTP error {exc.code}: {body}") from exc

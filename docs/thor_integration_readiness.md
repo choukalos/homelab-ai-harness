@@ -11,10 +11,13 @@
   (Phases 0–9 complete — see `docs/memory/IMPLEMENTATION_STATE.md`), admin REST +
   CLI + `/metrics`. Cross-client access via the `mcp_skills` MCP server (3
   meta-tools) — see `docs/thor_cross_client_skills.md`.
-- 10 MCP servers live in LiteLLM (streamable-http, **56 tools** — was 11/4
-  servers; 34 → 44 → 40 → 41 on 2026-08-28: media-pipeline tools replaced
-  the legacy media tools, then `mcp_mysql` gained `schema_overview`; 2026-08-29:
-  `mcp_knowledge` v2 rebuilt with 11 KB tools; `mcp_skills` added with 3 tools).
+- 11 MCP servers live in LiteLLM (SSE transport, **71 tools** — was 10/56
+  streamable-http; 34 → 44 → 40 → 41 on 2026-08-28: media-pipeline tools
+  replaced the legacy media tools, then `mcp_mysql` gained `schema_overview`;
+  2026-08-29: `mcp_knowledge` v2 rebuilt with 11 KB tools; `mcp_skills` added
+  with 3 tools; 2026-09-02: `mcp_memory` added with 2 tools; 2026-09-20:
+  transport migrated streamable-http → SSE, `mcp_knowledge` gained 5 digest
+  tools).
 - Images pinned: `litellm:v1.92.0`, `qdrant:v1.18.1` (2026-08-28, Phase 9).
 - Qdrant JWT RBAC on; `mcp_knowledge` v2 on a global-`m` key (sub=
   mcp-knowledge) — the `kb_` prefix code-gate is the security boundary

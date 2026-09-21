@@ -1,5 +1,9 @@
 name: homelab
 
+networks:
+  edge-net:
+    external: true
+
 services:
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -12,7 +16,5 @@ services:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
     networks:
       - edge-net
-    depends_on:
-      - caddy
 
 

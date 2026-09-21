@@ -450,9 +450,9 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 ## MCP Servers
 
-MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **streamable HTTP** transport.
+MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **SSE** transport (`GET /sse`).
 
-**Ten MCP servers are currently deployed** via `compose.mcp.yml` (64 tools total).
+**Eleven MCP servers are currently deployed** via `compose.mcp.yml` (71 tools total).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -466,6 +466,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_media` | Media generation via GPU-host media-pipeline + post-gen edit/file movement (trim, freeze, caption, info, upload, download, put, pull) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_skills` | Skill-runner gateway (list/run/get skill jobs) | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_memory` | Long-term memory (mem0/Qdrant) — memory_search, memory_list | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
@@ -476,21 +477,24 @@ skill-runner. See [Cross-Client Skills](docs/thor_cross_client_skills.md).
 
 **Architecture:**
 ```
-Skill Runner (:8091)  →  Streamable HTTP  →  mcp_search container
-                                           mcp_knowledge container
-                                           mcp_crawl container
-                                           mcp_filesystem_readonly container
-                                           mcp_mysql container
-                                           mcp_homelab_status container
-                                           mcp_filesystem container
-                                           mcp_media container
-                                           mcp_vision container
+Skill Runner (:8091)  →  LiteLLM /mcp-rest/tools/call  →  mcp_search container
+                                                          mcp_knowledge container
+                                                          mcp_crawl container
+                                                          mcp_filesystem_readonly container
+                                                          mcp_mysql container
+                                                          mcp_homelab_status container
+                                                          mcp_filesystem container
+                                                          mcp_media container
+                                                          mcp_vision container
+                                                          mcp_memory container
 
-LiteLLM (:4000)       →  Streamable HTTP  →  same MCP servers (for tool routing)
+LiteLLM (:4000)       →  SSE (GET /sse)  →  same MCP servers (for tool routing)
 ```
 
-The Skill Runner is the **primary gateway** for MCP tool calls in skill workflows.
-LiteLLM also proxies MCP calls for tool routing via `/mcp-rest/tools/call`.
+The Skill Runner routes MCP tool calls through LiteLLM's `/mcp-rest/tools/call`
+endpoint (since the 2026-09-20 SSE migration — the old direct streamable-http
+path was retired; LiteLLM's MCP client speaks SSE). Any MCP client can also
+call tools through LiteLLM directly.
 
 Each server has its own directory under `mcp/servers/<name>/` with:
 - `server.py` — FastMCP server implementation
@@ -537,7 +541,7 @@ a job still `running`/`pending` at restart is marked `interrupted`. Best-effort:
 degrades to in-memory-only if MySQL is unreachable. See
 [Cross-Client Skills](docs/thor_cross_client_skills.md).
 
-Skills compose MCP tools into controlled agentic workflows. The skill runner calls MCP servers **directly** over streamable HTTP on the Docker network (no LiteLLM proxy for tool calls).
+Skills compose MCP tools into controlled agentic workflows. The skill runner calls MCP tools via LiteLLM's `/mcp-rest/tools/call` endpoint (SSE-capable; the old direct streamable-http path was retired with the 2026-09-20 SSE migration).
 
 **Cross-client access:** the `mcp_skills` MCP server (3 meta-tools) wraps this API so
 any MCP client can list + run skills through LiteLLM. See
@@ -595,7 +599,7 @@ Connected to LiteLLM.
 | Service | Purpose | Status |
 |---|---|---|
 | LiteLLM | Model gateway + MCP gateway | ✅ Running |
-| MCP servers | Reusable tool providers (standalone containers) | ✅ 10 deployed (64 tools) |
+| MCP servers | Reusable tool providers (standalone containers) | ✅ 11 deployed (71 tools) |
 | Skill runner | Agentic workflow orchestration + chat gateway + scheduler | ✅ Running (:8091) |
 | AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ⏳ Decommission pending |
 | Open Web UI | Family/local AI chat interface | ✅ Running |
@@ -824,7 +828,7 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_vision` — Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp)
 - `mcp_skills` — Cross-client skill gateway: 3 meta-tools (list_skills, run_skill, get_skill_job) wrapping the skill-runner; forwards the caller's LiteLLM key for per-user attribution
 
-All run on `ai-net`. Accessed by the skill runner over streamable HTTP.
+All run on `ai-net`. Accessed by the skill runner (via LiteLLM `/mcp-rest`) and any MCP client over SSE.
 
 ---
 

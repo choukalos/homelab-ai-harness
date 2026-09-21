@@ -1,6 +1,6 @@
 # Docker Compose for MCP (Model Context Protocol) server containers
 # Each MCP server runs as a standalone container on the ai-net network.
-# LiteLLM reaches them by service name (e.g. http://mcp_knowledge:8000/mcp).
+# LiteLLM reaches them by service name over SSE (e.g. http://mcp_knowledge:8000/sse).
 
 name: ai-mcp
 

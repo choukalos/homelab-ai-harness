@@ -20,7 +20,7 @@ X-API-Key. When absent (e.g. pi connecting directly), the configured
 MEMORY_USER_KEY is used — a SINGLE key that must be in skill-runner's
 SKILL_RUNNER_API_KEY allow-list (exact-match semantics).
 
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 import os
@@ -157,15 +157,15 @@ def memory_list(
 
 
 def main() -> None:
-    """Run the MCP memory server over streamable-http transport (0.0.0.0:8000)."""
+    """Run the MCP memory server over SSE transport (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info(
         "Starting mcp_memory, skill-runner=%s, fallback_key=%s",
         SKILL_RUNNER_URL,
         "configured" if MEMORY_USER_KEY else "MISSING (direct calls will 403)",
     )
-    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # defaults to 0.0.0.0:8000
+    mcp.run(transport="sse")
 
 if __name__ == "__main__":
     main()

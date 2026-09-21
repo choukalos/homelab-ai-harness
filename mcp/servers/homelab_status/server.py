@@ -8,7 +8,7 @@ Provides four tools:
   - container_logs(service_name, tail)  Last N lines from container logs
 
 Backend: Docker daemon via docker-py SDK, system metrics via psutil
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 import os
@@ -281,11 +281,11 @@ def container_logs(service_name: str, tail: int = 100) -> dict:
 
 
 def main() -> None:
-    """Run the MCP homelab_status server over streamable-http transport (0.0.0.0:8000)."""
+    """Run the MCP homelab_status server over SSE transport (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_homelab_status, docker=%s", DOCKER_HOST)
-    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # defaults to 0.0.0.0:8000
+    mcp.run(transport="sse")
 
 if __name__ == "__main__":
     main()

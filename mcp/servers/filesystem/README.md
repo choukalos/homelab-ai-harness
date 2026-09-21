@@ -30,11 +30,11 @@ Read/write file system access MCP server scoped to `/home/chuck/workspace`.
 | `SCOPE_PATH` | `/home/chuck/workspace` | Single scoped root directory for all operations |
 | `MAX_FILE_SIZE` | `1048576` | Maximum file size for reads in bytes (default 1 MB) |
 | `MAX_WRITE_SIZE` | `5242880` | Maximum file size for writes in bytes (default 5 MB) |
-| `MCPS_HOST` | `0.0.0.0` | Bind address for streamable-http transport |
+| `MCPS_HOST` | `0.0.0.0` | Bind address for SSE transport |
 
 ## Transport
 
-streamable-http (HTTP) on `0.0.0.0:8000`.
+SSE (HTTP) on `0.0.0.0:8000`, path `/sse`.
 
 ## Deployment
 
@@ -60,13 +60,12 @@ mcp_filesystem:
 
 ### LiteLLM Registration
 
-Registered in `litellm/config.yml` under `mcp_servers:` with streamable-http
-transport:
+Registered in `litellm/config.yml` under `mcp_servers:` with SSE transport:
 
 ```yaml
 mcp_filesystem:
-  url: http://mcp_filesystem:8000/mcp
-  transport: streamable-http
+  url: http://mcp_filesystem:8000/sse
+  transport: sse
   allow_all_keys: true
 ```
 

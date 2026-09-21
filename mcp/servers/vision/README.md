@@ -106,7 +106,8 @@ LiteLLM `litellm/config.yml` (owner reload — batched with KB K3's
 
 ```yaml
   - name: mcp_vision
-    url: http://mcp_vision:8000/mcp
+    url: http://mcp_vision:8000/sse
+    transport: sse
     timeout: 7200
     allow_all_keys: true
     display_tools_to_model: true

@@ -321,7 +321,9 @@ def _generate_sub_queries(client: Any, topic: str, n_queries: int = 3) -> list[s
             "role": "system",
             "content": (
                 "You generate focused search sub-queries. "
-                "Output ONLY a JSON array of strings — no code fences, no preamble."
+                "Output ONLY a JSON object of the form "
+                '{"queries": ["query 1", "query 2", ...]} — '
+                "no code fences, no preamble, no other keys."
             ),
         },
         {"role": "user", "content": prompt},
@@ -331,7 +333,9 @@ def _generate_sub_queries(client: Any, topic: str, n_queries: int = 3) -> list[s
         result = client.chat_completion(
             MODEL_ALIAS,
             messages,
-            max_tokens=512,
+            # 2026-09-21: raised 512 -> 2048; matrix-coder is a reasoning
+            # model and can burn the 512 budget on internal reasoning.
+            max_tokens=2048,
             temperature=0.7,
             response_format={"type": "json_object"},
             stream=False,
@@ -341,7 +345,15 @@ def _generate_sub_queries(client: Any, topic: str, n_queries: int = 3) -> list[s
         if not choices:
             raise RuntimeError("LLM returned no choices")
 
-        content = choices[0].get("message", {}).get("content", "").strip()
+        # message.content can be an explicit null (reasoning model hit the
+        # token budget) — .get()'s default does not cover that.
+        raw_content = choices[0].get("message", {}).get("content")
+        if not raw_content:
+            raise RuntimeError(
+                f"LLM returned null content (finish_reason="
+                f"{choices[0].get('finish_reason', 'unknown')})"
+            )
+        content = raw_content.strip()
 
         # Strip code fences if present
         if content.startswith("```"):
@@ -350,12 +362,29 @@ def _generate_sub_queries(client: Any, topic: str, n_queries: int = 3) -> list[s
                 content = content[:-3]
             content = content.strip()
 
-        queries = json.loads(content)
-        if not isinstance(queries, list):
-            queries = [queries]
+        parsed = json.loads(content)
+
+        # response_format=json_object forces object output, so the model may
+        # wrap the array in a key (e.g. {"queries": [...]}). Unwrap it.
+        if isinstance(parsed, dict):
+            for key in ("queries", "results", "data", "items"):
+                if isinstance(parsed.get(key), list):
+                    parsed = parsed[key]
+                    break
+            else:
+                # Fall back to the first list-valued entry
+                parsed = next(
+                    (v for v in parsed.values() if isinstance(v, list)),
+                    [parsed],
+                )
+
+        if not isinstance(parsed, list):
+            parsed = [parsed]
 
         # Filter to non-empty strings and cap
-        queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
+        queries = [q.strip() for q in parsed if isinstance(q, str) and q.strip()]
+        if not queries:
+            raise RuntimeError(f"LLM returned no usable queries: {content[:200]}")
         return queries[:n_queries]
 
     except Exception as exc:

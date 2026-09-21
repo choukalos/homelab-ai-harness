@@ -6,6 +6,6 @@ See [`docs/thor_mcp_architecture.md`](../../docs/thor_mcp_architecture.md) for i
 
 ## Current State
 
-- Live config: `../config.yml` (streamable-http transport, 4 MCP servers)
+- Live config: `../config.yml` (SSE transport, 11 MCP servers — migrated from streamable-http 2026-09-20)
 - Drafts in this directory are historical artifacts from earlier phases
 - Phase 14/15 drafts applied; consider archiving or removing

@@ -49,4 +49,4 @@ reads it from the MCP request context (`_caller_key(ctx)`):
 
 ## Transport
 
-streamable-http (HTTP), default `0.0.0.0:8000`, path `/mcp`.
+SSE (HTTP), default `0.0.0.0:8000`, path `/sse`.
