@@ -45,3 +45,4 @@ credentials.json
 # MySQL config with credentials
 mysql-exporter/.my.cnf
 
+*.bak*

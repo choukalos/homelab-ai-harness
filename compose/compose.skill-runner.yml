@@ -16,7 +16,7 @@ services:
       - LITELLM_BASE_URL=http://litellm-proxy:4000
       - LITELLM_API_KEY=${LITELLM_API_KEY}
       - ARTIFACT_ROOT=/home/chuck/data/media
-      - SKILL_RUNNER_LOG_DIR=/home/chuck/homelab/logs/skill_runner
+      - SKILL_RUNNER_LOG_DIR=/home/chuck/data/logs/skill_runner
       - SKILL_RUNNER_PORT=8091
       - SKILL_RUNNER_HOST=0.0.0.0
       # Default chat model for /api/chat (see DEFAULT_CHAT_MODEL in main.py).
@@ -88,7 +88,7 @@ services:
       - ../skills:/app/skills:ro
       - /home/chuck/data/media:/home/chuck/data/media
       - /home/chuck/workspace:/home/chuck/workspace
-      - /home/chuck/homelab/logs/skill_runner:/home/chuck/homelab/logs/skill_runner
+      - /home/chuck/data/logs/skill_runner:/home/chuck/data/logs/skill_runner
       - /home/chuck/homelab/scheduler:/app/scheduler:ro
       - /home/chuck/data/scheduler:/app/data/scheduler
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering

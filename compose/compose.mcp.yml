@@ -23,7 +23,7 @@ services:
       - EMBED_MODEL=embeddings
       - VISION_MODEL=matrix-coder
       # Source-path allowlist for kb_ingest_file (container paths).
-      - KB_ALLOWED_ROOTS=/data/media,/data/workspace,/data/ai-kb/raw
+      - KB_ALLOWED_ROOTS=/data/media,/workspace,/data/ai-kb/raw
       # Writable backup target for kb_backup (host: /home/chuck/data/backups/kb).
       - KB_BACKUP_DIR=/backups/kb
       # Digest storage (host: /home/chuck/data/ai-kb/digests). Digests are a
@@ -38,7 +38,7 @@ services:
     volumes:
       - /home/chuck/data/ai-kb/raw:/data/ai-kb/raw:ro
       - /home/chuck/data/media:/data/media:ro
-      - /home/chuck/data/workspace:/data/workspace:ro
+      - /home/chuck/workspace:/workspace:ro
       - /home/chuck/data/backups/kb:/backups/kb:rw
       - /home/chuck/data/ai-kb/digests:/data/ai-kb/digests:rw
 
@@ -166,12 +166,13 @@ services:
       - VISION_MODEL=matrix-coder
       # Artifacts: NON-public (no Caddy route). rw vision dir nested in the
       # ro workspace mount; sources read from media/ + ai-kb/raw/ (ro).
-      - VISION_OUTPUT_ROOT=/data/workspace/vision
-      - VISION_ALLOWED_ROOTS=/data/media,/data/workspace,/data/ai-kb/raw
+      # Ephemeral scratch — lives in the workspace zone (NOT data/).
+      - VISION_OUTPUT_ROOT=/workspace/vision
+      - VISION_ALLOWED_ROOTS=/data/media,/workspace,/data/ai-kb/raw
     volumes:
-      - /home/chuck/data/workspace/vision:/data/workspace/vision
+      - /home/chuck/workspace/vision:/workspace/vision
       - /home/chuck/data/media:/data/media:ro
-      - /home/chuck/data/workspace:/data/workspace:ro
+      - /home/chuck/workspace:/workspace:ro
       - /home/chuck/data/ai-kb/raw:/data/ai-kb/raw:ro
     restart: unless-stopped
     networks:

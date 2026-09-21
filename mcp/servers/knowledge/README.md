@@ -101,7 +101,7 @@ these MCP tools provide the deterministic scaffolding.
 
 - **Canonical drop point**: `/home/chuck/data/ai-kb/raw/` (host) =
   `/data/ai-kb/raw` (container). `KB_ALLOWED_ROOTS` also covers
-  `/data/media` and `/data/workspace` (all read-only mounts).
+  `/data/media` and `/workspace` (all read-only mounts).
 - `kb_ingest_file` resolves the path and **rejects anything outside the
   allowlist** (symlinks resolved; traversal blocked).
 - PDF quality gate: pages with <200 chars of extracted text are rendered

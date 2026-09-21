@@ -55,11 +55,11 @@ LITELLM_API_KEY: str = os.environ.get("LITELLM_API_KEY", "")
 VISION_MODEL: str = os.environ.get("VISION_MODEL", "matrix-coder")
 VISION_MAX_IMAGES: int = int(os.environ.get("VISION_MAX_IMAGES", "5"))
 VISION_OUTPUT_ROOT: Path = Path(
-    os.environ.get("VISION_OUTPUT_ROOT", "/data/workspace/vision"))
+    os.environ.get("VISION_OUTPUT_ROOT", "/workspace/vision"))
 VISION_ALLOWED_ROOTS: list[Path] = [
     Path(p) for p in os.environ.get(
         "VISION_ALLOWED_ROOTS",
-        "/data/media,/data/workspace,/data/ai-kb/raw",
+        "/data/media,/workspace,/data/ai-kb/raw",
     ).split(",") if p.strip()
 ]
 VISION_DOWNLOAD_CAP: int = int(

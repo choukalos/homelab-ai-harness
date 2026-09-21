@@ -103,7 +103,7 @@ echo "==> [2/2] source files -> ${BACKUP_DIR}/kb-sources-${STAMP}.tar.gz"
 # MCP tool. Container allowlist roots -> host roots:
 #   /data/ai-kb/raw  -> /home/chuck/data/ai-kb/raw
 #   /data/media      -> /home/chuck/data/media
-#   /data/workspace  -> /home/chuck/data/workspace
+#   /workspace       -> /home/chuck/workspace
 TAR_DEST="${BACKUP_DIR}/kb-sources-${STAMP}.tar.gz"
 SOURCES="$(for COL in $COLS; do
     curl -s "${AUTH[@]}" -X POST "${QDRANT_URL}/collections/${COL}/points/scroll" \
@@ -117,7 +117,7 @@ if [[ -n "$SOURCES" ]]; then
     case "$SRC" in
       /data/ai-kb/raw/*)  HOST_FILES+=("/home/chuck/data/ai-kb/raw/${SRC#/data/ai-kb/raw/}") ;;
       /data/media/*)      HOST_FILES+=("/home/chuck/data/media/${SRC#/data/media/}") ;;
-      /data/workspace/*)  HOST_FILES+=("/home/chuck/data/workspace/${SRC#/data/workspace/}") ;;
+      /workspace/*)     HOST_FILES+=("/home/chuck/workspace/${SRC#/workspace/}") ;;
       *) echo "    WARNING: source '${SRC}' outside allowlist roots — skipped" ;;
     esac
   done <<< "$SOURCES"
