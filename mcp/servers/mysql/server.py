@@ -17,7 +17,7 @@ Provides tools:
   - nl_to_sql_then_run(database, question)    NL → SQL → execute in one call
 
 Backend: MySQL at configurable MYSQL_HOST (default: thor.local:3306)
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 Security: Read-only enforcement — blocks INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/TRUNCATE.
 Query safety: EXPLAIN pre-flight checks row estimates, join count, and full table scans.
 """
@@ -1085,7 +1085,7 @@ def nl_to_sql_then_run(database: str, question: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP MySQL server over streamable-http transport (0.0.0.0:8000)."""
+    """Run the MCP MySQL server over SSE transport (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_mysql, host=%s:%d, user=%s", MYSQL_HOST, MYSQL_PORT, MYSQL_USER)
     logger.info("Read-only enforcement enabled, max rows=%d, timeout=%ds", MAX_ROWS, QUERY_TIMEOUT)
@@ -1093,8 +1093,8 @@ def main() -> None:
                 MAX_ROWS_EXAMINED, MAX_JOIN_TABLES, BLOCK_FULL_TABLE_SCANS, SCHEMA_MAX_TABLES)
     logger.info("NL-to-SQL: model=%s, max_tokens=%d, sample_max=%d", LITELLM_MODEL, LITELLM_MAX_TOKENS, SAMPLE_MAX_ROWS)
     logger.info("CSV output dir: %s", CSV_OUTPUT_DIR)
-    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # defaults to 0.0.0.0:8000
+    mcp.run(transport="sse")
 
 if __name__ == "__main__":
     main()

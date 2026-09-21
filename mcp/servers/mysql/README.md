@@ -1,6 +1,6 @@
 # MCP MySQL Server
 
-Read-only MySQL database access with schema intelligence and natural-language-to-SQL translation via LiteLLM. Runs as an MCP server over streamable-http transport.
+Read-only MySQL database access with schema intelligence and natural-language-to-SQL translation via LiteLLM. Runs as an MCP server over SSE transport.
 
 ## Tools (11)
 
@@ -58,7 +58,7 @@ The NL-to-SQL prompt is built from `_build_schema_context()`, which gathers:
 | `LITELLM_DISABLE_THINKING` | `true` | Pass `chat_template_kwargs: {enable_thinking: false}` — Qwen3 thinking models otherwise burn the token budget on reasoning and return empty content. Set `false` for models whose chat template rejects the kwarg |
 | `SCHEMA_HINTS_PATH` | `/app/schema_hints.json` | Path to the curated hints file |
 | `SAMPLE_MAX_ROWS` | `20` | Max sample rows per table in the NL-to-SQL context |
-| `MCPS_HOST` | `0.0.0.0` | Bind address for streamable-http |
+| `MCPS_HOST` | `0.0.0.0` | Bind address for SSE |
 
 ## Safety
 
@@ -139,7 +139,7 @@ result = await mcp.call_tool("nl_to_sql_then_run", {
 
 ## Architecture
 
-- FastMCP server over streamable-http (`/mcp` endpoint)
+- FastMCP server over SSE (`/sse` endpoint)
 - `mysql.connector` for DB access (read-only session)
 - `litellm.completion()` for NL-to-SQL (provider-prefixed model name, thinking disabled by default)
 - Schema context built per NL-to-SQL call (introspection queries against the live DB)

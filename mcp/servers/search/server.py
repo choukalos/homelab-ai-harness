@@ -176,8 +176,9 @@ def main() -> None:
     """Run the MCP search server over SSE."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_search on %s", SEARXNG_URL)
-    mcp.run(transport="streamable-http")
-
+    #mcp.run(transport="sse")
+    mcp.run(transport="sse")
+    
 
 if __name__ == "__main__":
     main()

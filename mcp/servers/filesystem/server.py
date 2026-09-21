@@ -18,7 +18,7 @@ Security:
 Scoped path (configurable via SCOPE_PATH env var):
   /home/chuck/workspace
 
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 import os
@@ -318,14 +318,14 @@ def list_directory(path: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run the MCP filesystem server over streamable-http transport (0.0.0.0:8000)."""
+    """Run the MCP filesystem server over SSE transport (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_filesystem")
     logger.info("Scope path: %s", SCOPE_PATH)
     logger.info("Max read size: %d bytes (%.0f MB)", MAX_FILE_SIZE, MAX_FILE_SIZE / (1024 * 1024))
     logger.info("Max write size: %d bytes (%.0f MB)", MAX_WRITE_SIZE, MAX_WRITE_SIZE / (1024 * 1024))
-    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # defaults to 0.0.0.0:8000
+    mcp.run(transport="sse") # defaults to 0.0.0.0:8000
 
 if __name__ == "__main__":
     main()

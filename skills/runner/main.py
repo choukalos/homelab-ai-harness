@@ -162,7 +162,9 @@ MCP_SERVER_MEDIA_URL = os.environ.get(
     "MCP_SERVER_MEDIA_URL", "http://mcp_media:8000"
 )
 
-# Build a lookup dict for streamable-HTTP MCP calls
+# MCP server base URLs (direct connections retired 2026-09-20 — MCP servers
+# migrated to the SSE transport; tool calls now route through LiteLLM's
+# /mcp-rest/tools/call, which speaks SSE. Kept for reference / future use.)
 MCP_SERVER_URLS: dict[str, str] = {
     "mcp_filesystem": MCP_SERVER_FILESYSTEM_URL,
     "mcp_media": MCP_SERVER_MEDIA_URL,
@@ -727,23 +729,85 @@ class LiteLLMClient:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
-        Call an MCP tool via direct streamable-http (delegates to ``_mcp_call_streamable``).
+        Call an MCP tool via LiteLLM's /mcp-rest/tools/call endpoint.
+
+        2026-09-20: the direct streamable-http path was retired — the MCP
+        servers migrated to the SSE transport (GET /sse), so the old
+        POST /mcp handshake now 404s. LiteLLM's MCP client speaks SSE, so
+        routing through /mcp-rest/tools/call is the supported path (same
+        endpoint ``mcp_list_tools`` already uses).
+
+        Request:  {"name": <tool>, "arguments": {...}, "server_id": <server>}
+        Response: MCP CallToolResult — {"content": [...], "isError": bool,
+                  "structuredContent": {...} | null}
 
         Args:
             tool_name: Name of the MCP tool to call (e.g. 'search_web').
             arguments: Dict of tool arguments.
-            server_id: MCP server name/ID (e.g. 'mcp_search'). Required for streamable-http path.
+            server_id: MCP server name/ID (e.g. 'mcp_search'). Required.
             **kwargs: Additional params (currently unused; retained for compatibility).
 
         Returns:
-            Dict with ``output`` (list of content dicts) and ``is_error`` (bool).
+            Dict with ``output`` (list of content dicts), ``is_error`` (bool),
+            and ``result`` (structured content, when the tool returns any).
         """
         if not server_id:
             return {
-                "output": [{"type": "text", "text": "server_id is required for streamable-http MCP calls"}],
+                "output": [{"type": "text", "text": "server_id is required for MCP calls"}],
                 "is_error": True,
             }
-        return await self._mcp_call_streamable(server_id, tool_name, arguments)
+        client = await self._get_client()
+        response = await client.post(
+            "/mcp-rest/tools/call",
+            json={"name": tool_name, "arguments": arguments, "server_id": server_id},
+        )
+        response.raise_for_status()
+        data = response.json()
+        is_error = bool(data.get("isError"))
+        content = data.get("content") or []
+        structured = data.get("structuredContent")
+        result: dict[str, Any] = {"output": content, "is_error": is_error}
+        if isinstance(structured, dict):
+            # Normalize structured content the way the retired _build_result did:
+            # expose a "results" key (from result/matches/data/items) so skill
+            # parsers that do result.get("results", ...) keep working.
+            sc = structured
+            for key in ("result", "matches", "data", "items"):
+                if key in sc:
+                    sc = dict(sc)
+                    sc["results"] = sc[key]
+                    break
+            if "results" not in sc:
+                sc = {"results": sc}
+            result["result"] = sc
+            logger.info(
+                "MCP tool call via LiteLLM: server=%s tool=%s is_error=%s (structured, results_count=%d)",
+                server_id, tool_name, is_error, len(sc.get("results", [])),
+            )
+            return result
+
+        # structuredContent is null (e.g. system_info, container_logs,
+        # kb_search, crawl_page): the payload is JSON embedded in the text
+        # content item. Parse it so skill code gets a usable `result`.
+        for item in content:
+            if not (isinstance(item, dict) and item.get("type") == "text"):
+                continue
+            text = (item.get("text") or "").strip()
+            if not text or text[0] not in "[{":
+                continue
+            try:
+                parsed = json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                break
+            if isinstance(parsed, (dict, list)):
+                result["result"] = parsed if isinstance(parsed, dict) else {"results": parsed}
+            break
+
+        logger.info(
+            "MCP tool call via LiteLLM: server=%s tool=%s is_error=%s",
+            server_id, tool_name, is_error,
+        )
+        return result
 
     # -----------------------------------------------------------------------
     # Convenience: list available tools
@@ -755,352 +819,6 @@ class LiteLLMClient:
         response = await client.get("/mcp-rest/tools/list")
         response.raise_for_status()
         return response.json()
-
-    # -----------------------------------------------------------------------
-    # Direct Streamable-HTTP MCP tool call (bypasses LiteLLM proxy)
-    # -----------------------------------------------------------------------
-
-    def _parse_sse_event(self, body_text: str) -> dict:
-        """Parse a single SSE event from text/event-stream response."""
-        import json as _json
-        for line in body_text.split("\n"):
-            line = line.strip()
-            if line.startswith("data: "):
-                return _json.loads(line[6:])
-            elif line.startswith("event: ") or line.startswith("id: ") or line == "":
-                continue
-        # If no data: line found, try parsing as raw JSON
-        return _json.loads(body_text.strip())
-
-    async def _mcp_call_streamable(
-        self,
-        server_id: str,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Call an MCP server directly over the streamable-http protocol (bypasses LiteLLM /mcp-rest).
-
-        The streamable-http transport (MCP spec) works as follows:
-        1. POST JSON-RPC ``initialize`` to ``{base_url}/mcp`` → server returns
-           ``X-Session-Id`` header in the response.
-        2. POST JSON-RPC ``notifications/initialized`` to ``{base_url}/mcp``
-           with the ``X-Session-Id`` header to complete the handshake.
-        3. POST JSON-RPC ``tools/call`` to ``{base_url}/mcp`` with
-           ``X-Session-Id`` header.
-           - 200 OK with JSON-RPC result body (direct/synchronous result).
-           - 202 Accepted (server will stream response via SSE).
-        4. On 202, open GET ``{base_url}/mcp`` with ``X-Session-Id`` to receive
-           an SSE stream containing the JSON-RPC response message.
-        5. DELETE ``{base_url}/mcp`` with ``X-Session-Id`` to clean up the session.
-
-        Returns:
-            Dict with output (list of content dicts) and is_error (bool).
-        """
-        name = server_id.removeprefix("mcp_")
-        # Prefer parsed MCP_SERVER_URLS dict, then env var, then default
-        base_url = MCP_SERVER_URLS.get(
-            server_id,
-            os.environ.get(f"MCP_SERVER_{name.upper()}_URL", f"http://{server_id}:8000"),
-        ).rstrip("/")
-
-        logger.info("Streamable HTTP MCP call: server=%s base_url=%s tool=%s",
-                     server_id, base_url, tool_name)
-
-        initialize_request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": 2,
-                "capabilities": {},
-                "clientInfo": {"name": "skill-runner", "version": "0.1.0"},
-            },
-        }
-        initialized_notification = {"jsonrpc": "2.0", "method": "notifications/initialized"}
-        jsonrpc_request = {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        }
-
-        mcp_url = f"{base_url}/mcp"
-        session_id: Optional[str] = None
-        parse_error_holder: list[Optional[str]] = [None]
-        result_content: list[dict[str, Any]] = []
-        structured_result_holder: list[Optional[dict[str, Any]]] = [None]
-        is_error = False
-
-        async with AsyncClient(timeout=Timeout(120.0), headers={"Accept": "application/json, text/event-stream"}) as client:
-            # ---- Step 1: POST initialize, get session ID ----
-            try:
-                init_resp = await client.post(mcp_url, json=initialize_request, timeout=30.0)
-                init_resp.raise_for_status()
-                # Handle both JSON and SSE responses
-                ct = init_resp.headers.get("content-type", "")
-                if "text/event-stream" in ct:
-                    # Parse SSE event to extract JSON payload
-                    body_text = init_resp.text
-                    init_body = self._parse_sse_event(body_text)
-                else:
-                    init_body = init_resp.json()
-                # Support both X-Session-Id (old spec) and mcp-session-id (new spec)
-                session_id = init_resp.headers.get("X-Session-Id") or init_resp.headers.get("mcp-session-id")
-                if not session_id:
-                    parse_error_holder[0] = "initialize response missing session ID header"
-                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-                if "error" in init_body:
-                    parse_error_holder[0] = f"MCP init error: {init_body['error']}"
-                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-                server_info = init_body.get("result", {}).get("serverInfo", {})
-                logger.info("MCP initialized (server: %s, session: %s)",
-                            server_info.get("name", "unknown"), session_id)
-            except Exception as exc:
-                parse_error_holder[0] = f"MCP initialize failed: {exc}"
-                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-            # ---- Step 2: POST notifications/initialized ----
-            try:
-                init_ack = await client.post(
-                    mcp_url,
-                    json=initialized_notification,
-                    headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""},
-                    timeout=15.0,
-                )
-                init_ack.raise_for_status()
-                logger.info("MCP initialized notification sent")
-            except Exception as exc:
-                parse_error_holder[0] = f"MCP initialized notification failed: {exc}"
-                # Attempt cleanup and return
-                try:
-                    await client.delete(mcp_url, headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""}, timeout=10.0)
-                except Exception:
-                    pass
-                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-            # ---- Step 3: POST tools/call ----
-            try:
-                tool_resp = await client.post(
-                    mcp_url,
-                    json=jsonrpc_request,
-                    headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""},
-                    timeout=60.0,
-                )
-            except Exception as exc:
-                parse_error_holder[0] = f"tools/call POST failed: {exc}"
-                # Attempt cleanup
-                try:
-                    await client.delete(mcp_url, headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""}, timeout=10.0)
-                except Exception:
-                    pass
-                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-            logger.info("tools/call POST returned status %d", tool_resp.status_code)
-
-            # ---- Step 3a: 200 OK — direct JSON-RPC result or SSE ----
-            if tool_resp.status_code == 200:
-                ct = tool_resp.headers.get("content-type", "")
-                if "text/event-stream" in ct:
-                    jsonrpc_response = self._parse_sse_event(tool_resp.text)
-                else:
-                    try:
-                        jsonrpc_response = tool_resp.json()
-                    except Exception as exc:
-                        parse_error_holder[0] = f"Failed to parse tool response JSON: {exc}"
-                        # Attempt cleanup
-                        try:
-                            await client.delete(mcp_url, headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""}, timeout=10.0)
-                        except Exception:
-                            pass
-                        return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-                self._parse_tool_response(jsonrpc_response, result_content,
-                                           parse_error_holder, structured_result_holder)
-
-                if parse_error_holder[0]:
-                    error = parse_error_holder[0]
-                    try:
-                        await client.delete(mcp_url, headers={"Accept": "application/json, text/event-stream", "X-Session-Id": session_id or "", "mcp-session-id": session_id or ""}, timeout=10.0)
-                    except Exception:
-                        pass
-                    return {"output": [{"type": "text", "text": error}], "is_error": True}
-
-                # Continue to step 5 (cleanup)
-                await self._cleanup_session(client, mcp_url, session_id)
-                return self._build_result(result_content, structured_result_holder[0], is_error,
-                                           server_id, tool_name)
-
-            # ---- Step 3b: 202 Accepted — read SSE stream for response ----
-            elif tool_resp.status_code == 202:
-                logger.info("Got 202 Accepted, reading SSE stream for response")
-                try:
-                    sse_resp = await client.send(
-                        client.build_request("GET", mcp_url,
-                                              headers={"X-Session-Id": session_id}),
-                        stream=True,
-                    )
-                    sse_resp.raise_for_status()
-
-                    response_ready = asyncio.Event()
-
-                    async def sse_reader_task():
-                        try:
-                            event_type: Optional[str] = None
-                            async for raw_line in sse_resp.aiter_lines():
-                                line = raw_line.strip()
-                                if not line:
-                                    continue
-                                if line.startswith("event: "):
-                                    event_type = line[7:].strip()
-                                elif line.startswith("data: "):
-                                    data_value = line[6:].strip()
-                                    if event_type == "message" and data_value:
-                                        try:
-                                            jsonrpc_response = json.loads(data_value)
-                                            logger.info("MCP tool response via streamable-http SSE stream: keys=%s has_error=%s has_result=%s",
-                                                        list(jsonrpc_response.keys()),
-                                                        "error" in jsonrpc_response,
-                                                        "result" in jsonrpc_response)
-                                        except json.JSONDecodeError:
-                                            parse_error_holder[0] = f"Failed to parse SSE tool response: {data_value}"
-                                            response_ready.set()
-                                            return
-
-                                        if "error" in jsonrpc_response and "result" not in jsonrpc_response:
-                                            is_error = True
-                                            result_content.append(
-                                                {"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"}
-                                            )
-                                        elif "result" in jsonrpc_response:
-                                            result = jsonrpc_response["result"]
-                                            structured = result.get("structuredContent")
-                                            if structured:
-                                                structured_result_holder[0] = structured
-                                                is_error = False
-                                            else:
-                                                content_items = result.get("content", [])
-                                                result_content.extend(content_items)
-                                                is_error = result.get("isError", False) and not content_items
-                                        response_ready.set()
-                                        return
-                        except Exception as exc:
-                            logger.error("SSE reader error: %s", exc)
-                            parse_error_holder[0] = f"SSE reader error: {exc}"
-                            response_ready.set()
-
-                    reader_task = asyncio.create_task(sse_reader_task())
-                    try:
-                        await asyncio.wait_for(response_ready.wait(), timeout=60.0)
-                    except asyncio.TimeoutError:
-                        parse_error_holder[0] = "Timeout waiting for SSE response after 202"
-                    reader_task.cancel()
-                    try:
-                        await asyncio.gather(reader_task, return_exceptions=True)
-                    except Exception:
-                        pass
-                    try:
-                        await sse_resp.aclose()
-                    except Exception:
-                        pass
-
-                except Exception as exc:
-                    parse_error_holder[0] = f"SSE stream after 202 failed: {exc}"
-
-                # ---- Step 5: cleanup ----
-                await self._cleanup_session(client, mcp_url, session_id)
-
-                if parse_error_holder[0]:
-                    return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-                return self._build_result(result_content, structured_result_holder[0], is_error,
-                                           server_id, tool_name)
-
-            else:
-                parse_error_holder[0] = f"Unexpected status {tool_resp.status_code} from tools/call"
-                await self._cleanup_session(client, mcp_url, session_id)
-                return {"output": [{"type": "text", "text": parse_error_holder[0]}], "is_error": True}
-
-    # -----------------------------------------------------------------------
-    # Streamable-HTTP helpers
-    # -----------------------------------------------------------------------
-
-    async def _cleanup_session(
-        self, client: AsyncClient, mcp_url: str, session_id: Optional[str]
-    ) -> None:
-        """DELETE the MCP session to clean up server-side resources."""
-        if not session_id:
-            return
-        try:
-            del_resp = await client.delete(
-                mcp_url,
-                headers={"X-Session-Id": session_id},
-                timeout=10.0,
-            )
-            logger.debug("Session cleanup: status=%d", del_resp.status_code)
-        except Exception as exc:
-            logger.warning("Session cleanup failed: %s", exc)
-
-    @staticmethod
-    def _parse_tool_response(
-        jsonrpc_response: dict,
-        result_content: list[dict[str, Any]],
-        parse_error_holder: list[Optional[str]],
-        structured_result_holder: list[Optional[dict]],
-    ) -> None:
-        """Parse a JSON-RPC tool response into result_content / structured_result."""
-        if "error" in jsonrpc_response and "result" not in jsonrpc_response:
-            parse_error_holder[0] = f"MCP error: {jsonrpc_response['error']}"
-            result_content.append({"type": "text", "text": f"MCP error: {jsonrpc_response['error']}"})
-        elif "result" in jsonrpc_response:
-            result = jsonrpc_response["result"]
-            structured = result.get("structuredContent")
-            if structured:
-                structured_result_holder[0] = structured
-            else:
-                content_items = result.get("content", [])
-                result_content.extend(content_items)
-
-    @staticmethod
-    def _build_result(
-        result_content: list[dict[str, Any]],
-        structured_result: Optional[dict[str, Any]],
-        is_error: bool,
-        server_id: str,
-        tool_name: str,
-    ) -> dict[str, Any]:
-        """Build the final result dict from parsed content and structured result."""
-        parse_error: Optional[str] = None
-        if not result_content and not structured_result and not is_error:
-            parse_error = "No response received from MCP server via Streamable HTTP"
-            logger.warning("Streamable HTTP call returned no data (server=%s, tool=%s)",
-                           server_id, tool_name)
-            return {"output": [{"type": "text", "text": parse_error}], "is_error": True}
-
-        if structured_result is not None:
-            sc = structured_result
-            if isinstance(sc, dict):
-                for key in ("result", "matches", "data", "items"):
-                    if key in sc:
-                        sc = dict(sc)
-                        sc["results"] = sc[key]
-                        break
-                if "results" not in sc:
-                    sc = {"results": sc}
-            logger.info("Streamable HTTP call returning structured result (server=%s, tool=%s, results_count=%d)",
-                        server_id, tool_name, len(sc.get("results", [])))
-            return {
-                "result": sc,
-                "output": result_content if result_content else [{"_structured": sc}],
-                "is_error": is_error,
-            }
-        if result_content:
-            logger.info("Streamable HTTP call returning content result (server=%s, tool=%s, items=%d)",
-                        server_id, tool_name, len(result_content))
-            return {"output": result_content, "is_error": is_error}
-        return {"output": [], "is_error": is_error}
 
 
 # ---------------------------------------------------------------------------

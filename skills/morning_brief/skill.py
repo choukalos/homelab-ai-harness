@@ -313,6 +313,49 @@ class NewsItem:
 # ---------------------------------------------------------------------------
 
 
+def _extract_news_items(result: Any) -> list:
+    """
+    Extract the list of news items from an MCP search_news response.
+
+    Handles the raw MCP CallToolResult shape
+    ({"content": [...], "structuredContent": {...}}) as well as the
+    runner-normalized shape ({"result": {...}, "output": [...]}).
+    """
+    if not isinstance(result, dict):
+        return []
+
+    candidates: list[dict] = []
+    if isinstance(result.get("structuredContent"), dict):
+        candidates.append(result["structuredContent"])
+    if isinstance(result.get("result"), dict):
+        candidates.append(result["result"])
+    candidates.append(result)
+
+    for cand in candidates:
+        for key in ("result", "results", "data", "items", "matches"):
+            val = cand.get(key)
+            if isinstance(val, list) and val and isinstance(val[0], dict):
+                return val
+
+    # Last resort: JSON embedded in text content items
+    for key in ("content", "output"):
+        for item in result.get(key) or []:
+            if not (isinstance(item, dict) and item.get("type") == "text"):
+                continue
+            try:
+                parsed = json.loads(item.get("text", ""))
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                return parsed
+            if isinstance(parsed, dict):
+                for k in ("result", "results", "data", "items", "matches"):
+                    val = parsed.get(k)
+                    if isinstance(val, list) and val and isinstance(val[0], dict):
+                        return val
+    return []
+
+
 def _search_news(client: Any, query: str, max_results: int = 5) -> list[NewsItem]:
     """
     Search news via mcp_search-search_news through LiteLLM.
@@ -329,9 +372,7 @@ def _search_news(client: Any, query: str, max_results: int = 5) -> list[NewsItem
         return []
 
     items: list[NewsItem] = []
-    results_list = result.get("result", result.get("results", []))
-    if isinstance(result.get("result"), dict):
-        results_list = result["result"].get("results", result["result"].get("data", []))
+    results_list = _extract_news_items(result)
 
     for item in results_list:
         if len(items) >= max_results:

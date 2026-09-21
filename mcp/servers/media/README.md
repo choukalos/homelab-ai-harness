@@ -78,7 +78,7 @@ Typical commercial flow: `media_storyboard` → per shot
 | `MEDIA_USER` | `unknown` | Fallback user when no Authorization header (Thor: `chuck`) |
 | `MEDIA_CLIENT` | `pi` | Calling-app label stamped on jobs |
 
-Transport: streamable-http on `0.0.0.0:8000` (`/mcp`).
+Transport: SSE on `0.0.0.0:8000` (`/sse`).
 
 ## Public route (2026-09-07)
 

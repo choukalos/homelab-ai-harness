@@ -34,7 +34,7 @@ Path model (Thor has NO shared filesystem with the GPU host):
   - media_pull returns a signed public URL (MEDIA_PUBLIC_URL) usable from
     anywhere — no homelab access, no publishing to the website
 
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 from __future__ import annotations
@@ -731,7 +731,7 @@ async def media_pull(path: str, ttl_hours: float = 24, local_dir: str = "",
 
 
 def main() -> None:
-    """Run the MCP media server over streamable-http transport."""
+    """Run the MCP media server over SSE transport."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_media")
     logger.info("Media pipeline URL: %s", PIPELINE.base)
@@ -743,7 +743,8 @@ def main() -> None:
         logger.info("Pipeline health: %s", health)
     except Exception as exc:
         logger.warning("Pipeline not reachable at startup: %s", exc)
-    mcp.run(transport="streamable-http")
+    #mcp.run(transport="sse")
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":

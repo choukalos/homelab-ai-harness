@@ -128,6 +128,34 @@
   global-off check in the regression suite).
 - Last updated: 2026-08-29 (Phase 9 COMPLETE; KB v2 rebuild closed D6 —
   see 2026-08-29 phase-log entry; D9 Qdrant exposure left open per owner).
+- **2026-09-20 (post-Phase 9):** all MCP servers migrated from
+  streamable-http to the SSE transport (`GET /sse`; LiteLLM `transport: sse`).
+  The skill runner's direct streamable-http MCP client was retired the same
+  day — its `mcp_call` now routes through LiteLLM's `/mcp-rest/tools/call`
+  (which speaks SSE). `mcp_memory` is unaffected in behavior (still 2 tools,
+  same scoped JWT); the dated streamable-HTTP probe results in the phase log
+  below are historical and were green at the time.
+- **2026-09-20 (MCP response-shape audit + fixes):** after the SSE switch,
+  a full audit of the 10 `mcp_call`-using skills found response-shape
+  mismatches (several pre-existing, masked while the old path 404'd). Fixes:
+  (1) runner `mcp_call` (skills/runner/main.py) re-normalizes LiteLLM's raw
+  CallToolResult — `structuredContent` is surfaced as `result` and a `results`
+  alias is added when the structured payload is a list under
+  result/results/data/items/matches; JSON-in-text output is also parsed so
+  `system_info`/`container_logs` (structuredContent=null) yield real data.
+  (2) `homelab_report` + `siri_ask`: LLM `max_tokens` raised (reasoning model
+  matrix-coder burns budget on `reasoning_content`) + null-content guards
+  (message.content can be explicit null on finish_reason=length).
+  (3) `research_brief`: sub-query parser now unwraps the `json_object`
+  constraint's object output ({"queries": [...]}) and the prompt was aligned
+  to the object shape; max_tokens 512→2048.
+  (4) `investment_brief`/`morning_brief`/`deep_research`: search/news/SQL/crawl
+  extractors now handle the raw MCP shape (structuredContent + JSON-in-text
+  `content`, incl. mcp_crawl's double-encoded payload) as well as the
+  runner-normalized shape. Verified end-to-end: homelab_report (35
+  containers), research_brief (15 sources, method=mcp), recent_activity
+  (kb_add_fact 200), investment_brief SQL + news, morning_brief news,
+  deep_research web/kb/crawl extractors (unit-level against live MCP).
 
 ## Open items / future work (post-completion, 2026-08-29)
 

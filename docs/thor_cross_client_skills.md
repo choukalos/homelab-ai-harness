@@ -69,8 +69,8 @@ from the `Authorization` header (LiteLLM forwards it via `extra_headers:
 **LiteLLM registration** (`litellm/config.yml` → `mcp_servers.mcp_skills`):
 ```yaml
 mcp_skills:
-  transport: http
-  url: http://mcp_skills:8000/mcp
+  transport: sse
+  url: http://mcp_skills:8000/sse
   allow_all_keys: true
   extra_headers: [Authorization]   # forward caller key for attribution
   timeout: 7200                     # run_skill blocks up to max_runtime (deep_research=900s)
@@ -78,7 +78,7 @@ mcp_skills:
 Tools appear in LiteLLM prefixed with the server name: `mcp_skills-list_skills`,
 `mcp_skills-run_skill`, `mcp_skills-get_skill_job`.
 
-**Deps:** `mcp>=1.10,<2`, `httpx>=0.27`. Transport: streamable-http, path `/mcp`.
+**Deps:** `mcp>=1.10,<2`, `httpx>=0.27`. Transport: SSE, path `/sse` (migrated from streamable-http 2026-09-20).
 
 ---
 

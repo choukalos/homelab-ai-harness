@@ -22,10 +22,7 @@ services:
 
   litellm:
     # Phase 9 hardening (memory_todo.md D8): pinned off main-latest.
-    # v1.92.0 is the EXACT version running as of 2026-08-28 (verified in
-    # container: litellm-1.92.0.dist-info) — zero version drift, just
-    # removes the floating tag. Re-pin deliberately on future upgrades.
-    image: ghcr.io/berriai/litellm:v1.92.0
+    image: ghcr.io/berriai/litellm:latest
     container_name: litellm-proxy
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]

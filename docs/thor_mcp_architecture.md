@@ -2,15 +2,38 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 10 servers below are live in LiteLLM (streamable-http,
-> `ai-net`, 56 tools as of 2026-08-29 — 46 + 6 new `mcp_knowledge` v2 tools + 3
-> `mcp_skills` tools; legacy media tools removed 2026-08-28). This doc is the design
+> Status: **Implemented** — all 11 servers below are live in LiteLLM (SSE transport,
+> `ai-net`, 71 tools as of 2026-09-20 — 64 + 5 new `mcp_knowledge` digest tools
+> (kb_digest, kb_get_pages, kb_digest_store, kb_digest_get, kb_digest_list) + 2
+> `mcp_memory` tools; `mcp_memory` added 2026-09-02 with the memory project;
+> transport migrated streamable-http → SSE 2026-09-20). This doc is the design
 > baseline; the "Current state" notes reflect the live system.
 
-**Current state (2026-08-29)**
-- 10 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (11),
+**Current state (2026-09-20)**
+- 11 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (18), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3) — 64 tools total.
+  `mcp_media` (18), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
+  `mcp_memory` (2) — 71 tools total.
+- **SSE transport (2026-09-20):** all servers now run FastMCP over the SSE
+  transport (`GET /sse`; the streamable-http `/mcp` endpoint is gone). LiteLLM
+  connects with `transport: sse`. The skill runner's direct streamable-http MCP
+  client was retired the same day — its tool calls now route through LiteLLM's
+  `/mcp-rest/tools/call` (which speaks SSE).
+- **MCP response-shape contract (2026-09-20 audit):** `/mcp-rest/tools/call`
+  returns the **raw FastMCP CallToolResult** — `{content: [{type: text, text}],
+  structuredContent: <dict|null>, isError}`. Two shapes coexist: tools with a
+  structured output (e.g. `search_web`, `docker_ps`, `run_query`) put the data
+  in `structuredContent` (often under a `result` key); tools that return JSON
+  as text (e.g. `system_info`, `container_logs`, `kb_search`, `crawl_page`)
+  have `structuredContent: null` and the JSON lives in `content[0].text`
+  (`mcp_crawl` double-encodes: outer JSON → `content` string → inner JSON →
+  `markdown`). The runner's `mcp_call` (skills/runner/main.py) normalizes for
+  skill code: `structuredContent` is surfaced as `result`, a `results` alias
+  is added when the structured payload is a list under result/results/data/
+  items/matches, and JSON-in-text output is parsed into `result`. Skill-side
+  extractors (research_brief, deep_research, investment_brief, morning_brief,
+  content_writer, marketing_strategy, business_analyst) additionally handle
+  the raw shape directly so they work with either client.
 - **`mcp_knowledge` v2 (2026-08-29 — D6 closed):** family KB rebuilt on Qdrant
   `kb_*` collections (one per domain, 768-dim nomic, created on the fly;
   11 tools: `kb_search`, `kb_get_document`, `kb_list_documents`, `kb_overview`,
@@ -89,6 +112,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_media` | Media ops: **GPU media-pipeline (18 tools: 10 generation + 8 post-gen edit/file movement, live 2026-08-28 / 2026-09-07)** | GPU host `:8189` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
 | `mcp_skills` | Cross-client skill gateway: list/run/get skill jobs (3 tools, live 2026-08-29) | skill-runner `:8091` |
+| `mcp_memory` | Long-term memory search/list (mem0 + Qdrant `mem0_memories`), live 2026-09-02 | skill-runner memory API `:8091` |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
@@ -293,7 +317,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | **Read/write** | Read (`list_skills`, `get_skill_job`) + write (`run_skill` — executes a skill, may produce artifacts) |
 | **Security** | ai-net only (NOT exposed to host). No client ever talks to skill-runner directly. Per-user attribution via the caller key (complete 2026-09-04/06: `MEMORY_USER_KEYS` maps chuck/dylan to personal keys; `AUTH_KEY_THREADING_ENABLED=true` — see `docs/thor_cross_client_skills.md`). |
 | **LiteLLM** | `allow_all_keys: true`, `extra_headers: [Authorization]`, `timeout: 7200` (run_skill blocks up to max_runtime; deep_research=900s) |
-| **Deps** | `mcp>=1.10,<2`, `httpx>=0.27`. Transport: streamable-http, path `/mcp`. |
+| **Deps** | `mcp>=1.10,<2`, `httpx>=0.27`. Transport: SSE, path `/sse`. |
 | **Notes** | Verified through LiteLLM 2026-08-29: `mcp_skills-list_skills` (15 skills as of 2026-08-31), `mcp_skills-run_skill` (morning_brief, siri_ask, business_analyst, content_writer, marketing_strategy completed), `mcp_skills-get_skill_job` (job retrieval), identity threading (X-API-Key → `service`). See `mcp/servers/skills/README.md` + `docs/thor_cross_client_skills.md`. |
 
 ---
@@ -333,8 +357,10 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 10 servers run as containers on `ai-net` (streamable-http, port 8000)
-  and are registered in `litellm/config.yml` (`mcp_servers`, `allow_all_keys: true` —
+- **Implemented.** All 11 servers run as containers on `ai-net` (SSE transport,
+  path `/sse`, port 8000)
+  and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`,
+  `allow_all_keys: true` —
   decided 2026-08-25: every valid key may call every tool; no scoped grants).
   `mcp_skills` additionally forwards the caller's `Authorization` header
   (`extra_headers: [Authorization]`) for per-user skill attribution.

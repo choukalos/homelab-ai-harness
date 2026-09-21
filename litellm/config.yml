@@ -77,59 +77,70 @@ litellm_settings:
 
 mcp_servers:
   mcp_search:
-    transport: http
-    url: http://mcp_search:8000/mcp
+    transport: sse
+    url: http://mcp_search:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_knowledge:
-    transport: http
-    url: http://mcp_knowledge:8000/mcp
+    transport: sse
+    url: http://mcp_knowledge:8000/sse
     allow_all_keys: true
     timeout: 7200
 
   mcp_crawl:
-    transport: http
-    url: http://mcp_crawl:8000/mcp
+    transport: sse
+    url: http://mcp_crawl:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_filesystem_readonly:
-    transport: http
-    url: http://mcp_filesystem_readonly:8000/mcp
+    transport: sse
+    url: http://mcp_filesystem_readonly:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_mysql:
-    transport: http
-    url: http://mcp_mysql:8000/mcp
+    transport: sse
+    url: http://mcp_mysql:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_homelab_status:
-    transport: http
-    url: http://mcp_homelab_status:8000/mcp
+    transport: sse
+    url: http://mcp_homelab_status:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_filesystem:
-    transport: http
-    url: http://mcp_filesystem:8000/mcp
+    transport: sse
+    url: http://mcp_filesystem:8000/sse
     allow_all_keys: true
+    timeout: 7200
 
   mcp_media:
-    transport: http
-    url: http://mcp_media:8000/mcp
+    transport: sse
+    url: http://mcp_media:8000/sse
     allow_all_keys: true
     timeout: 7200
 
   mcp_vision:
-    transport: http
-    url: http://mcp_vision:8000/mcp
+    transport: sse
+    url: http://mcp_vision:8000/sse
+    allow_all_keys: true
+    timeout: 7200
+
+  mcp_memory:
+    transport: sse
+    url: http://mcp_memory:8000/sse
     allow_all_keys: true
     timeout: 7200
 
   mcp_skills:
-    transport: http
-    url: http://mcp_skills:8000/mcp
+    transport: sse
+    url: http://mcp_skills:8000/sse
     allow_all_keys: true
     extra_headers:
       - Authorization
     timeout: 7200
-
 

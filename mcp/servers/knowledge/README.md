@@ -11,7 +11,7 @@ a static allowlist of non-existent collections).
 
 ```
 LLM (LiteLLM / any MCP client)
-  │  streamable-http, ai-net only (no published ports)
+  │  SSE, ai-net only (no published ports)
   ▼
 mcp_knowledge (python:3.12-slim, :8000)
   ├─ Qdrant 1.18  ── kb_* collections (768-dim Cosine), JWT auth

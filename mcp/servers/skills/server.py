@@ -20,7 +20,7 @@ Authorization header, `extra_headers: ["Authorization"]`) is passed to
 skill-runner as X-API-Key so the job attributes to the right user. Falls back
 to the service key (SKILL_RUNNER_API_KEY) when no caller key is present.
 
-Transport: streamable-http (HTTP, default 0.0.0.0:8000)
+Transport: SSE (HTTP, default 0.0.0.0:8000, path /sse)
 """
 
 import os
@@ -284,11 +284,12 @@ def get_skill_job(job_id: str, ctx: Context = None) -> dict:
 
 
 def main() -> None:
-    """Run the MCP skills server over streamable-http transport (0.0.0.0:8000)."""
+    """Run the MCP skills server over SSE transport (0.0.0.0:8000, path /sse)."""
     logging.basicConfig(level=logging.INFO)
     logger.info("Starting mcp_skills, skill-runner=%s", SKILL_RUNNER_URL)
-    mcp.run(transport="streamable-http")  # defaults to 0.0.0.0:8000
-
+    #mcp.run(transport="sse")  # defaults to 0.0.0.0:8000
+    mcp.run(transport="sse")
+    
 
 if __name__ == "__main__":
     main()

@@ -114,7 +114,15 @@ def _call_mcp_tool(litellm_client, server_id: str, tool_name: str, arguments: di
     output = result.get("output", [])
     for item in output:
         if item.get("type") == "text":
-            return {"text_output": item.get("text", "")}
+            text = item.get("text", "")
+            # Some MCP tools (e.g. mcp_homelab_status.system_info,
+            # container_logs) return JSON as plain text content with
+            # structuredContent=null — parse it so downstream collectors
+            # get real dicts/lists instead of an opaque text_output blob.
+            try:
+                return json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                return {"text_output": text}
 
     return {"raw_output": output}
 
@@ -298,17 +306,31 @@ def _synthesize_report(litellm_client, raw_data_text: str, scope: str) -> str:
     ]
 
     logger.info("Synthesizing report via LLM (model=%s)...", MODEL_ALIAS)
+    # 2026-09-21: max_tokens raised 2000 -> 8192. matrix-coder (Qwen3.8-27B)
+    # is a reasoning model: with 2000 it exhausted the budget on
+    # reasoning_content and returned content=null (finish_reason=length),
+    # which crashed the skill at len(report).
     response = litellm_client.chat_completion(
         model=MODEL_ALIAS,
         messages=messages,
         temperature=0.1,
-        max_tokens=2000,
+        max_tokens=8192,
     )
 
-    # Extract the LLM's text content
+    # Extract the LLM's text content. Note: message.content can be an
+    # explicit null (reasoning model hit the token budget), so .get()'s
+    # default is NOT enough — fall back explicitly on None/empty.
     choices = response.get("choices", [])
     if choices and "message" in choices[0]:
-        return choices[0]["message"].get("content", "[No content from LLM]")
+        content = choices[0]["message"].get("content")
+        if content:
+            return content
+        finish = choices[0].get("finish_reason", "unknown")
+        return (
+            f"[Error: LLM returned no report content (finish_reason={finish}). "
+            "The reasoning model likely exhausted its token budget on "
+            "internal reasoning. Re-run the skill or raise max_tokens.]"
+        )
     return "[Error: could not parse LLM response]"
 
 
