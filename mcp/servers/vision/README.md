@@ -17,7 +17,7 @@ batching**: ≤5 images per fresh LLM call, unlimited calls, no session budget.
 | `vision_probe` | Ops: image cap + latency probe via LiteLLM (use after model changes) |
 
 **`source`** accepts a local path under an allowed root (`/data/media`,
-`/data/workspace`, `/data/ai-kb/raw` — symlink/`../` escape rejected), any
+`/workspace`, `/data/ai-kb/raw` — symlink/`../` escape rejected), any
 `http(s)` URL (2 GB download cap), or a YouTube URL (yt-dlp, metadata first:
 title/duration/chapters feed the report).
 
@@ -53,7 +53,7 @@ source (path/URL/YouTube)
 
 ### Artifacts
 
-`/home/chuck/data/workspace/vision/<slug>/` (rw mount nested in the ro
+`/home/chuck/workspace/vision/<slug>/` (rw mount nested in the ro
 workspace mount):
 
 ```
@@ -77,8 +77,8 @@ They are ephemeral — clean up via `vision_cleanup` (LLM) or
 | `LITELLM_API_KEY` | — | master key (container) |
 | `VISION_MODEL` | `matrix-coder` | alias as-is (REST takes no provider prefix) |
 | `VISION_MAX_IMAGES` | `5` | images per LLM call (probed 2026-08-27) |
-| `VISION_OUTPUT_ROOT` | `/data/workspace/vision` | artifact root |
-| `VISION_ALLOWED_ROOTS` | `/data/media,/data/workspace,/data/ai-kb/raw` | local-path allowlist |
+| `VISION_OUTPUT_ROOT` | `/workspace/vision` | artifact root |
+| `VISION_ALLOWED_ROOTS` | `/data/media,/workspace,/data/ai-kb/raw` | local-path allowlist |
 | `VISION_DOWNLOAD_CAP_BYTES` | `2147483648` | URL download cap |
 | `VISION_MAX_FRAMES_RAW` | `3000` | raw-mode frame budget |
 | `VISION_MAX_FRAMES_SCENE` | `200` | scene-mode total cap |

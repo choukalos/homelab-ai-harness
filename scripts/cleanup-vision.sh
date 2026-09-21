@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # cleanup-vision.sh — housekeeping for mcp_vision artifacts (manual; no cron).
 #
-# Artifacts live in /home/chuck/data/workspace/vision/<slug>/ (frames,
-# reports, chapter maps). They are ephemeral, NON-public data. The LLM can
+# Artifacts live in /home/chuck/workspace/vision/<slug>/ (frames,
+# reports, chapter maps). They are ephemeral, NON-public data — workspace
+# zone, NOT backed up. The LLM can
 # also clean via the vision_cleanup MCP tool; this script is the host-side
 # equivalent.
 #
@@ -14,7 +15,7 @@
 #   ./scripts/cleanup-vision.sh --slug <slug>        # delete one artifact dir
 set -euo pipefail
 
-ROOT="/home/chuck/data/workspace/vision"
+ROOT="/home/chuck/workspace/vision"
 DAYS=7
 DRY_RUN=false
 DO_ALL=false

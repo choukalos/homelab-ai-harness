@@ -69,7 +69,7 @@
   `vision_cleanup`, `vision_probe`. Sources: local paths (allowlisted), any
   http(s) URL (2 GB cap), YouTube (yt-dlp). `focus=commercial` QA's
   mcp_media-generated media (PASS/FAIL verdict). Artifacts are ephemeral and
-  NON-public (`/home/chuck/data/workspace/vision/<slug>/`; cleaned via
+  NON-public (`/home/chuck/workspace/vision/<slug>/`; cleaned via
   `vision_cleanup` or `scripts/cleanup-vision.sh`). Registered in LiteLLM with
   `timeout: 7200` (batched owner reload with the `mcp_knowledge` 7200s timeout
   for KB K3). See `mcp/servers/vision/README.md` and `mcp-vision-todo.md`.
@@ -167,7 +167,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | **Inputs** | Query string, KB name (friendly, slugified to `kb_<slug>`), source path, fact text |
 | **Outputs** | Ranked chunks with kb/source/page_range, document chunks, KB map, change log, ingest/backup reports |
 | **Read/write** | **Read + write** (2026-08-29 v2: server is the KB operator; writes are gated by the `kb_` prefix code-gate, not a read-only key) |
-| **Allowed paths** | `http://qdrant:6333`; sources under `/data/media`, `/data/workspace`, `/data/ai-kb/raw` (ro mounts); embeddings + vision via LiteLLM |
+| **Allowed paths** | `http://qdrant:6333`; sources under `/data/media`, `/workspace`, `/data/ai-kb/raw` (ro mounts); embeddings + vision via LiteLLM |
 | **Context impact** | Low-Medium — returns compact chunks/snippets |
 | **Security** | Global-`m` Qdrant key (`sub=mcp-knowledge`) + **`kb_` prefix code-gate** (structural: every Qdrant operation validates the collection name; adversarial-tested). The prefix gate, not the JWT, is the boundary — `mem0_memories` is unreachable by construction. |
 
@@ -297,7 +297,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | **Video modes** | `scene` (scene-change detection; single-pass <5 min, chunked longer; 200-frame cap) · `raw` (full native FPS, precise per-frame timestamps, **frame-budget guarded** — 3000 default, refuses before extracting) |
 | **Focus templates** | `general` · `gameplay` · `tutorial` · `commercial` (QA of mcp_media-generated media: PASS/FAIL verdict + fix suggestions; pass the generation brief in `prompt`) |
 | **Batching** | ≤5 images per fresh LLM call (provider limit, probed 2026-08-27); unlimited calls; thinking OFF (`chat_template_kwargs.enable_thinking=false` — Qwen3 thinking burns the completion budget) |
-| **Artifacts** | `/home/chuck/data/workspace/vision/<slug>/` — frames, `summary.md`, `chapters.json`, `frame_metadata.jsonl`, `report.md`. **Ephemeral + NON-public** (no Caddy route, never under `media/public/`); cleaned via `vision_cleanup` or `scripts/cleanup-vision.sh` (manual, no cron) |
+| **Artifacts** | `/home/chuck/workspace/vision/<slug>/` — frames, `summary.md`, `chapters.json`, `frame_metadata.jsonl`, `report.md`. **Ephemeral + NON-public** (no Caddy route, never under `media/public/`); cleaned via `vision_cleanup` or `scripts/cleanup-vision.sh` (manual, no cron) |
 | **Read/write** | Reads sources (ro mounts); writes only the artifact dir (rw mount nested in ro workspace) |
 | **Security** | ffmpeg/ffprobe/yt-dlp as arg lists (no shell); LiteLLM master key in-container; ai-net only |
 | **LiteLLM** | `allow_all_keys: true`, `timeout: 7200` (long videos = minutes) |

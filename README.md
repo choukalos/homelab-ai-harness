@@ -248,7 +248,7 @@ on the fly by `mcp_knowledge`. There is no watcher or pipeline: the
 LLM is the operator and ingests via `kb_ingest_file` / `kb_add_fact`.
 
 - Source files: `/home/chuck/data/ai-kb/raw/` (canonical drop point);
-  `/home/chuck/data/media` and `/home/chuck/data/workspace` are also
+  `/home/chuck/data/media` and `/home/chuck/workspace` are also
   readable as sources
 - Embeddings: 768-dim (nomic via LiteLLM), Cosine distance
 - Vision fallback: image/table pages transcribed via `matrix-coder`

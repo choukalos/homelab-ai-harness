@@ -83,7 +83,7 @@ KB_ALLOWED_ROOTS: list[str] = [
     r.rstrip("/") for r in
     os.environ.get(
         "KB_ALLOWED_ROOTS",
-        "/data/media,/data/workspace,/data/ai-kb/raw").split(",") if r
+        "/data/media,/workspace,/data/ai-kb/raw").split(",") if r
 ]
 # Writable backup target (mounted rw from /home/chuck/data/backups/kb).
 KB_BACKUP_DIR: str = os.environ.get("KB_BACKUP_DIR", "/backups/kb")
