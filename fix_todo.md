@@ -1,6 +1,6 @@
 # Data Structure Audit — Fix Plan
 
-**Date:** 2026-07-21
+**Date:** 2026-09-21 (updated 2026-09-22)
 **Scope:** Audit of `/home/chuck/{homelab,data,workspace}` against the intended structure:
 
 | Directory | Intent |
@@ -11,7 +11,7 @@
 
 **Verdict:** The core layout is mostly right (container data in `data/`, code in `homelab/`, staging in `workspace/media`), but there are **10 concrete violations** and **3 security issues** worth fixing.
 
-**Status (2026-07-21):** Executing. Items marked `[x]` are done. Items marked `[sudo]` need a root password (root-owned files). See bottom for the exact sudo batch.
+**Status (2026-09-22):** Executing. Items marked `[x]` are done. Items marked `[sudo]` need a root password (root-owned files). See bottom for the exact sudo batch.
 
 ---
 
@@ -27,7 +27,7 @@
 ### 1.2 GitHub PAT embedded in invest-hub remote URL `[x]`
 - **Problem:** `workspace/code/invest-hub` had `https://x-access-token:github_pat_...@github.com/...` as its origin URL.
 - **Done:**
-  1. Insurance first: `data/backups/invest-hub-local-2026-07-21.bundle` (full history, verified) + `-uncommitted.patch` + `-POOL-TIMEOUT-FIX.md` + `-status.txt`.
+  1. Insurance first: `data/backups/invest-hub-local-2026-09-21.bundle` (full history, verified) + `-uncommitted.patch` + `-POOL-TIMEOUT-FIX.md` + `-status.txt`.
   2. `workspace/code/` and the stale wrapper `workspace/.git` removed — the PAT is gone from disk (note: the token also appears in one old pi session log under `~/.pi/agent/sessions/`; harmless local history, but the PAT is dead anyway — GitHub rejected it: "Invalid username or token").
 
 ### 1.3 `~/lab-keys/dylan.txt` is world-readable (664) and outside the structure `[x]`
@@ -40,8 +40,8 @@
 
 ### 2.1 `workspace/code/invest-hub` is a live repo with UNCOMMITTED changes `[x]`
 - **Problem:** The invest-hub checkout (a versioned code repo) lived in `workspace/` (temp, not backed up) with uncommitted work (3 modified files + 1 untracked doc).
-- **Done:** Per user: the repo was superseded by code from another machine already in git, so the local checkout is stale and not worth migrating. Insurance saved to `data/backups/` (bundle + patch + doc), then `workspace/code/` removed. `compose/compose.invest-hub.yml` build contexts (`../../workspace/code/invest-hub/{server,client}`) are now dangling — see follow-up below.
-- **Follow-up:** decide how invest-hub images get built now (GitHub self-runner?). If local builds are still used, clone the repo under `homelab/` and fix the two `context:` lines.
+- **Done:** Per user: the repo was superseded by code from another machine already in git, so the local checkout is stale and not worth migrating. Insurance saved to `data/backups/` (bundle + patch + doc), then `workspace/code/` removed.
+- **Follow-up (RESOLVED 2026-09-22 — investigated, no action needed):** the `build.context` lines are **not a real build path — they are a sed anchor for CI.** `.github/workflows/deploy.yml` in the invest-hub repo (runs on the self-hosted `github-runner`) copies this compose file, rewrites the two `context:` lines to the fresh GitHub checkout via `sed`, builds from that copy, then `up -d --no-build` from the original. Verified: remote `main` (3826195d) is 24 commits **ahead** of the deleted checkout (0 unique local commits), the last CI deploy (2026-09-04) succeeded, the runner is online, and the sed anchors still match exactly. The uncommitted pool-timeout work was independently re-implemented (better) on the remote — see `data/backups/invest-hub-local-2026-09-21-uncommitted.patch` for the original. Contract now documented in the compose file comments. Optional hardening: add a `grep -q` guard to the workflow's sed so a broken anchor fails loudly (requires a push to the invest-hub repo).
 
 ### 2.2 `workspace/` itself is a git wrapper repo (choukalos/invest-hub) `[x]`
 - **Problem:** `workspace/` had its own `.git` (remote `choukalos/invest-hub`) tracking a committed `.DS_Store`, 3 HTML test files, and the invest-hub repo as a submodule — a stale wrapper around the real repo.
@@ -119,7 +119,7 @@
 - [x] `cd /home/chuck/homelab && git status` → only intentional changes (committed)
 - [x] `find /home/chuck/homelab -maxdepth 1 -type d \( -name data -o -name tmp -o -name runner-data \)` → empty (logs/ pending sudo move)
 - [x] `du -sh /home/chuck/data/workspace 2>/dev/null` → gone
-- [ ] `docker compose -f compose/compose.invest-hub.yml build` → decide build strategy (see 2.1 follow-up; contexts currently dangling)
+- [ ] `docker compose -f compose/compose.invest-hub.yml build` → **not a valid local operation** (contexts are CI sed anchors; CI builds from the GitHub checkout). `homelab.sh invest up/restart` is safe (no build step).
 - [ ] skill-runner writes logs to `/home/chuck/data/logs/skill_runner/` (after sudo move + container recreate)
 - [ ] vision test extraction writes to `/home/chuck/workspace/vision/<slug>/` (after container rebuild)
 - [x] No plaintext CF token in `~/rotate-cf-tunnel.sh` (script moved + token in `.env`); invest-hub PAT gone from disk
