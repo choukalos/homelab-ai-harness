@@ -11,7 +11,7 @@
 
 **Verdict:** The core layout is mostly right (container data in `data/`, code in `homelab/`, staging in `workspace/media`), but there are **10 concrete violations** and **3 security issues** worth fixing.
 
-**Status (2026-09-22):** Executing. Items marked `[x]` are done. Items marked `[sudo]` need a root password (root-owned files). See bottom for the exact sudo batch.
+**Status (2026-09-22):** COMPLETE except the CF token rotation (user, dashboard). All `[x]`. The `[sudo]` batch was executed 2026-09-22 ~02:17 UTC (root-owned leftovers moved/removed; see notes in 2.3/3.1).
 
 ---
 
@@ -46,20 +46,19 @@
 ### 2.2 `workspace/` itself is a git wrapper repo (choukalos/invest-hub) `[x]`
 - **Problem:** `workspace/` had its own `.git` (remote `choukalos/invest-hub`) tracking a committed `.DS_Store`, 3 HTML test files, and the invest-hub repo as a submodule — a stale wrapper around the real repo.
 - **Done:** `workspace/.git` removed (all its tracked content was junk/stale; the real repo is on GitHub). `workspace/` is now a plain scratch dir. `.DS_Store` left on disk (harmless).
-- **Remaining `[sudo]`:** `workspace/documents/` (root-owned dir) — move the 2 real outputs to `data/documents/`, delete the 2 smoke-test HTMLs. `workspace/build_qwen38_experiment.py` (root-owned file) — delete or chown.
+- **Remaining `[sudo]`:** DONE 2026-09-22 (user) — `workspace/documents/` moved to `data/documents/` (2 real outputs kept, 2 smoke-test HTMLs dropped); `workspace/build_qwen38_experiment.py` deleted.
 
-### 2.3 `workspace/documents/` and `workspace/build_qwen38_experiment.py` are root-owned `[sudo]`
+### 2.3 `workspace/documents/` and `workspace/build_qwen38_experiment.py` are root-owned `[x]`
 - **Problem:** Output files and a script created by a container running as root; ownership is `root:root` (chuck can't safely edit/delete).
-- **Fix (needs sudo):** see the sudo batch at the bottom. Long-term: containers should write outputs as the `chuck` uid or to a dedicated drop dir.
+- **Done (sudo batch, 2026-09-22):** both handled — see 2.2. Long-term: containers should write outputs as the `chuck` uid or to a dedicated drop dir.
 
 ---
 
 ## Priority 3 — Data/ephemera in the code repo (`homelab/`)
 
-### 3.1 `homelab/logs/skill_runner/` — 99 MB of runtime logs in the code tree `[sudo]`
+### 3.1 `homelab/logs/skill_runner/` — 99 MB of runtime logs in the code tree `[x]`
 - **Problem:** Root-owned logs inside the versioned repo dir. Gitignored (good) but violates the structure: runtime data belongs in `data/`.
-- **Done:** `compose/compose.skill-runner.yml` now points `SKILL_RUNNER_LOG_DIR` + the volume mount at `/home/chuck/data/logs/skill_runner/` (dir created).
-- **Remaining (needs sudo):** `sudo mv /home/chuck/homelab/logs/skill_runner/* /home/chuck/data/logs/skill_runner/ && sudo rmdir /home/chuck/homelab/logs/skill_runner /home/chuck/homelab/logs`, then recreate the skill-runner container.
+- **Done:** `compose/compose.skill-runner.yml` now points `SKILL_RUNNER_LOG_DIR` + the volume mount at `/home/chuck/data/logs/skill_runner/` (dir created). Sudo batch executed 2026-09-22: old logs moved to `data/logs/skill_runner/skill_runner.log.1` (102 MB), `homelab/logs/` removed. skill-runner (recreated) is writing to the new path.
 
 ### 3.2 `homelab/tmp/` — scratch scripts and logs (working files) `[x]`
 - **Problem:** ~20 scratch files (`kb_e2e.py`, `vision_part1-3.py`, `architecture-summary-for-frontier.md`, …) — LLM working files, not versioned code. Gitignored, so no leak risk, but wrong zone.
@@ -93,7 +92,7 @@
   3. `scripts/cleanup-vision.sh` `ROOT=` updated.
   4. `scripts/backup-kb.sh` mapping updated (`/workspace` → `/home/chuck/workspace`) — KB sources ingested from workspace are still backed up, scratch that's never ingested is not.
   5. Code defaults updated: `mcp/servers/vision/server.py`, `mcp/servers/knowledge/server.py`; docs updated (vision README, knowledge README, thor_mcp_architecture.md, main README).
-  6. **Remaining:** recreate `mcp_vision` + `mcp_knowledge` containers (code changed → rebuild), then run a test frame extraction to verify.
+  6. **Done:** `mcp_vision` + `mcp_knowledge` rebuilt and force-recreated; end-to-end test frame extraction verified writing to `/workspace/vision/<slug>/` (host: `workspace/vision/`); test artifacts cleaned via in-container `vision_cleanup`.
 
 ---
 
@@ -119,14 +118,14 @@
 - [x] `cd /home/chuck/homelab && git status` → only intentional changes (committed)
 - [x] `find /home/chuck/homelab -maxdepth 1 -type d \( -name data -o -name tmp -o -name runner-data \)` → empty (logs/ pending sudo move)
 - [x] `du -sh /home/chuck/data/workspace 2>/dev/null` → gone
-- [ ] `docker compose -f compose/compose.invest-hub.yml build` → **not a valid local operation** (contexts are CI sed anchors; CI builds from the GitHub checkout). `homelab.sh invest up/restart` is safe (no build step).
-- [ ] skill-runner writes logs to `/home/chuck/data/logs/skill_runner/` (after sudo move + container recreate)
-- [ ] vision test extraction writes to `/home/chuck/workspace/vision/<slug>/` (after container rebuild)
+- [x] `docker compose -f compose/compose.invest-hub.yml build` → **not a valid local operation** (contexts are CI sed anchors; CI builds from the GitHub checkout). `homelab.sh invest up/restart` is safe (no build step).
+- [x] skill-runner writes logs to `/home/chuck/data/logs/skill_runner/` (verified after sudo move + container recreate)
+- [x] vision test extraction writes to `/home/chuck/workspace/vision/<slug>/` (verified after container rebuild)
 - [x] No plaintext CF token in `~/rotate-cf-tunnel.sh` (script moved + token in `.env`); invest-hub PAT gone from disk
 - [x] `ls -la /home/chuck/` → only `data`, `homelab`, `lab-keys`, `workspace` + dotfiles
 - [ ] Rotate the CF API token in the Cloudflare dashboard (1.1)
 
-## SUDO batch (run as root — the only remaining file moves)
+## SUDO batch — EXECUTED 2026-09-22 ~02:17 UTC (user)
 
 ```bash
 # 1. skill-runner logs: homelab (code zone) -> data (backed-up zone)
@@ -145,7 +144,9 @@ sudo chown -R chuck:chuck /home/chuck/data/documents
 sudo rm /home/chuck/workspace/build_qwen38_experiment.py
 ```
 
-Then recreate the affected containers:
+Then recreate the affected containers — **DONE** (mcp_vision/mcp_knowledge rebuilt + force-recreated; skill-runner force-recreated; all healthy).
+
+**Optional cosmetic (not required):** the moved files are still root-owned in `data/` (world-readable, backups work): `sudo chown -R chuck:chuck /home/chuck/data/logs/skill_runner /home/chuck/data/documents`.
 
 ```bash
 cd /home/chuck/homelab
