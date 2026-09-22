@@ -48,8 +48,7 @@ services:
       - TZ=America/Chicago
       # mem0's setup.py does os.makedirs(~/.mem0) at import time; with no
       # HOME, ~ resolves to / and fails now that we run as chuck (uid 1000).
-      # Point it at /tmp (writable, ephemeral — same as before, when root
-      # silently wrote /.mem0 into the image layer).
+      # /tmp/.mem0 is a bind mount to data/mem0 (persistent, backed up).
       - MEM0_DIR=/tmp/.mem0
       - HARNESS_URL=http://skill-runner:8091
       # Durable job index (skills-todo Phase A): MySQL backing store so
@@ -101,6 +100,10 @@ services:
       - /home/chuck/data/logs/skill_runner:/home/chuck/data/logs/skill_runner
       - /home/chuck/homelab/scheduler:/app/scheduler:ro
       - /home/chuck/data/scheduler:/app/data/scheduler
+      # mem0 local dir (config.json + history.db): durable so a drive
+      # update/recreate doesn't lose it. The actual memories live in Qdrant
+      # (data/qdrant); this is mem0's auxiliary local state.
+      - /home/chuck/data/mem0:/tmp/.mem0
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
     # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
     # supported by Docker Compose.
