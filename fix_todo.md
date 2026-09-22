@@ -11,7 +11,7 @@
 
 **Verdict:** The core layout is mostly right (container data in `data/`, code in `homelab/`, staging in `workspace/media`), but there are **10 concrete violations** and **3 security issues** worth fixing.
 
-**Status (2026-09-22):** Core audit COMPLETE. Follow-up round (afternoon): cleanups done, containers switched to run as chuck (pending chown + recreate — see F3), CF token rotation confirmed but `.env` still needs the new token (F1).
+**Status (2026-09-22):** Core audit COMPLETE. Follow-up round: cleanups done, all 6 output-writing containers now run as chuck and verified (F3 done). Only open item: F1 — paste the new CF token into `homelab/.env` (user).
 
 ---
 
@@ -141,16 +141,12 @@
 - `workspace/tm_test/` removed; `workspace/.DS_Store` removed.
 - Vision artifacts: in-container `vision_cleanup` (7-day retention) deleted 72 dirs / 395 MB. 10 dirs from 2026-09-16 remain (just under the cutoff, 5.2 MB) — auto-clean in ~1 day.
 
-### F3. Containers run as chuck (uid/gid 1000) `[in-progress]`
+### F3. Containers run as chuck (uid/gid 1000) `[x]`
 - **Why:** skill-runner + 5 MCP servers wrote root-owned files into chuck-owned zones (data/logs, data/media, data/scheduler, data/backups/kb, data/ai-kb/digests, workspace/).
-- **Done (compose, committed):** `user: "1000:1000"` added to `skill-runner`, `mcp_knowledge`, `mcp_media`, `mcp_filesystem`, `mcp_mysql`, `mcp_vision`. No Dockerfile has a `USER` directive, so the compose override is clean. Both compose files parse.
-- **Prereq `[sudo]` (user):** chown the write targets so the chuck-user processes can write (existing root-owned files, incl. the active skill-runner log, block appends):
-  ```bash
-  sudo chown -R chuck:chuck /home/chuck/data/logs/skill_runner /home/chuck/data/documents \
-    /home/chuck/data/media /home/chuck/data/scheduler /home/chuck/data/backups/kb \
-    /home/chuck/data/ai-kb/digests /home/chuck/workspace
-  ```
-- **Then (agent):** recreate the 6 containers and verify (a) all healthy, (b) new files land chuck-owned (skill-runner log append, vision test artifact, media staging write).
+- **Done (compose, committed):** `user: "1000:1000"` added to `skill-runner`, `mcp_knowledge`, `mcp_media`, `mcp_filesystem`, `mcp_mysql`, `mcp_vision`. No Dockerfile has a `USER` directive, so the compose override is clean.
+- **Done (user, 2026-09-22):** chown batch executed — all 7 targets (incl. nested) now chuck-owned, verified with `find -not -user chuck` = 0.
+- **Done (recreate + verify, 2026-09-22 15:31 UTC):** all 6 containers force-recreated. Verified: `docker inspect User=1000:1000` on all; functional write tests land `1000:1000` (vision→workspace/vision, knowledge→ai-kb/digests, media→workspace/media, mysql→data/media/csv, filesystem→workspace/, skill-runner→data/scheduler); skill-runner log appends chuck-owned; all 5 MCP servers HTTP 200 on SSE; skill-runner `/health` 200.
+- **Fix needed during recreate:** mem0's `setup.py` does `os.makedirs(~/.mem0)` at import time; with no HOME, `~` = `/` → `PermissionError` as chuck (as root it had silently written `/.mem0` into the ephemeral image layer). Fixed with `MEM0_DIR=/tmp/.mem0` in the skill-runner env — mem0 now inits clean (Qdrant index creation 200 OK).
 - **Not changed (intentional):** `github-runner` + the pure-data containers (qdrant, mysql, grafana, …) — their writes stay in `data/` container dirs where root/UID ownership is normal. `mcp_homelab_status` reads docker.sock:ro — works as chuck via the docker group.
 
 ## SUDO batch — EXECUTED 2026-09-22 ~02:17 UTC (user)
