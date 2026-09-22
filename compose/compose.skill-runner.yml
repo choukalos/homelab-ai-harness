@@ -46,6 +46,11 @@ services:
       - AUTH_KEY_THREADING_ENABLED=${AUTH_KEY_THREADING_ENABLED:-false}
       - PYTHONUNBUFFERED=1
       - TZ=America/Chicago
+      # mem0's setup.py does os.makedirs(~/.mem0) at import time; with no
+      # HOME, ~ resolves to / and fails now that we run as chuck (uid 1000).
+      # Point it at /tmp (writable, ephemeral — same as before, when root
+      # silently wrote /.mem0 into the image layer).
+      - MEM0_DIR=/tmp/.mem0
       - HARNESS_URL=http://skill-runner:8091
       # Durable job index (skills-todo Phase A): MySQL backing store so
       # GET /skills/jobs/{id} survives a runner restart. skill_jobs table in
