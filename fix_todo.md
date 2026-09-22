@@ -11,7 +11,7 @@
 
 **Verdict:** The core layout is mostly right (container data in `data/`, code in `homelab/`, staging in `workspace/media`), but there are **10 concrete violations** and **3 security issues** worth fixing.
 
-**Status (2026-09-22):** COMPLETE except the CF token rotation (user, dashboard). All `[x]`. The `[sudo]` batch was executed 2026-09-22 ~02:17 UTC (root-owned leftovers moved/removed; see notes in 2.3/3.1).
+**Status (2026-09-22):** Core audit COMPLETE. Follow-up round (afternoon): cleanups done, containers switched to run as chuck (pending chown + recreate — see F3), CF token rotation confirmed but `.env` still needs the new token (F1).
 
 ---
 
@@ -124,6 +124,34 @@
 - [x] No plaintext CF token in `~/rotate-cf-tunnel.sh` (script moved + token in `.env`); invest-hub PAT gone from disk
 - [x] `ls -la /home/chuck/` → only `data`, `homelab`, `lab-keys`, `workspace` + dotfiles
 - [ ] Rotate the CF API token in the Cloudflare dashboard (1.1)
+
+## Follow-up round (2026-09-22 afternoon)
+
+### F1. CF token: rotation confirmed, but `.env` still holds the OLD token `[!user]`
+- **Verified:** the `CF_API_TOKEN` in `homelab/.env` is byte-identical to the token that was in the old world-readable `~/rotate-cf-tunnel.sh` (captured in the 2026-09-21 session log), and CF's `GET /user/tokens/verify` rejects it (code 1000 "Invalid API Token"). `.env` mtime is still 2026-09-21 11:14 (never edited since creation).
+- **Conclusion:** the dashboard rotation DID happen (the exposed token is now dead — good), but the new token was never pasted into `.env`.
+- **Fix (user):** Cloudflare dashboard → the new token → replace the `CF_API_TOKEN=` value in `homelab/.env` (600, gitignored). Then `scripts/rotate-cf-tunnel.sh` works again.
+
+### F1. CF API token — rotation confirmed, `.env` needs the new token `[user]`
+- **Verified 2026-09-22:** the token currently in `homelab/.env` is byte-identical to the OLD token that was in the deleted world-readable `~/rotate-cf-tunnel.sh` (matched against the 2026-09-21 session log), and CF's `GET /user/tokens/verify` rejects it (code 1000 "Invalid API Token"). `.env` mtime is still 2026-09-21 11:14 (never edited since).
+- **Conclusion:** the dashboard rotation WAS done (the exposed token is now dead — good), but the new token was never pasted into `.env`.
+- **Action (user):** paste the new token from the Cloudflare dashboard into `homelab/.env` as `CF_API_TOKEN=` (keep mode 600). `scripts/rotate-cf-tunnel.sh` reads it from there — no other change needed. Verify with: `curl -s -H "Authorization: Bearer $CF_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify` → `"success": true`.
+
+### F2. Optional cleanups `[x]`
+- `workspace/tm_test/` removed; `workspace/.DS_Store` removed.
+- Vision artifacts: in-container `vision_cleanup` (7-day retention) deleted 72 dirs / 395 MB. 10 dirs from 2026-09-16 remain (just under the cutoff, 5.2 MB) — auto-clean in ~1 day.
+
+### F3. Containers run as chuck (uid/gid 1000) `[in-progress]`
+- **Why:** skill-runner + 5 MCP servers wrote root-owned files into chuck-owned zones (data/logs, data/media, data/scheduler, data/backups/kb, data/ai-kb/digests, workspace/).
+- **Done (compose, committed):** `user: "1000:1000"` added to `skill-runner`, `mcp_knowledge`, `mcp_media`, `mcp_filesystem`, `mcp_mysql`, `mcp_vision`. No Dockerfile has a `USER` directive, so the compose override is clean. Both compose files parse.
+- **Prereq `[sudo]` (user):** chown the write targets so the chuck-user processes can write (existing root-owned files, incl. the active skill-runner log, block appends):
+  ```bash
+  sudo chown -R chuck:chuck /home/chuck/data/logs/skill_runner /home/chuck/data/documents \
+    /home/chuck/data/media /home/chuck/data/scheduler /home/chuck/data/backups/kb \
+    /home/chuck/data/ai-kb/digests /home/chuck/workspace
+  ```
+- **Then (agent):** recreate the 6 containers and verify (a) all healthy, (b) new files land chuck-owned (skill-runner log append, vision test artifact, media staging write).
+- **Not changed (intentional):** `github-runner` + the pure-data containers (qdrant, mysql, grafana, …) — their writes stay in `data/` container dirs where root/UID ownership is normal. `mcp_homelab_status` reads docker.sock:ro — works as chuck via the docker group.
 
 ## SUDO batch — EXECUTED 2026-09-22 ~02:17 UTC (user)
 
