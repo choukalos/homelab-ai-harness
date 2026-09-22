@@ -26,6 +26,14 @@ services:
 
   invest-hub-server:
     image: invest-hub-server:latest
+    # BUILD CONTEXT IS A CI PLACEHOLDER — do NOT "fix" these paths.
+    # The invest-hub repo's .github/workflows/deploy.yml (runs on the
+    # self-hosted github-runner) copies this file and rewrites the two
+    # `context:` lines below (via sed) to point at the fresh GitHub
+    # checkout, then builds from that copy. The strings below are the
+    # sed anchors: if they change, the workflow silently builds a
+    # dangling context and the deploy breaks. CI always deploys from
+    # the GitHub checkout — there is no local build path anymore.
     build:
       context: ../../workspace/code/invest-hub/server
       dockerfile: Dockerfile
@@ -60,6 +68,8 @@ services:
 
   invest-hub-client:
     image: invest-hub-client:latest
+    # CI placeholder context — see the note on invest-hub-server above.
+    # Rewritten by .github/workflows/deploy.yml (sed anchor); do not change.
     build:
       context: ../../workspace/code/invest-hub/client
       dockerfile: Dockerfile
