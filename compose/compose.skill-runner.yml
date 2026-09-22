@@ -7,6 +7,11 @@ services:
       dockerfile: Dockerfile
     image: skill-runner:local
     container_name: skill-runner
+    # Run as chuck (uid/gid 1000): the container writes into chuck-owned zones
+    # (data/logs/skill_runner, data/media, workspace/, data/scheduler), so
+    # outputs must land chuck-owned (2026-09-22 data-structure fix, item 6).
+    # Prereq: those dirs are chuck-owned (chown batch, fix_todo.md).
+    user: "1000:1000"
     restart: unless-stopped
     env_file:
       - ../.env

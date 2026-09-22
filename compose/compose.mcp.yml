@@ -10,6 +10,9 @@ services:
     build:
       context: ../mcp/servers/knowledge
     container_name: mcp_knowledge
+    # Run as chuck (uid/gid 1000): writes land in chuck-owned zones
+    # (data/backups/kb, data/ai-kb/digests) — outputs must be chuck-owned.
+    user: "1000:1000"
     environment:
       - QDRANT_URL=http://qdrant:6333
       # KB rebuild (2026-08-29): full KB server (read + write). KB_API_KEY is
@@ -81,6 +84,8 @@ services:
     build:
       context: ../mcp/servers/mysql
     container_name: mcp_mysql
+    # Run as chuck (uid/gid 1000): CSV output lands in data/media/csv.
+    user: "1000:1000"
     environment:
       - MYSQL_HOST=thor.local
       - MYSQL_PORT=3306
@@ -118,6 +123,8 @@ services:
     build:
       context: ../mcp/servers/filesystem
     container_name: mcp_filesystem
+    # Run as chuck (uid/gid 1000): writes land in workspace/ (chuck-owned).
+    user: "1000:1000"
     volumes:
       - /home/chuck/workspace:/home/chuck/workspace
     restart: unless-stopped
@@ -128,6 +135,9 @@ services:
     build:
       context: ../mcp/servers/media
     container_name: mcp_media
+    # Run as chuck (uid/gid 1000): writes land in data/media/generated +
+    # workspace/media (staging) — outputs must be chuck-owned.
+    user: "1000:1000"
     environment:
       # GPU-host media-pipeline (2026-08-28): ComfyUI + VLLM + TTS/music/SFX
       # workers on Matrix. Thin HTTP client — no GPU work in this container.
@@ -158,6 +168,9 @@ services:
     build:
       context: ../mcp/servers/vision
     container_name: mcp_vision
+    # Run as chuck (uid/gid 1000): artifacts land in workspace/vision
+    # (chuck-owned ephemeral zone).
+    user: "1000:1000"
     environment:
       # Vision model via LiteLLM REST (alias as-is; thinking OFF in code).
       # Cap: 5 images per request (probed 2026-08-27) — server batches.
