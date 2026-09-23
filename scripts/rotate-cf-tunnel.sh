@@ -1,6 +1,11 @@
 #!/usr/bin/bash
 # Rotate the Cloudflare tunnel token.
-# Credentials live in homelab/.env (gitignored, 600) — never hardcode them here.
+# CF_ACCOUNT_ID / CF_TUNNEL_ID come from homelab/.env (gitignored, 600).
+# CF_API_TOKEN comes from the environment — it is intentionally NOT stored
+# in .env (2026-09-23), so the live token never touches disk:
+#   CF_API_TOKEN='your-token' ./scripts/rotate-cf-tunnel.sh
+# (A CF_API_TOKEN line in .env still works as a fallback, but is not
+# recommended.)
 set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-/home/chuck/homelab/.env}"
@@ -9,15 +14,25 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Load only the CF_* vars we need
-eval "$(grep -E '^(CF_API_TOKEN|CF_ACCOUNT_ID|CF_TUNNEL_ID)=' "$ENV_FILE")"
+# Load the non-secret CF_* vars from .env
+eval "$(grep -E '^(CF_ACCOUNT_ID|CF_TUNNEL_ID)=' "$ENV_FILE")"
 
-for v in CF_API_TOKEN CF_ACCOUNT_ID CF_TUNNEL_ID; do
+for v in CF_ACCOUNT_ID CF_TUNNEL_ID; do
     if [ -z "${!v:-}" ]; then
         echo "ERROR: $v not set in $ENV_FILE" >&2
         exit 1
     fi
 done
+
+# Token: environment first, .env as legacy fallback
+if [ -z "${CF_API_TOKEN:-}" ]; then
+    eval "$(grep -E '^CF_API_TOKEN=' "$ENV_FILE" || true)"
+fi
+if [ -z "${CF_API_TOKEN:-}" ]; then
+    echo "ERROR: CF_API_TOKEN not set. Export it first, e.g.:" >&2
+    echo "  CF_API_TOKEN='your-token' $0" >&2
+    exit 1
+fi
 
 # need to copy/paste the result manually to see the output; look at result field for token.
 curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \

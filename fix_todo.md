@@ -11,7 +11,7 @@
 
 **Verdict:** The core layout is mostly right (container data in `data/`, code in `homelab/`, staging in `workspace/media`), but there are **10 concrete violations** and **3 security issues** worth fixing.
 
-**Status (2026-09-22):** Core audit COMPLETE. Follow-up round: cleanups done, all 6 output-writing containers now run as chuck and verified (F3 done). Only open item: F1 — paste the new CF token into `homelab/.env` (user).
+**Status (2026-09-23):** Core audit COMPLETE. Follow-up round: cleanups done, all 6 output-writing containers run as chuck and verified (F3 done). F1 resolved 2026-09-23 (CF token rotation confirmed; live token now passed via env at run time, not stored in `.env`). **All items complete.**
 
 ---
 
@@ -123,19 +123,18 @@
 - [x] vision test extraction writes to `/home/chuck/workspace/vision/<slug>/` (verified after container rebuild)
 - [x] No plaintext CF token in `~/rotate-cf-tunnel.sh` (script moved + token in `.env`); invest-hub PAT gone from disk
 - [x] `ls -la /home/chuck/` → only `data`, `homelab`, `lab-keys`, `workspace` + dotfiles
-- [ ] Rotate the CF API token in the Cloudflare dashboard (1.1)
+- [x] Rotate the CF API token in the Cloudflare dashboard (1.1) — confirmed 2026-09-22 (old token rejected by CF verify API); live token kept out of `.env` per F1 design decision (2026-09-23)
 
 ## Follow-up round (2026-09-22 afternoon)
 
-### F1. CF token: rotation confirmed, but `.env` still holds the OLD token `[!user]`
-- **Verified:** the `CF_API_TOKEN` in `homelab/.env` is byte-identical to the token that was in the old world-readable `~/rotate-cf-tunnel.sh` (captured in the 2026-09-21 session log), and CF's `GET /user/tokens/verify` rejects it (code 1000 "Invalid API Token"). `.env` mtime is still 2026-09-21 11:14 (never edited since creation).
-- **Conclusion:** the dashboard rotation DID happen (the exposed token is now dead — good), but the new token was never pasted into `.env`.
-- **Fix (user):** Cloudflare dashboard → the new token → replace the `CF_API_TOKEN=` value in `homelab/.env` (600, gitignored). Then `scripts/rotate-cf-tunnel.sh` works again.
-
-### F1. CF API token — rotation confirmed, `.env` needs the new token `[user]`
-- **Verified 2026-09-22:** the token currently in `homelab/.env` is byte-identical to the OLD token that was in the deleted world-readable `~/rotate-cf-tunnel.sh` (matched against the 2026-09-21 session log), and CF's `GET /user/tokens/verify` rejects it (code 1000 "Invalid API Token"). `.env` mtime is still 2026-09-21 11:14 (never edited since).
-- **Conclusion:** the dashboard rotation WAS done (the exposed token is now dead — good), but the new token was never pasted into `.env`.
-- **Action (user):** paste the new token from the Cloudflare dashboard into `homelab/.env` as `CF_API_TOKEN=` (keep mode 600). `scripts/rotate-cf-tunnel.sh` reads it from there — no other change needed. Verify with: `curl -s -H "Authorization: Bearer $CF_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify` → `"success": true`.
+### F1. CF API token — rotation confirmed; token now passed via env, NOT stored in `.env` `[x]`
+- **Verified 2026-09-22:** the token that was in `homelab/.env` was byte-identical to the OLD token that had sat world-readable in `~/rotate-cf-tunnel.sh` (matched against the 2026-09-21 session log), and CF's `GET /user/tokens/verify` rejected it (code 1000 "Invalid API Token"). The dashboard rotation WAS done (the exposed token is dead — good).
+- **Design decision (2026-09-23):** rather than paste the live token into `.env` (a second copy on disk), the token is now supplied **only at run time via the environment** — the live value never touches disk. The user keeps it in their secure notes.
+- **Done:**
+  1. `scripts/rotate-cf-tunnel.sh` rewritten: `CF_ACCOUNT_ID`/`CF_TUNNEL_ID` still load from `.env`; `CF_API_TOKEN` is read from the environment first (a `CF_API_TOKEN=` line in `.env` remains a legacy fallback but is not recommended). Missing token → clear error + usage hint, exit 1.
+  2. Dead `CF_API_TOKEN=` line removed from `homelab/.env` (mode 600 unchanged; `CF_TUNNEL_TOKEN`/`CF_ACCOUNT_ID`/`CF_TUNNEL_ID` intact).
+  3. Verified: no token → clean error exit 1; dummy token → reaches CF and gets HTTP 400 (invalid token), proving the request path works.
+- **Usage (user):** `CF_API_TOKEN='<token-from-secure-notes>' ./scripts/rotate-cf-tunnel.sh` → copy the `result` field (new tunnel token) into `compose/compose.edge.yml` `TUNNEL_TOKEN` (or the cloudflared container env) and `docker compose up -d` the edge stack. Verify the token itself with: `curl -s -H "Authorization: Bearer $CF_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify` → `"success": true`.
 
 ### F2. Optional cleanups `[x]`
 - `workspace/tm_test/` removed; `workspace/.DS_Store` removed.
