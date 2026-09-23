@@ -29,8 +29,19 @@ if [ -z "${CF_API_TOKEN:-}" ]; then
     eval "$(grep -E '^CF_API_TOKEN=' "$ENV_FILE" || true)"
 fi
 if [ -z "${CF_API_TOKEN:-}" ]; then
-    echo "ERROR: CF_API_TOKEN not set. Export it first, e.g.:" >&2
-    echo "  CF_API_TOKEN='your-token' $0" >&2
+    {
+        echo "ERROR: CF_API_TOKEN is not set (blank or missing)."
+        echo
+        echo "Usage:"
+        echo "  CF_API_TOKEN='<your CF API token>' $0"
+        echo
+        echo "The token is intentionally NOT stored in $ENV_FILE (2026-09-23) —"
+        echo "keep it in your secure notes and pass it via the environment so the"
+        echo "live value never touches disk. It must have 'Cloudflare Tunnel: Edit'"
+        echo "permission at account level."
+        echo
+        echo "CF_ACCOUNT_ID / CF_TUNNEL_ID are read from $ENV_FILE automatically."
+    } >&2
     exit 1
 fi
 
