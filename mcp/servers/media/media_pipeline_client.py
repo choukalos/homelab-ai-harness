@@ -170,8 +170,8 @@ class MediaPipelineClient:
                 j = json.loads(r.read())
             if j.get("status") == "done":
                 return j.get("output", {})
-            if j.get("status") == "error":
-                raise PipelineError(f"job {jid} failed: {j.get('error')}")
+            if j.get("status") in ("error", "timeout"):
+                raise PipelineError(f"job {jid} {j.get('status')}: {j.get('error')}")
             time.sleep(self.poll)
         raise PipelineError(f"job {jid} timed out after {timeout:.0f}s")
 
@@ -205,23 +205,44 @@ class MediaPipelineClient:
         return json.loads(Path(local).read_text())
 
     def generate_image(self, prompt: str, width: int = 1344, height: int = 768,
-                       seed: int = 42, steps: int = 4,
+                       seed: int = 42, steps: int = 25, model: str | None = None,
                        user: str | None = None, client: str | None = None,
                        timeout: float = 600) -> str:
-        """Text -> image (keyframe). Returns GPU-host path of the PNG."""
-        return self._wait(self._post_json("/images",
-                                          {"prompt": prompt, "width": width,
-                                           "height": height, "seed": seed,
-                                           "steps": steps},
+        """Text -> image (keyframe). Returns GPU-host path of the PNG.
+
+        model: 'qwen21' (default; Qwen-Image-2.1 — 25 steps, ~30-120 s at
+        1280x720) | 'legacy' (Qwen-Image-2512 GGUF + Lightning; pass steps=4).
+        steps: the server clamps qwen21 steps to [10, 50] (no distilled LoRA
+        at launch); the legacy path honors 4/8.
+        """
+        payload = {"prompt": prompt, "width": width, "height": height,
+                   "seed": seed, "steps": steps}
+        if model is not None:
+            payload["model"] = model
+        return self._wait(self._post_json("/images", payload,
                                           user, client), timeout)["image"]
 
-    def edit_image(self, image: str, prompt: str, seed: int = 42, steps: int = 8,
+    def edit_image(self, image: str, prompt: str, seed: int = 42, steps: int = 25,
+                   model: str | None = None, references: list[str] | None = None,
                    user: str | None = None, client: str | None = None,
                    timeout: float = 600) -> str:
-        """Image+text -> edited image. `image` is a LOCAL path (uploaded)."""
-        return self._wait(self._post_multipart("/images/edit", image,
-                                               {"prompt": prompt, "seed": str(seed),
-                                                "steps": str(steps)},
+        """Image+text -> edited image. `image` is a LOCAL path (uploaded).
+
+        model: 'qwen21' (default; unified Qwen-Image-2.1 editing) | 'legacy'
+        (Qwen-Image-Edit-2511 GGUF + Lightning; pass steps=8).
+        references: up to 9 extra identity/consistency images (qwen21 only);
+        each entry = a ComfyUI input/ filename OR a media_jobs-relative path
+        like 'media_jobs/<job_id>/<file>.png' (staged into ComfyUI input/
+        server-side). The canvas follows `image`; references influence
+        identity only (e.g. a previous shot's keyframe for character/product
+        consistency across shots).
+        """
+        fields = {"prompt": prompt, "seed": str(seed), "steps": str(steps)}
+        if model is not None:
+            fields["model"] = model
+        if references:
+            fields["references"] = ",".join(str(r) for r in references)
+        return self._wait(self._post_multipart("/images/edit", image, fields,
                                                user, client), timeout)["image"]
 
     def generate_shot(self, keyframe: str, prompt: str, width: int = 768,
@@ -291,7 +312,10 @@ class MediaPipelineClient:
                  sfx: str | None = None, width: int = 1920, height: int = 1080,
                  fps: int = 24, vo_volume: float = 1.0, music_volume: float = 0.35,
                  sfx_volume: float = 0.9, vo_start: float | None = None,
-                 loudnorm: bool = False, user: str | None = None,
+                 loudnorm: bool = False, upscale_each: bool = False,
+                 upscale_resolution: int = 1080, upscale_noise_scale: float = 0.0,
+                 upscale_fps: int = 24, upscale_seed: int = 42,
+                 text_overlays: list | None = None, user: str | None = None,
                  client: str | None = None, timeout: float = 1800) -> str:
         """Concat shots + mix audio -> final mp4. `shots` are GPU-host paths.
 
@@ -300,6 +324,13 @@ class MediaPipelineClient:
         renders a static clip); `sfx` may be a list [{path, at}] for
         timestamped placement; `vo_start` offsets the VO from t=0; `loudnorm`
         applies EBU R128 to the final mix.
+
+        Quality extensions (2026-09-24): `upscale_each` runs SeedVR2 (B) on
+        every shot before concat for 1080p-quality output (tune with
+        upscale_resolution / upscale_noise_scale / upscale_fps / upscale_seed);
+        `text_overlays` burns crisp titles into shots post-I2V (list of
+        {text, start?, end?, position?, size?, color?} — LTXV warps baked-in
+        text, so composite titles in post, not in the I2V prompt).
         """
         payload = {"shots": shots, "width": width, "height": height, "fps": fps,
                    "vo_volume": vo_volume, "music_volume": music_volume,
@@ -311,6 +342,14 @@ class MediaPipelineClient:
             payload["vo_start"] = vo_start
         if loudnorm:
             payload["loudnorm"] = True
+        if upscale_each:
+            payload.update({"upscale_each": True,
+                            "upscale_resolution": upscale_resolution,
+                            "upscale_noise_scale": upscale_noise_scale,
+                            "upscale_fps": upscale_fps,
+                            "upscale_seed": upscale_seed})
+        if text_overlays:
+            payload["text_overlays"] = text_overlays
         return self._wait(self._post_json("/assemble", payload, user, client),
                           timeout)["video"]
 

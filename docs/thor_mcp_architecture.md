@@ -242,21 +242,21 @@ retired skill. Restore E2E-verified (`kb_gaming` snapshot → disposable node �
 | **Path model** | No shared FS with GPU host: pipeline tools return **GPU-host paths** (needed for `media_assemble` chaining); `media_fetch` downloads to `/home/chuck/data/media/generated/pipeline/`; input tools auto-fetch GPU-host paths before upload. `media_put` + local trim/freeze/caption sources read the **staging dir** `/home/chuck/workspace/media` (`MEDIA_STAGING_DIR`, rw-mounted; scratch — `scripts/cleanup-media-staging.sh`, `MEDIA_STAGING_MAX_AGE_DAYS` default 7d) and auto-upload. `media_pull` mints a **signed public URL** (`MEDIA_PUBLIC_URL` = `https://siri.choukalos.com/media/pipeline/dl/<token>`, TTL 1–168h) — off-LAN retrieval without publishing. LiteLLM `timeout: 7200` for this server (flows block up to 2h) |
 | **Read/write** | Write (generate/edit/assemble to GPU host) + `media_fetch`/`media_pull(local_dir=)` downloads to `/home/chuck/data/media/generated/pipeline/` + `media_put` uploads from staging |
 | **Security** | Pipeline + ComfyUI over LAN. Output write-scoped to the media dir. Public route `siri.choukalos.com/media/pipeline/*` (Caddy): `/dl/<token>` public (token is the credential), `/upload` requires `X-Api-Key` (chuck/dylan LiteLLM key); everything else (incl. `/dl_token`) 404 / LAN-only |
-| **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. `media_assemble` M4 extensions (2026-09-07): object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm` (backward compatible). |
+| **Notes** | Legacy ComfyUI/HF tools (`generate_image`, `edit_image`, `image_info`, `list_images`) removed 2026-08-28 (old ComfyUI flows decommissioned); `media-generate` skill now uses `media_generate_image` + `media_fetch`. Queue back-pressure: 1 concurrent GPU job + 5 queued; 503 → `retry_after_seconds`. `media_assemble` M4 extensions (2026-09-07): object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm` (backward compatible). Qwen-Image-2.1 upgrade (2026-09-23): `/images` + `/images/edit` default to qwen21 (unified create+edit, 25 steps, server clamps to [10,50]); `model` param (`qwen21` \| `legacy` rollback); `references` on edit (≤9 identity/consistency images, qwen21 only); job output carries `model`; new `timeout` job status surfaced as `PipelineError`. `media_assemble` quality extensions (2026-09-24): `upscale_each` (SeedVR2 per-shot → true 1080p; `upscale_resolution`/`noise_scale`/`fps`/`seed`), `text_overlays` (crisp post-I2V titles `{text,start?,end?,position?,size?,color?}`) — assemble-stage, orthogonal to the image model, backward-compatible (default off). |
 
 **Media pipeline (GPU host, `192.168.4.55:8189`)** — the service `mcp_media` wraps. Stdlib-only client (`media_pipeline_client.py`, vendored verbatim; no auth, LAN-only). Endpoints, each mapped 1:1 to an MCP tool:
 
 | Endpoint | MCP tool | Model/worker | Typical time |
 |---|---|---|---|
 | `POST /storyboard` | `media_storyboard` | VLLM (shot-list JSON) | ~30s |
-| `POST /images` | `media_generate_image` | ComfyUI (SD3 keyframes) | 30–60s |
-| `POST /images/edit` | `media_edit_image` | ComfyUI (img2img edit) | ~30s |
+| `POST /images` | `media_generate_image` | ComfyUI (Qwen-Image-2.1 default; `model=legacy` = old Qwen-Image-2512) | ~30–120 s @1280×720 (25 steps) |
+| `POST /images/edit` | `media_edit_image` | ComfyUI (unified Qwen-Image-2.1 editing; `references` ≤9 identity images; `model=legacy` = old Qwen-Image-Edit-2511) | ~30–120 s |
 | `POST /shots` | `media_generate_shot` | LTXV I2V (~4s clips) | ~10–60s (measured 10s, 97f @ 768×512) |
 | `POST /tts` | `media_text_to_speech` | TTS worker (default voice: movie-trailer) | 15–60s |
 | `POST /music` | `media_generate_music` | ACE-Step | 10–30 min |
 | `POST /sfx` | `media_sfx` | MMAudio (synced to a clip) | 10–30 min |
 | `POST /upscale` | `media_upscale_video` | SeedVR2 (`b`) / 4xUltrasharp (`a2`) | 1–5 min |
-| `POST /assemble` | `media_assemble` | ffmpeg concat + audio mix (M4: object shots, ts sfx, `vo_start`, `loudnorm`) | 1–10 min |
+| `POST /assemble` | `media_assemble` | ffmpeg concat + audio mix (M4: object shots, ts sfx, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → 1080p, `text_overlays` post-I2V titles) | 1–10 min (upscale_each ~12 min/shot) |
 | `GET /files/{name}` | `media_fetch` | — (download) | seconds |
 | `POST /trim` | `media_trim` | ffmpeg trim (libx264 crf 18) | seconds–1 min |
 | `POST /freeze` | `media_freeze` | ffmpeg freeze-frame (no generative model) | seconds |
