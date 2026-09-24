@@ -15,14 +15,14 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | Tool | Pipeline endpoint | Purpose |
 |---|---|---|
 | `media_storyboard` | `/storyboard` | Brief → shot list JSON (VLLM) |
-| `media_generate_image` | `/images` | Text → keyframe image |
-| `media_edit_image` | `/images/edit` | Image + text → edited image (upload) |
+| `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
+| `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
 | `media_generate_shot` | `/shots` | Keyframe → ~4s I2V clip (LTXV, upload) |
 | `media_text_to_speech` | `/tts` | Script → voice-over wav |
 | `media_generate_music` | `/music` | Prompt(+lyrics) → song/instrumental wav (ACE-Step) |
 | `media_sfx` | `/sfx` | Video → synced SFX bed (MMAudio, upload) |
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
-| `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm` — string forms still work) |
+| `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
 
 **Post-gen edit + file movement (2026-09-07, media_pipeline_gaps.md M1–M8):**
@@ -119,6 +119,30 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-09-24: `media_assemble` quality extensions — added `upscale_each` (runs
+SeedVR2 (B) on every shot before concat → true 1080p output; tune with
+`upscale_resolution` / `upscale_noise_scale` / `upscale_fps` / `upscale_seed`)
+and `text_overlays` (burns crisp titles into shots post-I2V — list of
+`{text, start?, end?, position?, size?, color?}`; LTXV warps text baked into
+the I2V prompt, so titles composite in post). Both are assemble-stage video
+features (orthogonal to the image model) and backward-compatible (default
+off). Verified: 16/16 client payload checks + live end-to-end (qwen21 keyframe
+→ I2V shot → `upscale_each`+`text_overlays` assemble → 1920×1080 h264,
+SeedVR2 ~12 min) + vision QA (title "THE FOX" crisp bottom-center, no warp)
++ live MCP wire schema (6 new params) + real MCP `tools/call` (title "MCP
+TEST" crisp).
+2026-09-23: Qwen-Image-2.1 upgrade (matrix pipeline update) — `/images` +
+`/images/edit` now default to **Qwen-Image-2.1** (unified create+edit; 25
+steps, ~30–120 s at 1280×720; server clamps qwen21 steps to [10, 50]).
+`media_generate_image` + `media_edit_image` gain `model` (`qwen21` default |
+`legacy` = old Qwen-Image-2512/2511 GGUF+Lightning, steps=4/8) and
+`media_edit_image` gains `references` (up to 9 identity/consistency images —
+pass a previous shot's keyframe for cross-shot character/product
+consistency; qwen21 only). Steps defaults updated 4/8 → 25. Edit output
+snaps to the model's native grid (e.g. 1376×768 for a 1280×720 canvas).
+Verified: 27/27 client + live pipeline checks (qwen21 t2i/edit, legacy
+rollback t2i/edit, references, identity) + 9/9 MCP SSE end-to-end checks
+(`test_qwen21_upgrade.py`, `test_mcp_e2e.py`).
 2026-09-07: post-gen edit + file movement (media_pipeline_gaps.md Part 2,
 T2/T3) — 8 new tools (`media_trim`, `media_freeze`, `media_caption`,
 `media_info`, `media_upload`, `media_download`, `media_put`, `media_pull`);

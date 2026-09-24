@@ -255,9 +255,12 @@ async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
     name="media_generate_image",
     description=(
         "Generate an image (keyframe) from a text prompt via the GPU-host media "
-        "pipeline. Returns {path, location='gpu_host'}: the path is ON THE GPU HOST — "
-        "pass it directly to media_generate_shot/media_assemble (auto-fetched) or "
-        "call media_fetch to download it locally."
+        "pipeline (Qwen-Image-2.1 by default; 25 steps, ~30-120 s at 1280x720). "
+        "`model`: 'qwen21' (default) | 'legacy' (old Qwen-Image-2512 GGUF + "
+        "Lightning; pass steps=4 for the fast path). Returns {path, "
+        "location='gpu_host'}: the path is ON THE GPU HOST — pass it directly to "
+        "media_generate_shot/media_assemble (auto-fetched) or call media_fetch "
+        "to download it locally."
     ),
 )
 async def media_generate_image(
@@ -265,14 +268,15 @@ async def media_generate_image(
     width: int = 1280,
     height: int = 720,
     seed: int = 42,
-    steps: int = 4,
+    steps: int = 25,
+    model: Optional[str] = None,
     ctx: Context = None,
 ) -> dict:
     """Text -> keyframe image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         path = await asyncio.to_thread(
-            PIPELINE.generate_image, prompt, width, height, seed, steps,
+            PIPELINE.generate_image, prompt, width, height, seed, steps, model,
             user=user, client=MEDIA_CLIENT
         )
     except Exception as exc:
@@ -284,11 +288,19 @@ async def media_generate_image(
     name="media_edit_image",
     description=(
         "Edit an image (e.g. compose a consistent keyframe) via the GPU-host media "
-        "pipeline. `image` may be a local path OR a GPU-host path (auto-fetched). "
-        "Returns {path, location='gpu_host'}."
+        "pipeline (unified Qwen-Image-2.1 editing by default; 25 steps). `image` "
+        "may be a local path OR a GPU-host path (auto-fetched); the canvas "
+        "follows it. `references` = up to 9 extra identity/consistency images "
+        "(a ComfyUI input/ filename or a media_jobs path like "
+        "media_jobs/<job_id>/<file>.png) — e.g. pass a previous shot's keyframe "
+        "to keep the character/product consistent across shots (qwen21 only). "
+        "`model`: 'qwen21' (default) | 'legacy' (old Qwen-Image-Edit-2511; "
+        "steps=8). Returns {path, location='gpu_host'}."
     ),
 )
-async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 8,
+async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 25,
+                           model: Optional[str] = None,
+                           references: Optional[List[str]] = None,
                            ctx: Context = None) -> dict:
     """Image + text -> edited image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
@@ -296,8 +308,10 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
         local_image = await _ensure_local(image)
         if not os.path.isfile(local_image):
             return {"error": f"Image not found (local or on GPU host): {image}"}
-        path = await asyncio.to_thread(PIPELINE.edit_image, local_image, prompt, seed, steps,
-                                       user=user, client=MEDIA_CLIENT)
+        path = await asyncio.to_thread(
+            PIPELINE.edit_image, local_image, prompt, seed, steps, model, references,
+            user=user, client=MEDIA_CLIENT
+        )
     except Exception as exc:
         return _pipeline_error(exc, {"image": image, "prompt": prompt})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
@@ -440,8 +454,12 @@ async def media_upscale_video(
         "Concat video shots and mix VO + music + SFX into a final mp4 via the "
         "GPU-host media pipeline. `shots` MUST be GPU-host paths (as returned by "
         "media_generate_shot / media_upscale_video) — do NOT pass locally downloaded "
-        "paths. vo/music/sfx are optional GPU-host paths. For 1080p quality, B-upscale "
-        "each shot first. M4 extensions (backward compatible): `shots` entries may be "
+        "paths. vo/music/sfx are optional GPU-host paths. `upscale_each=true` runs "
+        "SeedVR2 (B) on every shot before concat for 1080p-quality output (~5 "
+        "min/shot; tune with upscale_resolution/noise_scale/fps/seed); "
+        "`text_overlays` burns crisp titles into shots post-I2V (list of {text, "
+        "start?, end?, position?, size?, color?} — LTXV warps baked-in text, so "
+        "composite here). M4 extensions (backward compatible): `shots` entries may be "
         "objects {path, in?, out?, duration?} to trim/hold a shot (still image + "
         "duration renders a static clip); `sfx` may be a list [{path, at}] for "
         "timestamped placement; `vo_start` offsets the VO from t=0; `loudnorm` applies "
@@ -462,6 +480,12 @@ async def media_assemble(
     sfx_volume: float = 0.9,
     vo_start: Optional[float] = None,
     loudnorm: bool = False,
+    upscale_each: bool = False,
+    upscale_resolution: int = 1080,
+    upscale_noise_scale: float = 0.0,
+    upscale_fps: int = 24,
+    upscale_seed: int = 42,
+    text_overlays: Optional[List[dict]] = None,
     ctx: Context = None,
 ) -> dict:
     """Concat shots + mix audio -> final mp4 (GPU host)."""
@@ -470,7 +494,10 @@ async def media_assemble(
         path = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
             width, height, fps, vo_volume, music_volume, sfx_volume,
-            vo_start=vo_start, loudnorm=loudnorm,
+            vo_start=vo_start, loudnorm=loudnorm, upscale_each=upscale_each,
+            upscale_resolution=upscale_resolution,
+            upscale_noise_scale=upscale_noise_scale, upscale_fps=upscale_fps,
+            upscale_seed=upscale_seed, text_overlays=text_overlays,
             user=user, client=MEDIA_CLIENT,
         )
     except Exception as exc:
