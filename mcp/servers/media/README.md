@@ -119,6 +119,23 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-09-24: full MCP client e2e of the Qwen-Image-2.1 upgrade (T0–T6,
+`/tmp/qwen21_e2e/run.py` — raw MCP JSON-RPC over SSE, one phase per
+invocation): tool-schema preflight (steps default 25, `model` +
+`references` present) → qwen21 keyframe (45 s) → `model=legacy`
+regression (125 s) → qwen21 edit sign OPEN→CLOSED (55 s; grid snap
+1376×768) → barista portrait (40 s) → edit with `references` (50 s; job
+output `references=1`, doorway figure resembles the portrait) → LTXV I2V
+shot (15 s; 768×512 24 fps 4.04 s) → upscale `a2` 1080 (140 s) → TTS
+trailer VO (15 s; 4.74 s) → assemble `vo_start=0.5` + `loudnorm` (5 s) →
+`media_info` + `media_fetch` final 1920×1080 h264 24 fps AAC (2.5 MB).
+All 11 phases PASS + vision QA ("OPEN"/"CLOSED" signs legible and
+correctly spelled; references edit matches portrait; final cut clean
+1080p, no artifacts). Notes: legacy-model subject drift (bakery→
+bookstore) is model behavior, not a client bug; a2 upscale reports 42 fps
+metadata (duration preserved; assemble normalizes to 24 fps); pipeline job
+registry is ephemeral — `GET /jobs/{id}` + `media_info` 404 on stale jobs,
+but file fetch / `media_pull` still work.
 2026-09-24: `media_assemble` quality extensions — added `upscale_each` (runs
 SeedVR2 (B) on every shot before concat → true 1080p output; tune with
 `upscale_resolution` / `upscale_noise_scale` / `upscale_fps` / `upscale_seed`)
