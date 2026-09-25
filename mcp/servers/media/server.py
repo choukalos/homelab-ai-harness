@@ -808,7 +808,8 @@ async def media_put(local_file: str, subdirectory: str = "",
 @mcp.tool(
     name="media_pull",
     description=(
-        "Mint a signed public URL for a media_jobs file (or job_id): returns "
+        "Mint a signed public URL for a media_jobs file (absolute GPU-host path, "
+        "relative media_jobs/<job_id>/<file> path, or job_id): returns "
         f"{MEDIA_PUBLIC_URL}/dl/<token> with expiry — anyone anywhere can curl it "
         "(the token IS the credential; no homelab access, no website publishing). "
         "TTL 1–168h (default 24). Optional local_dir also copies the file to the "
