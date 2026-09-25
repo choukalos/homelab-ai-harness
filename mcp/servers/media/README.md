@@ -138,6 +138,15 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-09-25: `media_pull` relative-path fix — `pull()`/`_resolve_path()` now
+normalize a relative `media_jobs/<job_id>/<file>` ref to the absolute job
+root (`/home/chuck/data/comfyui/run/`) before POSTing `/dl_token` (the
+pipeline's `/dl_token` only accepts absolute paths; relative refs were
+misrouted to `GET /jobs/{id}` and 404'd). Absolute paths and bare job_ids
+unchanged. Verified: 7/7 MCP-layer checks (relative / absolute / bare
+job_id → same resolved path + signed URL) + public fetch of a
+relative-path-minted token through `siri.choukalos.com` (200).
+
 2026-09-25: TTS voice library (matrix pipeline update, per
 `voices_thor_handoff.md`) — 3 new tools: `media_list_voices` (`GET /voices`,
 sync), `media_add_voice` (`POST /voices`, job — register a voice from a 3–15 s

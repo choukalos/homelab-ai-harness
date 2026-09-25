@@ -54,6 +54,9 @@ PUBLIC_URL = os.environ.get(
     "MEDIA_PUBLIC_URL", "https://siri.choukalos.com/media/pipeline").rstrip("/")
 # /files/{name} is relative to the pipeline's job dir (JOB_DIR on the GPU host).
 _JOB_PREFIX = "/home/chuck/data/comfyui/run/media_jobs/"
+# Parent of the job dir — the root relative media_jobs paths resolve against,
+# so "media_jobs/<job_id>/<file>" -> "/home/chuck/data/comfyui/run/media_jobs/...".
+_JOB_ROOT = _JOB_PREFIX.rsplit("media_jobs/", 1)[0]
 
 
 class PipelineError(RuntimeError):
@@ -152,9 +155,14 @@ class MediaPipelineClient:
         return self._post_multipart_sync("/upload", source, {})["path"]
 
     def _resolve_path(self, ref: str) -> str:
-        """Accept a media_jobs path OR a job_id (resolved via GET /jobs/{id})."""
+        """Accept an absolute GPU-host path, a relative media_jobs path
+        ("media_jobs/<job_id>/<file>"), OR a job_id (resolved via GET /jobs/{id}).
+        The pipeline's /dl_token only accepts absolute paths, so relative
+        media_jobs refs are normalized against the job root."""
         if ref.startswith("/"):
             return ref
+        if ref.startswith("media_jobs/"):
+            return _JOB_ROOT + ref
         j = self._get_json(f"/jobs/{ref}")
         if j.get("status") == "error":
             raise PipelineError(f"job {ref} failed: {j.get('error')}")
@@ -484,7 +492,8 @@ class MediaPipelineClient:
 
     def pull(self, path: str, ttl_hours: float = 24, local_dir: str | None = None,
              timeout: float = 60) -> dict:
-        """Mint a signed public URL for a media_jobs path (or job_id).
+        """Mint a signed public URL for a media_jobs path — absolute or
+        relative ("media_jobs/<job_id>/<file>") — or a job_id.
         -> {url, expires_at, token, path} (+ local_path when local_dir given;
         the local copy uses the LAN /files fetch)."""
         if not (0 < ttl_hours <= 168):
