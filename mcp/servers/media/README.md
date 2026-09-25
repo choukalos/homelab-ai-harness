@@ -27,6 +27,17 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
+| `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
+
+**Submit-and-poll (2026-09-25):** every job tool above accepts
+`non_blocking: bool = False`. With `non_blocking=true` the tool returns
+`{job_id, status: "running"}` in ~1 s instead of blocking until the job
+finishes; then poll `media_job_result(job_id, wait_seconds=20)` until
+`status` is `done`/`error`. Default (`false`) keeps the original blocking
+behavior (skill-runner / direct SSE callers unchanged). Why: pi's
+`pi-provider-litellm` aborts tool calls at a hardcoded 30 s while the job
+keeps running server-side — submit-and-poll keeps every tool call under the
+abort window without touching litellm/pi.
 
 **Post-gen edit + file movement (2026-09-07, media_pipeline_gaps.md M1–M8):**
 
@@ -137,6 +148,25 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-09-25: submit-and-poll for long jobs (fixes the 30 s client abort) —
+all 13 job tools (`media_storyboard`, `media_generate_image`,
+`media_edit_image`, `media_generate_shot`, `media_text_to_speech`,
+`media_add_voice`, `media_generate_music`, `media_sfx`,
+`media_upscale_video`, `media_assemble`, `media_trim`, `media_freeze`,
+`media_caption`) accept `non_blocking: bool = False`: when true the tool
+returns `{job_id, status: "running"}` in ~1 s. New `media_job_result`
+tool long-polls `GET /jobs/{id}` up to `wait_seconds` (default 20, capped
+25 s — under pi-provider-litellm's hardcoded 30 s `CALL_TIMEOUT_MS`)
+and returns the final result (same shape as the blocking tool, via
+`finalize_job` on the job's `output` keys) or `status: 'running'` to poll
+again. Client: `job_status` / `poll_job` / `finalize_job` (output-key
+based — `video`/`image`/`audio`/`storyboard` — not flow-name based). No
+pipeline (Matrix) changes required: `POST /<flow>` → `{job_id}` and
+`GET /jobs/{id}` already existed. Backward compatible: default blocking
+path unchanged for skill-runner / direct SSE. Verified: MCP-layer e2e
+(10/10 — tools/list schema, TTS + storyboard submit→poll→done, bogus-id
+clean 404, blocking regression).
 
 2026-09-25: `media_pull` relative-path fix — `pull()`/`_resolve_path()` now
 normalize a relative `media_jobs/<job_id>/<file>` ref to the absolute job
