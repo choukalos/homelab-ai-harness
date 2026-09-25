@@ -20,6 +20,7 @@ import json
 import mimetypes
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -267,10 +268,46 @@ class MediaPipelineClient:
     def text_to_speech(self, text: str, voice: str = "trailer",
                        user: str | None = None, client: str | None = None,
                        timeout: float = 1800) -> str:
-        """Script -> voice-over wav. Returns GPU-host path."""
+        """Script -> voice-over wav. Returns GPU-host path. `voice` = a library
+        name (see list_voices: trailer, default, narrator_f, deep_m, ...) or a
+        reference wav path on the GPU host (3-15 s single-speaker clip)."""
         return self._wait(self._post_json("/tts", {"text": text, "voice": voice},
                                           user, client),
                           timeout)["audio"]
+
+    # ------------------------------------------------- voice library (2026-09-25)
+    def list_voices(self, timeout: float = 30) -> list:
+        """GET /voices (sync) -> [{name, description, gender, style, added,
+        protected, ref_exists, sample}]."""
+        return self._get_json("/voices", timeout)["voices"]
+
+    def add_voice(self, name: str, source: str, description: str = "",
+                  gender: str = "", style: str = "", sample_text: str = "",
+                  user: str | None = None, client: str | None = None,
+                  timeout: float = 900) -> dict:
+        """POST /voices (job): register a voice from a reference wav (3-15 s).
+        `source` = GPU-host path under the run/basedir dirs (stage external
+        files with download/upload_local/put first). Re-registering a name
+        replaces it (protected names -> 400). Returns the job output
+        {voice, ref, sample, ref_duration_s}."""
+        payload = {"name": name, "source": source, "description": description,
+                   "gender": gender, "style": style}
+        if sample_text:
+            payload["sample_text"] = sample_text
+        return self._wait(self._post_json("/voices", payload, user, client),
+                          timeout)
+
+    def delete_voice(self, name: str, timeout: float = 30) -> dict:
+        """DELETE /voices/{name} (sync). 400 on protected names, 404 missing.
+        Returns {"deleted": name}."""
+        req = urllib.request.Request(f"{self.base}/voices/{name}",
+                                     method="DELETE")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            raise PipelineError(f"/voices/{name} -> HTTP {e.code}: "
+                                f"{e.read()[:200]!r}")
 
     def generate_music(self, prompt: str, lyrics: str = "", duration: int = 30,
                        seed: int = 42, user: str | None = None,

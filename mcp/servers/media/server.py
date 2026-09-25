@@ -6,7 +6,10 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_generate_image(prompt, ...)              Text -> keyframe image
   - media_edit_image(image, prompt, ...)           Image + text -> edited image
   - media_generate_shot(keyframe, prompt, ...)     Keyframe -> ~4s I2V clip
-  - media_text_to_speech(text, voice)              Script -> voice-over wav
+  - media_text_to_speech(text, voice)              Script -> voice-over wav (voice = library name or ref wav path)
+  - media_list_voices()                            TTS voice library (sync)
+  - media_add_voice(name, source, ...)             Register voice from reference wav (job)
+  - media_delete_voice(name)                       Remove a TTS voice (sync)
   - media_generate_music(prompt, lyrics, ...)      Prompt -> song/instrumental
   - media_sfx(video, description, duration)        Video -> synced SFX bed
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
@@ -158,7 +161,12 @@ mcp = FastMCP(
         "RETRIEVAL: media_pull mints a signed public URL "
         f"({MEDIA_PUBLIC_URL}/dl/<token>) anyone can curl — no homelab access, "
         "no website publishing; optional local_dir copies it to the local "
-        "media library instead."
+        "media library instead.\n"
+        "VOICES: media_list_voices lists the TTS voice library (trailer, "
+        "default, narrator_f, deep_m, ...); pass a voice name to "
+        "media_text_to_speech, and register new voices from a 3-15 s "
+        "reference wav with media_add_voice (stage external files with "
+        "media_put / media_download first)."
     ),
     host=MCPS_HOST,
 )
@@ -357,9 +365,15 @@ async def media_generate_shot(
 @mcp.tool(
     name="media_text_to_speech",
     description=(
-        "Generate voice-over speech via the GPU-host media pipeline (movie-trailer "
-        "voice by default; `voice` can also be a path to a custom reference wav on "
-        "the GPU host). Returns {path, location='gpu_host'}."
+        "Generate voice-over speech via the GPU-host media pipeline. `voice` = a "
+        "library name (see media_list_voices: trailer, default, narrator_f, "
+        "deep_m, ...) or a path to a custom reference wav on the GPU host "
+        "(3-15 s single-speaker clip). movie-trailer voice by default. "
+        "Audition flow: media_list_voices -> this tool with a short line -> "
+        "media_pull for a signed URL. Returns {path, location='gpu_host'}: the "
+        "path is ON THE GPU HOST — pass it directly to media_assemble or other "
+        "pipeline tools (inputs are auto-fetched) or call media_fetch to "
+        "download it locally."
     ),
 )
 async def media_text_to_speech(text: str, voice: str = "trailer",
@@ -372,6 +386,67 @@ async def media_text_to_speech(text: str, voice: str = "trailer",
     except Exception as exc:
         return _pipeline_error(exc, {"text": text[:80], "voice": voice})
     return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+@mcp.tool(
+    name="media_list_voices",
+    description=(
+        "List the TTS voice library (sync, instant): name, description, gender, "
+        "style, and the audition sample path for each. Call this before "
+        "generating VO to pick a voice (e.g. narrator_f for a female "
+        "narrator). Returns {voices: [{name, description, gender, style, "
+        "added, protected, ref_exists, sample}]}."
+    ),
+)
+async def media_list_voices(ctx: Context = None) -> dict:
+    """TTS voice library (GPU host, sync)."""
+    try:
+        voices = await asyncio.to_thread(PIPELINE.list_voices)
+        return {"voices": voices}
+    except Exception as exc:
+        return _pipeline_error(exc, {})
+
+
+@mcp.tool(
+    name="media_add_voice",
+    description=(
+        "Register a new TTS voice from a reference wav on the GPU host (3-15 s "
+        "of clean single-speaker speech; QC'd, normalized to 16 kHz mono, "
+        "audition sample generated on the GPU). `source` = GPU-host path under "
+        "the run/basedir dirs — stage external files with media_download or "
+        "media_put first (they land in media_jobs/uploads/). Re-registering a "
+        "name replaces it (protected names trailer/default -> 400). Returns "
+        "{voice, ref, sample, ref_duration_s}."
+    ),
+)
+async def media_add_voice(name: str, source: str, description: str = "",
+                          gender: str = "", style: str = "",
+                          ctx: Context = None) -> dict:
+    """Register a TTS voice from a reference wav (GPU host, job)."""
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        return await asyncio.to_thread(
+            PIPELINE.add_voice, name, source, description, gender, style,
+            user=user, client=MEDIA_CLIENT,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"name": name, "source": source})
+
+
+@mcp.tool(
+    name="media_delete_voice",
+    description=(
+        "Remove a TTS voice (ref + sample + manifest entry). `trailer` and "
+        "`default` are protected (400); unknown names -> 404. Returns "
+        "{\"deleted\": name}."
+    ),
+)
+async def media_delete_voice(name: str, ctx: Context = None) -> dict:
+    """Remove a TTS voice (GPU host, sync)."""
+    try:
+        return await asyncio.to_thread(PIPELINE.delete_voice, name)
+    except Exception as exc:
+        return _pipeline_error(exc, {"name": name})
 
 
 @mcp.tool(

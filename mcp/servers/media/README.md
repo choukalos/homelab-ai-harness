@@ -18,7 +18,10 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
 | `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
 | `media_generate_shot` | `/shots` | Keyframe → ~4s I2V clip (LTXV, upload) |
-| `media_text_to_speech` | `/tts` | Script → voice-over wav |
+| `media_text_to_speech` | `/tts` | Script → voice-over wav (`voice` = library name — `trailer` default, `default`, `narrator_f`, `deep_m`, ... — or a reference wav path on the GPU host) |
+| `media_list_voices` | `/voices` (sync) | TTS voice library: name, description, gender, style, audition sample path |
+| `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
+| `media_delete_voice` | `/voices/{name}` (sync) | Remove a voice (ref + sample + manifest entry); `trailer`/`default` protected |
 | `media_generate_music` | `/music` | Prompt(+lyrics) → song/instrumental wav (ACE-Step) |
 | `media_sfx` | `/sfx` | Video → synced SFX bed (MMAudio, upload) |
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
@@ -37,6 +40,22 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_download` | `/download` (sync) | Fetch a URL into media_jobs on the GPU host |
 | `media_put` | `/upload` (sync) | Push a **thor-local staging file** to `media_jobs/uploads/` (multipart, 500MB cap). GPU-host paths pass through unchanged |
 | `media_pull` | `/dl_token` (sync) | Mint a **signed public URL** for a media_jobs path or job_id → `https://siri.choukalos.com/media/pipeline/dl/<token>` (TTL 1–168h, default 24). Optional `local_dir` also copies it to the local media library (LAN fetch) |
+
+**TTS voice library (2026-09-25, matrix pipeline update):**
+
+| Tool | Pipeline endpoint | Purpose |
+|---|---|---|
+| `media_list_voices` | `GET /voices` (sync) | Voice portfolio: `trailer` (deep male, **default**, protected), `default` (stock male XTTS, protected), `deep_m` (warm deep male clone), `narrator_f` (female narrator clone, F0 ~212 Hz) + anything registered via `media_add_voice` |
+| `media_add_voice` | `POST /voices` (job) | Register a voice from a 3–15 s reference wav on the GPU host (stage with `media_put`/`media_download` first → `media_jobs/uploads/`). Re-registering a name replaces it; protected names → 400. Returns `{voice, ref, sample, ref_duration_s}` |
+| `media_delete_voice` | `DELETE /voices/{name}` (sync) | Remove a voice (ref + sample + manifest entry). `trailer`/`default` protected (400); unknown → 404 |
+
+`/tts` `voice` semantics (server-side resolution): `trailer`/`default` → legacy
+`--voice` pass-through; a library name → `--reference-audio <resolved ref>`;
+a path (contains `/` or ends `.wav`) → `--reference-audio <path>` (previously
+documented but broken — now working); anything else → 400 with the available
+list. Voice files live under
+`/home/chuck/data/comfyui/basedir/models/tts/voices/` on the GPU host (outside
+the 14-day media_jobs sweep — registered voices are permanent until deleted).
 
 **Path model** (Thor has no shared filesystem with the GPU host):
 - Pipeline tools return **GPU-host paths** — required so `media_assemble`
@@ -118,6 +137,18 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-09-25: TTS voice library (matrix pipeline update, per
+`voices_thor_handoff.md`) — 3 new tools: `media_list_voices` (`GET /voices`,
+sync), `media_add_voice` (`POST /voices`, job — register a voice from a 3–15 s
+reference wav; QC + 16 kHz mono normalization + audition sample generated on
+the GPU), `media_delete_voice` (`DELETE /voices/{name}`, sync; `trailer`/
+`default` protected). `media_text_to_speech` `voice` now accepts a **library
+name** (`narrator_f` = female narrator, `deep_m`, ...) or a **reference wav
+path** (the raw-path contract was previously documented but broken on the
+server — now working); `trailer`/`default` behavior unchanged. Client:
+`list_voices`/`add_voice`/`delete_voice` + updated `text_to_speech` docstring.
+All changes additive and backwards compatible.
 
 2026-09-24: full MCP client e2e of the Qwen-Image-2.1 upgrade (T0–T6,
 `/tmp/qwen21_e2e/run.py` — raw MCP JSON-RPC over SSE, one phase per
