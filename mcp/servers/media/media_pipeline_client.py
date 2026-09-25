@@ -184,6 +184,54 @@ class MediaPipelineClient:
             time.sleep(self.poll)
         raise PipelineError(f"job {jid} timed out after {timeout:.0f}s")
 
+    # ------------------------------------- submit-and-poll (non-blocking)
+    def job_status(self, job_id: str, timeout: float = 30) -> dict:
+        """GET /jobs/{id} -> the full job dict (id, flow, status, output,
+        error, created/started/finished, user, client, payload).
+        Raises PipelineError on 404 (unknown job, or evicted from the
+        ephemeral registry)."""
+        try:
+            return self._get_json(f"/jobs/{job_id}", timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise PipelineError(
+                    f"job {job_id} not found — unknown id, or evicted from the "
+                    f"pipeline's ephemeral job registry (poll promptly after "
+                    f"submitting; finished files are retained 14d and can be "
+                    f"pulled via pull() if you know the path)")
+            raise PipelineError(f"GET /jobs/{job_id} -> HTTP {e.code}")
+
+    def poll_job(self, job_id: str, wait_seconds: float = 20.0) -> dict:
+        """Long-poll a job for up to `wait_seconds` (non-raising while the
+        job is merely still running). Returns:
+          {"status": "done"|"error"|"timeout", "job": <job dict>}
+          {"status": "running", "job": <job dict>, "waited_s": <float>}
+        Raises PipelineError only for unknown/evicted jobs (404)."""
+        t0 = time.time()
+        deadline = t0 + max(1.0, wait_seconds)
+        while True:
+            j = self.job_status(job_id)
+            st = j.get("status")
+            if st in ("done", "error", "timeout"):
+                return {"status": st, "job": j}
+            if time.time() >= deadline:
+                return {"status": "running", "job": j,
+                        "waited_s": round(time.time() - t0, 1)}
+            time.sleep(min(self.poll, 2.0))
+
+    def finalize_job(self, job: dict) -> dict:
+        """Convert a DONE job dict into the payload the blocking tools
+        return: media files -> {path, location}; storyboard -> the parsed
+        shot list; other flows (e.g. add_voice) -> the raw output mapping."""
+        out = job.get("output") or {}
+        if "storyboard" in out:
+            local = self.fetch(out["storyboard"], "/tmp")
+            return json.loads(Path(local).read_text())
+        for k in ("video", "image", "audio"):
+            if k in out:
+                return {"path": out[k], "location": "gpu_host"}
+        return dict(out)
+
     # ------------------------------------------------------------- utilities
     def health(self) -> dict:
         with urllib.request.urlopen(f"{self.base}/health", timeout=15) as r:
@@ -204,37 +252,45 @@ class MediaPipelineClient:
     # ----------------------------------------------------------- high level
     def storyboard(self, brief: str, n_shots: int = 5, aspect: str = "16:9",
                    user: str | None = None, client: str | None = None,
-                   timeout: float = 300) -> dict:
-        """LLM shot list -> {"shots": [{"id","visual","vo"}]}."""
-        out = self._wait(self._post_json("/storyboard",
-                                         {"brief": brief, "n_shots": n_shots,
-                                          "aspect": aspect},
-                                         user, client), timeout)
+                   non_blocking: bool = False, timeout: float = 300) -> dict:
+        """LLM shot list -> {"shots": [{"id","visual","vo"}]}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately
+        (poll with poll_job + finalize_job)."""
+        jid = self._post_json("/storyboard",
+                              {"brief": brief, "n_shots": n_shots,
+                               "aspect": aspect}, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        out = self._wait(jid, timeout)
         local = self.fetch(out["storyboard"], "/tmp")
         return json.loads(Path(local).read_text())
 
     def generate_image(self, prompt: str, width: int = 1344, height: int = 768,
                        seed: int = 42, steps: int = 25, model: str | None = None,
                        user: str | None = None, client: str | None = None,
-                       timeout: float = 600) -> str:
+                       non_blocking: bool = False, timeout: float = 600) -> str | dict:
         """Text -> image (keyframe). Returns GPU-host path of the PNG.
 
         model: 'qwen21' (default; Qwen-Image-2.1 — 25 steps, ~30-120 s at
         1280x720) | 'legacy' (Qwen-Image-2512 GGUF + Lightning; pass steps=4).
         steps: the server clamps qwen21 steps to [10, 50] (no distilled LoRA
         at launch); the legacy path honors 4/8.
+        non_blocking=True -> submit only; returns {"job_id"} immediately
+        (poll with poll_job + finalize_job).
         """
         payload = {"prompt": prompt, "width": width, "height": height,
                    "seed": seed, "steps": steps}
         if model is not None:
             payload["model"] = model
-        return self._wait(self._post_json("/images", payload,
-                                          user, client), timeout)["image"]
+        jid = self._post_json("/images", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["image"]
 
     def edit_image(self, image: str, prompt: str, seed: int = 42, steps: int = 25,
                    model: str | None = None, references: list[str] | None = None,
                    user: str | None = None, client: str | None = None,
-                   timeout: float = 600) -> str:
+                   non_blocking: bool = False, timeout: float = 600) -> str | dict:
         """Image+text -> edited image. `image` is a LOCAL path (uploaded).
 
         model: 'qwen21' (default; unified Qwen-Image-2.1 editing) | 'legacy'
@@ -245,43 +301,53 @@ class MediaPipelineClient:
         server-side). The canvas follows `image`; references influence
         identity only (e.g. a previous shot's keyframe for character/product
         consistency across shots).
+        non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
         fields = {"prompt": prompt, "seed": str(seed), "steps": str(steps)}
         if model is not None:
             fields["model"] = model
         if references:
             fields["references"] = ",".join(str(r) for r in references)
-        return self._wait(self._post_multipart("/images/edit", image, fields,
-                                               user, client), timeout)["image"]
+        jid = self._post_multipart("/images/edit", image, fields, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["image"]
 
     def generate_shot(self, keyframe: str, prompt: str, width: int = 768,
                       height: int = 512, frames: int = 97, fps: float = 24.0,
                       seed: int = 42, strength: float = 0.7,
                       user: str | None = None, client: str | None = None,
-                      timeout: float = 3600) -> str:
+                      non_blocking: bool = False, timeout: float = 3600) -> str | dict:
         """Keyframe (LOCAL path) + style prompt -> ~4s I2V clip. Returns host path.
 
         strength: how strongly the keyframe anchors the clip. Lower = less
         warble/morphing (0.7 is the tuned default; 0.6 marginally smoother,
         0.8+ more motion but more warble). Prompt for visual STYLE, not motion.
+        non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
-        return self._wait(self._post_multipart("/shots", keyframe,
-                                               {"prompt": prompt, "width": str(width),
-                                                "height": str(height),
-                                                "frames": str(frames), "fps": str(fps),
-                                                "seed": str(seed),
-                                                "strength": str(strength)},
-                                               user, client), timeout)["video"]
+        jid = self._post_multipart("/shots", keyframe,
+                                   {"prompt": prompt, "width": str(width),
+                                    "height": str(height),
+                                    "frames": str(frames), "fps": str(fps),
+                                    "seed": str(seed),
+                                    "strength": str(strength)},
+                                   user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     def text_to_speech(self, text: str, voice: str = "trailer",
                        user: str | None = None, client: str | None = None,
-                       timeout: float = 1800) -> str:
+                       non_blocking: bool = False, timeout: float = 1800) -> str | dict:
         """Script -> voice-over wav. Returns GPU-host path. `voice` = a library
         name (see list_voices: trailer, default, narrator_f, deep_m, ...) or a
-        reference wav path on the GPU host (3-15 s single-speaker clip)."""
-        return self._wait(self._post_json("/tts", {"text": text, "voice": voice},
-                                          user, client),
-                          timeout)["audio"]
+        reference wav path on the GPU host (3-15 s single-speaker clip).
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        jid = self._post_json("/tts", {"text": text, "voice": voice},
+                              user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["audio"]
 
     # ------------------------------------------------- voice library (2026-09-25)
     def list_voices(self, timeout: float = 30) -> list:
@@ -292,18 +358,21 @@ class MediaPipelineClient:
     def add_voice(self, name: str, source: str, description: str = "",
                   gender: str = "", style: str = "", sample_text: str = "",
                   user: str | None = None, client: str | None = None,
-                  timeout: float = 900) -> dict:
+                  non_blocking: bool = False, timeout: float = 900) -> dict:
         """POST /voices (job): register a voice from a reference wav (3-15 s).
         `source` = GPU-host path under the run/basedir dirs (stage external
         files with download/upload_local/put first). Re-registering a name
         replaces it (protected names -> 400). Returns the job output
-        {voice, ref, sample, ref_duration_s}."""
+        {voice, ref, sample, ref_duration_s}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
         payload = {"name": name, "source": source, "description": description,
                    "gender": gender, "style": style}
         if sample_text:
             payload["sample_text"] = sample_text
-        return self._wait(self._post_json("/voices", payload, user, client),
-                          timeout)
+        jid = self._post_json("/voices", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)
 
     def delete_voice(self, name: str, timeout: float = 30) -> dict:
         """DELETE /voices/{name} (sync). 400 on protected names, 404 missing.
@@ -319,39 +388,49 @@ class MediaPipelineClient:
 
     def generate_music(self, prompt: str, lyrics: str = "", duration: int = 30,
                        seed: int = 42, user: str | None = None,
-                       client: str | None = None, timeout: float = 3600) -> str:
-        """Prompt(+lyrics) -> song/instrumental wav. Returns GPU-host path."""
-        return self._wait(self._post_json("/music",
-                                          {"prompt": prompt, "lyrics": lyrics,
-                                           "duration": duration, "seed": seed},
-                                          user, client),
-                          timeout)["audio"]
+                       client: str | None = None, non_blocking: bool = False,
+                       timeout: float = 3600) -> str | dict:
+        """Prompt(+lyrics) -> song/instrumental wav. Returns GPU-host path.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        jid = self._post_json("/music",
+                              {"prompt": prompt, "lyrics": lyrics,
+                               "duration": duration, "seed": seed},
+                              user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["audio"]
 
     def sfx(self, video: str, description: str = "", duration: float = 8.0,
             steps: int = 25, cfg: float = 4.5, seed: int = 42,
             user: str | None = None, client: str | None = None,
-            timeout: float = 3600) -> str:
-        """Video (LOCAL path) -> synced SFX bed. Returns GPU-host path."""
-        return self._wait(self._post_multipart("/sfx", video,
-                                               {"duration": str(duration),
-                                                "steps": str(steps), "cfg": str(cfg),
-                                                "seed": str(seed), "prompt": description,
-                                                "negative_prompt": "", "fps": "24"},
-                                               user, client),
-                          timeout)["audio"]
+            non_blocking: bool = False, timeout: float = 3600) -> str | dict:
+        """Video (LOCAL path) -> synced SFX bed. Returns GPU-host path.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        jid = self._post_multipart("/sfx", video,
+                                   {"duration": str(duration),
+                                    "steps": str(steps), "cfg": str(cfg),
+                                    "seed": str(seed), "prompt": description,
+                                    "negative_prompt": "", "fps": "24"},
+                                   user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["audio"]
 
     def upscale(self, video: str, pipeline: str = "b", resolution: int = 1080,
                 noise_scale: float = 0.0, fps: int = 24, seed: int = 42,
                 user: str | None = None, client: str | None = None,
-                timeout: float = 7200) -> str:
-        """Video (LOCAL path) -> upscaled. pipeline 'b'=SeedVR2 | 'a2'=fast."""
-        return self._wait(self._post_multipart("/upscale", video,
-                                               {"pipeline": pipeline,
-                                                "resolution": str(resolution),
-                                                "noise_scale": str(noise_scale),
-                                                "fps": str(fps), "seed": str(seed)},
-                                               user, client),
-                          timeout)["video"]
+                non_blocking: bool = False, timeout: float = 7200) -> str | dict:
+        """Video (LOCAL path) -> upscaled. pipeline 'b'=SeedVR2 | 'a2'=fast.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        jid = self._post_multipart("/upscale", video,
+                                   {"pipeline": pipeline,
+                                    "resolution": str(resolution),
+                                    "noise_scale": str(noise_scale),
+                                    "fps": str(fps), "seed": str(seed)},
+                                   user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     def assemble(self, shots: list, vo: str | None = None, music: str | None = None,
                  sfx: str | None = None, width: int = 1920, height: int = 1080,
@@ -361,7 +440,8 @@ class MediaPipelineClient:
                  upscale_resolution: int = 1080, upscale_noise_scale: float = 0.0,
                  upscale_fps: int = 24, upscale_seed: int = 42,
                  text_overlays: list | None = None, user: str | None = None,
-                 client: str | None = None, timeout: float = 1800) -> str:
+                 client: str | None = None, non_blocking: bool = False,
+                 timeout: float = 1800) -> str | dict:
         """Concat shots + mix audio -> final mp4. `shots` are GPU-host paths.
 
         M4 extensions (backward compatible): `shots` entries may be objects
@@ -376,6 +456,7 @@ class MediaPipelineClient:
         `text_overlays` burns crisp titles into shots post-I2V (list of
         {text, start?, end?, position?, size?, color?} — LTXV warps baked-in
         text, so composite titles in post, not in the I2V prompt).
+        non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
         payload = {"shots": shots, "width": width, "height": height, "fps": fps,
                    "vo_volume": vo_volume, "music_volume": music_volume,
@@ -395,18 +476,21 @@ class MediaPipelineClient:
                             "upscale_seed": upscale_seed})
         if text_overlays:
             payload["text_overlays"] = text_overlays
-        return self._wait(self._post_json("/assemble", payload, user, client),
-                          timeout)["video"]
+        jid = self._post_json("/assemble", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     # ------------------------------------------------- post-gen edit tools (M1–M8)
     def trim(self, source: str, start: float = 0.0, end: float | None = None,
              duration: float | None = None, fps: int | None = None,
              width: int | None = None, height: int | None = None,
              user: str | None = None, client: str | None = None,
-             timeout: float = 1800) -> str:
+             non_blocking: bool = False, timeout: float = 1800) -> str | dict:
         """Cut a clip to a time range (ffmpeg, always re-encodes libx264 crf 18).
         Exactly one of `end`/`duration`. `source` = GPU-host path OR local file
-        (auto-uploaded). Returns GPU-host path of the trimmed video."""
+        (auto-uploaded). Returns GPU-host path of the trimmed video.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
         if (end is None) == (duration is None):
             raise PipelineError("exactly one of end/duration is required")
         payload = {"source": self._ensure_source(source), "start": start}
@@ -417,31 +501,37 @@ class MediaPipelineClient:
         for k, v in (("fps", fps), ("width", width), ("height", height)):
             if v is not None:
                 payload[k] = v
-        return self._wait(self._post_json("/trim", payload, user, client),
-                          timeout)["video"]
+        jid = self._post_json("/trim", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     def freeze(self, source: str, frame: int = 0, duration: float = 2.0,
                width: int = 1280, height: int = 720, fps: int = 24,
                user: str | None = None, client: str | None = None,
-               timeout: float = 1800) -> str:
+               non_blocking: bool = False, timeout: float = 1800) -> str | dict:
         """Still image or video frame -> pixel-static N-second clip (NO generative
         model). `frame` is a frame INDEX (0-based) when source is a video.
-        `source` = GPU-host path OR local file (auto-uploaded)."""
+        `source` = GPU-host path OR local file (auto-uploaded).
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
         payload = {"source": self._ensure_source(source), "frame": frame,
                    "duration": duration, "width": width, "height": height,
                    "fps": fps}
-        return self._wait(self._post_json("/freeze", payload, user, client),
-                          timeout)["video"]
+        jid = self._post_json("/freeze", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     def caption(self, source: str, text: str, start: float = 0.0,
                 end: float | None = None, position: str = "bottom",
                 font_size: int | None = None, font: str = "DejaVuSans-Bold.ttf",
                 color: str = "white", outline: int = 3,
                 user: str | None = None, client: str | None = None,
-                timeout: float = 1800) -> str:
+                non_blocking: bool = False, timeout: float = 1800) -> str | dict:
         """Burn text into a clip (ffmpeg drawtext, textfile-based; multiline OK).
         `source` = GPU-host path OR local file (auto-uploaded). `end` defaults
-        to clip end. Returns GPU-host path of the captioned video."""
+        to clip end. Returns GPU-host path of the captioned video.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
         payload = {"source": self._ensure_source(source), "text": text,
                    "start": start, "position": position, "font": font,
                    "color": color, "outline": outline}
@@ -449,8 +539,10 @@ class MediaPipelineClient:
             payload["end"] = end
         if font_size is not None:
             payload["font_size"] = font_size
-        return self._wait(self._post_json("/caption", payload, user, client),
-                          timeout)["video"]
+        jid = self._post_json("/caption", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)["video"]
 
     def info(self, path: str, timeout: float = 60) -> dict:
         """ffprobe metadata for a matrix path (sync).

@@ -14,6 +14,7 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_sfx(video, description, duration)        Video -> synced SFX bed
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
   - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
+  - media_job_result(job_id, wait_seconds)          Poll a job to its final result (long-poll, <=25s)
   - media_fetch(host_path, subdirectory)          Download a pipeline result locally
   - media_trim(source, start, end|duration, ...)  Cut a clip to a time range (ffmpeg)
   - media_freeze(source, frame, duration, ...)    Image/frame -> static N-s clip (ffmpeg)
@@ -26,7 +27,10 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
 
 All GPU work happens on the pipeline host (ComfyUI + VLLM + TTS/music/SFX
 workers); this container only POSTs jobs, polls, and downloads results.
-Jobs block until done (per-flow timeouts up to 2h).
+Jobs block until done (per-flow timeouts up to 2h) — OR pass
+non_blocking=true to any job tool to get the job_id back in ~1s and poll
+media_job_result(job_id, wait_seconds<=25): submit-and-poll keeps every tool
+call under the ~30s client tool-call timeout (e.g. pi-provider-litellm).
 
 Path model (Thor has NO shared filesystem with the GPU host):
   - pipeline tools return GPU-HOST paths (required so media_assemble can chain)
@@ -166,7 +170,16 @@ mcp = FastMCP(
         "default, narrator_f, deep_m, ...); pass a voice name to "
         "media_text_to_speech, and register new voices from a 3-15 s "
         "reference wav with media_add_voice (stage external files with "
-        "media_put / media_download first)."
+        "media_put / media_download first).\n"
+        "LONG JOBS: most clients abort tool calls at ~30s. For any job likely "
+        "to exceed that (image gen, I2V shots, TTS, music, SFX, upscale, "
+        "assemble, long trims/captions), pass non_blocking=true: the tool "
+        "returns {job_id, status:'running'} in ~1s. Then poll "
+        "media_job_result(job_id, wait_seconds=20) — each poll blocks up to "
+        "20s (max 25) and returns the final result (same shape as the "
+        "blocking tool) when the job is done, or status:'running' to poll "
+        "again. Sync tools (media_info, media_list_voices, media_pull, ...) "
+        "are instant and need no polling."
     ),
     host=MCPS_HOST,
 )
@@ -180,6 +193,21 @@ _HOST_PATH_NOTE = (
     "pipeline tools (inputs are auto-fetched), or call media_fetch to "
     "download it to the local media library."
 )
+
+_NON_BLOCKING_NOTE = (
+    "Job submitted — it runs on the GPU host (serial queue). Poll "
+    "media_job_result(job_id, wait_seconds=20) until status is done/error; "
+    "each poll blocks up to wait_seconds (max 25s) and returns the final "
+    "result when the job finishes (same shape as the blocking tool)."
+)
+
+_MAX_POLL_WAIT_S = 25.0  # keep each poll under the ~30s client tool-call timeout
+
+
+def _non_blocking_result(res: dict) -> dict:
+    """Wrap a non-blocking submit result ({job_id}) for the agent."""
+    return {"job_id": res["job_id"], "status": "running",
+            "note": _NON_BLOCKING_NOTE}
 
 
 def _is_host_path(path: str) -> bool:
@@ -246,17 +274,23 @@ def _staging_error(path: str, what: str = "file") -> Optional[dict]:
     description=(
         "Generate a cinematic shot list (JSON) for a commercial/video from a brief, "
         "via the GPU-host media pipeline. Returns {\"shots\": [{id, visual, vo}, ...]}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
+                           non_blocking: bool = False,
                            ctx: Context = None) -> dict:
     """LLM shot list from a brief (GPU-host VLLM)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        return await asyncio.to_thread(PIPELINE.storyboard, brief, n_shots, aspect,
-                                       user=user, client=MEDIA_CLIENT)
+        res = await asyncio.to_thread(PIPELINE.storyboard, brief, n_shots, aspect,
+                                       user=user, client=MEDIA_CLIENT,
+                                       non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"brief": brief})
+    if non_blocking:
+        return _non_blocking_result(res)
+    return res
 
 
 @mcp.tool(
@@ -269,6 +303,7 @@ async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
         "location='gpu_host'}: the path is ON THE GPU HOST — pass it directly to "
         "media_generate_shot/media_assemble (auto-fetched) or call media_fetch "
         "to download it locally."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_generate_image(
@@ -278,18 +313,21 @@ async def media_generate_image(
     seed: int = 42,
     steps: int = 25,
     model: Optional[str] = None,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Text -> keyframe image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.generate_image, prompt, width, height, seed, steps, model,
-            user=user, client=MEDIA_CLIENT
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -304,11 +342,13 @@ async def media_generate_image(
         "to keep the character/product consistent across shots (qwen21 only). "
         "`model`: 'qwen21' (default) | 'legacy' (old Qwen-Image-Edit-2511; "
         "steps=8). Returns {path, location='gpu_host'}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 25,
                            model: Optional[str] = None,
                            references: Optional[List[str]] = None,
+                           non_blocking: bool = False,
                            ctx: Context = None) -> dict:
     """Image + text -> edited image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
@@ -316,13 +356,15 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
         local_image = await _ensure_local(image)
         if not os.path.isfile(local_image):
             return {"error": f"Image not found (local or on GPU host): {image}"}
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.edit_image, local_image, prompt, seed, steps, model, references,
-            user=user, client=MEDIA_CLIENT
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"image": image, "prompt": prompt})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -334,6 +376,7 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
         "minimize warble. `strength` = how strongly the keyframe anchors the clip "
         "(lower = less warble; 0.7 is the tuned default). Returns {path, "
         "location='gpu_host'}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_generate_shot(
@@ -345,6 +388,7 @@ async def media_generate_shot(
     fps: float = 24.0,
     seed: int = 42,
     strength: float = 0.7,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Keyframe -> ~4s I2V clip (GPU host)."""
@@ -353,13 +397,16 @@ async def media_generate_shot(
         local_kf = await _ensure_local(keyframe)
         if not os.path.isfile(local_kf):
             return {"error": f"Keyframe not found (local or on GPU host): {keyframe}"}
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.generate_shot, local_kf, prompt, width, height, frames, fps,
             seed, strength, user=user, client=MEDIA_CLIENT,
+            non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"keyframe": keyframe, "prompt": prompt})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -374,18 +421,23 @@ async def media_generate_shot(
         "path is ON THE GPU HOST — pass it directly to media_assemble or other "
         "pipeline tools (inputs are auto-fetched) or call media_fetch to "
         "download it locally."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_text_to_speech(text: str, voice: str = "trailer",
+                               non_blocking: bool = False,
                                ctx: Context = None) -> dict:
     """Script -> voice-over wav (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(PIPELINE.text_to_speech, text, voice,
-                                       user=user, client=MEDIA_CLIENT)
+        res = await asyncio.to_thread(PIPELINE.text_to_speech, text, voice,
+                                       user=user, client=MEDIA_CLIENT,
+                                       non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"text": text[:80], "voice": voice})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -417,20 +469,26 @@ async def media_list_voices(ctx: Context = None) -> dict:
         "media_put first (they land in media_jobs/uploads/). Re-registering a "
         "name replaces it (protected names trailer/default -> 400). Returns "
         "{voice, ref, sample, ref_duration_s}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_add_voice(name: str, source: str, description: str = "",
                           gender: str = "", style: str = "",
+                          non_blocking: bool = False,
                           ctx: Context = None) -> dict:
     """Register a TTS voice from a reference wav (GPU host, job)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        return await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.add_voice, name, source, description, gender, style,
             user=user, client=MEDIA_CLIENT,
+            non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"name": name, "source": source})
+    if non_blocking:
+        return _non_blocking_result(res)
+    return res
 
 
 @mcp.tool(
@@ -454,18 +512,23 @@ async def media_delete_voice(name: str, ctx: Context = None) -> dict:
     description=(
         "Generate music or a song (ACE-Step) via the GPU-host media pipeline. "
         "`lyrics` optional. Returns {path, location='gpu_host'}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30, seed: int = 42,
+                               non_blocking: bool = False,
                                ctx: Context = None) -> dict:
     """Prompt (+lyrics) -> song/instrumental wav (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(PIPELINE.generate_music, prompt, lyrics, duration, seed,
-                                       user=user, client=MEDIA_CLIENT)
+        res = await asyncio.to_thread(PIPELINE.generate_music, prompt, lyrics, duration, seed,
+                                       user=user, client=MEDIA_CLIENT,
+                                       non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -474,9 +537,11 @@ async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30
         "Generate an SFX bed synced to a video clip (MMAudio) via the GPU-host media "
         "pipeline. `video` may be a local path OR a GPU-host path (auto-fetched). "
         "Returns {path, location='gpu_host'}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_sfx(video: str, description: str = "", duration: float = 8.0,
+                    non_blocking: bool = False,
                     ctx: Context = None) -> dict:
     """Video -> synced SFX bed (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
@@ -484,11 +549,14 @@ async def media_sfx(video: str, description: str = "", duration: float = 8.0,
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
-        path = await asyncio.to_thread(PIPELINE.sfx, local_video, description, duration,
-                                       user=user, client=MEDIA_CLIENT)
+        res = await asyncio.to_thread(PIPELINE.sfx, local_video, description, duration,
+                                       user=user, client=MEDIA_CLIENT,
+                                       non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"video": video})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -498,6 +566,7 @@ async def media_sfx(video: str, description: str = "", duration: float = 8.0,
         "local path OR a GPU-host path (auto-fetched). pipeline: 'b' = SeedVR2 "
         "(quality, ~5 min), 'a2' = 4xUltrasharp (fast, ~1 min). Returns "
         "{path, location='gpu_host'}."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_upscale_video(
@@ -506,6 +575,7 @@ async def media_upscale_video(
     resolution: int = 1080,
     noise_scale: float = 0.0,
     seed: int = 42,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Video -> upscaled (GPU host)."""
@@ -514,13 +584,15 @@ async def media_upscale_video(
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.upscale, local_video, pipeline, resolution, noise_scale, seed,
-            user=user, client=MEDIA_CLIENT
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"video": video, "pipeline": pipeline})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -540,6 +612,7 @@ async def media_upscale_video(
         "timestamped placement; `vo_start` offsets the VO from t=0; `loudnorm` applies "
         "EBU R128 to the final mix. Returns {path, location='gpu_host'}; call "
         "media_fetch to download the final mp4 or media_pull for a signed public URL."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_assemble(
@@ -561,23 +634,72 @@ async def media_assemble(
     upscale_fps: int = 24,
     upscale_seed: int = 42,
     text_overlays: Optional[List[dict]] = None,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Concat shots + mix audio -> final mp4 (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
             width, height, fps, vo_volume, music_volume, sfx_volume,
             vo_start=vo_start, loudnorm=loudnorm, upscale_each=upscale_each,
             upscale_resolution=upscale_resolution,
             upscale_noise_scale=upscale_noise_scale, upscale_fps=upscale_fps,
             upscale_seed=upscale_seed, text_overlays=text_overlays,
-            user=user, client=MEDIA_CLIENT,
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"shots": shots})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+# ------------------------------------------------- submit-and-poll (long jobs)
+@mcp.tool(
+    name="media_job_result",
+    description=(
+        "Poll a media-pipeline job by job_id (from any tool's non_blocking "
+        "submit). Blocks up to wait_seconds (default 20, max 25 — kept under "
+        "the ~30s client tool-call timeout) and returns either the FINAL "
+        "result — same shape as the blocking tool ({path, location} for media "
+        "jobs, {shots} for storyboard, voice output for add_voice) — or "
+        "{status: 'running'}: call media_job_result again to keep polling. "
+        "Job ids are valid while the job is in the pipeline's ephemeral "
+        "registry (poll promptly; finished files are retained 14d and can be "
+        "pulled via media_pull if you know the path)."
+    ),
+)
+async def media_job_result(job_id: str, wait_seconds: float = 20.0,
+                           ctx: Context = None) -> dict:
+    """Long-poll GET /jobs/{job_id} up to wait_seconds (capped at 25s)."""
+    wait = max(1.0, min(float(wait_seconds), _MAX_POLL_WAIT_S))
+    try:
+        r = await asyncio.to_thread(PIPELINE.poll_job, job_id, wait)
+    except Exception as exc:
+        return _pipeline_error(exc, {"job_id": job_id})
+    job = r["job"]
+    if r["status"] == "running":
+        return {"job_id": job_id, "flow": job.get("flow"),
+                "status": "running", "waited_s": r.get("waited_s"),
+                "note": "Still running — call media_job_result again to keep "
+                        "polling (the job continues on the GPU host)."}
+    if r["status"] in ("error", "timeout"):
+        return {"job_id": job_id, "flow": job.get("flow"),
+                "status": r["status"], "error": job.get("error")}
+    try:
+        payload = await asyncio.to_thread(PIPELINE.finalize_job, job)
+    except Exception as exc:
+        return _pipeline_error(exc, {"job_id": job_id})
+    out = {"job_id": job_id, "flow": job.get("flow"), "status": "done"}
+    if isinstance(payload, dict):
+        out.update(payload)
+    else:
+        out["result"] = payload
+    if "path" in out:
+        out["note"] = _HOST_PATH_NOTE
+    return out
 
 
 @mcp.tool(
@@ -621,6 +743,7 @@ async def media_fetch(host_path: str, subdirectory: str = "") -> dict:
         f"local file under the staging dir {MEDIA_STAGING_DIR} (auto-uploaded). "
         "Exactly one of `end` or `duration`. Optional fps/width/height. Returns "
         "{path, location='gpu_host'}; verify with media_info."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_trim(
@@ -631,6 +754,7 @@ async def media_trim(
     fps: Optional[int] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Cut a clip to a time range (GPU host, ffmpeg)."""
@@ -639,13 +763,15 @@ async def media_trim(
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.trim, source, start, end, duration, fps, width, height,
-            user=user, client=MEDIA_CLIENT,
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -657,6 +783,7 @@ async def media_trim(
         f"under the staging dir {MEDIA_STAGING_DIR} (auto-uploaded). `frame` is a "
         "frame INDEX (0-based) when source is a video. Returns {path, "
         "location='gpu_host'}; accepted by media_assemble."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_freeze(
@@ -666,6 +793,7 @@ async def media_freeze(
     width: int = 1280,
     height: int = 720,
     fps: int = 24,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Image/frame -> static N-s clip (GPU host, ffmpeg)."""
@@ -674,13 +802,15 @@ async def media_freeze(
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.freeze, source, frame, duration, width, height, fps,
-            user=user, client=MEDIA_CLIENT,
+            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
@@ -691,6 +821,7 @@ async def media_freeze(
         "`source` may be a GPU-host path OR a local file under the staging dir "
         f"{MEDIA_STAGING_DIR} (auto-uploaded). `end` defaults to clip end. Returns "
         "{path, location='gpu_host'}; verify with media_info + a vision frame read."
+" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
     ),
 )
 async def media_caption(
@@ -703,6 +834,7 @@ async def media_caption(
     font: str = "DejaVuSans-Bold.ttf",
     color: str = "white",
     outline: int = 3,
+    non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Burn text into a clip (GPU host, ffmpeg drawtext)."""
@@ -711,13 +843,16 @@ async def media_caption(
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
-        path = await asyncio.to_thread(
+        res = await asyncio.to_thread(
             PIPELINE.caption, source, text, start, end, position, font_size,
             font, color, outline, user=user, client=MEDIA_CLIENT,
+            non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"source": source, "text": text[:80]})
-    return {"path": path, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+    if non_blocking:
+        return _non_blocking_result(res)
+    return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
 
 
 @mcp.tool(
