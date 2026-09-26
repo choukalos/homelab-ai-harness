@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- ClickHouse BACKUP/RESTORE support (docs/backup-audit-2026-09-26.md v3).
+     Defines a local disk 'backups' under the existing data volume so
+     BACKUP DATABASE ... TO Disk('backups','<name>') works, and allows
+     that disk for the BACKUP/RESTORE commands. The backup dir is
+     /home/chuck/data/plausible-events-db/backups on the host. -->
+<clickhouse>
+  <backups>
+    <allowed_disk>backups</allowed_disk>
+  </backups>
+  <storage_configuration>
+    <disks>
+      <backups>
+        <type>local</type>
+        <path>/var/lib/clickhouse/backups/</path>
+      </backups>
+    </disks>
+  </storage_configuration>
+</clickhouse>

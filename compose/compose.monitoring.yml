@@ -168,6 +168,7 @@ services:
       - ../plausible/clickhouse/logs.xml:/etc/clickhouse-server/config.d/logs.xml:ro
       - ../plausible/clickhouse/ipv4-only.xml:/etc/clickhouse-server/config.d/ipv4-only.xml:ro
       - ../plausible/clickhouse/low-resources.xml:/etc/clickhouse-server/config.d/low-resources.xml:ro
+      - ../plausible/clickhouse/backups.xml:/etc/clickhouse-server/config.d/backups.xml:ro
       - ../plausible/clickhouse/default-profile-low-resources-overrides.xml:/etc/clickhouse-server/users.d/default-profile-low-resources-overrides.xml:ro
     ulimits:
       nofile:

@@ -1,0 +1,67 @@
+{
+  "host_id": "thor",
+  "description": "Thor — AI homelab host (192.168.4.54). Single source of truth for what thor backs up to the shared NAS share (docs/backup-audit-2026-09-26.md v3).",
+  "env_file": "/home/chuck/homelab/.env",
+  "nas": {
+    "server": "lego.local",
+    "share": "backups",
+    "mountpoint": "/mnt/nas",
+    "credentials": "~/.smbcredentials"
+  },
+  "retention": { "daily": 14, "weekly": 2 },
+  "local_hedge": {
+    "enabled": true,
+    "dir": "/home/chuck/data/backups/nas-hedge",
+    "keep": 2
+  },
+  "daily": [
+    { "type": "qdrant_snapshot", "name": "qdrant" },
+    { "type": "tar", "name": "env", "sources": ["/home/chuck/homelab/.env"] },
+    { "type": "mirror", "name": "ai-kb", "source": "/home/chuck/data/ai-kb" }
+  ],
+  "weekly": [
+    { "type": "mysql_dump", "name": "mysql/homelab", "database": "homelab", "user_env": "AI_DB_USER", "password_env": "AI_DB_PASS", "host_env": "MYSQL_DB_HOST" },
+    { "type": "mysql_dump", "name": "mysql/investorhub", "database": "investorhub", "user_env": "INVEST_DB_USER", "password_env": "INVEST_DB_PASS", "host_env": "MYSQL_DB_HOST" },
+    { "type": "pg_dump", "name": "litellm-postgres", "container": "litellm-db", "user": "litellm", "dumpall": true },
+    { "type": "pg_dump", "name": "plausible-db", "container": "plausible-db", "user": "plausible", "dumpall": true },
+    { "type": "clickhouse_backup", "name": "clickhouse/plausible", "container": "plausible-events-db", "databases": ["plausible"] },
+    { "type": "mirror", "name": "media", "source": "/home/chuck/data/media", "exclude": ["generated/"] },
+    { "type": "mirror", "name": "documents", "source": "/home/chuck/data/documents" },
+    { "type": "mirror", "name": "victoria-metrics", "source": "/home/chuck/data/victoria-metrics", "exclude": ["cache/", "tmp/"] },
+    { "type": "rsync", "name": "presenton", "source": "/home/chuck/data/presenton" },
+    { "type": "rsync", "name": "open-webui", "source": "/home/chuck/data/open-webui", "exclude": ["cache/"] },
+    { "type": "file", "name": "grafana.db", "source": "/home/chuck/data/grafana/grafana.db", "container": "grafana", "container_path": "/var/lib/grafana/grafana.db" },
+    { "type": "rsync", "name": "mem0", "source": "/home/chuck/data/mem0" },
+    { "type": "rsync", "name": "n8n", "source": "/home/chuck/data/n8n" },
+    {
+      "type": "tar",
+      "name": "misc",
+      "sources": [
+        "/home/chuck/data/caddy",
+        "/home/chuck/data/searxng",
+        "/home/chuck/data/searxng-valkey",
+        "/home/chuck/data/redis",
+        "/home/chuck/data/scheduler",
+        "/home/chuck/data/mysql-mcp-csv",
+        "/home/chuck/data/litellm",
+        "/home/chuck/data/crawl4ai",
+        "/home/chuck/data/invest-hub",
+        "/home/chuck/data/plausible-app",
+        "/home/chuck/data/plausible-events-logs"
+      ]
+    },
+    {
+      "type": "tar",
+      "name": "dotfiles",
+      "sources": [
+        "/home/chuck/.ssh",
+        "/home/chuck/.gitconfig",
+        "/home/chuck/.bashrc",
+        "/home/chuck/.profile",
+        "/home/chuck/.config",
+        "/home/chuck/.pi"
+      ]
+    },
+    { "type": "git_bundle", "name": "homelab-git", "repo": "/home/chuck/homelab", "branch": "main" }
+  ]
+}

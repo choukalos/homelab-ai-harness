@@ -1,0 +1,21 @@
+{
+  "host_id": "matrix",
+  "description": "Matrix — GPU workstation (192.168.4.55). PLACEHOLDER: matrix backups are currently handled by a separate in-dev process that writes to the 'matrix/' folder on the NAS share. This config exists only so the shared scripts have a host entry; do NOT run backup-nas.sh on matrix until the two approaches are unified (see docs/backup-audit-2026-09-26.md open item 6).",
+  "env_file": "/home/chuck/homelab/.env",
+  "nas": {
+    "server": "lego.local",
+    "share": "backups",
+    "mountpoint": "/mnt/nas",
+    "credentials": "~/.smbcredentials"
+  },
+  "retention": { "daily": 14, "weekly": 2 },
+  "local_hedge": {
+    "enabled": false,
+    "dir": "/home/chuck/data/backups/nas-hedge",
+    "keep": 2
+  },
+  "daily": [],
+  "weekly": [
+    { "type": "tar", "name": "env", "sources": ["/home/chuck/homelab/.env"] }
+  ]
+}
