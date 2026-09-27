@@ -1057,18 +1057,91 @@ Never committed to GitHub.
 
 # Backups
 
-Critical backups:
-- MySQL
-- ai-kb repo
-- homelab-blog repo (GitHub) + /home/chuck/data/portal/git mirror
-- Open Web UI DB
-- Qdrant data
-- LiteLLM Postgres
-- Plausible DB + ClickHouse
-- Victoria Metrics data
-- Grafana dashboards + configs
+Backups run automatically to the **Lego** NAS (`//lego.local/backup`, mounted at
+`/mnt/lego`) and are organized per-host under `backup/<hostname>/` (this host:
+`backup/thor/`). Retention is capped at **2 weeks** (14 daily + 2 weekly runs).
+The full design, data classification, and recovery runbook live in
+[`docs/backup-audit-2026-09-26.md`](docs/backup-audit-2026-09-26.md).
 
-Long-term backups stored on NAS.
+## What's backed up
+
+| Scope | Cadence | Items |
+|---|---|---|
+| **Daily** | 03:00 | Qdrant (15 collections), `.env`, ai-kb mirror |
+| **Weekly** | Sun 04:00 | MySQL (`homelab`, `investorhub`), LiteLLM Postgres, Plausible DB, ClickHouse, Open Web UI DB, Grafana `grafana.db`, mem0, n8n, Presenton, misc (portal/blog/git), dotfiles, homelab git bundle, + mirrors (ai-kb, media, documents, Victoria Metrics) |
+
+Critical items covered: MySQL, ai-kb, homelab-blog (via git bundle + mirror),
+Open Web UI, Qdrant, LiteLLM Postgres, Plausible + ClickHouse, Victoria Metrics,
+Grafana, and the homelab repo itself.
+
+## When it runs
+
+Two systemd timers (installed by `scripts/backup-install-timers.sh`):
+
+```text
+backup-nas-daily.timer    *-*-* 03:00:00     (daily scope)
+backup-nas-weekly.timer   Sun *-*-* 04:00:00 (weekly scope)
+```
+
+Both are `Persistent=true` — if the host is off at the scheduled time, the run
+fires on next boot instead of skipping. Check them with:
+
+```bash
+systemctl list-timers 'backup-nas-*' --all
+```
+
+## Manual runs
+
+```bash
+# Run a scope now (dry-run first to preview)
+scripts/backup-nas.sh daily --dry-run
+scripts/backup-nas.sh daily
+scripts/backup-nas.sh weekly
+
+# A labeled one-off snapshot (never auto-pruned)
+scripts/backup-nas.sh one-off "pre-upgrade"
+
+# Or trigger via systemd instead of the script directly
+sudo systemctl start backup-nas-daily.service
+journalctl -u backup-nas-daily.service -n 50
+```
+
+## Restore
+
+`scripts/backup-restore.sh` is **dry-run by default** — add `--yes` to apply.
+
+```bash
+# List available runs + items
+scripts/backup-restore.sh --list
+scripts/backup-restore.sh --list --items
+
+# Restore one item (e.g. .env, a Qdrant collection, a MySQL dump)
+scripts/backup-restore.sh --item env
+scripts/backup-restore.sh --item qdrant/kb_homelab --yes
+scripts/backup-restore.sh --item mysql/homelab --test   # load into a throwaway MySQL
+
+# Full recovery: stage every item into a target dir + a RUNBOOK.md
+scripts/backup-restore.sh --full --target /tmp/restore --yes
+```
+
+Every restored artifact is sha256-verified against the run's manifest before use.
+Restore activity is logged to `backup/<host>/restore-log/` on the NAS.
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/backup-setup.sh` | one-time root setup (mount, fstab, sudoers) |
+| `scripts/backup-install-timers.sh` | install + enable the systemd timers |
+| `scripts/backup-nas.sh` | the backup engine (daily/weekly/one-off) |
+| `scripts/backup-restore.sh` | partial + full recovery |
+| `scripts/backup-verify.sh` | disposable restore tests |
+| `scripts/backup-lib.sh` | shared helpers |
+| `scripts/backup-hosts/<host>.json` | per-host config (items, retention, mount) |
+
+Backups are **not encrypted** (the NAS is a private, same-trust-domain copy).
+The chain continues downstream: **Thor/Matrix → Lego → Athena → USB drives** +
+a fire-safe for critical files.
 
 ---
 

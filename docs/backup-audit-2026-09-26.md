@@ -349,7 +349,7 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 |---|---|---|---|
 | 1 | NAS share name + backup user/creds on Lego | Chuck | ✅ **resolved** — share `backup`, user `backup`; creds in `~/.smbcredentials` (mode 600) on each host, never in the repo |
 | 2 | Git history cleanup (`git filter-repo` + force-push, drops 3×102 MB logs + zip + node_modules) | Chuck | optional, separate day |
-| 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | after A6 |
+| 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | ✅ **done** — hedge in place (daily/weekly runs copied to `data/backups/nas-hedge/`, keep 2) |
 | 4 | VM (Victoria Metrics) in the backup? | Chuck | ✅ **yes — kept** (confirmed 2026-09-27) — the metrics are valuable. Mirror excludes root-owned `cache/`/`tmp/` (VM runs as root); `data/` is the real 3.1G. |
 | 5 | Daily vs weekly for Qdrant (daily recommended — memory writes happen most days) | Chuck | ✅ **daily** (default) |
 | 6 | **Matrix inventory**: what on Matrix is irreplaceable? (ComfyUI fine-tunes/LoRAs, custom TTS voice refs, outputs, `.env`, other services?) No SSH key from thor → matrix (verified 2026-09-26). | Chuck | ⏳ blocks `matrix.json` (not the thor build) — `matrix.json` is a placeholder for now |
@@ -362,12 +362,16 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 
 ### 5.1 Build status (2026-09-26, updated 2026-09-27 for CIFS + QNAP corrections)
 
-All scripts are **built and tested end-to-end against a local staging dir** (`--root /tmp/nas-test`, no NAS mount required). On 2026-09-27 the scripts were **hardened for Lego's real QNAP-SMB/CIFS interface** (measured on Matrix): `RSYNC_FLAGS` = `-rt --modify-window=1 --timeout=60` (no more `-a`), `ensure_mounted` self-heal, a free-space guard, and a post-run sha256 integrity verify. A one-time `backup-setup.sh` installs the fstab + sudoers + mountpoint. **v4 corrections:** Lego is a QNAP NAS (not macOS), retention is capped at 2 weeks, and the VM mirror (Victoria Metrics) is kept (valuable metrics).
+All scripts are **built, tested end-to-end, and running live on the real NAS.** They were first validated against a local staging dir (`--root /tmp/nas-test`, no NAS mount required), then **hardened for Lego's real QNAP-SMB/CIFS interface** (measured on Matrix): `RSYNC_FLAGS` = `-rt --modify-window=1 --timeout=60` (no more `-a`), `ensure_mounted` self-heal, a free-space guard, and a post-run sha256 integrity verify. **v4 corrections:** Lego is a QNAP NAS (not macOS), retention is capped at 2 weeks, and the VM mirror (Victoria Metrics) is kept (valuable metrics).
+
+**Live status (2026-09-27):** `backup-setup.sh` has been **run on Thor** — the `backup` share is mounted at `/mnt/lego` (QNAP, `uid=1000,forceuid`, 19T free) and the write test passes. The **first real daily + weekly backups completed with 0 failures and `verify OK`** (`daily-20260927-111418`, `weekly-20260927-111509`; 4.0 GB on the NAS). Restore paths were **verified against the live NAS**: `.env` restored byte-identical, a Qdrant collection recovered 15 points into a disposable container, a MySQL dump loaded 8 tables into a disposable MySQL, and a full restore staged 33 items. **Systemd timers are installed and enabled** (daily 03:00, weekly Sun 04:00, both `Persistent=true`).
 
 | Script | Role | Status |
 |---|---|---|
 | `scripts/backup-lib.sh` | shared helpers (config, manifest discovery, run/item resolution, unchanged-chain, `ensure_mounted` self-heal, `require_free_space`, CIFS-safe `RSYNC_FLAGS`) | ✅ tested |
-| `scripts/backup-setup.sh` | **one-time root setup**: fstab (`vers=2.1,soft,noauto,x-systemd.automount,_netdev`), scoped sudoers, `/mnt/lego/<host>`, capacity check, write test | ✅ syntax-checked (needs `sudo` + `cifs-utils` on Thor) |
+| `scripts/backup-setup.sh` | **one-time root setup**: fstab (`vers=2.1,soft,noauto,x-systemd.automount,_netdev`), scoped sudoers, `/mnt/lego/<host>`, capacity check, write test. Resolves the backup user from `SUDO_USER` (not root). | ✅ **run + verified on Thor** (mount live, write test OK) |
+| `scripts/backup-install-timers.sh` | installs + enables the systemd timers (copies units to `/etc/systemd/system`) | ✅ **run** (both timers live) |
+| `scripts/systemd/backup-nas-{daily,weekly}.{service,timer}` | oneshot services + `Persistent` timers (daily 03:00, weekly Sun 04:00) | ✅ **installed + enabled** |
 | `scripts/backup-nas.sh` | host-agnostic backup engine (daily/weekly/one-off, change detection, staging+commit, prune, hedge, flock, **post-run sha256 verify**, **free-space guard**) | ✅ tested (daily + weekly, 0 failures, verify OK) |
 | `scripts/backup-restore.sh` | partial (`--item`) + full (`--full [--target]`) recovery, sha256-verified, dry-run default, `--test` disposable containers, `--full --target` staging + RUNBOOK.md, **additive mirror restore** | ✅ tested (all item types + full staging) |
 | `scripts/backup-verify.sh` | disposable restore tests for key items | ✅ tested (mysql, qdrant, litellm-postgres PASS) |
@@ -382,7 +386,7 @@ All scripts are **built and tested end-to-end against a local staging dir** (`--
 - **ClickHouse** restore needs `chown -R 101:101` after `docker cp` (server runs as uid 101).
 - **MySQL** users are `@%`-only; dumps connect via `thor.local`, not `localhost`.
 
-**Root-owned cleanup still needing sudo (Chuck):** `data/prometheus` (57M) is root-owned; `data/postgres` (67M) already deleted. Command: `sudo rm -rf /home/chuck/data/prometheus`.
+**Root-owned cleanup (done):** `data/postgres` (67M) and `data/prometheus` (57M) — both deleted (confirmed 2026-09-27).
 
 ---
 
