@@ -1,0 +1,14 @@
+[Unit]
+Description=NAS backup (daily) — run at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# if the host was off at 03:00, run it on next boot (don't skip a day)
+Persistent=true
+# spread load a few minutes past the top of the hour
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=backup-nas-daily.service
+
+[Install]
+WantedBy=timers.target

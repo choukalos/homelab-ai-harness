@@ -1,0 +1,22 @@
+[Unit]
+Description=NAS backup (weekly) — full scope (DBs, mirrors, git bundle, VM)
+Wants=network-online.target
+After=network-online.target
+# the script self-heals the mount (ensure_mounted); we only need the network up
+
+[Service]
+Type=oneshot
+User=chuck
+WorkingDirectory=/home/chuck/homelab
+Environment=HOME=/home/chuck
+ExecStart=/home/chuck/homelab/scripts/backup-nas.sh weekly
+# weekly scope is large (VM mirror ~3 GB, git bundle ~180 MB); 2 h headroom
+TimeoutStartSec=7200
+# be a good citizen: low CPU/nice, best-effort I/O so backups don't starve the host
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

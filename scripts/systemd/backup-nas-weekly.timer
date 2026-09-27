@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the weekly NAS backup Sunday 04:00
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+# if the host was off at Sunday 04:00, run it on next boot (don't skip the week)
+Persistent=true
+# spread load a few minutes past the top of the hour
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=backup-nas-weekly.service
+
+[Install]
+WantedBy=timers.target

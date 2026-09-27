@@ -1,0 +1,23 @@
+[Unit]
+Description=NAS backup (daily) — qdrant snapshots + .env + ai-kb mirror
+Wants=network-online.target
+After=network-online.target
+# the script self-heals the mount (ensure_mounted); we only need the network up
+
+[Service]
+Type=oneshot
+User=chuck
+WorkingDirectory=/home/chuck/homelab
+Environment=HOME=/home/chuck
+ExecStart=/home/chuck/homelab/scripts/backup-nas.sh daily
+# daily scope is small (~30 s of I/O); 1 h is generous headroom
+TimeoutStartSec=3600
+# be a good citizen: low CPU/nice, best-effort I/O so backups don't starve the host
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# don't hold the run if the host is shutting down
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
