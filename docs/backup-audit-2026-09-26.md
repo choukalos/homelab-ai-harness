@@ -352,8 +352,8 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 | 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | ✅ **done** — hedge in place (daily/weekly runs copied to `data/backups/nas-hedge/`, keep 2) |
 | 4 | VM (Victoria Metrics) in the backup? | Chuck | ✅ **yes — kept** (confirmed 2026-09-27) — the metrics are valuable. Mirror excludes root-owned `cache/`/`tmp/` (VM runs as root); `data/` is the real 3.1G. |
 | 5 | Daily vs weekly for Qdrant (daily recommended — memory writes happen most days) | Chuck | ✅ **daily** (default) |
-| 6 | **Matrix inventory**: what on Matrix is irreplaceable? (ComfyUI fine-tunes/LoRAs, custom TTS voice refs, outputs, `.env`, other services?) No SSH key from thor → matrix (verified 2026-09-26). | Chuck | ⏳ blocks `matrix.json` (not the thor build) — `matrix.json` is a placeholder for now |
-| 7 | Does Matrix already have a clone of `homelab-ai-harness` (or at least the media MCP code)? | Chuck | ⏳ **no clone** — scripts will be copied manually to Matrix; Matrix evolves the scripts and shares the unified version back |
+| 6 | **Matrix inventory**: what on Matrix is irreplaceable? (ComfyUI fine-tunes/LoRAs, custom TTS voice refs, outputs, `.env`, other services?) | Chuck | ✅ **resolved** — Matrix is backed up by its **own separate backup script/process** (different data sets + change cadence), not the shared multi-host scripts. Inventory is handled there. |
+| 7 | Does Matrix use the shared `homelab-ai-harness` backup scripts (clone + per-host `matrix.json`)? | Chuck | ✅ **resolved** — **no**: Matrix runs its own separate backup process (see item 6). The shared multi-host scripts remain for Thor (and any future host that wants them); `matrix.json` is retained only as a reference placeholder. |
 | 8 | Confirm NAS naming: share `backup`, single user `backup` for all machines (§3.5)? | Chuck | ✅ **yes** |
 | 9 | Per-host subfolder quota (e.g. 10 GB each)? | Chuck | ❌ **no** (declined; QNAP has ample disk + per-share quotas if ever needed — the script's `min_free_kb` guard is the control) |
 | 10 | Is Athena (192.168.5.110) a future backup host? | Chuck | ✅ **clarified** — Athena is a *second NAS downstream in the chain*, not a backup host: **Thor/Matrix → Lego → Athena → USB drives**, plus a fire-safe for critical files. Offsite copy is covered by this chain (out of scope to build today). |
@@ -376,7 +376,7 @@ All scripts are **built, tested end-to-end, and running live on the real NAS.** 
 | `scripts/backup-restore.sh` | partial (`--item`) + full (`--full [--target]`) recovery, sha256-verified, dry-run default, `--test` disposable containers, `--full --target` staging + RUNBOOK.md, **additive mirror restore** | ✅ tested (all item types + full staging) |
 | `scripts/backup-verify.sh` | disposable restore tests for key items | ✅ tested (mysql, qdrant, litellm-postgres PASS) |
 | `scripts/backup-hosts/thor.json` | full thor config (daily: qdrant/env/ai-kb; weekly: 16 items incl. VM mirror; `min_free_kb`) | ✅ in repo |
-| `scripts/backup-hosts/matrix.json` | placeholder (empty daily, env-only weekly, hedge off) | ✅ in repo |
+| `scripts/backup-hosts/matrix.json` | reference placeholder only — **Matrix uses its own separate backup process** (item 6/7), not the shared scripts | ✅ in repo (not used) |
 
 **Known limitations (documented):**
 - **Caddy** `data/caddy` + `config/caddy` are `root:root 700` — unreadable without sudo; ACME certs are reissuable and the Caddyfile is in the repo, so this is accepted. The `misc` tar uses `--ignore-failed-read` to skip unreadable files.
