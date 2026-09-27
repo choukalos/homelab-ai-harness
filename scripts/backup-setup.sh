@@ -36,13 +36,25 @@ CONFIG="${CONFIG:-$SCRIPT_DIR/backup-hosts/thor.json}"
 SERVER="$(jq -r '.nas.server' "$CONFIG")"
 SHARE="$(jq -r '.nas.share' "$CONFIG")"
 MOUNT="$(jq -r '.nas.mountpoint' "$CONFIG")"
-CRED_FILE="$(jq -r '.nas.credentials // "~/.smbcredentials"' "$CONFIG")"
-CRED_FILE="${CRED_FILE/#\~/$HOME}"
 HOST_ID="$(jq -r '.host_id // empty' "$CONFIG")"; [[ -n "$HOST_ID" ]] || HOST_ID="$(hostname -s)"
-MOUNT_UID="${MOUNT_UID:-$(id -u)}"
-MOUNT_GID="${MOUNT_GID:-$(id -g)}"
-BACKUP_USER="$(getent passwd "$MOUNT_UID" | cut -d: -f1)"
-[[ -n "$BACKUP_USER" ]] || fail "could not resolve username for uid $MOUNT_UID"
+
+# When run via sudo, the backup user is the INVOKING user (SUDO_USER) — not
+# root. Their home holds ~/.smbcredentials and their uid/gid should own the
+# mount (so the non-root backup user can write to it). Using root's $HOME/
+# uid here is the classic sudo gotcha that breaks the mount + permissions.
+if [[ -n "${SUDO_USER:-}" ]]; then
+  BACKUP_USER="$SUDO_USER"
+else
+  BACKUP_USER="$(id -un)"
+fi
+[[ -n "$BACKUP_USER" ]] || fail "could not determine the backup user (SUDO_USER unset and id -un empty)"
+MOUNT_UID="$(id -u "$BACKUP_USER")"
+MOUNT_GID="$(id -g "$BACKUP_USER")"
+BACKUP_HOME="$(getent passwd "$BACKUP_USER" | cut -d: -f6)"
+[[ -n "$BACKUP_HOME" ]] || fail "could not resolve home dir for $BACKUP_USER"
+
+CRED_FILE="$(jq -r '.nas.credentials // "~/.smbcredentials"' "$CONFIG")"
+CRED_FILE="${CRED_FILE/#\~/$BACKUP_HOME}"
 MARKER="# lego-backup-managed"
 
 # optional share override
