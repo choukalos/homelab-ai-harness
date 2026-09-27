@@ -470,10 +470,15 @@ gen_mirror() {
   # --ignore-errors: VM cache dirs contain root-owned/ephemeral files;
   # partial mirror is still useful (the source stays authoritative)
   if stats="$(rsync "${RSYNC_FLAGS[@]}" --delete --ignore-errors --stats "${excl[@]+"${excl[@]}"}" "$source/" "$dest/" 2>&1)"; then
-    local bytes
-    bytes="$(awk -F': ' '/^Total transferred file size/ {print $2}' <<<"$stats" | grep -oE '^[0-9]+' || true)"
-    append_entry "$name" mirror updated "${bytes:-0}" "" "mirrors/${name}/"
-    log "  $name: mirror updated (${bytes:-0} B transferred)"
+    # rsync --stats reports the DELTA (bytes newly transferred this run) plus
+    # the total size of the whole transfer. On an already-current mirror the
+    # delta is ~0, so log the meaningful numbers: files changed + total size.
+    local files_changed total_bytes total_h
+    files_changed="$(awk '/^Number of regular files transferred/ {print $NF}' <<<"$stats" | grep -oE '^[0-9]+' || true)"
+    total_bytes="$(awk '/^total size is/ {print $4}' <<<"$stats" | tr -d ',' | grep -oE '^[0-9]+' || true)"
+    total_h="$(numfmt --to=iec --suffix=B "${total_bytes:-0}" 2>/dev/null || echo "${total_bytes:-0} B")"
+    append_entry "$name" mirror updated "${total_bytes:-0}" "" "mirrors/${name}/"
+    log "  $name: mirror updated (${files_changed:-0} file(s) changed, ${total_h} total)"
   else
     mark_failed "$name" mirror "rsync failed: $(tail -1 <<<"$stats" 2>/dev/null)"
   fi
