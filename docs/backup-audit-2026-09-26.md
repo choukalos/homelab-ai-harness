@@ -15,16 +15,16 @@
 | `data/` | 6.0G | Service data, backup to NAS | ✅ **Yes, mostly** — all Docker bind-mounted service state. ~4.5G is regenerable (metrics, caches, diag logs) and excluded from the NAS payload. |
 
 **Decisions locked in (2026-09-26):**
-1. NAS share/creds: **pending from Chuck** (only external blocker). Share `backups` + user `backup` confirmed; creds live in `~/.smbcredentials` (mode 600) on each host — never in the repo, docs, logs, or summaries.
+1. NAS share/creds: **resolved** — share `backup` + user `backup`; creds live in `~/.smbcredentials` (mode 600) on each host — never in the repo, docs, logs, or summaries. Lego is a **macOS** box (stock SMB server, not Synology).
 2. Victoria Metrics: **keep history, minimize backup cost** → weekly rsync *mirror* (one copy, ~3G one-time + ~50MB/wk), no retention change, no snapshot series.
 3. `media/generated`: **skipped** entirely.
 4. Orphans `data/postgres` (67M) + `data/prometheus` (57M): **delete** (safety-checked first).
 5. `lab-keys/`: sensitive — **excluded**, Chuck backs up separately.
 6. `.env`: **plain archive, no encryption** (homelab-trust environment; avoids recovery hassle).
-7. **Multi-machine**: one NAS share (`backups`) + one non-admin backup user, shared by all machines (Thor, Matrix, future hosts). Each host writes only to its own subdirectory (`thor/`, `matrix/`, …); `HOST_ID` is a stable per-host identifier, not the hostname. Collision rules in §3.5.
+7. **Multi-machine**: one NAS share (`backup`) + one non-admin backup user, shared by all machines (Thor, Matrix, future hosts). Each host writes only to its own subdirectory (`thor/`, `matrix/`, …); `HOST_ID` comes from `/etc/hostname` (Matrix's proven approach), not the config. Collision rules in §3.5.
 8. **Recovery tooling**: `scripts/backup-restore.sh` — partial recovery (any single item from any run) and full recovery (fresh-disk rebuild = the SSD-swap runbook), sha256-verified against run manifests, dry-run by default. §3.6.
 9. **NAS-failure hedge**: the daily run also keeps the last 2 daily tiers locally in `data/backups/nas-hedge/` (~50 MB) — insurance against NAS share loss/deletion.
-10. **Backup chain (offsite covered downstream)**: Thor/Matrix → **Lego** (`backups` share) → **Athena** (192.168.5.110, second NAS) → USB drives, plus a fire-safe for critical files (`.env`, `lab-keys`). Athena is *downstream* in the chain, not a backup host — offsite is out of scope for the Thor/Matrix build.
+10. **Backup chain (offsite covered downstream)**: Thor/Matrix → **Lego** (`backup` share) → **Athena** (192.168.5.110, second NAS) → USB drives, plus a fire-safe for critical files (`.env`, `lab-keys`). Athena is *downstream* in the chain, not a backup host — offsite is out of scope for the Thor/Matrix build.
 
 **Build status (2026-09-26):** all scripts built and **tested end-to-end against a local staging dir** (no NAS mount needed): `backup-nas.sh` (daily/weekly/change-detect/prune, 0 failures), `backup-restore.sh` (every item type, `--full --target` staging + generated RUNBOOK, `--test` disposable containers), `backup-verify.sh` (mysql/qdrant/pg all PASS). ClickHouse native backup/restore verified live. Only remaining blocker is the NAS credential (C1).
 
@@ -33,11 +33,11 @@
 - **Weekly Sun 04:00** — everything else (DB dumps, ClickHouse, media, VM, misc), with **change detection**: unchanged dumps are not re-stored. At most one update/week, and only when something actually changed.
 - **One-off (manual)** — `backup-nas.sh --one-off <label>`: full run, tagged, never auto-pruned. This is the SSD-swap snapshot.
 - **Retention: 2 weeks + one-off** — 14 daily, 2 weekly, 1+ tagged one-off. Mirrors (ai-kb, media, VM) are single copies with no retention growth.
-- **Multi-machine**: one `backups` share + one user on Lego; per-host subdirs, per-host config, collision rules in §3.5.
+- **Multi-machine**: one `backup` share + one user on Lego (macOS); per-host subdirs, per-host config, collision rules in §3.5.
 - **Recovery**: `backup-restore.sh` — partial (any item, any run) or full (fresh-disk rebuild), verified, dry-run by default (§3.6).
 - **Estimated NAS footprint: ~4.6 GB total, growing ~100–150 MB/week** (Thor; Matrix TBD pending inventory).
 
-**Backup chain (offsite covered):** Thor/Matrix → **Lego** (primary NAS, share `backups`) → **Athena** (second NAS, 192.168.5.110) → **USB drives**, plus a **fire-safe** for critical files (`.env`, `lab-keys/`). Athena is a downstream copy target, *not* a backup host. Building the offsite copy is out of scope today — the chain already exists.
+**Backup chain (offsite covered):** Thor/Matrix → **Lego** (primary NAS, macOS, share `backup`) → **Athena** (second NAS, 192.168.5.110) → **USB drives**, plus a **fire-safe** for critical files (`.env`, `lab-keys/`). Athena is a downstream copy target, *not* a backup host. Building the offsite copy is out of scope today — the chain already exists.
 
 **Verified backup mechanics (tested 2026-09-26):**
 
@@ -163,11 +163,20 @@ Classification key: **CRITICAL** = irreplaceable, must back up · **KEEP** = wor
 
 ### 3.2 NAS layout (multi-host)
 
-NAS = **Lego, 192.168.5.100** (SMB open; DSM 8080; Portainer 9000).
-**One share: `backups`. One backup user** (e.g. `backup`, local DSM user, no admin) — shared by every machine. Each host mounts the same share at its own local `/mnt/nas` (CIFS; per-machine creds in `~/.smbcredentials`, mode 600) and writes only to its own subdirectory.
+NAS = **Lego, 192.168.5.100** — a **macOS box** running the stock SMB server (not a Synology; no DSM). **One share: `backup`. One backup user** (`backup`, non-admin) — shared by every machine. Each host mounts the same share at its own local `/mnt/lego` (CIFS; per-machine creds in `~/.smbcredentials`, mode 600) and writes only to its own subdirectory.
+
+> **CIFS / macOS-SMB quirks (measured on Matrix 2026-09-26 — see `scripts/backup/README.md` on Matrix for the full write-up):**
+> 1. **SMB 2.1 only.** SMB3 → `EOPNOTSUPP`, SMB 2.0.2 → `EINVAL`. Pin `vers=2.1` in fstab.
+> 2. **Idle sessions killed fast** (~18 s–3 min). Continuous I/O keeps the session alive; a stale mount must be remounted. Mount + work in **one continuous invocation** (a ~1 min gap risks a dead session).
+> 3. **Dead session on a hard mount = fatal** (D-state zombies, unkillable). Mounts use **`soft:`** so a dead session errors out instead of wedging the kernel.
+> 4. **Login rate-limiting after session churn** (transient `NT_STATUS_LOGON_FAILURE`, clears in minutes). Never retry faster; the self-heal waits it out.
+> 5. **No real Unix modes** — the server reports 755 for everything. rsync uses **`-rt`** (not `-a`), and `--modify-window=1` for `--link-dest` hardlinks (CIFS truncates mtime to 100 ns).
+> 6. **D-state `cifsd`/`umount` in `ps` → reboot the host.** Nothing else clears it.
+>
+> Mitigations in the scripts: `ensure_mounted` (bounded self-heal: probe → `umount -l` → remount), `RSYNC_FLAGS` (`-rt --modify-window=1 --timeout=60`), a post-run sha256 integrity verify, and a free-space guard.
 
 ```
-//lego/backups/
+//lego/backup/
 ├── thor/
 │   ├── manifest-<stamp>.json        # per-run manifest: items, sha256, sizes, duration, skipped-unchanged list
 │   ├── daily-<YYYYMMDD-HHMM>/       # keep 14
@@ -206,6 +215,8 @@ NAS = **Lego, 192.168.5.100** (SMB open; DSM 8080; Portainer 9000).
 | One-off | 200 MB | per manual run |
 | **Total** | **~4.6 GB** | **~100–150 MB/week steady-state** |
 
+> **Lego is a macOS box with constrained storage — the VM mirror (3.0 GB) is the dominant cost and the biggest lever.** If Lego's free space is tight, the options (in order of impact) are: (1) drop the VM mirror entirely (it's regenerable metrics; the local copy is the source of truth) → saves 3.0 GB; (2) shorten VM retention (`--retentionPeriod` 1y → 1m) → cuts the mirror to ~250 MB; (3) keep as-is (~4.6 GB total). The backup script enforces a `min_free_kb` guard (default 5 GB) and aborts rather than fill the disk. **Confirm Lego's available disk before the first run.**
+
 ### 3.4 Verification
 
 - Every run writes `manifest-<stamp>.json` (items, sha256, sizes, duration, skips) to the NAS + `~/.local/state/backup-nas.log`.
@@ -218,17 +229,17 @@ NAS = **Lego, 192.168.5.100** (SMB open; DSM 8080; Portainer 9000).
 
 | Concern | Rule |
 |---|---|
-| Namespace | Host `thor` writes only to `backups/thor/`. `HOST_ID` comes from the host's config (stable string, **not** the hostname — survives renames). The script validates `HOST_ID` against `^[a-z0-9-]+$` and builds every path as `backups/<HOST_ID>/…`; prune/restore refuse to touch anything outside that prefix. |
+| Namespace | Host `thor` writes only to `backup/thor/`. `HOST_ID` comes from **`/etc/hostname`** (Matrix's proven approach — no per-host config value to drift). The script validates `HOST_ID` against `^[a-z0-9][a-z0-9-]*$` and builds every path as `backup/<HOST_ID>/…`; prune/restore refuse to touch anything outside that prefix. |
 | Filename collisions | Every artifact is stamped (`<YYYYMMDD-HHMM>`); one-offs are labeled. Two hosts can never collide — different subdirs, unique stamps. |
 | Shared mutable state | None. Manifests are per-run, per-host. No lockfile, counter, or index is shared across hosts. |
 | Creds | Per-machine local (`~/.smbcredentials`, mode 600). Same NAS user on every host is fine — SMB auth is per-connection. |
-| Mount point | Local per host (`/mnt/nas`). The NAS sees one share; there is no NAS-side per-host mount concept. |
+| Mount point | Local per host (`/mnt/lego`). The NAS sees one share; there is no NAS-side per-host mount concept. |
 | Adding a machine | (1) clone the repo, (2) add `scripts/backup-hosts/<host>.json`, (3) create `~/.smbcredentials`, (4) mount + timer. No NAS-side change needed — the first run creates its subdir. |
 | Host-ID registry | `thor` (192.168.4.54) · `matrix` (192.168.4.55) · future: `athena`? — recorded here so IDs never duplicate. |
 
-**Deliberately NOT doing:** per-machine shares (`backups-thor`, `backups-matrix`) or per-machine NAS users — more DSM objects, no real isolation gain; the script enforces the namespace. (DSM audit log shows source IP if per-machine log clarity is ever needed.)
+**Deliberately NOT doing:** per-machine shares (`backup-thor`, `backup-matrix`) or per-machine NAS users — more macOS share objects, no real isolation gain; the script enforces the namespace.
 
-**Optional hardening (Q4):** per-host subfolder quota in DSM (Btrfs folder quota, e.g. 10 GB/host) so one runaway host can't fill the NAS.
+**Optional hardening (Q4):** a per-host subfolder size cap. macOS's stock SMB server has no per-folder quota (unlike DSM's Btrfs quotas), so this would have to be enforced by the backup script's free-space guard (already present: `min_free_kb`) rather than the NAS.
 
 ### 3.6 Recovery tooling (partial + full)
 
@@ -287,7 +298,7 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 
 | # | Item | Status |
 |---|---|---|
-| C1 | **NAS share + backup user on Lego**: share `backups` + one non-admin user (`backup`) shared by all machines (per §3.5) + password (or place `~/.smbcredentials` on each host). *The only external blocker.* | ⏳ pending — share `backups` + user `backup` confirmed; creds → `~/.smbcredentials` (mode 600) |
+| C1 | **NAS share + backup user on Lego**: share `backup` + one non-admin user (`backup`) shared by all machines (per §3.5) + `~/.smbcredentials` (mode 600) on each host. | ✅ resolved — share `backup` + user `backup`; creds in `~/.smbcredentials`; one-time mount setup via `sudo scripts/backup-setup.sh` (cifs-utils + fstab `vers=2.1,soft,noauto` + scoped sudoers) |
 | C2 | SSD swap (physical) | ⏳ after one-off + verify |
 | C3 | `lab-keys/` backup (separate process) | ⏳ Chuck's call |
 | C4 | Approve one-time system changes I make: (a) ClickHouse `backups.allowed_disk` config + `plausible-events-db` restart (~10 s) — **done + tested 2026-09-26**; (b) delete `data/postgres` (67M) + `data/prometheus` (57M) — **`data/postgres` deleted; `data/prometheus` is root-owned → needs `sudo rm -rf /home/chuck/data/prometheus`**; (c) `apt install cifs-utils` + fstab mount + systemd timers (needs sudo) | ✅ a done; b partial (sudo needed for prometheus); c at implementation time |
@@ -332,30 +343,31 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | NAS share name + backup user/creds on Lego | Chuck | ⏳ **only blocker** — share `backups`, user `backup` confirmed (§8); creds go to `~/.smbcredentials` (mode 600) on each host, never in the repo |
+| 1 | NAS share name + backup user/creds on Lego | Chuck | ✅ **resolved** — share `backup`, user `backup`; creds in `~/.smbcredentials` (mode 600) on each host, never in the repo |
 | 2 | Git history cleanup (`git filter-repo` + force-push, drops 3×102 MB logs + zip + node_modules) | Chuck | optional, separate day |
 | 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | after A6 |
 | 4 | VM: accept that the NAS mirror is the *latest* state (no point-in-time series for metrics)? | Chuck | ✅ **yes** (regenerable data) — mirror excludes root-owned `cache/`/`tmp/` (VM runs as root); `data/` is the real 3.1G |
 | 5 | Daily vs weekly for Qdrant (daily recommended — memory writes happen most days) | Chuck | ✅ **daily** (default) |
 | 6 | **Matrix inventory**: what on Matrix is irreplaceable? (ComfyUI fine-tunes/LoRAs, custom TTS voice refs, outputs, `.env`, other services?) No SSH key from thor → matrix (verified 2026-09-26). | Chuck | ⏳ blocks `matrix.json` (not the thor build) — `matrix.json` is a placeholder for now |
 | 7 | Does Matrix already have a clone of `homelab-ai-harness` (or at least the media MCP code)? | Chuck | ⏳ **no clone** — scripts will be copied manually to Matrix; Matrix evolves the scripts and shares the unified version back |
-| 8 | Confirm NAS naming: share `backups`, single user `backup` for all machines (§3.5)? | Chuck | ✅ **yes** |
-| 9 | Per-host subfolder quota in DSM (e.g. 10 GB each)? | Chuck | ❌ **no** (declined — no per-host quotas) |
+| 8 | Confirm NAS naming: share `backup`, single user `backup` for all machines (§3.5)? | Chuck | ✅ **yes** |
+| 9 | Per-host subfolder quota (e.g. 10 GB each)? | Chuck | ❌ **no** (declined; macOS has no per-folder quota — the script's `min_free_kb` guard is the control) |
 | 10 | Is Athena (192.168.5.110) a future backup host? | Chuck | ✅ **clarified** — Athena is a *second NAS downstream in the chain*, not a backup host: **Thor/Matrix → Lego → Athena → USB drives**, plus a fire-safe for critical files. Offsite copy is covered by this chain (out of scope to build today). |
 | 11 | Matrix cadence: same daily/weekly, or weekly-only? | Chuck | ✅ **weekly-only** until inventory lands (placeholder) |
 | 12 | Offsite copy of the NAS itself (e.g. B2, second drive)? | Chuck | ✅ **out of scope** — the Lego→Athena→USB + fire-safe chain covers it |
 
-### 5.1 Build status (2026-09-26)
+### 5.1 Build status (2026-09-26, updated 2026-09-27 for CIFS)
 
-All scripts are **built and tested end-to-end against a local staging dir** (`--root /tmp/nas-test`, no NAS mount required):
+All scripts are **built and tested end-to-end against a local staging dir** (`--root /tmp/nas-test`, no NAS mount required). On 2026-09-27 the scripts were **hardened for Lego's real macOS-SMB/CIFS interface** (measured on Matrix): `RSYNC_FLAGS` = `-rt --modify-window=1 --timeout=60` (no more `-a`), `ensure_mounted` self-heal, a free-space guard, and a post-run sha256 integrity verify. A one-time `backup-setup.sh` installs the fstab + sudoers + mountpoint.
 
 | Script | Role | Status |
 |---|---|---|
-| `scripts/backup-lib.sh` | shared helpers (config, manifest discovery, run/item resolution, unchanged-chain) | ✅ tested |
-| `scripts/backup-nas.sh` | host-agnostic backup engine (daily/weekly/one-off, change detection, staging+commit, prune, hedge, flock) | ✅ tested (daily + weekly, 0 failures) |
-| `scripts/backup-restore.sh` | partial (`--item`) + full (`--full [--target]`) recovery, sha256-verified, dry-run default, `--test` disposable containers, `--full --target` staging + RUNBOOK.md | ✅ tested (all item types + full staging) |
+| `scripts/backup-lib.sh` | shared helpers (config, manifest discovery, run/item resolution, unchanged-chain, `ensure_mounted` self-heal, `require_free_space`, CIFS-safe `RSYNC_FLAGS`) | ✅ tested |
+| `scripts/backup-setup.sh` | **one-time root setup**: fstab (`vers=2.1,soft,noauto,x-systemd.automount,_netdev`), scoped sudoers, `/mnt/lego/<host>`, capacity check, write test | ✅ syntax-checked (needs `sudo` + `cifs-utils` on Thor) |
+| `scripts/backup-nas.sh` | host-agnostic backup engine (daily/weekly/one-off, change detection, staging+commit, prune, hedge, flock, **post-run sha256 verify**, **free-space guard**) | ✅ tested (daily + weekly, 0 failures, verify OK) |
+| `scripts/backup-restore.sh` | partial (`--item`) + full (`--full [--target]`) recovery, sha256-verified, dry-run default, `--test` disposable containers, `--full --target` staging + RUNBOOK.md, **additive mirror restore** | ✅ tested (all item types + full staging) |
 | `scripts/backup-verify.sh` | disposable restore tests for key items | ✅ tested (mysql, qdrant, litellm-postgres PASS) |
-| `scripts/backup-hosts/thor.json` | full thor config (daily: qdrant/env/ai-kb; weekly: 16 items) | ✅ in repo |
+| `scripts/backup-hosts/thor.json` | full thor config (daily: qdrant/env/ai-kb; weekly: 16 items; `min_free_kb`) | ✅ in repo |
 | `scripts/backup-hosts/matrix.json` | placeholder (empty daily, env-only weekly, hedge off) | ✅ in repo |
 
 **Known limitations (documented):**

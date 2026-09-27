@@ -78,6 +78,10 @@ ensure_nas_root "$ROOT_OVERRIDE" "$SKIP_MOUNT"
 HOST_ROOT="$NAS_ROOT/$HOST_ID"
 mkdir -p "$HOST_ROOT"
 
+# --- free-space guard: protect the NAS disk from an unbounded run ----------
+MIN_FREE_KB="$(jq -r '.min_free_kb // 5242880' "$CONFIG")"   # default 5 GB
+require_free_space "$HOST_ROOT" $(( MIN_FREE_KB * 1024 ))
+
 STAMP="$(date +%Y%m%d-%H%M%S)"
 case "$MODE" in
   daily)   RUN_ID="daily-${STAMP}" ;;
@@ -363,7 +367,7 @@ gen_rsync() {
   local e
   while IFS= read -r e; do [[ -n "$e" ]] && excl+=("--exclude=$e"); done < <(jq -r '.exclude[]?' <<<"$item")
   local dest="$WORK/${name}"
-  if rsync -a "${excl[@]+"${excl[@]}"}" "$source/" "$dest/"; then
+  if rsync "${RSYNC_FLAGS[@]}" "${excl[@]+"${excl[@]}"}" "$source/" "$dest/"; then
     local size
     size="$(du -sb "$dest" | cut -f1)"
     append_entry "$name" rsync stored "" "$size" "$name/"
@@ -465,7 +469,7 @@ gen_mirror() {
   local stats
   # --ignore-errors: VM cache dirs contain root-owned/ephemeral files;
   # partial mirror is still useful (the source stays authoritative)
-  if stats="$(rsync -a --delete --ignore-errors --stats "${excl[@]+"${excl[@]}"}" "$source/" "$dest/" 2>&1)"; then
+  if stats="$(rsync "${RSYNC_FLAGS[@]}" --delete --ignore-errors --stats "${excl[@]+"${excl[@]}"}" "$source/" "$dest/" 2>&1)"; then
     local bytes
     bytes="$(awk -F': ' '/^Total transferred file size/ {print $2}' <<<"$stats" | grep -oE '^[0-9]+' || true)"
     append_entry "$name" mirror updated "${bytes:-0}" "" "mirrors/${name}/"
@@ -521,13 +525,45 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit "$FAILURES"
 fi
 
+# --- verify: re-hash every stored artifact on the NAS vs the manifest -------
+# CIFS can corrupt/drop data on a dead session; this catches it. A FAILED
+# verify means re-run the backup (the run is suspect).
+verify_run() {
+  local manifest="$1" run_dir="$2"
+  local total=0 bad=0 item status path sha f actual
+  while IFS= read -r item; do
+    status="$(jq -r '.status // empty' <<<"$item")"
+    path="$(jq -r '.path // empty' <<<"$item")"
+    sha="$(jq -r '.sha256 // empty' <<<"$item")"
+    # only verify real single-file artifacts: status=stored, has a real sha,
+    # and the path is a file (mirrors/rsync dirs end with / and have no sha)
+    [[ "$status" == "stored" && -n "$path" && -n "$sha" && "$path" != */ ]] || continue
+    total=$((total+1))
+    f="$run_dir/$path"
+    if [[ ! -f "$f" ]]; then
+      echo "  VERIFY: MISSING $path" >&2; bad=$((bad+1)); continue
+    fi
+    actual="$(sha256sum "$f" | cut -d' ' -f1)"
+    if [[ "$actual" != "$sha" ]]; then
+      echo "  VERIFY: MISMATCH $path (want ${sha:0:12}.. got ${actual:0:12}..)" >&2
+      bad=$((bad+1))
+    fi
+  done < <(jq -c '.items[]' "$manifest")
+  if (( bad == 0 )); then
+    log "verify OK ($total stored artifact(s) intact)"
+    return 0
+  fi
+  log "verify FAILED ($bad/$total artifacts corrupted — re-run the backup)"
+  return 1
+}
+
 # --- commit --------------------------------------------------------------------
 if [[ "$FAILURES" -gt 0 ]]; then
   log "WARNING: $FAILURES item(s) failed — committing partial run (failures recorded in manifest)"
 fi
 
 STAGING="$HOST_ROOT/.staging-${RUN_ID}"
-if rsync -a "$WORK/" "$STAGING/"; then
+if rsync "${RSYNC_FLAGS[@]}" "$WORK/" "$STAGING/"; then
   mv "$STAGING" "$HOST_ROOT/${RUN_ID}"
   log "committed run dir: ${RUN_ID}"
 else
@@ -537,6 +573,12 @@ else
 fi
 write_manifest "$HOST_ROOT/${RUN_ID}/manifest.json"
 log "manifest written (commit marker)"
+
+# post-run integrity verify (catch CIFS corruption before we trust the run)
+if ! verify_run "$HOST_ROOT/${RUN_ID}/manifest.json" "$HOST_ROOT/${RUN_ID}"; then
+  log "ERROR: post-run verify failed — this run is suspect; re-run the backup"
+  exit 1
+fi
 
 # --- prune ----------------------------------------------------------------------
 prune_tier() {

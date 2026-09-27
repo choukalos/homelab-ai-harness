@@ -4,10 +4,11 @@
   "env_file": "/home/chuck/homelab/.env",
   "nas": {
     "server": "lego.local",
-    "share": "backups",
-    "mountpoint": "/mnt/nas",
+    "share": "backup",
+    "mountpoint": "/mnt/lego",
     "credentials": "~/.smbcredentials"
   },
+  "min_free_kb": 5242880,
   "retention": { "daily": 14, "weekly": 2 },
   "local_hedge": {
     "enabled": true,

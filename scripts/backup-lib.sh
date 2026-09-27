@@ -19,6 +19,20 @@ STATE_DIR="${HOME}/.local/state"
 mkdir -p "$STATE_DIR"
 
 # ---------------------------------------------------------------------
+# CIFS / macOS-SMB safety (measured on Matrix against Lego, 2026-09-26).
+# Lego's stock SMB server is hostile: SMB 2.1 only, idle sessions killed
+# in ~18s–3min, no real Unix modes (reports 755 for everything), mtime
+# truncated to 100ns. These mitigations are MANDATORY:
+#   * rsync -rt (NOT -a): -a's -p/-g/-o fail on CIFS (no real modes) and
+#     defeat --link-dest hardlinking. --modify-window=1 absorbs the 100ns
+#     mtime truncation. --timeout=60 aborts a stalled transfer (a >3min
+#     idle gap kills the session; 60s keeps us safely under that).
+#   * mount: vers=2.1 + soft (a hard mount + dead session = unkillable
+#     D-state zombies; only a reboot clears that). See backup-setup.sh.
+# ---------------------------------------------------------------------
+RSYNC_FLAGS=(-rt --modify-window=1 --timeout=60)
+
+# ---------------------------------------------------------------------
 # resolve_config [config_file] [host_id]
 # Sets: CONFIG, HOST_ID, ENV_FILE (and sources the env file)
 # ---------------------------------------------------------------------
@@ -37,7 +51,11 @@ resolve_config() {
     exit 2
   fi
   CONFIG="$cfg"
+  # HOST_ID defaults to the hostname (Matrix's proven approach — the per-host
+  # NAS subfolder is /etc/hostname). A config host_id overrides it. Hostnames
+  # must be stable + match ^[a-z0-9][a-z0-9-]*$ (thor, matrix, ...).
   HOST_ID="$(jq -r '.host_id // empty' "$CONFIG")"
+  [[ -n "$HOST_ID" ]] || HOST_ID="$(hostname -s)"
   if [[ -z "$HOST_ID" || ! "$HOST_ID" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
     echo "ERROR: invalid host_id '${HOST_ID}' in $CONFIG (must match ^[a-z0-9][a-z0-9-]*$)" >&2
     exit 2
@@ -49,8 +67,64 @@ resolve_config() {
 }
 
 # ---------------------------------------------------------------------
+# ensure_mounted <mountpoint>
+# CIFS-safe mount with bounded self-heal (Matrix's proven approach).
+# Lego's SMB server kills idle sessions; a stale kernel mount then blocks
+# the next mount until it's lazy-unmounted. All steps are BOUNDED — never
+# an unbounded wait that could hang a cron job. Requires the fstab entry
+# (vers=2.1,soft,noauto,x-systemd.automount) + a scoped sudoers rule, both
+# installed by backup-setup.sh. `sudo -n` = non-interactive (no TTY prompt).
+# ---------------------------------------------------------------------
+ensure_mounted() {
+  local mp="$1"
+  # fast path: already mounted and responsive
+  if timeout 15 ls "$mp" >/dev/null 2>&1; then return 0; fi
+  echo "[$(date '+%F %T')] mount $mp not healthy — attempting self-heal" >&2
+  if grep -q " $mp " /proc/mounts 2>/dev/null; then
+    echo "  stale entry in /proc/mounts — lazy-unmounting" >&2
+    timeout 30 sudo -n umount -l "$mp" >/dev/null 2>&1 || true
+    if grep -q " $mp " /proc/mounts 2>/dev/null; then
+      echo "FATAL: CIFS state wedged (still in /proc/mounts after umount -l)." >&2
+      echo "       A D-state cifsd/umount is unkillable — reboot required: sudo reboot" >&2
+      exit 2
+    fi
+  fi
+  echo "  mounting (timeout 600 — covers Lego's post-churn login rate-limit)" >&2
+  if ! timeout 600 sudo -n mount "$mp" >/dev/null 2>&1; then
+    echo "FATAL: mount $mp failed." >&2
+    echo "       First run? install the fstab entry + sudoers rule once (needs sudo):" >&2
+    echo "         sudo scripts/backup-setup.sh" >&2
+    echo "       (mount.cifs present?  cifs-utils. Lego up?  ping lego.local)" >&2
+    exit 2
+  fi
+  if ! timeout 15 ls "$mp" >/dev/null 2>&1; then
+    echo "FATAL: mounted but probe failed after mount — check Lego is up (ping lego.local)" >&2
+    exit 2
+  fi
+  echo "  mount $mp healthy" >&2
+}
+
+# ---------------------------------------------------------------------
+# require_free_space <dir> <min_free_bytes>
+# Refuse to start if the target has less than MIN free (protects Lego's
+# disk from an unbounded backup run). Best-effort: df failure is non-fatal
+# (we'd rather back up than block on a df quirk).
+# ---------------------------------------------------------------------
+require_free_space() {
+  local dir="$1" min_free="$2"
+  local avail
+  avail="$(df -P "${dir%/}" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d ' ')" || true
+  if [[ -n "$avail" && "$avail" =~ ^[0-9]+$ ]]; then
+    if (( avail * 1024 < min_free )); then
+      echo "FATAL: only $(( avail * 1024 / 1024 / 1024 )) MB free under $dir (need $(( min_free / 1024 / 1024 )) MB) — aborting to protect the NAS" >&2
+      exit 2
+    fi
+  fi
+}
+
+# ---------------------------------------------------------------------
 # ensure_nas_root [root_override] [skip_mount]
-# Sets: NAS_ROOT (the share root, e.g. /mnt/nas)
+# Sets: NAS_ROOT (the share root, e.g. /mnt/lego)
 # With root_override (local testing): uses that dir, no mount.
 # ---------------------------------------------------------------------
 ensure_nas_root() {
@@ -60,18 +134,16 @@ ensure_nas_root() {
     mkdir -p "$NAS_ROOT"
     return 0
   fi
-  local mp server share creds uid gid
-  mp="$(jq -r '.nas.mountpoint // "/mnt/nas"' "$CONFIG")"
-  if mountpoint -q "$mp" 2>/dev/null; then
+  local mp creds
+  mp="$(jq -r '.nas.mountpoint // "/mnt/lego"' "$CONFIG")"
+  if [[ "$skip" == "1" ]]; then
+    if ! timeout 15 ls "$mp" >/dev/null 2>&1; then
+      echo "ERROR: $mp is not mounted and --skip-mount was given." >&2
+      exit 2
+    fi
     NAS_ROOT="$mp"
     return 0
   fi
-  if [[ "$skip" == "1" ]]; then
-    echo "ERROR: $mp is not mounted and --skip-mount was given." >&2
-    exit 2
-  fi
-  server="$(jq -r '.nas.server' "$CONFIG")"
-  share="$(jq -r '.nas.share' "$CONFIG")"
   creds="$(jq -r '.nas.credentials // "~/.smbcredentials"' "$CONFIG")"
   creds="${creds/#\~/$HOME}"
   if [[ ! -f "$creds" ]]; then
@@ -80,17 +152,8 @@ ensure_nas_root() {
     printf '  printf "username=%%s\\npassword=%%s\\n" "<user>" "<pass>" > %s && chmod 600 %s\n' "$creds" "$creds" >&2
     exit 2
   fi
-  uid="$(id -u)"; gid="$(id -g)"
-  mkdir -p "$mp" 2>/dev/null || true
-  if mount -t cifs "//${server}/${share}" "$mp" \
-      -o "credentials=${creds},uid=${uid},gid=${gid},file_mode=0600,dir_mode=0700" 2>/dev/null; then
-    NAS_ROOT="$mp"
-    return 0
-  fi
-  echo "ERROR: could not mount //${server}/${share} at $mp (probably needs root)." >&2
-  echo "Run once (or add to /etc/fstab):" >&2
-  echo "  sudo mkdir -p $mp && sudo mount -t cifs //${server}/${share} $mp -o credentials=${creds},uid=${uid},gid=${gid},file_mode=0600,dir_mode=0700" >&2
-  exit 2
+  ensure_mounted "$mp"
+  NAS_ROOT="$mp"
 }
 
 # ---------------------------------------------------------------------

@@ -380,8 +380,8 @@ do_mirror() {
     return 1
   fi
   if [[ "$YES" -eq 1 ]]; then
-    restore_log "  $name: LIVE — rsync $mirror_src/ → $target/ (mirror is the copy of record)"
-    if rsync -a --delete "$mirror_src/" "$target/"; then
+    restore_log "  $name: LIVE — rsync $mirror_src/ → $target/ (additive: backup may exclude content, so we don't delete local extras)"
+    if rsync "${RSYNC_FLAGS[@]}" "$mirror_src/" "$target/"; then
       restore_log "  $name: LIVE restore OK"
     else
       restore_log "  $name: LIVE restore FAILED"
@@ -389,8 +389,8 @@ do_mirror() {
     fi
   else
     local summary
-    summary="$(rsync -ain --delete "$mirror_src/" "$target/" 2>/dev/null | head -15)"
-    restore_log "  $name: DRY-RUN — would rsync live mirror → $target/ (preview):"
+    summary="$(rsync "${RSYNC_FLAGS[@]}" -n -i "$mirror_src/" "$target/" 2>/dev/null | head -15)"
+    restore_log "  $name: DRY-RUN — would rsync live mirror → $target/ (additive, preview):"
     echo "$summary" | sed 's/^/    /'
     restore_log "  $name: DRY-RUN — (re-run with --yes to execute)"
   fi
@@ -561,7 +561,7 @@ if [[ "$ACTION" == "full" ]]; then
         dest="$TARGET_DIR/mirrors/$name"
         if [[ -d "$src" ]]; then
           mkdir -p "$dest"
-          rsync -a "$src/" "$dest/"
+          rsync "${RSYNC_FLAGS[@]}" "$src/" "$dest/"
           staged=$((staged+1))
           printf '%s\t%s\t%s\n' "$name" "$type" "mirrors/$name/" >> "$TARGET_DIR/.staged.tsv"
         else
@@ -594,7 +594,7 @@ if [[ "$ACTION" == "full" ]]; then
     done <<<"$full_items"
     # live mirrors (always the freshest)
     if [[ -d "$HOST_ROOT/mirrors" ]]; then
-      rsync -a "$HOST_ROOT/mirrors/" "$TARGET_DIR/mirrors/"
+      rsync "${RSYNC_FLAGS[@]}" "$HOST_ROOT/mirrors/" "$TARGET_DIR/mirrors/"
     fi
     # RUNBOOK (generated from what was actually staged)
     {
@@ -609,7 +609,7 @@ if [[ "$ACTION" == "full" ]]; then
       echo "   - place .env:      tar -xzf $TARGET_DIR/tars/env-*.tar.gz -C /   (or copy from the fire-safe)"
       echo
       echo "## 2. Restore data"
-      echo "   - mirrors: rsync -a $TARGET_DIR/mirrors/<name>/ → /home/chuck/data/<name>/"
+      echo "   - mirrors: rsync (CIFS-safe -rt --modify-window=1 --timeout=60) $TARGET_DIR/mirrors/<name>/ → /home/chuck/data/<name>/"
       echo "   - dotfiles: tar -xzf $TARGET_DIR/tars/dotfiles-*.tar.gz -C /"
       echo "   - misc:     tar -xzf $TARGET_DIR/tars/misc-*.tar.gz -C /"
       echo "   - grafana.db: cp $TARGET_DIR/artifacts/grafana.db → /home/chuck/data/grafana/  (needs sudo: file is 472:root)"
