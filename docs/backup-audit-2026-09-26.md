@@ -348,7 +348,7 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | NAS share name + backup user/creds on Lego | Chuck | ✅ **resolved** — share `backup`, user `backup`; creds in `~/.smbcredentials` (mode 600) on each host, never in the repo |
-| 2 | Git history cleanup (`git filter-repo` + force-push, drops 3×102 MB logs + zip + node_modules) | Chuck | optional, separate day |
+| 2 | Git history cleanup (`git filter-repo` + force-push, drops 3×102 MB logs + zip + node_modules) | Chuck | ✅ **done** (2026-09-27) — `git filter-repo` dropped `logs/skill_runner/` + `ai-harness.zip` + `node_modules/` from all 216 commits; force-pushed (new HEAD `74c5d6c9`). `.git` shrank 198M → 3.2M. Rollback bundle: `/tmp/homelab-pre-filter.bundle`. |
 | 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | ✅ **done** — hedge in place (daily/weekly runs copied to `data/backups/nas-hedge/`, keep 2) |
 | 4 | VM (Victoria Metrics) in the backup? | Chuck | ✅ **yes — kept** (confirmed 2026-09-27) — the metrics are valuable. Mirror excludes root-owned `cache/`/`tmp/` (VM runs as root); `data/` is the real 3.1G. |
 | 5 | Daily vs weekly for Qdrant (daily recommended — memory writes happen most days) | Chuck | ✅ **daily** (default) |
