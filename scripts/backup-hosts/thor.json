@@ -28,6 +28,7 @@
     { "type": "clickhouse_backup", "name": "clickhouse/plausible", "container": "plausible-events-db", "databases": ["plausible"] },
     { "type": "mirror", "name": "media", "source": "/home/chuck/data/media", "exclude": ["generated/"] },
     { "type": "mirror", "name": "documents", "source": "/home/chuck/data/documents" },
+    { "type": "mirror", "name": "victoria-metrics", "source": "/home/chuck/data/victoria-metrics", "exclude": ["cache/", "tmp/"] },
     { "type": "rsync", "name": "presenton", "source": "/home/chuck/data/presenton" },
     { "type": "rsync", "name": "open-webui", "source": "/home/chuck/data/open-webui", "exclude": ["cache/"] },
     { "type": "file", "name": "grafana.db", "source": "/home/chuck/data/grafana/grafana.db", "container": "grafana", "container_path": "/var/lib/grafana/grafana.db" },

@@ -1,6 +1,6 @@
 # Thor Data Audit + NAS Backup Plan
 
-> Date: 2026-09-26 (v4 — multi-machine NAS design + recovery tooling + CIFS hardening. v2 decisions: weekly cadence, 2-week retention + one-off, no encryption, orphans deleted. **v4 corrections (2026-09-27): Lego is a QNAP NAS (not macOS), VM mirror dropped, hostname-dir structure confirmed**)
+> Date: 2026-09-26 (v4 — multi-machine NAS design + recovery tooling + CIFS hardening. v2 decisions: weekly cadence, 2-week retention + one-off, no encryption, orphans deleted. **v4 corrections (2026-09-27): Lego is a QNAP NAS (not macOS), hostname-dir structure confirmed, VM (Victoria Metrics) mirror kept — the metrics are valuable**)
 > Scope: `/home/chuck/homelab`, `/home/chuck/data`, `/home/chuck/workspace` (+ critical out-of-scope gaps)
 > Goal: validate the 3-dir classification, establish a storage-kind NAS backup strategy, and de-risk the SSD upgrade.
 
@@ -32,10 +32,10 @@
 - **Daily 03:00** — Qdrant (memory + KB) + `.env` + `ai-kb` sources. ~25 MB/run.
 - **Weekly Sun 04:00** — everything else (DB dumps, ClickHouse, media, VM, misc), with **change detection**: unchanged dumps are not re-stored. At most one update/week, and only when something actually changed.
 - **One-off (manual)** — `backup-nas.sh --one-off <label>`: full run, tagged, never auto-pruned. This is the SSD-swap snapshot.
-- **Retention: 2 weeks + one-off** — 14 daily, 2 weekly, 1+ tagged one-off. Mirrors (ai-kb, media, documents) are single copies with no retention growth. (VM mirror removed on request.)
+- **Retention: 2 weeks + one-off** — 14 daily, 2 weekly, 1+ tagged one-off. Mirrors (ai-kb, media, documents, victoria-metrics) are single copies with no retention growth.
 - **Multi-machine**: one `backup` share + one user on Lego (QNAP); per-host subdirs, per-host config, collision rules in §3.5.
 - **Recovery**: `backup-restore.sh` — partial (any item, any run) or full (fresh-disk rebuild), verified, dry-run by default (§3.6).
-- **Estimated NAS footprint: ~1.6 GB total, growing ~100 MB/week** (Thor; Matrix TBD pending inventory). Lego has T's of GB free — footprint is not a constraint.
+- **Estimated NAS footprint: ~4.6 GB total, bounded by the 2-week retention** (Thor; Matrix TBD pending inventory). The VM (Victoria Metrics) mirror is 3.0 GB of the total — the metrics are valuable, so it's kept. Lego has T's of GB free — footprint is not a constraint.
 
 **Backup chain (offsite covered):** Thor/Matrix → **Lego** (primary NAS, QNAP, share `backup`) → **Athena** (second NAS, 192.168.5.110) → **USB drives**, plus a **fire-safe** for critical files (`.env`, `lab-keys/`). Athena is a downstream copy target, *not* a backup host. Building the offsite copy is out of scope today — the chain already exists.
 
@@ -98,7 +98,7 @@ Classification key: **CRITICAL** = irreplaceable, must back up · **KEEP** = wor
 | `ai-kb/` | 317M | `mcp_knowledge`, `mcp_vision` | **CRITICAL** | `raw/` = KB source documents (ingest allowlist roots), `digests/` |
 | `media/` | 504M | `portal`, `mcp_media`, `mcp_mysql` (csv) | **CRITICAL** (parts) | `public/` 179M = **published website content** (video 169M, images, audio); `images/` 19M + `presentations/` 18M = generated user artifacts; briefs/reports/csv ~1M; `generated/` 284M = **SKIPPED per decision** |
 | `open-webui/` | 910M | `open-webui` | **CRITICAL** (parts) | `webui.db` 4.2M (accounts/chats/config) **CRITICAL**; `uploads/` 16M **KEEP**; `cache/` 889M **REGEN** (skip) |
-| `victoria-metrics/` | 3.0G | `victoria-metrics` | **NOT backed up** (dropped 2026-09-27) | Metrics TSDB (`--retentionPeriod=1y`). User declined the mirror — it's the metrics DB, not docker images; docker images (`/var/lib/docker`) were never in the backup. |
+| `victoria-metrics/` | 3.0G | `victoria-metrics` | **KEEP (mirror)** | Metrics TSDB, `--retentionPeriod=1y` — the metrics are valuable, so the mirror is kept. Weekly rsync mirror, single copy, ~50 MB/wk increment. Excludes root-owned `cache/`/`tmp/`. |
 | `invest-hub-runner/` | 425M | `github-runner` | **REGEN** | `_diag/` diagnostic logs |
 | `logs/` | 99M | `skill-runner` | **REGEN** | `skill_runner/` logs |
 | `backups/` | 495M | — (ops) | staging | Existing **local** backups (Qdrant + `.env`), 2026-08-26…29. Same-disk, stale — superseded by the NAS plan. Thin out after first NAS backup lands. |
@@ -194,7 +194,7 @@ NAS = **Lego, 192.168.5.100** — a **QNAP NAS** (QTS) with T's of GB free. **On
 │   │   └── homelab-git-<stamp>.bundle
 │   ├── one-off-<label>-<stamp>/     # never pruned; same layout, tagged
 │   ├── mirrors/                     # single copy, always current, no retention
-│   │   ├── ai-kb/  media/  documents/
+│   │   ├── ai-kb/  media/  documents/  victoria-metrics/
 │   └── restore-log/                 # every restore op logged here (audit trail)
 ├── matrix/                          # same shape; items TBD (open item 6)
 └── <future-host>/                   # e.g. athena — add a dir + config, nothing else
@@ -215,10 +215,11 @@ NAS = **Lego, 192.168.5.100** — a **QNAP NAS** (QTS) with T's of GB free. **On
 | ai-kb mirror | 317 MB | only on new KB docs |
 | media mirror (excl. generated) | 250 MB | only on new published/generated-kept files |
 | documents mirror | ~50 MB | only on new documents |
+| VM mirror (Victoria Metrics) | 3.0 GB | ~50 MB/week (1y retention) |
 | One-off | 200 MB | per manual run (not recurring) |
-| **Total** | **~1.5 GB** | **bounded by the 2-week retention** |
+| **Total** | **~4.5 GB** | **~100–150 MB/week steady-state** |
 
-> **Lego has T's of GB free — footprint is not a constraint.** The VM mirror (Victoria Metrics, 3.0 GB) was **dropped on request** (it's the metrics TSDB — *not* docker images; docker images live in `/var/lib/docker` and were never in the backup). Retention is capped at **2 weeks** (14 daily + 2 weekly), so the total stays bounded at ~1.5 GB no matter how long the backups run. A `min_free_kb` guard (default 5 GB) still aborts a run if the NAS ever fills up.
+> **Lego has T's of GB free — footprint is not a constraint.** The VM mirror (Victoria Metrics, 3.0 GB) is **kept** — the metrics are valuable (confirmed 2026-09-27; initially mistaken for docker images, which live in `/var/lib/docker` and were never in the backup). Retention on the daily/weekly runs is capped at **2 weeks** (14 daily + 2 weekly); the mirrors are single always-current copies. A `min_free_kb` guard (default 5 GB) still aborts a run if the NAS ever fills up.
 
 ### 3.4 Verification
 
@@ -349,7 +350,7 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 | 1 | NAS share name + backup user/creds on Lego | Chuck | ✅ **resolved** — share `backup`, user `backup`; creds in `~/.smbcredentials` (mode 600) on each host, never in the repo |
 | 2 | Git history cleanup (`git filter-repo` + force-push, drops 3×102 MB logs + zip + node_modules) | Chuck | optional, separate day |
 | 3 | Thin `data/backups/` local snapshots after first NAS backup | Me | after A6 |
-| 4 | VM (Victoria Metrics) in the backup? | Chuck | ❌ **dropped on request** (2026-09-27) — it's the metrics TSDB (not docker images); not worth the 3.0 GB. Removed from `thor.json`. |
+| 4 | VM (Victoria Metrics) in the backup? | Chuck | ✅ **yes — kept** (confirmed 2026-09-27) — the metrics are valuable. Mirror excludes root-owned `cache/`/`tmp/` (VM runs as root); `data/` is the real 3.1G. |
 | 5 | Daily vs weekly for Qdrant (daily recommended — memory writes happen most days) | Chuck | ✅ **daily** (default) |
 | 6 | **Matrix inventory**: what on Matrix is irreplaceable? (ComfyUI fine-tunes/LoRAs, custom TTS voice refs, outputs, `.env`, other services?) No SSH key from thor → matrix (verified 2026-09-26). | Chuck | ⏳ blocks `matrix.json` (not the thor build) — `matrix.json` is a placeholder for now |
 | 7 | Does Matrix already have a clone of `homelab-ai-harness` (or at least the media MCP code)? | Chuck | ⏳ **no clone** — scripts will be copied manually to Matrix; Matrix evolves the scripts and shares the unified version back |
@@ -361,7 +362,7 @@ New script: `scripts/backup-restore.sh` (same repo → available on every host; 
 
 ### 5.1 Build status (2026-09-26, updated 2026-09-27 for CIFS + QNAP corrections)
 
-All scripts are **built and tested end-to-end against a local staging dir** (`--root /tmp/nas-test`, no NAS mount required). On 2026-09-27 the scripts were **hardened for Lego's real QNAP-SMB/CIFS interface** (measured on Matrix): `RSYNC_FLAGS` = `-rt --modify-window=1 --timeout=60` (no more `-a`), `ensure_mounted` self-heal, a free-space guard, and a post-run sha256 integrity verify. A one-time `backup-setup.sh` installs the fstab + sudoers + mountpoint. **v4 corrections:** Lego is a QNAP NAS (not macOS), the VM mirror was dropped, retention is capped at 2 weeks.
+All scripts are **built and tested end-to-end against a local staging dir** (`--root /tmp/nas-test`, no NAS mount required). On 2026-09-27 the scripts were **hardened for Lego's real QNAP-SMB/CIFS interface** (measured on Matrix): `RSYNC_FLAGS` = `-rt --modify-window=1 --timeout=60` (no more `-a`), `ensure_mounted` self-heal, a free-space guard, and a post-run sha256 integrity verify. A one-time `backup-setup.sh` installs the fstab + sudoers + mountpoint. **v4 corrections:** Lego is a QNAP NAS (not macOS), retention is capped at 2 weeks, and the VM mirror (Victoria Metrics) is kept (valuable metrics).
 
 | Script | Role | Status |
 |---|---|---|
@@ -370,7 +371,7 @@ All scripts are **built and tested end-to-end against a local staging dir** (`--
 | `scripts/backup-nas.sh` | host-agnostic backup engine (daily/weekly/one-off, change detection, staging+commit, prune, hedge, flock, **post-run sha256 verify**, **free-space guard**) | ✅ tested (daily + weekly, 0 failures, verify OK) |
 | `scripts/backup-restore.sh` | partial (`--item`) + full (`--full [--target]`) recovery, sha256-verified, dry-run default, `--test` disposable containers, `--full --target` staging + RUNBOOK.md, **additive mirror restore** | ✅ tested (all item types + full staging) |
 | `scripts/backup-verify.sh` | disposable restore tests for key items | ✅ tested (mysql, qdrant, litellm-postgres PASS) |
-| `scripts/backup-hosts/thor.json` | full thor config (daily: qdrant/env/ai-kb; weekly: 15 items — VM mirror dropped; `min_free_kb`) | ✅ in repo |
+| `scripts/backup-hosts/thor.json` | full thor config (daily: qdrant/env/ai-kb; weekly: 16 items incl. VM mirror; `min_free_kb`) | ✅ in repo |
 | `scripts/backup-hosts/matrix.json` | placeholder (empty daily, env-only weekly, hedge off) | ✅ in repo |
 
 **Known limitations (documented):**
@@ -393,4 +394,4 @@ All scripts are **built and tested end-to-end against a local staging dir** (`--
 - `homelab` git: clean, in sync with GitHub · 277 tracked files
 - Qdrant: 15 collections, 23M · MySQL: `homelab` (42 MB dump), `investorhub` (578 MB dump)
 - VM: `--retentionPeriod=1y`, ~50 MB/week growth
-- Largest data dirs: victoria-metrics 3.0G (**not backed up** — dropped) · open-webui 910M (889M cache REGEN) · media 504M (284M generated SKIPPED) · invest-hub-runner 425M (REGEN) · ai-kb 317M (mirror)
+- Largest data dirs: victoria-metrics 3.0G (mirror — kept, valuable metrics) · open-webui 910M (889M cache REGEN) · media 504M (284M generated SKIPPED) · invest-hub-runner 425M (REGEN) · ai-kb 317M (mirror)
