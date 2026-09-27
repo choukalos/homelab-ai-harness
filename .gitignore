@@ -25,6 +25,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Node
+node_modules/
+
+# Build/scratch archives (never commit)
+ai-harness.zip
+
 # Private keys and certificates
 *.key
 *.pem
