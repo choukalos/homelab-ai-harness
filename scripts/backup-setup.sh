@@ -10,19 +10,21 @@
 # server/mountpoint/credentials. Idempotent — safe to re-run after
 # changing the share or password.
 #
-# What it does:
-#   1. verifies ~/.smbcredentials has a real password (not CHANGE_ME)
-#   2. creates the mountpoint + this host's tree (/<mnt>/<hostname>)
-#   3. installs the fstab entry:
+# Order (matters — fstab must exist before the first mount):
+#   1. verify ~/.smbcredentials has a real password (not CHANGE_ME)
+#   2. install cifs-utils (mount.cifs) if missing
+#   3. create the mountpoint dir
+#   4. write the fstab entry:
 #        //lego.local/<share>  /mnt/lego  cifs  credentials=...,uid=,gid=,
 #        vers=2.1,soft,noauto,x-systemd.automount,_netdev
-#      (noauto + x-systemd.automount: a downed NAS can't wedge boot or
-#       the backup script; vers=2.1: Lego's macOS SMB server rejects
-#       SMB3 (EOPNOTSUPP) and SMB2.0.2 (EINVAL); soft: a dead session
-#       errors out instead of wedging the kernel into D-state zombies)
-#   4. installs a scoped sudoers rule so the backup user can
-#      (re)mount /mnt/lego without a password (self-heal needs it)
-#   5. mounts, checks free capacity, writes a test file
+#      (vers=2.1: Lego's SMB server rejects SMB3 (EOPNOTSUPP) and
+#       SMB2.0.2 (EINVAL); 2.1 is the highest dialect it accepts —
+#       measured 2026-09-26. soft: a dead session errors out instead of
+#       wedging the kernel into D-state zombies. noauto +
+#       x-systemd.automount: a downed NAS can't wedge boot.)
+#   5. install a scoped sudoers rule so the backup user can (re)mount
+#      /mnt/lego without a password (the self-heal needs it)
+#   6. mount, check free capacity, write a test file
 # =====================================================================
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,64 +55,84 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then SHARE="$1"; fi
 if grep -qE '^password=CHANGE_ME' "$CRED_FILE"; then
   fail "$CRED_FILE still contains the CHANGE_ME placeholder — set the real Lego password first"
 fi
+echo "credentials: $CRED_FILE present"
 
-# --- 2. mount point + this host's tree (e.g. /mnt/lego/thor) ---------------
-# Self-heal first: Lego's macOS SMB server kills idle CIFS sessions quickly
-# and rate-limits after churn, so a previous mount may be hung. Both recovery
-# steps are bounded (see ensure_mounted in backup-lib.sh for the full story):
-# umount -l can hang while procs hold I/O to a dead superblock (reboot clears
-# it), and the server's rate-limit can make mount take minutes.
-if ! timeout 15 ls "$MOUNT" >/dev/null 2>&1; then
-  echo "mount of $MOUNT missing or unresponsive — (re)mounting"
-  timeout 30 umount -l "$MOUNT" 2>/dev/null || true
-  sleep 1
-  if grep -qE "^[^ ]+ $MOUNT " /proc/mounts 2>/dev/null; then
-    fail "stale mount of $MOUNT still attached (umount -l timed out) — wedged CIFS state, reboot the host to clear it"
-  fi
-  timeout 600 mount "$MOUNT" || fail "mount failed after 10 min — check share name, credentials, and network (lego.local)"
-  timeout 15 ls "$MOUNT" >/dev/null 2>&1 || fail "$MOUNT still unresponsive after remount — check the NAS (dmesg | grep -i cifs)"
+# --- 2. cifs-utils (mount.cifs) -------------------------------------------
+if ! command -v mount.cifs >/dev/null 2>&1; then
+  echo "installing cifs-utils (mount.cifs)..."
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq >/dev/null 2>&1 || true
+  apt-get install -y -qq cifs-utils >/dev/null 2>&1 || fail "install cifs-utils failed — run manually: sudo apt-get install -y cifs-utils"
 fi
-mkdir -p "$MOUNT/$HOST_ID"
-chmod 755 "$MOUNT" "$MOUNT/$HOST_ID"
-echo "layout: $SERVER share '$SHARE' -> $MOUNT ; this host's tree: $MOUNT/$HOST_ID"
+command -v mount.cifs >/dev/null 2>&1 || fail "mount.cifs still missing after install — check apt"
+echo "cifs-utils: $(mount.cifs --version 2>/dev/null | head -1 || echo present)"
 
-# --- 3. fstab (replace any previous managed entry) ------------------------
+# --- 3. mountpoint dir -----------------------------------------------------
+mkdir -p "$MOUNT"
+chmod 755 "$MOUNT"
+echo "mountpoint: $MOUNT ready"
+
+# --- 4. fstab (replace any previous managed entry) ------------------------
 # uid=/gid= make the root-mounted share appear owned by the backup user.
-# NO file_mode/dir_mode: Lego's macOS SMB server doesn't expose real Unix
-# modes anyway (client reports 755 for everything), and a forced file_mode
-# breaks rsync --link-dest hardlinking. The backup scripts use rsync -rt.
+# NO file_mode/dir_mode: Lego's SMB server doesn't expose real Unix modes
+# (client reports 755 for everything), and a forced file_mode breaks rsync
+# --link-dest hardlinking. The backup scripts use rsync -rt.
 # `soft` (not `hard`): a dead session on a hard mount blocks I/O forever and
 # wedges the kernel (D-state zombies + stuck umount -l). With soft, I/O fails
-# with an error instead; the verify step catches partial runs.
+# with an error instead; the post-run verify catches partial runs.
 FSTAB_LINE="//$SERVER/$SHARE	$MOUNT	cifs	credentials=$CRED_FILE,uid=$MOUNT_UID,gid=$MOUNT_GID,vers=2.1,soft,noauto,x-systemd.automount,_netdev	0 0"
-# NOTE: vers=2.1 — Lego's macOS SMB server rejects SMB3 (EOPNOTSUPP) and
-# SMB2.0.2 (EINVAL); 2.1 is the highest dialect it accepts (tested 2026-09-26).
 if grep -qF "$MARKER" /etc/fstab; then
   sed -i "/$MARKER/d; /^\/\/$SERVER/d" /etc/fstab
   echo "fstab: removed previous managed entry"
 fi
+cp /etc/fstab /etc/fstab.bak-lego-backup 2>/dev/null || true
 printf '%s\n%s\n' "$MARKER" "$FSTAB_LINE" >> /etc/fstab
+grep -qF "$MOUNT" /etc/fstab || fail "fstab write failed — $MOUNT not in /etc/fstab"
 echo "fstab: installed"
 echo "        $FSTAB_LINE"
 
-# --- 3b. scoped sudoers: let the backup user (re)mount $MOUNT passwordless ---
+# --- 5. scoped sudoers: let the backup user (re)mount $MOUNT passwordless ---
 SUDOERS_FILE=/etc/sudoers.d/lego-backup
 printf '%s ALL=(root) NOPASSWD: /bin/mount %s, /bin/umount -l %s\n' "$BACKUP_USER" "$MOUNT" "$MOUNT" > "$SUDOERS_FILE"
 chmod 440 "$SUDOERS_FILE"
 visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1 || { rm -f "$SUDOERS_FILE"; fail "sudoers validation failed"; }
 echo "sudoers: $BACKUP_USER can mount/remount $MOUNT without password"
 
-# --- 3c. systemd: regenerate the fstab units (x-systemd.automount) ----------
+# --- 6. systemd: regenerate the fstab units (x-systemd.automount) ----------
 systemctl daemon-reload 2>/dev/null && echo "systemd: fstab units regenerated" || echo "WARNING: systemctl daemon-reload failed (units appear after reboot)"
 
-# --- 4. mount + verify -----------------------------------------------------
+# --- 7. cifs kernel module -------------------------------------------------
 lsmod | grep -q '^cifs ' || modprobe cifs || echo "WARNING: could not load cifs module (try: sudo depmod -a && sudo modprobe cifs)"
-if timeout 15 mountpoint -q "$MOUNT"; then
-  echo "remounting (was already mounted)..."
-  umount "$MOUNT" 2>/dev/null || umount -l "$MOUNT"
+
+# --- 8. mount + verify -----------------------------------------------------
+# Self-heal: a previous mount may be hung (Lego's SMB server kills idle
+# sessions and rate-limits after churn). Bounded: umount -l 30s, mount 600s.
+if timeout 15 ls "$MOUNT" >/dev/null 2>&1; then
+  echo "$MOUNT already mounted and responsive"
+else
+  echo "$MOUNT missing or unresponsive — (re)mounting"
+  timeout 30 umount -l "$MOUNT" 2>/dev/null || true
+  sleep 1
+  if grep -qE "^[^ ]+ $MOUNT " /proc/mounts 2>/dev/null; then
+    fail "stale mount of $MOUNT still attached (umount -l timed out) — wedged CIFS state, reboot the host to clear it"
+  fi
+  # Mount with a clear error if it fails (share name / creds / network / SMB version).
+  if ! timeout 600 mount "$MOUNT" 2>&1; then
+    echo "--- diagnostics ---"
+    echo "  ping:   $(ping -c 1 -W 2 "$SERVER" 2>&1 | grep -E 'bytes from|100% packet' | head -1 || echo unreachable)"
+    echo "  creds:  $CRED_FILE ($( [[ -f $CRED_FILE ]] && echo present || echo MISSING ))"
+    echo "  share:  //${SERVER}/${SHARE}"
+    echo "  try:    smbclient -L //$SERVER -U backup -m 'SMB2,2.1'  (lists shares; confirms SMB dialect)"
+    fail "mount failed — see diagnostics above"
+  fi
+  timeout 15 ls "$MOUNT" >/dev/null 2>&1 || fail "$MOUNT still unresponsive after remount — check the NAS (dmesg | grep -i cifs)"
 fi
-mount "$MOUNT" || fail "mount failed — check share name, credentials, and network (lego.local)"
 echo "mounted $MOUNT"
+
+# host tree (created AFTER the mount so it lands on the share)
+mkdir -p "$MOUNT/$HOST_ID"
+chmod 755 "$MOUNT/$HOST_ID"
+echo "layout: //${SERVER}/${SHARE} -> $MOUNT ; this host's tree: $MOUNT/$HOST_ID"
 
 # --- capacity check (Thor needs ~5 GB; warn if < 10 GB) --------------------
 avail_kb="$(df -Pk "$MOUNT/$HOST_ID" | awk 'NR==2 {print $4}')"
