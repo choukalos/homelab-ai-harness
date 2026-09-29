@@ -907,18 +907,18 @@ class _SyncLiteLLMWrapper:
 
 def _find_skill_module(skill_name: str) -> Optional[Path]:
     """Locate a skill's __init__.py or run.py in the skills/ directory."""
-    # In container: skills mounted at /app/skills/
-    # In dev on laptop: skills are parent of runner dir
-    candidates = [
-        Path("/app/skills"),                           # container mode
-        Path(__file__).resolve().parent.parent,       # dev mode (laptop)
-    ]
-    for base in candidates:
+    # In container: skills mounted at /app/skills/ (baked main.py at /app)
+    # In dev on laptop: skills are parent of runner dir. _skills_base_dirs()
+    # guards against the container case where parent.parent is "/".
+    for base in _skills_base_dirs():
         skill_dir = base / skill_name
         for entry in ("run.py", "skill.py", "__init__.py"):
             p = skill_dir / entry
-            if p.is_file():
-                return p
+            try:
+                if p.is_file():
+                    return p
+            except OSError:
+                continue
     return None
 
 
@@ -2350,11 +2350,21 @@ async def _chat_direct(text: str, model: str, memory_enabled: bool = True) -> Ch
 
 
 def _skills_base_dirs() -> list[Path]:
-    """Directories scanned for skill subfolders (container + dev)."""
-    return [
-        Path("/app/skills"),
-        Path(__file__).resolve().parent.parent,
-    ]
+    """Directories scanned for skill subfolders (container + dev).
+
+    Container: main.py is baked at /app/main.py and skills are bind-mounted
+    at /app/skills. Dev: main.py lives at <repo>/skills/runner/main.py, so
+    the skills dir is the parent of the runner dir. Guard: in the container
+    that parent.parent resolves to the filesystem root "/" — never scan it
+    (GET /skills 500'd with PermissionError on /root/skill.yml: /root is
+    700 root:root and the container runs as uid 1000, so os.stat raises
+    EACCES — 2026-09-28 skill-runner discovery fix).
+    """
+    bases = [Path("/app/skills")]
+    dev_base = Path(__file__).resolve().parent.parent
+    if dev_base != Path("/") and dev_base not in bases:
+        bases.append(dev_base)
+    return bases
 
 
 def _parse_skill_yml(path: Path) -> dict:
@@ -2382,13 +2392,18 @@ def _list_skills() -> list[SkillInfo]:
         except OSError:
             continue
         for skill_dir in entries:
-            if not skill_dir.is_dir():
-                continue
-            name = skill_dir.name
-            if name in seen:
-                continue
-            yml = skill_dir / "skill.yml"
-            if not yml.is_file():
+            try:
+                if not skill_dir.is_dir():
+                    continue
+                name = skill_dir.name
+                if name in seen:
+                    continue
+                yml = skill_dir / "skill.yml"
+                if not yml.is_file():
+                    continue
+            except OSError:
+                # Unreadable dir (EACCES, e.g. /root as non-root): skip it —
+                # a permission quirk must not 500 the whole discovery call.
                 continue
             seen.add(name)
             data = _parse_skill_yml(yml)
