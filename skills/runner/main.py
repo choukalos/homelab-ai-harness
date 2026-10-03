@@ -428,7 +428,7 @@ _SKILL_TIMEOUTS = {
     "presentation_build": 120,
     "presentation_update": 120,
     "research_brief": 60,
-    "morning_brief": 60,
+    "morning_brief": 300,  # 5 min: freshness search + article fetch + LLM + publish
     "homelab_report": 60,
     "investment_brief": 60,
     "business_analyst": 330,
@@ -845,6 +845,7 @@ class _SyncLiteLLMWrapper:
     def __init__(self, client: LiteLLMClient) -> None:
         self._base_url = client.base_url
         self._api_key = client.api_key
+        self._user_id = client.user_id
 
     @property
     def base_url(self) -> str:
@@ -865,7 +866,15 @@ class _SyncLiteLLMWrapper:
         def _run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            local_client = LiteLLMClient(base_url=self._base_url, api_key=self._api_key)
+            # Propagate the configured per-LLM-call timeout (LLM_CALL_TIMEOUT,
+            # default 240s) — the LiteLLMClient default of 120s truncates
+            # long reasoning-model calls (e.g. morning_brief synthesis).
+            local_client = LiteLLMClient(
+                base_url=self._base_url,
+                api_key=self._api_key,
+                user_id=self._user_id,
+                timeout=LLM_CALL_TIMEOUT,
+            )
             try:
                 coro = coro_factory(local_client)
                 return loop.run_until_complete(coro)

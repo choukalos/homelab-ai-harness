@@ -13,6 +13,7 @@ Transport: stdio
 import os
 import re
 import logging
+import urllib.parse
 from typing import Optional
 
 import httpx
@@ -57,13 +58,63 @@ def _truncate_snippet(text: str, max_chars: int = SNIPPET_MAX_CHARS) -> str:
     return truncated.rstrip() + "…"
 
 
+def _publisher_from_item(item: dict) -> str:
+    """Derive a publisher name from a SearXNG result.
+
+    SearXNG news results carry no dedicated publisher field; the
+    ``metadata`` field is engine-dependent:
+      - bing news: "<age> | <Publisher>"  (e.g. "20h | Fortune on MSN")
+      - reuters:   the news category       (e.g. "Business")
+    Falls back to the URL's registrable domain.
+    """
+    metadata = item.get("metadata") or ""
+    if " | " in metadata:
+        candidate = metadata.split(" | ", 1)[1].strip()
+        if candidate and len(candidate) <= 60:
+            return candidate
+    url = item.get("url", "")
+    if url:
+        try:
+            host = urllib.parse.urlsplit(url).netloc.lower()
+        except ValueError:
+            host = ""
+        if host.startswith("www."):
+            host = host[4:]
+        parts = host.split(".")
+        if len(parts) >= 2:
+            return ".".join(parts[-2:])
+    return ""
+
+
+def _published_date_from_item(item: dict) -> str:
+    """ISO date (YYYY-MM-DD) from a SearXNG result, or '' when unavailable."""
+    published = item.get("publishedDate")
+    if not published:
+        return ""
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})", str(published))
+    return m.group(1) if m else ""
+
+
 def _format_result(item: dict) -> dict:
     """Format a single SearXNG result into a compact dict."""
     return {
         "title": item.get("title", "").strip()[:200],
         "url": item.get("url", "").strip(),
         "snippet": _truncate_snippet(item.get("content", "")),
+        "source": _publisher_from_item(item),
+        "published_date": _published_date_from_item(item),
     }
+
+
+def _days_to_time_range(days: int) -> str:
+    """Map a lookback window in days to a SearXNG time_range value."""
+    if days <= 1:
+        return "day"
+    if days <= 7:
+        return "week"
+    if days <= 31:
+        return "month"
+    return "year"
 
 
 async def _searxng_search(
@@ -156,16 +207,26 @@ async def search_recent(query: str, days: int = 7, max_results: int = 5) -> list
 
 @mcp.tool(
     name="search_news",
-    description="Search news sources for results matching the given query.",
+    description=(
+        "Search news sources for results matching the given query. "
+        "Optionally restrict to results from the last N days (days)."
+    ),
 )
-async def search_news(query: str, max_results: int = 5) -> list[dict]:
+async def search_news(
+    query: str, max_results: int = 5, days: Optional[int] = None
+) -> list[dict]:
     """News-specific search.
 
     Args:
         query: The search query string.
         max_results: Maximum number of results (default 5, cap 20).
+        days: Optional lookback window in days (1=day, <=7=week, <=31=month,
+            else year). None = no freshness filter (original behavior).
     """
-    return await _searxng_search(query, categories="news", max_results=max_results)
+    time_range = _days_to_time_range(days) if days is not None else None
+    return await _searxng_search(
+        query, categories="news", time_range=time_range, max_results=max_results
+    )
 
 
 # ---------------------------------------------------------------------------

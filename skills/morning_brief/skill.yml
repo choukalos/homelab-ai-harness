@@ -1,6 +1,6 @@
 name: morning_brief
-version: "1.0"
-description: "Daily morning brief — news across configurable interest topics, synthesized into a short-and-sweet bullet-point summary."
+version: "2.0"
+description: "Daily new-stories digest — freshness-filtered news (last month) across interest topics, no-repeat via seen-store, per-story summaries with key data points, published as tap-friendly HTML."
 inputs:
   - name: interests
     type: string
@@ -10,17 +10,27 @@ inputs:
     type: integer
     required: false
     default: 5
-    description: "Maximum number of news items per interest category."
+    description: "Maximum number of news items searched per interest topic."
+  - name: max_age_days
+    type: integer
+    required: false
+    default: 30
+    description: "Only surface stories published within the last N days (freshness window)."
+  - name: max_stories
+    type: integer
+    required: false
+    default: 6
+    description: "Maximum number of NEW stories to surface in the digest (hard cap 10)."
   - name: publish
     type: boolean
     required: false
     default: false
-    description: "Also publish the brief to the public drop zone (single-file retention: overwrites the target)."
+    description: "Also publish the HTML digest to the public drop zone (single-file retention: overwrites the target)."
   - name: publish_path
     type: string
     required: false
-    default: "/home/chuck/data/media/public/briefs/latest.md"
-    description: "Destination file for the published brief (public drop zone)."
+    default: "/home/chuck/data/media/public/briefs/latest.html"
+    description: "Destination file for the published HTML digest (public drop zone)."
 config:
   default_interests:
     - "technology news"
@@ -28,11 +38,14 @@ config:
     - "Ring SimpliSafe Nest Arlo ADT news"
     - "Xfinity press release"
     - "artificial intelligence news"
-  format: short_and_sweet
+  format: story_digest
+  seen_store: /home/chuck/data/media/homelab_reports/morning_brief_seen.json
+  seen_retention_days: 60
 tools:
-  - mcp_search
+  - mcp_search   # search_news with days=freshness window
+  - mcp_crawl    # crawl_page for per-story article content (best-effort)
 model_alias: matrix-coder
 artifact_path: /home/chuck/data/media/homelab_reports/
 approval_gates: []
 channels: [cli, pi, n8n]
-max_runtime: 180  # seconds
+max_runtime: 300  # seconds (search + crawl + LLM + publish)
