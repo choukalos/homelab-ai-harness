@@ -11,6 +11,12 @@ scrape_configs:
     - node-exporter:9100
     labels:
       instance: thor
+- job_name: mysql
+  static_configs:
+  - targets:
+    - mysql-exporter:9104
+    labels:
+      instance: thor
 - job_name: cadvisor-local
   static_configs:
   - targets:

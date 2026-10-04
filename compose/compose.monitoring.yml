@@ -181,21 +181,56 @@ services:
       start_period: 1m
 
   # ─── Bare-metal MySQL Exporter ───
-  # TODO: Re-enable once mysql-exporter config issue is resolved
-  # The exporter requires a .my.cnf or DATA_SOURCE_NAME but the current
-  # image (v0.15.1+) has config parsing issues with env_file.
-  # mysql-exporter:
-  #   image: prom/mysqld-exporter:v0.15.1
-  #   container_name: mysql-exporter
-  #   restart: unless-stopped
-  #   env_file:
-  #     - ../.env
-  #   networks:
-  #     - monitoring-net
-  #   volumes:
-  #     - ../mysql-exporter/.my.cnf:/root/.my.cnf:ro
-  #   extra_hosts:
-  #     - "thor.local:192.168.4.54"
+  # Uses the `ai`@% MySQL user (see ../mysql-exporter/.my.cnf — gitignored).
+  # The `ai` user lacks PROCESS, so only the collectors that work without it
+  # are enabled (global_status, global_variables; slave_status is disabled
+  # because MySQL 8.4 removed SHOW SLAVE STATUS). This covers
+  # the metrics we alert on: slow_queries, threads_connected, aborted_*,
+  # innodb_buffer_pool_wait_free, questions.
+  # If a dedicated user with PROCESS+SELECT is created later, drop the
+  # --no-collect.* flags to enable the richer collectors.
+  mysql-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: mysql-exporter
+    restart: unless-stopped
+    # Image defaults to user 'nobody'; run as root so it can read the
+    # mounted /root/.my.cnf (credentials file, 600 on host).
+    user: "0:0"
+    command:
+      - --config.my-cnf=/root/.my.cnf
+      - --no-collect.slave_status
+      - --no-collect.info_schema.processlist
+      - --no-collect.info_schema.tables
+      - --no-collect.info_schema.innodb_tablespaces
+      - --no-collect.info_schema.innodb_metrics
+      - --no-collect.info_schema.innodb_cmp
+      - --no-collect.info_schema.innodb_cmpmem
+      - --no-collect.info_schema.userstats
+      - --no-collect.info_schema.clientstats
+      - --no-collect.info_schema.tablestats
+      - --no-collect.info_schema.schemastats
+      - --no-collect.info_schema.query_response_time
+      - --no-collect.perf_schema.indexiowaits
+      - --no-collect.perf_schema.tablelocks
+      - --no-collect.perf_schema.eventsstatements
+      - --no-collect.perf_schema.eventsstatementssum
+      - --no-collect.perf_schema.eventswaits
+      - --no-collect.perf_schema.file_events
+      - --no-collect.perf_schema.file_instances
+      - --no-collect.perf_schema.memory_events
+      - --no-collect.perf_schema.tableiowaits
+      - --no-collect.sys.user_summary
+      - --no-collect.auto_increment.columns
+      - --no-collect.binlog_size
+      - --no-collect.engine_innodb_status
+      - --no-collect.engine_tokudb_status
+      - --no-collect.mysql.user
+    networks:
+      - monitoring-net
+    volumes:
+      - ../mysql-exporter/.my.cnf:/root/.my.cnf:ro
+    extra_hosts:
+      - "thor.local:192.168.4.54"
 
 networks:
   monitoring-net:
