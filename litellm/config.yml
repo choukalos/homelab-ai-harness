@@ -75,6 +75,10 @@ litellm_settings:
     - prometheus
   require_auth_for_metrics_endpoint: false
 
+router_settings:
+  enable_pre_call_checks: true
+  num_retries: 0
+
 mcp_servers:
   mcp_search:
     transport: sse

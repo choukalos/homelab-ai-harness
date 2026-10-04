@@ -152,6 +152,11 @@ services:
     ports:
       - "11235:11235"
     shm_size: "3g"
+    # Operator token: entrypoint refuses to bind non-loopback without a
+    # credential (mcp_crawl needs to reach it over ai-net). Sent by
+    # mcp_crawl as Authorization: Bearer. Rotate by changing .env + recreate.
+    environment:
+      - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN}
     volumes:
       - /home/chuck/data/crawl4ai:/app/data
 

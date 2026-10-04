@@ -65,6 +65,9 @@ services:
     container_name: mcp_crawl
     environment:
       - CRAWL4AI_URL=http://crawl4ai:11235
+      # Required since crawl4ai binds all interfaces with token auth
+      # (sent as Authorization: Bearer by server.py).
+      - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN}
     restart: unless-stopped
     networks:
       - ai-net

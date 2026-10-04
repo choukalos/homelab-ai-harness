@@ -503,38 +503,49 @@ def _collect_schema(database: str) -> dict:
         table_infos = []
         samples: dict[str, list[dict]] = {}
         for table in tables:
-            cols = _get_all_columns(cursor, database, table)
-            row_count = _get_table_row_count(conn, database, table)
-
-            # Indexes grouped by name
-            idx_groups: dict[str, dict] = {}
-            for idx in _get_table_indexes(cursor, database, table):
-                g = idx_groups.setdefault(idx["index_name"], {"unique": not idx["non_unique"], "columns": []})
-                g["columns"].append(idx["column_name"])
-
-            # Sample rows: up to 3 for small tables, 1 row for every other table
-            # (LIMIT 1 is a cheap first-page read even on multi-million-row tables).
-            limit = 3 if row_count <= 100 else 1
             try:
-                cursor.execute(f"SELECT * FROM `{database}`.`{table}` LIMIT {limit}")
-                rows = cursor.fetchall()
-                if rows:
-                    samples[table] = [
-                        {k: (str(v)[:60] if v is not None else None) for k, v in r.items()}
-                        for r in rows
-                    ]
-            except Exception:
-                pass
+                cols = _get_all_columns(cursor, database, table)
+                row_count = _get_table_row_count(conn, database, table)
 
-            table_infos.append({
-                "name": table,
-                "row_count": row_count,
-                "columns": cols,
-                "indexes": [
-                    {"index_name": n, "columns": g["columns"], "unique": g["unique"]}
-                    for n, g in idx_groups.items()
-                ],
-            })
+                # Indexes grouped by name
+                idx_groups: dict[str, dict] = {}
+                for idx in _get_table_indexes(cursor, database, table):
+                    g = idx_groups.setdefault(idx["index_name"], {"unique": not idx["non_unique"], "columns": []})
+                    g["columns"].append(idx["column_name"])
+
+                # Sample rows: up to 3 for small tables, 1 row for every other table
+                # (LIMIT 1 is a cheap first-page read even on multi-million-row tables).
+                limit = 3 if row_count <= 100 else 1
+                try:
+                    cursor.execute(f"SELECT * FROM `{database}`.`{table}` LIMIT {limit}")
+                    rows = cursor.fetchall()
+                    if rows:
+                        samples[table] = [
+                            {k: (str(v)[:60] if v is not None else None) for k, v in r.items()}
+                            for r in rows
+                        ]
+                except Exception:
+                    pass
+
+                table_infos.append({
+                    "name": table,
+                    "row_count": row_count,
+                    "columns": cols,
+                    "indexes": [
+                        {"index_name": n, "columns": g["columns"], "unique": g["unique"]}
+                        for n, g in idx_groups.items()
+                    ],
+                })
+            except Exception as exc:
+                # A single unreadable table (e.g. an information_schema view
+                # that needs the PROCESS privilege) must not sink the whole
+                # overview — record it and move on.
+                logger.warning("schema_overview: skipping table %s.%s: %s",
+                               database, table, exc)
+                table_infos.append({
+                    "name": table, "row_count": None, "columns": [],
+                    "indexes": [], "error": str(exc)[:160],
+                })
 
         # Join graph: table -> [tables it references via FK or soft relation]
         join_graph: dict[str, list[str]] = {t: [] for t in tables}

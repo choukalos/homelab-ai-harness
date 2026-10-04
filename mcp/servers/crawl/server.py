@@ -24,6 +24,9 @@ from mcp.server import FastMCP
 # ---------------------------------------------------------------------------
 
 CRAWL4AI_URL: str = os.environ.get("CRAWL4AI_URL", "http://crawl4ai:11235")
+# crawl4ai requires an operator token when it binds non-loopback
+# (Authorization: Bearer). Empty = unauthenticated (loopback-only setups).
+CRAWL4AI_API_TOKEN: str = os.environ.get("CRAWL4AI_API_TOKEN", "")
 HTTP_TIMEOUT: float = float(os.environ.get("CRAWL_TIMEOUT", "30"))
 MAX_CONCURRENT: int = int(os.environ.get("CRAWL_MAX_CONCURRENT", "10"))
 MAX_CHARS: int = int(os.environ.get("CRAWL_MAX_CHARS", "50000"))
@@ -108,11 +111,17 @@ async def _crawl_page_internal(url: str, format_: str = "markdown", max_chars: i
     """
     _validate_url(url)
 
-    # Choose Crawl4AI endpoint based on format
+    headers = {}
+    if CRAWL4AI_API_TOKEN:
+        headers["Authorization"] = f"Bearer {CRAWL4AI_API_TOKEN}"
+
+    # Choose Crawl4AI endpoint based on format.
+    # /md takes {"url"} and returns {"markdown": ...}.
+    # /crawl takes {"urls": [...]} and returns {"results": [{"html": ...}]}.
     if format_ == "markdown":
-        endpoint = "/md"
+        endpoint, payload = "/md", {"url": url}
     elif format_ == "html":
-        endpoint = "/crawl"
+        endpoint, payload = "/crawl", {"urls": [url]}
     else:
         raise ValueError(f"Unsupported format '{format_}'. Use 'markdown' or 'html'.")
 
@@ -122,10 +131,22 @@ async def _crawl_page_internal(url: str, format_: str = "markdown", max_chars: i
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             resp = await client.post(
                 target_url,
-                json={"url": url},
+                json=payload,
+                headers=headers,
             )
             resp.raise_for_status()
-            content = resp.text
+            # Extract the payload instead of passing raw JSON through.
+            data = resp.json()
+            if format_ == "markdown":
+                content = data.get("markdown") or resp.text
+            else:
+                results = data.get("results") or []
+                if results and results[0].get("html"):
+                    content = results[0]["html"]
+                elif results and results[0].get("error_message"):
+                    raise RuntimeError(f"Crawl failed: {results[0]['error_message']}")
+                else:
+                    content = resp.text
     except httpx.HTTPError as exc:
         logger.error("Crawl4AI request failed for %s: %s", url, exc)
         raise RuntimeError(f"Crawl4AI request failed: {exc}") from exc

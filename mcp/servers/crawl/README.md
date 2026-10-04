@@ -13,6 +13,7 @@ Fetch and extract web page content via Crawl4AI. Runs as an MCP server over SSE 
 | Environment Variable | Default | Description |
 |---|---|---|
 | `CRAWL4AI_URL` | `http://crawl4ai:11235` | Crawl4AI base URL |
+| `CRAWL4AI_API_TOKEN` | *(empty)* | Operator token, sent as `Authorization: Bearer`. Required when crawl4ai binds non-loopback (its entrypoint refuses that without a credential). |
 | `CRAWL_TIMEOUT` | `30` | HTTP request timeout in seconds |
 | `CRAWL_MAX_CONCURRENT` | `10` | Maximum concurrent crawls |
 | `CRAWL_MAX_CHARS` | `50000` | Maximum characters returned per crawl |
@@ -20,6 +21,7 @@ Fetch and extract web page content via Crawl4AI. Runs as an MCP server over SSE 
 For container deployment on the homelab Docker network:
 ```bash
 export CRAWL4AI_URL=http://crawl4ai:11235
+export CRAWL4AI_API_TOKEN=...   # same token as the crawl4ai service
 ```
 
 ## Usage

@@ -995,13 +995,18 @@ async def kb_list_documents(kb: Optional[str] = None) -> dict:
                 d["sha256"] = pl.get("sha256") or d["sha256"]
                 d["ingested_at"] = pl.get("ingested_at") or d["ingested_at"]
                 pr = pl.get("page_range")
-                if pr:
-                    d["page_range"][0] = (
-                        min(d["page_range"][0], pr[0])
-                        if d["page_range"][0] is not None else pr[0])
-                    d["page_range"][1] = (
-                        max(d["page_range"][1], pr[1])
-                        if d["page_range"][1] is not None else pr[1])
+                if isinstance(pr, (list, tuple)):
+                    # Normalize: some digests stored a flat page list
+                    # (or empty) instead of a [min, max] pair.
+                    nums = [x for x in pr if isinstance(x, (int, float))]
+                    if nums:
+                        pr = [min(nums), max(nums)]
+                        d["page_range"][0] = (
+                            min(d["page_range"][0], pr[0])
+                            if d["page_range"][0] is not None else pr[0])
+                        d["page_range"][1] = (
+                            max(d["page_range"][1], pr[1])
+                            if d["page_range"][1] is not None else pr[1])
             out[col] = sorted(docs.values(),
                               key=lambda d: d["ingested_at"] or "", reverse=True)
         return {"documents": out,
@@ -1616,6 +1621,11 @@ async def kb_digest_store(slug: str, type: str, md: str,
         points = []
         for i, (title, content) in enumerate(sections):
             pr = (page_refs or {}).get(title)
+            # Store a [min, max] pair; callers sometimes pass a flat page
+            # list (or empty) — normalize so readers never see a ragged shape.
+            if isinstance(pr, (list, tuple)):
+                nums = [x for x in pr if isinstance(x, (int, float))]
+                pr = [min(nums), max(nums)] if nums else None
             points.append({
                 "id": _point_id(f"digest:{digest_id}:{i}", 0),
                 "vector": vecs[i],
