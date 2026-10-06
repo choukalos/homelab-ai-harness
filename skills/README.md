@@ -17,7 +17,7 @@ through LiteLLM. See [Cross-Client Skills](../docs/thor_cross_client_skills.md).
 
 ## Skills
 
-12 skills are launchable (exposed via `GET /skills`); `code_review` and
+14 skills are launchable (exposed via `GET /skills`); `code_review` and
 `repo_maintenance` are TODO placeholders (no `skill.py`/`skill.yml`).
 
 | Skill | Status | Notes |
@@ -35,6 +35,8 @@ through LiteLLM. See [Cross-Client Skills](../docs/thor_cross_client_skills.md).
 | [demo_browse](demo_browse/) | ✅ Live | Search/browse demos by keyword |
 | [demo_workflow](demo_workflow/) | ✅ Live | Full demo pipeline (research→build→verify) |
 | [research_brief](research_brief/) | ✅ Live | Lightweight web research + summarization |
+| [market_research_brief](market_research_brief/) | ✅ Live | Market research brief (generic, profile-driven) |
+| [smarthome_homesecurity_brief](smarthome_homesecurity_brief/) | ✅ Live | Monthly smart home / home security market brief |
 
 ## API
 

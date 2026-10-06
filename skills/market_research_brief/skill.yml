@@ -1,0 +1,50 @@
+name: market_research_brief
+version: "1.0"
+description: "Market research brief — competitor scan (last month's moves + trend), market size & share, analyst watch, outlook. Generic engine driven by market profiles (profiles/<market>.yml); monthly cadence, artifacts retained for multi-year trend tracking, yearly summary on the January run. Free sources only; paywalled analyst data is flagged, never fabricated."
+inputs:
+  - name: market
+    type: string
+    required: true
+    description: "Market profile name (a file under profiles/, e.g. 'smarthome_homesecurity'). Omitted by specialty subskills that pin a profile."
+  - name: period_days
+    type: integer
+    required: false
+    default: 30
+    description: "Lookback window in days for the competitor scan and market data (default 30 — 'last month')."
+  - name: max_items
+    type: integer
+    required: false
+    default: 5
+    description: "Maximum news items collected per query (competitor, seed query, market-size query). Hard cap 10."
+  - name: publish
+    type: boolean
+    required: false
+    default: false
+    description: "Publish the HTML brief to the public blog drop zone: latest file (overwritten) + dated copy (last 3 dated copies retained). Yearly summaries are published when generated."
+  - name: publish_path
+    type: string
+    required: false
+    description: "Override the published 'latest' file path (default: /home/chuck/data/media/public/briefs/<profile slug>.html)."
+config:
+  profiles_dir: profiles
+  artifact_dir: /home/chuck/data/media/market_research_briefs
+  public_root: /home/chuck/data/media/public
+  public_base: "https://choukalos.com/files"
+  dated_dir: market_research        # dated copies live under /files/briefs/market_research/
+  dated_retention: 3                # keep the last 3 dated copies per market on the blog
+  yearly_month: 1                   # generate the yearly summary on the January run
+  yearly_min_briefs: 12             # monthly briefs required before a yearly summary is generated
+  market_size_queries:
+    - "market size"
+    - "market share"
+  tools_note: >
+    mcp_search (search_news / search_web) for competitor + market data,
+    mcp_knowledge (kb_search) for family-KB context — all via LiteLLM.
+tools:
+  - mcp_search
+  - mcp_knowledge
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/market_research_briefs/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 600  # seconds — multi-query research + LLM synthesis + publish

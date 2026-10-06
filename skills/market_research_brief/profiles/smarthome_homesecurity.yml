@@ -1,0 +1,69 @@
+# Market profile: Smart Home & Home Security
+# Consumed by the market_research_brief engine (profiles/<market>.yml).
+# Competitor entries may be a plain string (name == search term) or a
+# mapping: {name, search: [terms], note}.
+
+market: smarthome_homesecurity
+title: "Smart Home & Home Security"
+description: >
+  Consumer smart home and home security market: connected cameras, video
+  doorbells, alarm systems, smart locks, hubs, and voice assistants.
+
+# Segments in report order. Each competitor gets its own subsection in the
+# Competitor Scan, labeled with the segment.
+segments:
+  - id: home_security
+    label: "Home Security"
+    competitors:
+      - Ring
+      - SimpliSafe
+      - ADT
+      - Brinks
+      - "Xfinity Home"
+  - id: smart_home
+    label: "Smart Home"
+    competitors:
+      - name: "Xfinity Shield"
+        search: ["Xfinity Shield", "Xfinity Smart Home"]
+        note: "Xfinity's smart home platform, rebranded from Xfinity Smart Home."
+      - Nest
+      - Arlo
+  - id: up_and_comers
+    label: "Up-and-Comers"
+    competitors:
+      - Wyze
+      - Eufy
+      - Blink
+
+# Analyst firms to watch (free coverage only — paywalled reports are
+# referenced, never fabricated).
+analyst_firms:
+  - name: "Parks Associates (Parks Research)"
+    note: "Leading smart home / home security analyst firm. Most reports are paywalled; use free press coverage and public announcements."
+  - name: "Gartner"
+    note: "Good secondary source for smart home / home security forecasts; much data is paywalled."
+
+# Broad market-level news sweep (in addition to per-competitor queries).
+# These were the home-security interests in morning_brief before 2026-10-05.
+seed_queries:
+  - "smart home security"
+  - "Ring SimpliSafe Nest Arlo ADT news"
+  - "Xfinity press release"
+
+# Extra market-size / market-share queries (search_web, free sources only).
+# The engine also appends "<market title> market size" / "market share".
+market_size_queries:
+  - "smart home market size"
+  - "home security market size"
+  - "Parks Associates smart home report"
+  - "Gartner smart home forecast"
+
+# Yearly summary: generated on the run whose UTC month == yearly_month,
+# from the last 12 distinct monthly briefs (needs >= yearly_min_briefs).
+yearly_month: 1
+yearly_min_briefs: 12
+
+# Publishing (blog drop zone).
+publish:
+  slug: smarthome_homesecurity_brief
+  cadence: monthly

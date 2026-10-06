@@ -34,10 +34,9 @@ inputs:
 config:
   default_interests:
     - "technology news"
-    - "smart home security"
-    - "Ring SimpliSafe Nest Arlo ADT news"
-    - "Xfinity press release"
     - "artificial intelligence news"
+    - "car news"
+    - "sports car manual transmission news"
   format: story_digest
   seen_store: /home/chuck/data/media/homelab_reports/morning_brief_seen.json
   seen_retention_days: 60

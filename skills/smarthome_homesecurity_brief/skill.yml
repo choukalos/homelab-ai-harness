@@ -1,0 +1,36 @@
+name: smarthome_homesecurity_brief
+version: "1.0"
+description: "Monthly market research brief for the Smart Home & Home Security market — competitor scan (Ring, SimpliSafe, ADT, Brinks, Xfinity Home, Xfinity Shield, Nest, Arlo, plus up-and-comers Wyze/Eufy/Blink), market size & share, Parks Associates / Gartner watch, outlook. Runs the market_research_brief engine with the smarthome_homesecurity profile; publishes smarthome_homesecurity_brief.html to the blog (last 3 dated copies retained)."
+inputs:
+  - name: period_days
+    type: integer
+    required: false
+    default: 30
+    description: "Lookback window in days for the competitor scan and market data (default 30 — 'last month')."
+  - name: max_items
+    type: integer
+    required: false
+    default: 5
+    description: "Maximum news items collected per query. Hard cap 10."
+  - name: publish
+    type: boolean
+    required: false
+    default: true
+    description: "Publish the HTML brief to the blog drop zone (latest file + dated copy; last 3 dated copies retained)."
+  - name: publish_path
+    type: string
+    required: false
+    description: "Override the published 'latest' file path (default: /home/chuck/data/media/public/briefs/smarthome_homesecurity_brief.html)."
+config:
+  market: smarthome_homesecurity
+  publish_path: "/home/chuck/data/media/public/briefs/smarthome_homesecurity_brief.html"
+  public_url: "https://choukalos.com/files/briefs/smarthome_homesecurity_brief.html"
+  cadence: monthly
+tools:
+  - mcp_search
+  - mcp_knowledge
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/market_research_briefs/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 600  # seconds — multi-query research + LLM synthesis + publish

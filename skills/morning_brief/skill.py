@@ -94,10 +94,9 @@ MODEL_ALIAS = os.environ.get("MORNING_BRIEF_MODEL_ALIAS", "matrix-coder")
 # Default interest topics from skill.yml config
 DEFAULT_INTERESTS = [
     "technology news",
-    "smart home security",
-    "Ring SimpliSafe Nest Arlo ADT news",
-    "Xfinity press release",
     "artificial intelligence news",
+    "car news",
+    "sports car manual transmission news",
 ]
 
 logger = logging.getLogger("skill.morning_brief")
