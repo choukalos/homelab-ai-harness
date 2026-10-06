@@ -16,10 +16,19 @@ inputs:
   - name: max_holdings
     type: integer
     required: false
-    default: 20
-    description: "Max holdings to analyze from portfolio."
+    default: 50
+    description: "Max distinct holdings to analyze, aggregated across ALL of the user's portfolios."
+  - name: publish
+    type: boolean
+    required: false
+    default: true
+    description: "Publish the brief as HTML to the public blog drop zone (https://choukalos.com/files/briefs/investment_brief.html)."
 config:
   default_email: "choukalos@yahoo.com"
+  max_artifacts: 3
+  publish_path: "/home/chuck/data/media/public/briefs/investment_brief.html"
+  public_url: "https://choukalos.com/files/briefs/investment_brief.html"
+  investorhub_url: "https://invest.choukalos.com"
   interest_categories:
     - "dividend aristocrats"
     - "reliable dividend stocks"

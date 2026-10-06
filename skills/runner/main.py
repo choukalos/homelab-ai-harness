@@ -430,7 +430,7 @@ _SKILL_TIMEOUTS = {
     "research_brief": 60,
     "morning_brief": 300,  # 5 min: freshness search + article fetch + LLM + publish
     "homelab_report": 60,
-    "investment_brief": 60,
+    "investment_brief": 300,  # matches skill.yml max_runtime (SQL + news + LLM synthesis)
     "business_analyst": 330,
     "content_writer": 510,
     "marketing_strategy": 330,
