@@ -1,16 +1,16 @@
 name: morning_brief
-version: "2.0"
-description: "Daily new-stories digest — freshness-filtered news (last month) across interest topics, no-repeat via seen-store, per-story summaries with key data points, published as tap-friendly HTML."
+version: "2.1"
+description: "Daily new-stories digest — freshness-filtered news (last month) balanced across AI, tech (non-AI), and sports-car/manual-transmission car reviews; no-repeat via seen-store, per-story summaries with key data points, published as tap-friendly HTML."
 inputs:
   - name: interests
     type: string
     required: false
-    description: "Comma-separated list of interest topics. Overrides default_interests if provided."
+    description: "Comma-separated list of interest topics. Overrides the default interest areas (AI / Tech / Cars) if provided."
   - name: max_items
     type: integer
     required: false
-    default: 5
-    description: "Maximum number of news items searched per interest topic."
+    default: 6
+    description: "Maximum number of news items searched per interest query."
   - name: max_age_days
     type: integer
     required: false
@@ -32,11 +32,17 @@ inputs:
     default: "/home/chuck/data/media/public/briefs/latest.html"
     description: "Destination file for the published HTML digest (public drop zone)."
 config:
+  # Default interest areas (label -> search queries). Selection round-robins
+  # across areas so the digest stays balanced. The Tech area excludes
+  # AI-leaning stories (covered by the AI area); the Cars area excludes
+  # accident/incident news and focuses on manual-transmission / sports-car
+  # reviews. Aggregator pages (MSN/Yahoo/AOL) that cannot be fetched are
+  # dropped in favor of stories whose content could be read.
   default_interests:
-    - "technology news"
-    - "artificial intelligence news"
-    - "car news"
-    - "sports car manual transmission news"
+    - "artificial intelligence news"   # AI
+    - "technology news"                # Tech (non-AI)
+    - "sports car reviews"             # Cars
+    - "manual transmission car review" # Cars
   format: story_digest
   seen_store: /home/chuck/data/media/homelab_reports/morning_brief_seen.json
   seen_retention_days: 60

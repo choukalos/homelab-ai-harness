@@ -13,19 +13,29 @@ Purpose:
   All LLM/MCP traffic is routed through LiteLLM. Never touch MCP servers directly.
 
 Workflow:
-  1. Validate inputs; resolve interest topics, max_age_days, max_stories.
-  2. Search news per topic via mcp_search-search_news (days=max_age_days ->
-     SearXNG time_range, so only ~last-month stories are returned).
-  3. Deduplicate results across topics by normalized URL.
+  1. Validate inputs; resolve interest areas, max_age_days, max_stories.
+  2. Search news per area query via mcp_search-search_news
+     (days=max_age_days -> SearXNG time_range, so only ~last-month stories
+     are returned). Searches are retried on empty results (SearXNG news is
+     flaky). Per-area relevance filters drop off-topic items (e.g. car
+     accident/incident reports under the Cars area, AI-leaning items under
+     the Tech area).
+  3. Deduplicate results across areas by normalized URL.
   4. Seen-store: skip stories already surfaced in a previous run; prune
      entries older than the retention window.
-  5. Cap at max_stories (round-robin across topics for diversity).
-  6. Fetch each story's article content via mcp_crawl-crawl_page
+  5. Select up to max_stories + buffer NEW candidates (round-robin across
+     interest AREAS for balance; an area's queries are alternated for
+     diversity).
+  6. Fetch each candidate's article content via mcp_crawl-crawl_page
      (best-effort; snippet fallback when a fetch fails — paywalls/anti-bot).
-  7. Synthesize the per-story digest via LiteLLM chat completion.
-  8. Save artifacts: markdown (raw digest) + HTML (rendered page).
-  9. Publish the HTML to the public drop zone (single-file retention).
- 10. Record surfaced stories in the seen-store.
+  7. Quality gate: when the crawler is working, drop candidates from
+     aggregator/portal sites (MSN, Yahoo, AOL) whose article could not be
+     fetched — a snippet-only card with a junky aggregator link is worse
+     than no card. Truncate to max_stories.
+  8. Synthesize the per-story digest via LiteLLM chat completion.
+  9. Save artifacts: markdown (raw digest) + HTML (rendered page).
+  10. Publish the HTML to the public drop zone (single-file retention).
+  11. Record surfaced stories in the seen-store.
 
 Constraints:
   - Max runtime: 300 seconds (5 minutes).
@@ -91,13 +101,69 @@ LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
 LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "")
 MODEL_ALIAS = os.environ.get("MORNING_BRIEF_MODEL_ALIAS", "matrix-coder")
 
-# Default interest topics from skill.yml config
-DEFAULT_INTERESTS = [
-    "technology news",
-    "artificial intelligence news",
-    "car news",
-    "sports car manual transmission news",
+# ---------------------------------------------------------------------------
+# Default interest areas
+# ---------------------------------------------------------------------------
+#
+# The daily digest is balanced across three interest areas. Each area is a
+# (label, search_queries, exclude_pattern) tuple:
+#
+#   AI   — AI news and stories.
+#   Tech — technology news; AI-leaning items are excluded here (the AI area
+#          covers them) so this slot stays non-AI tech.
+#   Cars — car/sports-car reviews, manual-transmission and sports-car
+#          focused. Accident/incident/crime stories are excluded (a plain
+#          "car news" query surfaces crash reports, which are not wanted).
+#
+# Story selection round-robins across AREAS (not queries), so each area gets
+# an even share of the digest.
+
+# AI-leaning headline/snippet signals — used to keep the Tech area non-AI.
+_AI_KEYWORDS_RE = re.compile(
+    r"\b("
+    r"artificial intelligence|AI|A\.I\.|OpenAI|ChatGPT|Anthropic|DeepMind|"
+    r"machine learning|deep learning|neural net(?:work|works)?|"
+    r"large language model(?:s)?|LLMs?|AGI"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Accident/incident/crime signals — used to keep the Cars area focused on
+# reviews/enthusiast stories rather than crash reports. "crash test" is
+# allowed (safety context in reviews).
+_CAR_INCIDENT_RE = re.compile(
+    r"\b("
+    r"crash(?:ed|es)?(?!\s+test)|collision|collided|accident|"
+    r"injur(?:y|ies|ed)|killed|fatalit(?:y|ies)|arrest(?:ed|s)?|"
+    r"police|sheriff|standoff|suspect|shooting|hospitalized|ambulance|"
+    r"rescue[d]?|hit and run"
+    r")\b",
+    re.IGNORECASE,
+)
+
+DEFAULT_INTEREST_AREAS: list[tuple[str, list[str], Optional[re.Pattern]]] = [
+    ("AI", ["artificial intelligence news"], None),
+    ("Tech", ["technology news"], _AI_KEYWORDS_RE),
+    ("Cars", ["sports car reviews", "manual transmission car review"], _CAR_INCIDENT_RE),
 ]
+
+# Flat query list (backward-compatible view of the default areas).
+DEFAULT_INTERESTS = [q for _, queries, _ in DEFAULT_INTEREST_AREAS for q in queries]
+
+# Known aggregator/portal hosts. Their article pages are ad-cluttered and the
+# crawl often fails; when an aggregator story's content cannot be fetched it
+# is dropped (see the quality gate in run()) instead of surfacing a
+# snippet-only card with a junky link.
+_AGGREGATOR_HOSTS = {"msn.com", "yahoo.com", "aol.com", "msn", "yahoo", "aol"}
+
+# Extra candidates selected beyond max_stories so the quality gate can drop
+# low-quality candidates without shrinking the digest.
+SELECTION_BUFFER = 2
+
+# SearXNG news search is flaky (identical queries can return 0 results and
+# then succeed seconds later), so empty results are retried.
+SEARCH_ATTEMPTS = 3
+SEARCH_RETRY_DELAY_SECS = 2
 
 logger = logging.getLogger("skill.morning_brief")
 
@@ -322,13 +388,15 @@ class NewsItem:
         snippet: str = "",
         source: str = "",
         category: str = "",
+        query: str = "",
         published_date: str = "",
     ):
         self.title = title
         self.url = url
         self.snippet = snippet
         self.source = source
-        self.category = category  # which interest topic it was found under
+        self.category = category  # which interest area it was found under
+        self.query = query  # which search query surfaced it
         self.published_date = published_date  # ISO date (YYYY-MM-DD) when known
         self.content: Optional[str] = None  # fetched article text (None = unavailable)
 
@@ -351,6 +419,28 @@ def _normalize_url(url: str) -> str:
         host = host[4:]
     path = parts.path.rstrip("/")
     return f"{host}{path}".lower()
+
+
+def _url_host(url: str) -> str:
+    """Extract the lowercase host from a URL (www. stripped, '' on error)."""
+    try:
+        host = urllib.parse.urlsplit(url).netloc.lower()
+    except ValueError:
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _is_aggregator_host(url: str) -> bool:
+    """True when the URL's host (or registrable domain) is a known aggregator."""
+    host = _url_host(url)
+    if host in _AGGREGATOR_HOSTS:
+        return True
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:]) in _AGGREGATOR_HOSTS
+    return False
 
 
 # Friendly display names for common news domains (publisher fallback when the
@@ -549,19 +639,33 @@ def _search_news(
     Search news via mcp_search-search_news through LiteLLM.
 
     `days` restricts results to the last N days (SearXNG time_range).
-    Returns a list of NewsItem objects.
+    SearXNG news search is flaky — identical queries can return 0 results
+    and then succeed seconds later — so empty results are retried up to
+    SEARCH_ATTEMPTS times. Returns a list of NewsItem objects.
     """
     args: dict[str, Any] = {"query": query, "max_results": max_results}
     if days is not None:
         args["days"] = days
-    result = client.mcp_call("search_news", args, server_id="mcp_search")
-    if not result:
+
+    results_list: list = []
+    for attempt in range(1, SEARCH_ATTEMPTS + 1):
+        result = client.mcp_call("search_news", args, server_id="mcp_search")
+        if result and not result.get("isError"):
+            results_list = _extract_news_items(result)
+        if results_list:
+            break
+        if attempt < SEARCH_ATTEMPTS:
+            logger.warning(
+                "News search empty for %r (attempt %d/%d) — retrying in %ds",
+                query[:80], attempt, SEARCH_ATTEMPTS, SEARCH_RETRY_DELAY_SECS,
+            )
+            time.sleep(SEARCH_RETRY_DELAY_SECS)
+
+    if not results_list:
         logger.warning("News search returned no results for: %s", query[:100])
         return []
 
     items: list[NewsItem] = []
-    results_list = _extract_news_items(result)
-
     for item in results_list:
         if len(items) >= max_results:
             break
@@ -642,35 +746,31 @@ def _fetch_article(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_interests(params: dict[str, Any], config_interests: list[str]) -> list[str]:
+def _resolve_interest_areas(
+    params: dict[str, Any],
+) -> list[tuple[str, list[str], Optional[re.Pattern]]]:
     """
-    Resolve interest topics from input param or fall back to config defaults.
+    Resolve interest areas from the `interests` input or the defaults.
 
-    Input `interests` can be:
-    - A comma-separated string (most common from skill.yml input)
-    - A list of strings (programmatic use)
-    - Missing/empty -> use config defaults
+    - Explicit `interests` (comma-separated string or list): each topic
+      becomes its own area with a single query and no relevance filter
+      (the user asked for exactly these topics).
+    - Missing/empty: the default areas (AI / Tech / Cars) with their
+      relevance filters.
 
-    Returns a list of non-empty interest topic strings.
+    Returns a list of (label, [queries], exclude_pattern) tuples.
     """
     raw = params.get("interests")
 
-    if raw is None or raw == "":
-        if config_interests:
-            return list(config_interests)
-        return list(DEFAULT_INTERESTS)
+    if raw is not None and raw != "":
+        if isinstance(raw, list):
+            topics = [str(t).strip() for t in raw if str(t).strip()]
+        else:
+            topics = [t.strip() for t in str(raw).split(",") if t.strip()]
+        if topics:
+            return [(t, [t], None) for t in topics]
 
-    if isinstance(raw, list):
-        topics = [str(t).strip() for t in raw if str(t).strip()]
-    else:
-        topics = [t.strip() for t in str(raw).split(",") if t.strip()]
-
-    # If user provided at least one topic, use it (even if fewer than defaults)
-    if topics:
-        return topics
-
-    # Fall back to defaults if input was empty after parsing
-    return list(config_interests) if config_interests else list(DEFAULT_INTERESTS)
+    return [(label, list(queries), exclude) for label, queries, exclude in DEFAULT_INTEREST_AREAS]
 
 
 # ---------------------------------------------------------------------------
@@ -696,20 +796,24 @@ def _deduplicate_items(items: list[NewsItem]) -> list[NewsItem]:
 
 def _select_new_stories(
     items: list[NewsItem],
-    interests: list[str],
+    areas: list[tuple[str, list[str], Optional[re.Pattern]]],
     seen_store: dict,
     max_stories: int,
     job=None,
 ) -> tuple[list[NewsItem], int]:
     """
-    Pick the NEW stories for this digest:
+    Pick the NEW story candidates for this digest:
     - skip stories already in the seen-store (surfaced in a previous run)
-    - round-robin across interest topics (diversity) up to max_stories
+    - round-robin across interest AREAS (each area gets an even share)
+    - within an area, alternate between its search queries (diversity)
 
     Returns (selected_items, skipped_seen_count).
     """
     seen_urls = set(seen_store.get("stories", {}).keys())
-    by_topic: dict[str, list[NewsItem]] = {topic: [] for topic in interests}
+    queues: dict[tuple[str, str], list[NewsItem]] = {
+        (label, q): [] for label, queries, _ in areas for q in queries
+    }
+    fallback_key = (areas[0][0], areas[0][1][0])
     skipped_seen = 0
 
     for item in items:
@@ -717,24 +821,30 @@ def _select_new_stories(
         if key in seen_urls:
             skipped_seen += 1
             continue
-        topic = item.category if item.category in by_topic else interests[0]
-        by_topic[topic].append(item)
+        k = (item.category, item.query)
+        queues[k if k in queues else fallback_key].append(item)
 
     selected: list[NewsItem] = []
+    query_idx: dict[str, int] = {label: 0 for label, _, _ in areas}
     while len(selected) < max_stories:
         added = False
-        for topic in interests:
+        for label, queries, _ in areas:
             if len(selected) >= max_stories:
                 break
-            if by_topic[topic]:
-                selected.append(by_topic[topic].pop(0))
-                added = True
+            for _ in range(len(queries)):
+                qi = query_idx[label] % len(queries)
+                bucket = queues.get((label, queries[qi])) or []
+                if bucket:
+                    selected.append(bucket.pop(0))
+                    query_idx[label] = qi + 1
+                    added = True
+                    break
         if not added:
             break
 
     if hasattr(job, "add_log"):
         job.add_log(
-            f"Story selection: {len(selected)} new story(ies) selected, "
+            f"Story selection: {len(selected)} candidate(s) selected, "
             f"{skipped_seen} skipped (already surfaced before)"
         )
     return selected, skipped_seen
@@ -1376,8 +1486,10 @@ def run(
     # Resolve LiteLLM client (sync interface guaranteed)
     client = _resolve_litellm_client(litellm_client)
 
-    # Resolve interest topics from input or config defaults
-    interests = _resolve_interests(params, DEFAULT_INTERESTS)
+    # Resolve interest areas from input or defaults (AI / Tech / Cars;
+    # an explicit `interests` input becomes one unfiltered area per topic)
+    areas = _resolve_interest_areas(params)
+    area_labels = [label for label, _, _ in areas]
 
     # Freshness window (days) — stories must be from the last N days
     max_age_days = params.get("max_age_days", DEFAULT_MAX_AGE_DAYS)
@@ -1387,7 +1499,7 @@ def run(
         max_age_days = DEFAULT_MAX_AGE_DAYS
     max_age_days = max(1, min(max_age_days, 365))
 
-    # Per-topic search depth (kept for backward compatibility with `max_items`)
+    # Per-query search depth (kept for backward compatibility with `max_items`)
     max_items = params.get("max_items", DEFAULT_MAX_STORIES)
     if not isinstance(max_items, int) or max_items < 1:
         max_items = DEFAULT_MAX_STORIES
@@ -1406,26 +1518,49 @@ def run(
 
     if hasattr(job, "add_log"):
         job.add_log(
-            f"Executing morning_brief: {len(interests)} interest topic(s), "
-            f"max_age_days={max_age_days}, max_stories={max_stories}"
+            f"Executing morning_brief: {len(areas)} interest area(s) "
+            f"({', '.join(area_labels)}), max_age_days={max_age_days}, "
+            f"max_stories={max_stories}"
         )
-        job.add_log(f"Interests: {', '.join(interests)}")
+        job.add_log(
+            "Areas: "
+            + ", ".join(
+                f"{label} <- {q}" for label, queries, _ in areas for q in queries
+            )
+        )
         job.add_log(f"Model alias: {MODEL_ALIAS}")
 
     _install_timeout()
     try:
-        # ---- Phase 1: search news per topic (freshness-filtered) ----
+        # ---- Phase 1: search news per area query (freshness-filtered) ----
         all_items: list[NewsItem] = []
-        for topic in interests:
-            if hasattr(job, "add_log"):
-                job.add_log(f"Searching news: {topic} (last {max_age_days} days)")
-            items = _search_news(client, topic, max_results=max_items, days=max_age_days)
-            for item in items:
-                item.category = topic
-            all_items.extend(items)
+        for label, queries, exclude_re in areas:
+            for query in queries:
+                if hasattr(job, "add_log"):
+                    job.add_log(
+                        f"Searching news: {query!r} (area {label}, "
+                        f"last {max_age_days} days)"
+                    )
+                found = _search_news(client, query, max_results=max_items, days=max_age_days)
+                excluded = 0
+                for item in found:
+                    if exclude_re is not None and exclude_re.search(
+                        f"{item.title} {item.snippet}"
+                    ):
+                        excluded += 1
+                        if hasattr(job, "add_log"):
+                            job.add_log(
+                                f"  → excluded (not {label} content): {item.title[:80]}"
+                            )
+                        continue
+                    item.category = label
+                    item.query = query
+                    all_items.append(item)
+                if excluded and hasattr(job, "add_log"):
+                    job.add_log(f"  → {excluded} off-topic result(s) filtered out")
 
         if hasattr(job, "add_log"):
-            job.add_log(f"Total raw news items across topics: {len(all_items)}")
+            job.add_log(f"Total raw news items across areas: {len(all_items)}")
 
         # ---- No results: publish a fallback report ----
         if not all_items:
@@ -1434,7 +1569,7 @@ def run(
                 f"**No new stories found.** The search returned no results "
                 f"published within the last {max_age_days} days for the "
                 "configured interest topics.\n\n"
-                f"**Topics searched:** {', '.join(interests)}\n"
+                f"**Topics searched:** {', '.join(area_labels)}\n"
             )
             html = _render_report_html(report, title, f"0 new stories · last {max_age_days} days")
             artifact_path = _write_artifact(report)
@@ -1448,20 +1583,20 @@ def run(
                     published_url = _public_url(Path(published_path))
             return {
                 "summary": "No new stories found in the last "
-                           f"{max_age_days} days across {len(interests)} topic(s).",
+                           f"{max_age_days} days across {len(areas)} interest area(s).",
                 "report": report,
                 "artifact_path": artifact_path,
                 "html_artifact_path": html_artifact_path,
                 "published_path": published_path,
                 "published_url": published_url,
-                "categories": interests,
+                "categories": area_labels,
                 "item_count": 0,
                 "stories_surfaced": 0,
                 "stories_skipped_seen": 0,
                 "max_age_days": max_age_days,
             }
 
-        # ---- Phase 2: deduplicate across topics ----
+        # ---- Phase 2: deduplicate across areas ----
         unique_items = _deduplicate_items(all_items)
 
         # ---- Phase 3: seen-store — skip stories already surfaced ----
@@ -1469,18 +1604,21 @@ def run(
         pruned = _prune_seen_store(seen_store)
         if pruned and hasattr(job, "add_log"):
             job.add_log(f"Seen-store pruned {pruned} stale entr(ies)")
-        stories, skipped_seen = _select_new_stories(
-            unique_items, interests, seen_store, max_stories, job
+        # Select max_stories + buffer candidates so the quality gate (below)
+        # can drop low-quality candidates without shrinking the digest.
+        candidate_cap = min(max_stories + SELECTION_BUFFER, HARD_MAX_STORIES)
+        candidates, skipped_seen = _select_new_stories(
+            unique_items, areas, seen_store, candidate_cap, job
         )
 
         # ---- Nothing new: publish a fallback report ----
-        if not stories:
+        if not candidates:
             report = (
                 f"# {title}\n\n"
                 f"**No new stories this run.** All {len(unique_items)} story(ies) "
                 f"found (published within the last {max_age_days} days) were "
                 "already surfaced in a previous digest. Nothing new to report.\n\n"
-                f"**Topics searched:** {', '.join(interests)}\n"
+                f"**Topics searched:** {', '.join(area_labels)}\n"
             )
             html = _render_report_html(report, title, f"0 new stories · last {max_age_days} days")
             artifact_path = _write_artifact(report)
@@ -1499,7 +1637,7 @@ def run(
                 "html_artifact_path": html_artifact_path,
                 "published_path": published_path,
                 "published_url": published_url,
-                "categories": interests,
+                "categories": area_labels,
                 "item_count": len(unique_items),
                 "stories_surfaced": 0,
                 "stories_skipped_seen": skipped_seen,
@@ -1511,7 +1649,7 @@ def run(
         # budget is reached (remaining stories fall back to snippet-only).
         deadline = time.monotonic() + MAX_RUNTIME_SECS - 75
         fetched = 0
-        for item in stories:
+        for item in candidates:
             if time.monotonic() > deadline:
                 if hasattr(job, "add_log"):
                     job.add_log("Time budget reached — remaining stories use snippet only")
@@ -1526,22 +1664,78 @@ def run(
                     f"  → {'fetched ' + str(len(item.content)) + ' chars' if item.content else 'fetch failed (snippet fallback)'}"
                 )
         if hasattr(job, "add_log"):
-            job.add_log(f"Article fetch: {fetched}/{len(stories)} succeeded")
+            job.add_log(f"Article fetch: {fetched}/{len(candidates)} succeeded")
 
-        # ---- Phase 5: synthesize the per-story digest via LLM ----
+        # ---- Phase 5: quality gate — drop unfetchable aggregator stories ----
+        # When the crawler is working (at least one fetch succeeded), stories
+        # from aggregator/portal sites (MSN, Yahoo, AOL) whose article could
+        # not be fetched are dropped: those pages are ad-cluttered and a
+        # snippet-only card with a junky link is worse than no card. If the
+        # crawler is down (zero fetches succeeded) everything is kept and
+        # falls back to snippets.
+        any_fetched = any(item.content for item in candidates)
+        stories: list[NewsItem] = []
+        for item in candidates:
+            if item.content is None and any_fetched and _is_aggregator_host(item.url):
+                if hasattr(job, "add_log"):
+                    job.add_log(
+                        f"Quality gate: dropping {item.url[:80]} "
+                        f"(aggregator page could not be fetched)"
+                    )
+                continue
+            stories.append(item)
+            if len(stories) >= max_stories:
+                break
+
+        # ---- All candidates dropped: publish a fallback report ----
+        if not stories:
+            report = (
+                f"# {title}\n\n"
+                f"**No new stories to surface this run.** {len(candidates)} "
+                "candidate(s) were found (published within the last "
+                f"{max_age_days} days) but all came from aggregator pages "
+                "(MSN/Yahoo/AOL) that could not be fetched. They stay "
+                "eligible for the next run.\n\n"
+                f"**Topics searched:** {', '.join(area_labels)}\n"
+            )
+            html = _render_report_html(report, title, f"0 new stories · last {max_age_days} days")
+            artifact_path = _write_artifact(report)
+            html_artifact_path = _write_artifact(html, "html")
+            published_path = None
+            published_url = None
+            if params.get("publish"):
+                target = Path(params.get("publish_path", str(PUBLISH_PATH)))
+                published_path = _publish_report(html, target, job)
+                if published_path:
+                    published_url = _public_url(Path(published_path))
+            return {
+                "summary": "No new stories to surface: all candidates were unfetchable aggregator pages.",
+                "report": report,
+                "artifact_path": artifact_path,
+                "html_artifact_path": html_artifact_path,
+                "published_path": published_path,
+                "published_url": published_url,
+                "categories": area_labels,
+                "item_count": len(unique_items),
+                "stories_surfaced": 0,
+                "stories_skipped_seen": skipped_seen,
+                "max_age_days": max_age_days,
+            }
+
+        # ---- Phase 6: synthesize the per-story digest via LLM ----
         if hasattr(job, "add_log"):
             job.add_log("Synthesizing per-story digest via LLM...")
         report = _synthesize_digest(client, stories, max_age_days, job)
         if hasattr(job, "add_log"):
             job.add_log(f"Digest generated ({len(report)} chars)")
 
-        # ---- Phase 6: render HTML + save artifacts ----
+        # ---- Phase 7: render HTML + save artifacts ----
         meta_line = f"{len(stories)} new stories · last {max_age_days} days"
         html = _render_report_html(report, title, meta_line, stories)
         artifact_path = _write_artifact(report)
         html_artifact_path = _write_artifact(html, "html")
 
-        # ---- Phase 7: publish HTML to the public drop zone ----
+        # ---- Phase 8: publish HTML to the public drop zone ----
         published_path = None
         published_url = None
         if params.get("publish"):
@@ -1550,7 +1744,7 @@ def run(
             if published_path:
                 published_url = _public_url(Path(published_path))
 
-        # ---- Phase 8: record surfaced stories in the seen-store ----
+        # ---- Phase 9: record surfaced stories in the seen-store ----
         # Only mark stories as surfaced when the digest actually rendered
         # them (a broken/empty digest must not consume the stories).
         digest_ok = any(ln.startswith("## ") for ln in report.splitlines())
@@ -1585,7 +1779,7 @@ def run(
             "html_artifact_path": html_artifact_path,
             "published_path": published_path,
             "published_url": published_url,
-            "categories": interests,
+            "categories": area_labels,
             "item_count": len(unique_items),
             "stories_surfaced": len(stories),
             "stories_skipped_seen": skipped_seen,
@@ -1616,7 +1810,7 @@ def run(
             "html_artifact_path": html_artifact_path,
             "published_path": published_path,
             "published_url": published_url,
-            "categories": interests,
+            "categories": area_labels,
             "item_count": 0,
             "stories_surfaced": 0,
             "stories_skipped_seen": 0,
@@ -1647,7 +1841,7 @@ def run(
             "html_artifact_path": html_artifact_path,
             "published_path": published_path,
             "published_url": published_url,
-            "categories": interests,
+            "categories": area_labels,
             "item_count": 0,
             "stories_surfaced": 0,
             "stories_skipped_seen": 0,
@@ -1678,7 +1872,7 @@ def run(
             "html_artifact_path": html_artifact_path,
             "published_path": published_path,
             "published_url": published_url,
-            "categories": interests,
+            "categories": area_labels,
             "item_count": 0,
             "stories_surfaced": 0,
             "stories_skipped_seen": 0,
@@ -1728,7 +1922,7 @@ def main() -> None:
 
     if args.dry_run:
         print("Resolved configuration:")
-        print(f"  interests:      {_resolve_interests(params, DEFAULT_INTERESTS)}")
+        print(f"  interest areas: {_resolve_interest_areas(params)}")
         print(f"  max_items:      {params['max_items']}")
         print(f"  max_age_days:   {params['max_age_days']}")
         print(f"  max_stories:    {params['max_stories']}")
