@@ -23,6 +23,17 @@
       "timezone": "America/Chicago"
     },
     {
+      "id": "weekday-investment-brief",
+      "name": "Weekday Investment Brief",
+      "cron": "0 7 * * 1-5",
+      "skill": "investment_brief",
+      "params": {
+        "publish": true
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
       "id": "monthly-smarthome-homesecurity-brief",
       "name": "Monthly Smart Home & Home Security Market Brief",
       "cron": "0 9 1 * *",
