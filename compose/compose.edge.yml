@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
-    command: tunnel --no-autoupdate run
+    command: tunnel --protocol http2 --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     environment:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
     networks:
