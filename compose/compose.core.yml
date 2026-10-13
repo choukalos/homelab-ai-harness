@@ -10,7 +10,10 @@ networks:
 
 services:
   caddy:
-    image: caddy:2
+    # Pinned: 2.11.6 had a regression (#8103) where the new 1-min idle read
+    # deadline killed streaming responses (LLM SSE) exactly 60s after the
+    # request body was read. Fixed in 2.11.7 (#8107). Bump deliberately.
+    image: caddy:2.11.7
     container_name: caddy
     restart: unless-stopped
     env_file:
