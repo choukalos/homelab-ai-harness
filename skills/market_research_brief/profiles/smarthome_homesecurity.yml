@@ -67,3 +67,91 @@ yearly_min_briefs: 12
 publish:
   slug: smarthome_homesecurity_brief
   cadence: monthly
+
+# ---------------------------------------------------------------------------
+# Annual reference data (competitor comparison + market context).
+# Rebuilt on the January run or via: python3 reference.py --market <market>
+# Output: references/<market>.json (git-tracked, human-editable).
+# See market_research_todo.md for the full plan.
+# ---------------------------------------------------------------------------
+reference:
+  stale_after_days: 365
+  # Key aspects for THIS market (per-market — different markets define their own).
+  aspects:
+    - {id: kit_cost, label: "Initial kit cost", type: usd}
+    - {id: kit_includes, label: "Starter kit includes", type: text}
+    - {id: monthly_monitoring, label: "Monthly pro monitoring", type: usd}
+    - {id: self_monitoring, label: "Self-monitoring option", type: bool}
+    - {id: cloud_storage, label: "Cloud storage / recording", type: text}
+    - {id: cellular_backup, label: "Cellular backup", type: bool}
+    - {id: emergency_response, label: "Police/fire/medical dispatch", type: bool}
+    - {id: family_tracking, label: "Family tracking / SOS help", type: text}
+    - {id: camera_types, label: "Camera types", type: list}
+    - {id: camera_resolution, label: "Camera resolution", type: text}
+    - {id: ai_features, label: "Advanced AI", type: list}
+    - {id: sensors, label: "Supported sensors", type: list}
+    - {id: hub, label: "Hub / base station", type: text}
+    - {id: integrations, label: "Ecosystem integrations", type: list}
+    - {id: pro_install, label: "Pro installation", type: bool}
+    - {id: contract, label: "Contract terms", type: text}
+    - {id: warranty, label: "Warranty", type: text}
+  # LLM rubric ratings (1-5, same rubric for every competitor).
+  rating_aspects:
+    - {id: value, label: "Value"}
+    - {id: features, label: "Features"}
+    - {id: ecosystem, label: "Ecosystem"}
+    - {id: support, label: "Monitoring & support"}
+  # Selected free review sites whose scores are shown alongside rubric ratings.
+  review_sites: [SafeHome.org, Security.org, findprices.com]
+  # Crawl sources for the reference build (vendor pages + comparison sites).
+  sources:
+    - {url: "https://ring.com/ring-bundles", competitors: [Ring]}
+    - {url: "https://ring.com/plans", competitors: [Ring]}
+    - {url: "https://www.safehome.org/home-security-cameras/ring/", competitors: [Ring]}
+    - {url: "https://simplisafe.com/home-security-shop-packages", competitors: [SimpliSafe]}
+    - {url: "https://www.security.org/home-security-systems/simplisafe/", competitors: [SimpliSafe]}
+    - {url: "https://www.safehome.org/security-systems/simplisafe/", competitors: [SimpliSafe]}
+    - {url: "https://www.adt.com/", competitors: [ADT]}
+    - {url: "https://www.security.org/home-security-systems/adt/", competitors: [ADT]}
+    - {url: "https://www.safehome.org/security-systems/adt/", competitors: [ADT]}
+    - {url: "https://www.brinks.com/", competitors: [Brinks]}
+    - {url: "https://www.security.org/home-security-systems/brinks/", competitors: [Brinks]}
+    - {url: "https://www.safehome.org/security-systems/brinks/", competitors: [Brinks]}
+    - {url: "https://www.xfinity.com/learn/home-solutions/home-security", competitors: [Xfinity Home, Xfinity Shield]}
+    - {url: "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html", competitors: [Xfinity Shield, Xfinity Home], note: "Comcast Shield announcement 2026-08: free app w/ Xfinity Internet, $15/mo tier w/ indoor camera + sensors; camera $5/mo EIP x36mo per user (chuck) 2026-10"}
+    - {url: "https://www.safehome.org/security-systems/xfinity-comcast/", competitors: [Xfinity Home, Xfinity Shield]}
+    - {url: "https://store.google.com/us/category/connected_home", competitors: [Nest]}
+    - {url: "https://www.safehome.org/security-systems/nest-secure/", competitors: [Nest]}
+    - {url: "https://us.arlo.com/pages/plans", competitors: [Arlo]}
+    - {url: "https://www.safehome.org/home-security-cameras/arlo/", competitors: [Arlo]}
+    - {url: "https://www.wyze.com/us/en/collections/all", competitors: [Wyze]}
+    - {url: "https://www.safehome.org/security-systems/wyze/", competitors: [Wyze]}
+    - {url: "https://us.eufy.com/collections/home-security-systems", competitors: [Eufy]}
+    - {url: "https://www.safehome.org/security-systems/eufy/", competitors: [Eufy]}
+    - {url: "https://blinkforhome.com/", competitors: [Blink]}
+    - {url: "https://www.safehome.org/home-security-cameras/blink/", competitors: [Blink]}
+    - {url: "https://www.safehome.org/security-systems/best/", competitors: [all]}
+    - {url: "https://www.safehome.org/resources/home-security-industry-annual/", competitors: [all],
+       note: "Annual industry report — brand market-share survey table (Ring 43%, ADT 10%, Nest 7%, Wyze 6%, Xfinity 5%, SimpliSafe 5%, Eufy 4%); survey table ~char 5750, within 9000-char crawl budget"}
+    - {url: "https://www.findprices.com/compare/home-security-systems-price-comparison", competitors: [all]}
+  # Competitor size/share indicators (consistent mechanism; each labeled by
+  # type: revenue | survey_share | pr_estimate | install_base | other).
+  share_indicators:
+    - {competitor: Arlo, type: revenue, source: "Arlo IR FY press release (investor.arlo.com)",
+       query: "Arlo Technologies full year revenue results press release"}
+    - {competitor: ADT, type: revenue, source: "ADT Inc. 10-K (SEC EDGAR, CIK 1703056) — public company",
+       query: "ADT Inc 10-K SEC annual revenue total revenue"}
+    - {competitor: Ring, type: survey_share, source: "SafeHome.org annual industry report",
+       query: "most popular home security camera brand survey"}
+    - {competitor: Nest, type: survey_share, source: "SafeHome.org annual industry report (survey of 2,435 U.S. adults)",
+       query: "SafeHome.org home security industry annual report brand share survey"}
+    - {competitor: Eufy, type: survey_share, source: "SafeHome.org annual industry report (survey of 2,435 U.S. adults)",
+       query: "SafeHome.org home security industry annual report brand share survey"}
+    - {competitor: SimpliSafe, type: survey_share, source: "SafeHome.org annual industry report (survey of 2,435 U.S. adults)",
+       query: "SafeHome.org home security industry annual report brand share survey"}
+  # NOTE: Xfinity Home share indicator intentionally omitted — internal Comcast data.
+  # Extra queries for the market-size phase of the build.
+  market_size_queries:
+    - "smart home market size"
+    - "home security system market size"
+    - "home security market share 2026"

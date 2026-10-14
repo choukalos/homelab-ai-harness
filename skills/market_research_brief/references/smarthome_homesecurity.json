@@ -1,0 +1,2003 @@
+{
+  "market": "smarthome_homesecurity",
+  "title": "Smart Home & Home Security",
+  "built_at": "2026-10-13",
+  "stale_after_days": 365,
+  "market_size": [
+    {
+      "estimate_usd_b": 159.5,
+      "year": 2026,
+      "cagr_pct": 2.97,
+      "horizon_year": 2031,
+      "scope": "global smart home hardware (B2C)",
+      "source": "Statista",
+      "url": "https://www.statista.com/outlook/cmo/smart-home/worldwide/",
+      "note": "free page summary; full data paywalled"
+    },
+    {
+      "estimate_usd_b": 147.52,
+      "year": 2025,
+      "cagr_pct": null,
+      "horizon_year": 2034,
+      "scope": "global smart home",
+      "source": "Fortune Business Insights",
+      "url": "https://www.fortunebusinessinsights.com/industry-reports/smart-home-market-101900",
+      "note": "free page summary; full report paywalled"
+    },
+    {
+      "estimate_usd_b": 56.62,
+      "year": 2025,
+      "cagr_pct": 8.5,
+      "horizon_year": 2035,
+      "scope": "global home security systems",
+      "source": "Emergen Research",
+      "url": "https://www.emergenresearch.com/industry-report/home-security-systems-market",
+      "note": "free page summary; full report paywalled"
+    },
+    {
+      "estimate_usd_b": 75.06,
+      "year": 2025,
+      "cagr_pct": null,
+      "horizon_year": 2030,
+      "scope": "global home security systems",
+      "source": "Mordor Intelligence",
+      "url": "https://www.mordorintelligence.com/industry-reports/home-security-system-market",
+      "note": "free page summary; full report paywalled"
+    }
+  ],
+  "market_context": [
+    "Gartner identifies interoperable connectivity, embedded AI, GenAI-enabled virtual assistants, and autonomous robotics as forces that will reshape smart home user experiences (per Gartner, https://www.gartner.com/en/documents/5810115).",
+    "Statista reports the United States generates the most smart home revenue, at US$20.1bn in 2026 (per Statista, https://www.statista.com/outlook/cmo/smart-home/worldwide/).",
+    "SafeHome.org's 2026 report highlights rising adoption of smart systems and millions of U.S. households investing in protection (per SafeHome.org, https://www.safehome.org/resources/home-security-industry-annual/).",
+    "SafeHome.org's 2026 report says Ring was the most popular home security camera brand, used by 43% of surveyed users (per SafeHome.org, https://www.safehome.org/resources/home-security-industry-annual/)."
+  ],
+  "share_indicators": [
+    {
+      "competitor": "Arlo",
+      "type": "revenue",
+      "value": "$330M ARR at end of FY2025",
+      "pct": null,
+      "as_of": "2025",
+      "source": "Arlo IR FY2025 press release",
+      "url": "https://investor.arlo.com/press-releases/press-release-details/2026/Arlo-Reports-Fourth-Quarter-and-Full-Year-2025-Results/default.aspx",
+      "note": "ARR, not total company revenue; from free Arlo IR press release summary."
+    },
+    {
+      "competitor": "ADT",
+      "type": "revenue",
+      "value": "$5.13B FY2025 total revenue",
+      "pct": null,
+      "as_of": "FY2025",
+      "source": "ADT Inc. 10-K (SEC EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1703056/000170305626000022/adt-20251231.htm",
+      "note": "Public company (NYSE: ADT). FY2025 total revenue $5,128.6M (FY2024: $4,898.4M). 10-K filed 2026-03-02."
+    },
+    {
+      "competitor": "Ring",
+      "type": "survey_share",
+      "value": "43% of surveyed users use Ring home security cameras",
+      "pct": 43,
+      "as_of": "2026",
+      "source": "SafeHome.org 2026 Home Security Market Report",
+      "url": "https://www.safehome.org/resources/home-security-industry-annual/",
+      "note": "Survey share of home security camera users, not revenue market share; 2026 annual report."
+    },
+    {
+      "competitor": "Nest",
+      "type": "survey_share",
+      "value": "7% of U.S. camera/security users (Google Nest)",
+      "pct": 7,
+      "as_of": "2026",
+      "source": "SafeHome.org 2026 annual industry report",
+      "url": "https://www.safehome.org/resources/home-security-industry-annual/",
+      "note": "Share of U.S. camera/security-system users naming this as primary brand (SafeHome.org survey, n=2,435 U.S. adults, 2026). Brand share, not revenue share."
+    },
+    {
+      "competitor": "Eufy",
+      "type": "survey_share",
+      "value": "4% of U.S. camera/security users",
+      "pct": 4,
+      "as_of": "2026",
+      "source": "SafeHome.org 2026 annual industry report",
+      "url": "https://www.safehome.org/resources/home-security-industry-annual/",
+      "note": "Share of U.S. camera/security-system users naming this as primary brand (SafeHome.org survey, n=2,435 U.S. adults, 2026). Brand share, not revenue share."
+    },
+    {
+      "competitor": "SimpliSafe",
+      "type": "survey_share",
+      "value": "5% of U.S. camera/security users",
+      "pct": 5,
+      "as_of": "2026",
+      "source": "SafeHome.org 2026 annual industry report",
+      "url": "https://www.safehome.org/resources/home-security-industry-annual/",
+      "note": "Share of U.S. camera/security-system users naming this as primary brand (SafeHome.org survey, n=2,435 U.S. adults, 2026). Brand share, not revenue share."
+    }
+  ],
+  "competitors": [
+    {
+      "name": "Ring",
+      "segment": "Home Security",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 179.99,
+          "display": "$179.99 (starting)",
+          "source": "ring.com",
+          "url": "https://ring.com/ring-bundles",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "kit_includes": {
+          "value": "Video doorbell and security camera",
+          "display": "Video doorbell and security camera",
+          "source": "ring.com",
+          "url": "https://ring.com/ring-bundles",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 19.99,
+          "display": "$19.99/mo (Ring Pro)",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "self_monitoring": {
+          "value": null
+        },
+        "cloud_storage": {
+          "value": "Up to 180 days of video playback",
+          "display": "Up to 180 days of video playback",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": true,
+          "display": "yes",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": true,
+          "display": "yes",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": "SOS button requests emergency services",
+          "display": "SOS button requests emergency services",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Indoor Cam",
+            "Outdoor Cam",
+            "Spotlight Cam",
+            "Floodlight Cam"
+          ],
+          "display": "Indoor Cam, Outdoor Cam, Spotlight Cam, Floodlight Cam",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/ring/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "1080p, 2K, and 4K options",
+          "display": "1080p, 2K, and 4K options",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/ring/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "ai_features": {
+          "value": [
+            "Video Descriptions",
+            "Familiar Faces",
+            "Unusual Event Alert",
+            "Active Warnings",
+            "Video Search"
+          ],
+          "display": "Video Descriptions, Familiar Faces, Unusual Event Alert, Active Warnings, Video Search",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "sensors": {
+          "value": null
+        },
+        "hub": {
+          "value": null
+        },
+        "integrations": {
+          "value": [
+            "Amazon Alexa",
+            "Google Assistant"
+          ],
+          "display": "Amazon Alexa, Google Assistant",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/ring/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "ring.com",
+          "url": "https://ring.com/ring-bundles",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "contract": {
+          "value": "Plans auto-renew until canceled",
+          "display": "Plans auto-renew until canceled",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "warranty": {
+          "value": "Extended warranty with Ring Multi",
+          "display": "Extended warranty with Ring Multi",
+          "source": "ring.com",
+          "url": "https://ring.com/plans",
+          "as_of": "2026-09",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Affordable kits, cameras, and tiered plans offer strong value."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Wide camera lineup, AI alerts, monitoring, SOS, and LTE backup."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Alexa and Google Assistant support provide solid ecosystem integration."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "24/7 monitoring, live agent option, SOS, and extended warranty support."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 9.2,
+          "url": "https://www.safehome.org/home-security-cameras/ring/",
+          "as_of": "2026-08"
+        }
+      ]
+    },
+    {
+      "name": "SimpliSafe",
+      "segment": "Home Security",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 282.94,
+          "display": "$282.94 (Starter list)",
+          "source": "simplisafe.com",
+          "url": "https://simplisafe.com/home-security-shop-packages",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "kit_includes": {
+          "value": "Base station, keypad, three entry sensors, motion sensor",
+          "display": "Base station, keypad, three entry sensors, motion sensor",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 22.99,
+          "display": "$22.99/mo (starting)",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "cloud_storage": null,
+        "cellular_backup": null,
+        "emergency_response": {
+          "value": true,
+          "display": "yes",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": "Panic button available",
+          "display": "Panic button available",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Wireless Indoor Camera",
+            "Wireless Outdoor Camera",
+            "Video Doorbell Pro"
+          ],
+          "display": "Wireless Indoor Camera, Wireless Outdoor Camera, Video Doorbell Pro",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "camera_resolution": null,
+        "ai_features": {
+          "value": [
+            "Intruder Intervention",
+            "Active Guard Outdoor Protection"
+          ],
+          "display": "Intruder Intervention, Active Guard Outdoor Protection",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "sensors": {
+          "value": [
+            "Entry sensor",
+            "Motion sensor",
+            "Glass break sensor",
+            "Temperature sensor",
+            "Water sensor",
+            "Smoke detector",
+            "Carbon monoxide sensor"
+          ],
+          "display": "Entry sensor, Motion sensor, Glass break sensor, Temperature sensor, Water sensor, Smoke detector, Carbon monoxide sensor",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Base station",
+          "display": "Base station",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "integrations": null,
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "simplisafe.com",
+          "url": "https://simplisafe.com/home-security-shop-packages",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "contract": {
+          "value": "No contracts",
+          "display": "No contracts",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/simplisafe/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "warranty": null
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Low kit costs, no contracts, optional monitoring, frequent discounts."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Broad sensors, cameras, AI intrusion deterrence, and professional monitoring options."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Limited documented ecosystem integrations; mainly standalone security devices."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Professional monitoring, optional pro install, and 60-day return support."
+        }
+      },
+      "review_data": [
+        {
+          "site": "safehome.org",
+          "score": 9.2,
+          "url": "https://www.safehome.org/security-systems/simplisafe/",
+          "as_of": "2026-10"
+        }
+      ]
+    },
+    {
+      "name": "ADT",
+      "segment": "Home Security",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 99,
+          "display": "$99 (limited-time offer)",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "kit_includes": {
+          "value": "Google Nest Cam and installation",
+          "display": "Google Nest Cam and installation",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 59.99,
+          "display": "$59.99/mo (Pro Monitoring)",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/adt/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "cloud_storage": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": null
+        },
+        "cellular_backup": {
+          "value": true,
+          "display": "yes",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": true,
+          "display": "yes",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": "MySafety SOS via ADT+ app",
+          "display": "MySafety SOS via ADT+ app",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Google Nest Cam",
+            "Google Nest Doorbell",
+            "Google Nest Cam with Floodlight",
+            "Google Nest Cam Indoor",
+            "Google Nest Cam Outdoor"
+          ],
+          "display": "Google Nest Cam, Google Nest Doorbell, Google Nest Cam with Floodlight, Google Nest Cam Indoor, Google Nest Cam Outdoor",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/adt/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "camera_resolution": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": null
+        },
+        "ai_features": {
+          "value": [
+            "facial recognition",
+            "activity zones",
+            "smart notifications"
+          ],
+          "display": "facial recognition, activity zones, smart notifications",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/adt/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "sensors": {
+          "value": [
+            "door/window sensors",
+            "motion sensor",
+            "smoke/CO detector",
+            "water/temperature sensors",
+            "glass break sensor"
+          ],
+          "display": "door/window sensors, motion sensor, smoke/CO detector, water/temperature sensors, glass break sensor",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/adt/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "hub": {
+          "value": "v5 ADT Base",
+          "display": "v5 ADT Base",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Google Nest",
+            "Yale smart lock"
+          ],
+          "display": "Google Nest, Yale smart lock",
+          "source": "security.org",
+          "url": "https://www.security.org/home-security-systems/adt/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "contract": {
+          "value": "Pro install 35-36 mo; DIY no long-term contracts",
+          "display": "Pro install 35-36 mo; DIY no long-term contracts",
+          "source": "adt.com",
+          "url": "https://www.adt.com/",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "warranty": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": null
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Premium pricing with promotions; not budget-friendly but established."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Nest cameras, AI alerts, FirstNet, Live Light, and MySafety provide strong features."
+        },
+        "ecosystem": {
+          "score": 4,
+          "rationale": "Google Nest partnership and ADT+ app create a strong ecosystem."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Six company-owned centers, 24/7 monitoring, and fast response support strong service."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 9.3,
+          "url": "https://www.safehome.org/security-systems/adt/",
+          "as_of": "2026-08"
+        }
+      ]
+    },
+    {
+      "name": "Brinks",
+      "segment": "Home Security",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 360,
+          "display": "$360 (Essential quote)",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "Touch screen control panel, 1 motion sensor, 2 door/window sensors",
+          "display": "Touch screen control panel, 1 motion sensor, 2 door/window sensors",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "monthly_monitoring": {
+          "value": 39.99,
+          "display": "$39.99/mo (Essential)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "self_monitoring": {
+          "value": null,
+          "display": null
+        },
+        "cloud_storage": {
+          "value": "Cloud storage in Mobile + Video plan",
+          "display": "Cloud storage in Mobile + Video plan",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "cellular_backup": {
+          "value": true,
+          "display": "yes",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "emergency_response": {
+          "value": true,
+          "display": "yes",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "family_tracking": {
+          "value": null,
+          "display": null
+        },
+        "camera_types": {
+          "value": [
+            "indoor camera",
+            "doorbell camera",
+            "outdoor camera"
+          ],
+          "display": "indoor camera, doorbell camera, outdoor camera",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "camera_resolution": {
+          "value": null,
+          "display": null
+        },
+        "ai_features": {
+          "value": null,
+          "display": null
+        },
+        "sensors": {
+          "value": [
+            "door/window sensor",
+            "motion sensor",
+            "glass break sensor",
+            "smoke detector",
+            "carbon monoxide detector",
+            "water leak detector",
+            "garage door tilt sensor"
+          ],
+          "display": "door/window sensor, motion sensor, glass break sensor, smoke detector, carbon monoxide detector, water leak detector, garage door tilt sensor",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "hub": {
+          "value": "Touch screen control panel",
+          "display": "Touch screen control panel",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "integrations": {
+          "value": [
+            "Alexa",
+            "Google Assistant",
+            "Google Home"
+          ],
+          "display": "Alexa, Google Assistant, Google Home",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "Security.org",
+          "url": "https://www.security.org/home-security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "contract": {
+          "value": "No monitoring contract; free install requires 3-year contract",
+          "display": "No monitoring contract; free install requires 3-year contract",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "warranty": {
+          "value": "Optional extended plan covers wear and manufacturing defects",
+          "display": "Optional extended plan covers wear and manufacturing defects",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/brinks/",
+          "as_of": "2026-09",
+          "estimated": true
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Affordable pro-installed system with free installation and low entry monitoring."
+        },
+        "features": {
+          "score": 3,
+          "rationale": "Solid core sensors and cameras, but lacks video verification and advanced AI."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Works with Alexa and Google Assistant, but limited smart-home depth."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "24/7 professional monitoring, cellular backup, and optional extended service plan."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 8.7,
+          "url": "https://www.safehome.org/security-systems/brinks/",
+          "as_of": "2026-09"
+        }
+      ]
+    },
+    {
+      "name": "Xfinity Home",
+      "segment": "Home Security",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 360,
+          "display": "$360 upfront (Base)",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "Touchscreen panel, 3 entry sensors, motion sensor, yard sign, app, backup",
+          "display": "Touchscreen panel, 3 entry sensors, motion sensor, yard sign, app, backup",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 55,
+          "display": "$55/mo (with Xfinity Internet)",
+          "source": "xfinity.com",
+          "url": "https://www.xfinity.com/learn/home-solutions/home-security",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "Cloud storage for camera recordings",
+          "display": "Cloud storage for camera recordings",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": true,
+          "display": "yes",
+          "source": "xfinity.com",
+          "url": "https://www.xfinity.com/learn/home-solutions/home-security",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": true,
+          "display": "yes",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "family_tracking": null,
+        "camera_types": {
+          "value": [
+            "indoor",
+            "outdoor"
+          ],
+          "display": "indoor, outdoor",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "HD",
+          "display": "HD",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "ai_features": null,
+        "sensors": {
+          "value": [
+            "window/door entry sensors",
+            "pet-friendly motion sensor"
+          ],
+          "display": "window/door entry sensors, pet-friendly motion sensor",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Touchscreen control panel",
+          "display": "Touchscreen control panel",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Xfinity app",
+            "Xfinity Gateway"
+          ],
+          "display": "Xfinity app, Xfinity Gateway",
+          "source": "xfinity.com",
+          "url": "https://www.xfinity.com/learn/home-solutions/home-security",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "xfinity.com",
+          "url": "https://www.xfinity.com/learn/home-solutions/home-security",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "contract": {
+          "value": "24-month contract",
+          "display": "24-month contract",
+          "source": "safehome.org",
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "warranty": null
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Premium monitoring and equipment, but bundle discounts improve value."
+        },
+        "features": {
+          "score": 3,
+          "rationale": "Solid monitoring, cellular backup, cameras, and app controls, but limited advanced features."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Good Xfinity app and gateway integration, but narrower than major smart-home ecosystems."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "24/7 monitoring and pro support, but reviews note response-time and support concerns."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 7.6,
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10"
+        }
+      ]
+    },
+    {
+      "name": "Xfinity Shield",
+      "segment": "Smart Home",
+      "note": "Xfinity's home security platform (announced 2026-08). The Shield app ships free to every Xfinity Internet customer; paid tiers add camera/sensor monitoring and Xfinity hardware.",
+      "facts": {
+        "kit_cost": {
+          "value": 0,
+          "display": "Free (Shield app included with Xfinity Internet)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "kit_includes": {
+          "value": "Shield app: Wi-Fi protection, cybersecurity, family controls in the Xfinity app",
+          "display": "Shield app: Wi-Fi protection, cybersecurity, family controls (Xfinity app)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 10,
+          "display": "$10/mo + bring your own devices; Xfinity indoor camera $5/mo EIP x36mo (≈$15/mo tier w/ camera + sensors)",
+          "source": "chuck (user-verified) 2026-10; Yahoo Finance",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "self_monitoring": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "cloud video storage (included in $15/mo tier)",
+          "display": "cloud video storage ($15/mo tier)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": "24/7 urgent response (included in $15/mo tier)",
+          "display": "24/7 urgent response ($15/mo tier)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Xfinity indoor camera ($5/mo EIP x36mo)",
+            "bring-your-own cameras"
+          ],
+          "display": "Xfinity indoor camera ($5/mo EIP x36mo); bring-your-own cameras",
+          "source": "chuck (user-verified) 2026-10; Yahoo Finance",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "ai_features": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "sensors": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hub": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "integrations": {
+          "value": "Xfinity app (Wi-Fi protection, cybersecurity, family controls)",
+          "display": "Xfinity app (Wi-Fi protection, cybersecurity, family controls)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": "no",
+          "display": "no (self-managed; BYOD cameras)",
+          "source": "Yahoo Finance (Comcast announcement)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "contract": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "warranty": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "contract_terms": {
+          "value": "none",
+          "display": "No contract (camera EIP is a 36-month installment)",
+          "source": "chuck (user-provided pricing)",
+          "url": "https://finance.yahoo.com/markets/stocks/articles/comcast-cmcsa-turns-home-security-131533405.html",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Premium pricing and two-year contract offset by bundle discounts and solid equipment."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Strong monitoring, backup, smart-home automation, and professional installation, though equipment lineup is narrower."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Good Xfinity app, Internet, and X1 integration, but ecosystem is narrower than rivals."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "24/7 monitoring and pro setup, but reviews note response times and support need improvement."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 7.6,
+          "url": "https://www.safehome.org/security-systems/xfinity-comcast/",
+          "as_of": "2026-10"
+        }
+      ]
+    },
+    {
+      "name": "Nest",
+      "segment": "Smart Home",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 399,
+          "display": "$399",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "Nest Guard hub, two entry sensors, two keychain fobs",
+          "display": "Nest Guard hub, two entry sensors, two keychain fobs",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "Up to 60 days video history with Google Home Premium",
+          "display": "Up to 60 days video history with Google Home Premium",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Nest Cam Outdoor (wired, 2nd gen)",
+            "Nest Cam Indoor (wired, 3rd gen)",
+            "Nest Doorbell (wired, 3rd gen)"
+          ],
+          "display": "Nest Cam Outdoor (wired, 2nd gen), Nest Cam Indoor (wired, 3rd gen), Nest Doorbell (wired, 3rd gen)",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "2K",
+          "display": "2K",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "ai_features": {
+          "value": [
+            "Gemini",
+            "Detailed alerts",
+            "Ask Home",
+            "Richer event descriptions"
+          ],
+          "display": "Gemini, Detailed alerts, Ask Home, Richer event descriptions",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "sensors": {
+          "value": [
+            "Entry sensors"
+          ],
+          "display": "Entry sensors",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Nest Guard hub",
+          "display": "Nest Guard hub",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Google Home app",
+            "Gemini",
+            "Google Home Premium"
+          ],
+          "display": "Google Home app, Gemini, Google Home Premium",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "Google Store",
+          "url": "https://store.google.com/us/category/connected_home",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "contract": {
+          "value": "Nest Secure did not require a Brinks contract",
+          "display": "Nest Secure did not require a Brinks contract",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "warranty": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Discontinued security system; current Nest devices rely on optional paid Google Home Premium."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "2K cameras, Gemini, detailed alerts, Ask Home, and facial recognition show strong features."
+        },
+        "ecosystem": {
+          "score": 4,
+          "rationale": "Deep Google Home, Gemini, and Google Home Premium integration across cameras and speakers."
+        },
+        "support": {
+          "score": 2,
+          "rationale": "Nest Secure monitoring discontinued; current Nest lacks active professional monitoring in material."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 7.8,
+          "url": "https://www.safehome.org/security-systems/nest-secure/",
+          "as_of": "2026-08"
+        }
+      ]
+    },
+    {
+      "name": "Arlo",
+      "segment": "Smart Home",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 499.99,
+          "display": "$499.99 (Arlo Pro 3 2-pack with base)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "2 cameras and base station",
+          "display": "2 cameras and base station",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "monthly_monitoring": {
+          "value": 7.99,
+          "display": "$7.99+ (subscription)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "self_monitoring": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "Cloud storage up to 4K footage",
+          "display": "Cloud storage up to 4K footage",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "cellular_backup": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Arlo Essential",
+            "Arlo Pro",
+            "Arlo Ultra"
+          ],
+          "display": "Arlo Essential, Arlo Pro, Arlo Ultra",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "camera_resolution": {
+          "value": "1080p, 2K, 4K HDR",
+          "display": "1080p, 2K, 4K HDR",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "ai_features": {
+          "value": [
+            "smart object detection",
+            "intelligent audio alerts",
+            "smart motion detection"
+          ],
+          "display": "smart object detection, intelligent audio alerts, smart motion detection",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "sensors": {
+          "value": [
+            "motion detection"
+          ],
+          "display": "motion detection",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Base station",
+          "display": "Base station",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "integrations": {
+          "value": [
+            "Third-party smart home"
+          ],
+          "display": "Third-party smart home",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "pro_install": {
+          "value": true,
+          "display": "yes",
+          "source": "Arlo",
+          "url": "https://us.arlo.com/pages/plans",
+          "as_of": "2026-07",
+          "estimated": false
+        },
+        "contract": {
+          "value": "No contracts required",
+          "display": "No contracts required",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07",
+          "estimated": true
+        },
+        "warranty": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Premium hardware prices offset by low subscription and no contracts."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Strong camera features include 4K HDR, color night vision, and smart detection."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Broad camera lineup and third-party smart home integration, but limited sensor ecosystem."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Support and professional install available, but no professional monitoring or emergency dispatch."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 8.2,
+          "url": "https://www.safehome.org/home-security-cameras/arlo/",
+          "as_of": "2026-07"
+        }
+      ]
+    },
+    {
+      "name": "Wyze",
+      "segment": "Up-and-Comers",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 156,
+          "display": "$156 (entry-level kit)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "3 sensors, keypad, hub",
+          "display": "3 sensors, keypad, hub",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "monthly_monitoring": {
+          "value": 10,
+          "display": "$10/mo (starting)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": true
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "findprices.com",
+          "url": "https://www.findprices.com/compare/home-security-systems-price-comparison",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "Cloud storage offered",
+          "display": "Cloud storage offered",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "family_tracking": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "camera_types": {
+          "value": [
+            "Indoor Cam Pan",
+            "Window Cam",
+            "Solar Cam Pan 2K",
+            "Cam Pan v4",
+            "Cam v4",
+            "Battery Cam Pro",
+            "Bulb Cam",
+            "Battery Video Doorbell",
+            "Duo Cam Pan",
+            "Duo Cam Battery Doorbell",
+            "Video Doorbell v2",
+            "Cam Pan v2",
+            "Cam OG"
+          ],
+          "display": "Indoor Cam Pan, Window Cam, Solar Cam Pan 2K, Cam Pan v4, Cam v4, Battery Cam Pro, Bulb Cam, Battery Video Doorbell, Duo Cam Pan, Duo Cam Battery Doorbell, Video Doorbell v2, Cam Pan v2, Cam OG",
+          "source": "wyze.com",
+          "url": "https://www.wyze.com/us/en/collections/all",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "2K, 2.5K QHD/HDR, HD+",
+          "display": "2K, 2.5K QHD/HDR, HD+",
+          "source": "wyze.com",
+          "url": "https://www.wyze.com/us/en/collections/all",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "ai_features": {
+          "value": [
+            "people",
+            "pets",
+            "packages",
+            "vehicles"
+          ],
+          "display": "people, pets, packages, vehicles",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "sensors": {
+          "value": [
+            "Leak sensors",
+            "Leak sensor probes",
+            "Climate sensor",
+            "Entry sensors",
+            "Motion sensor"
+          ],
+          "display": "Leak sensors, Leak sensor probes, Climate sensor, Entry sensors, Motion sensor",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Wyze Sense Hub",
+          "display": "Wyze Sense Hub",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Alexa",
+            "Google Assistant",
+            "IFTTT"
+          ],
+          "display": "Alexa, Google Assistant, IFTTT",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": false,
+          "display": "no",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "contract": {
+          "value": "No contracts",
+          "display": "No contracts",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02",
+          "estimated": false
+        },
+        "warranty": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Very low kit and monitoring costs, no contracts."
+        },
+        "features": {
+          "score": 3,
+          "rationale": "Solid camera/sensor lineup, but feature set is limited."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Alexa, Google Assistant, IFTTT support; limited third-party ecosystem."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Affordable monitoring and DIY setup, but limited support details."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 7.3,
+          "url": "https://www.safehome.org/security-systems/wyze/",
+          "as_of": "2026-02"
+        }
+      ]
+    },
+    {
+      "name": "Eufy",
+      "segment": "Up-and-Comers",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 129.99,
+          "display": "$129.99 (5-Piece Home Alarm Kit)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/eufy/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": "2 eufyCam 3Cs, 2 entry sensors, doorbell, hub, keypad",
+          "display": "2 eufyCam 3Cs, 2 entry sensors, doorbell, hub, keypad",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/eufy/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "monthly_monitoring": null,
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "findprices.com",
+          "url": "https://www.findprices.com/compare/home-security-systems-price-comparison",
+          "as_of": "2026-05",
+          "estimated": true
+        },
+        "cloud_storage": {
+          "value": "Local recording; no cloud fees",
+          "display": "Local recording; no cloud fees",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": true,
+          "display": "yes",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "emergency_response": {
+          "value": false,
+          "display": "no",
+          "source": "findprices.com",
+          "url": "https://www.findprices.com/compare/home-security-systems-price-comparison",
+          "as_of": "2026-05",
+          "estimated": true
+        },
+        "family_tracking": null,
+        "camera_types": {
+          "value": [
+            "NVR cameras",
+            "floodlight cameras",
+            "indoor cameras",
+            "doorbell cameras",
+            "4G LTE cameras",
+            "PoE cameras"
+          ],
+          "display": "NVR cameras, floodlight cameras, indoor cameras, doorbell cameras, 4G LTE cameras, PoE cameras",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "4K, 16MP, and 3K options",
+          "display": "4K, 16MP, and 3K options",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "ai_features": {
+          "value": [
+            "AI detection",
+            "AI tracking",
+            "local AI agent"
+          ],
+          "display": "AI detection, AI tracking, local AI agent",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "sensors": {
+          "value": [
+            "entry sensors",
+            "motion sensors"
+          ],
+          "display": "entry sensors, motion sensors",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/security-systems/eufy/",
+          "as_of": "2026-09",
+          "estimated": true
+        },
+        "hub": {
+          "value": "HomeBase 3, HomeBase S380, HomeBase Professional S1, NVR",
+          "display": "HomeBase 3, HomeBase S380, HomeBase Professional S1, NVR",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Anker",
+            "Anker SOLIX",
+            "Anker eufyMake",
+            "Anker soundcore",
+            "smart assistants"
+          ],
+          "display": "Anker, Anker SOLIX, Anker eufyMake, Anker soundcore, smart assistants",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": false,
+          "display": "no",
+          "source": "findprices.com",
+          "url": "https://www.findprices.com/compare/home-security-systems-price-comparison",
+          "as_of": "2026-05",
+          "estimated": false
+        },
+        "contract": {
+          "value": "No long-term contracts",
+          "display": "No long-term contracts",
+          "source": "eufy.com",
+          "url": "https://us.eufy.com/collections/home-security-systems",
+          "as_of": "2026-09",
+          "estimated": false
+        },
+        "warranty": null
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Low hardware costs and no required monthly fees, though cameras add up."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "4K cameras, AI detection, local storage, and solar options; monitoring gaps."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Broad Anker/eufy ecosystem with smart home devices, but compatibility issues noted."
+        },
+        "support": {
+          "score": 2,
+          "rationale": "Limited professional monitoring and support details; app reviews are solid."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 8.1,
+          "url": "https://www.safehome.org/security-systems/eufy/",
+          "as_of": "2026-09"
+        }
+      ]
+    },
+    {
+      "name": "Blink",
+      "segment": "Up-and-Comers",
+      "note": "",
+      "facts": {
+        "kit_cost": {
+          "value": 29.99,
+          "display": "$29.99 (Blink Mini)",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": true
+        },
+        "kit_includes": {
+          "value": null
+        },
+        "monthly_monitoring": {
+          "value": null
+        },
+        "self_monitoring": {
+          "value": true,
+          "display": "yes",
+          "source": "blinkforhome.com",
+          "url": "https://blinkforhome.com/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "cloud_storage": {
+          "value": "Low-cost cloud storage and local video storage",
+          "display": "Low-cost cloud storage and local video storage",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "cellular_backup": {
+          "value": null
+        },
+        "emergency_response": {
+          "value": null
+        },
+        "family_tracking": {
+          "value": null
+        },
+        "camera_types": {
+          "value": [
+            "Blink Mini",
+            "Blink Mini 2",
+            "Blink Mini 2K+",
+            "Blink Outdoor 4",
+            "Blink Outdoor 2K+",
+            "Blink Solaris 2K+",
+            "Blink Mini Pan-Tilt",
+            "Blink Wired Floodlight",
+            "Blink Mini 2K+ Wired Floodlight Camera"
+          ],
+          "display": "Blink Mini, Blink Mini 2, Blink Mini 2K+, Blink Outdoor 4, Blink Outdoor 2K+, Blink Solaris 2K+, Blink Mini Pan-Tilt, Blink Wired Floodlight, Blink Mini 2K+ Wired Floodlight Camera",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "camera_resolution": {
+          "value": "Up to 2K video resolution",
+          "display": "Up to 2K video resolution",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "ai_features": {
+          "value": null
+        },
+        "sensors": {
+          "value": [
+            "motion sensor"
+          ],
+          "display": "motion sensor",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "hub": {
+          "value": "Sync module required for some cameras",
+          "display": "Sync module required for some cameras",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "integrations": {
+          "value": [
+            "Alexa"
+          ],
+          "display": "Alexa",
+          "source": "blinkforhome.com",
+          "url": "https://blinkforhome.com/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "pro_install": {
+          "value": false,
+          "display": "no",
+          "source": "SafeHome.org",
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08",
+          "estimated": false
+        },
+        "contract": {
+          "value": null
+        },
+        "warranty": {
+          "value": null
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Very affordable cameras and low-cost storage plans make Blink a strong budget pick."
+        },
+        "features": {
+          "score": 3,
+          "rationale": "Solid basics like 2K video, motion detection, two-way audio, and Alexa integration."
+        },
+        "ecosystem": {
+          "score": 3,
+          "rationale": "Works with Alexa and multi-system app, but ecosystem is narrower than full security systems."
+        },
+        "support": {
+          "score": 2,
+          "rationale": "No professional monitoring or emergency response is indicated; self-monitoring via app only."
+        }
+      },
+      "review_data": [
+        {
+          "site": "SafeHome.org",
+          "score": 7.6,
+          "url": "https://www.safehome.org/home-security-cameras/blink/",
+          "as_of": "2026-08"
+        }
+      ]
+    }
+  ]
+}

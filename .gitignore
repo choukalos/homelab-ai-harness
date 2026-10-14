@@ -51,4 +51,8 @@ credentials.json
 # MySQL config with credentials
 mysql-exporter/.my.cnf
 
+# Market-research reference: track the living reference JSON, ignore the
+# transient 24h crawl cache (references/<market>.crawls.json)
+skills/market_research_brief/references/*.crawls.json
+
 *.bak*

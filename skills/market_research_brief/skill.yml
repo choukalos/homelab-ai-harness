@@ -25,6 +25,11 @@ inputs:
     type: string
     required: false
     description: "Override the published 'latest' file path (default: /home/chuck/data/media/public/briefs/<profile slug>.html)."
+  - name: build_reference
+    type: boolean
+    required: false
+    default: false
+    description: "Rebuild the annual reference (references/<market>.json) if stale/missing before generating the brief. Full builds take ~15-30 min (outside the 600 s budget) — for January, prefer a separate n8n job running `python3 reference.py --market <market>` first. When a reference exists, the brief embeds it (compact) and the standalone reference page is republished on `publish: true`."
 config:
   profiles_dir: profiles
   artifact_dir: /home/chuck/data/media/market_research_briefs

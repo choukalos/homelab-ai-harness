@@ -73,7 +73,21 @@ artifact + publish paths, or null), `market`, `period_days`,
 
 - [smarthome-homesecurity-brief](../smarthome-homesecurity-brief/SKILL.md)
   — pins the `smarthome_homesecurity` profile (Smart Home & Home Security),
-  runs monthly, publishes `smarthome_homesecurity_brief.html`.
+  runs monthly (1st, 9:00 CT), publishes `smarthome_homesecurity_brief.html`.
+- `ecommerce_platforms_brief` — pins the `ecommerce_platforms` profile
+  (Shopify, BigCommerce, Salesforce Commerce Cloud, WooCommerce, Magento/
+  Adobe Commerce, PrestaShop, OpenCart, Shopware, nopCommerce, Medusa,
+  Saleor, Bagisto, Spree, Squarespace, Wix, Lightspeed), runs monthly
+  (1st, 9:30 CT), publishes `ecommerce_platforms_brief.html`.
+
+**Annual reference:** each profile with a `reference:` block gets an annual
+reference dataset (`references/<market>.json`) — competitor comparison
+facts, ratings, market-size estimates, share indicators — rebuilt in
+January by the `market_research_reference` skill (7:00/8:00 CT, before the
+monthly briefs) and published standalone to
+`https://choukalos.com/files/briefs/market_research/<market>_reference.html`.
+Monthly briefs embed a compact version; the January yearly summary embeds
+the full reference.
 
 ## Constraints
 

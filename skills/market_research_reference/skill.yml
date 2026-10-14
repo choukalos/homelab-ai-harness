@@ -1,0 +1,19 @@
+name: market_research_reference
+version: "1.0"
+description: "Rebuild the annual reference dataset (references/<market>.json) for a market_research_brief profile — competitor comparison facts, ratings, market-size estimates, share indicators — from free sources via LiteLLM (mcp_search + mcp_crawl), then republish the standalone reference page to /files/briefs/market_research/<market>_reference.html. Runs in January (before the monthly brief) or on demand. Takes ~15-30 min (outside the 600 s monthly-brief budget)."
+inputs:
+  - name: market
+    type: string
+    required: true
+    description: "Market profile name (e.g. ecommerce_platforms, smarthome_homesecurity) — must have a reference: block in profiles/<market>.yml."
+config:
+  public_url: "https://choukalos.com/files/briefs/market_research/"
+  cadence: yearly
+tools:
+  - mcp_search
+  - mcp_crawl
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/market_research_briefs/
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 5400  # seconds — full reference build (crawls + per-competitor LLM extraction)

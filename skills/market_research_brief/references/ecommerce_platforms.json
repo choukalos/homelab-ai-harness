@@ -1,0 +1,2002 @@
+{
+  "market": "ecommerce_platforms",
+  "title": "Ecommerce Platforms",
+  "built_at": "2026-10-13",
+  "stale_after_days": 365,
+  "market_size": [
+    {
+      "estimate_usd_b": 7300,
+      "year": 2025,
+      "cagr_pct": null,
+      "horizon_year": 2027,
+      "scope": "global retail ecommerce sales (the market these platforms serve)",
+      "source": "eMarketer (cited by Shopify)",
+      "url": "https://www.shopify.com/blog/what-is-ecommerce",
+      "note": "Total retail ecommerce sales, not the platform-software market; free coverage only."
+    }
+  ],
+  "market_context": [
+    "Shopify reports it is the ecommerce platform behind millions of businesses in 175+ countries, indicating broad global adoption (per Apple App Store, https://apps.apple.com/us/app/shopify-sell-run-a-business/id371294472).",
+    "Store Leads says WooCommerce and Shopify dominate by merchant count, with Shopify growing slightly faster and having greater mindshare (per Store Leads, https://storeleads.app/reports).",
+    "BigCommerce is positioning its new parent brand 'Commerce' around an AI-driven future, bundling BigCommerce, Feedonomics and Makeswift (per BigCommerce, https://www.bigcommerce.com/press/releases/).",
+    "Salesforce Commerce Cloud emphasizes AI-driven commerce embedded across the customer lifecycle as a platform differentiator (per Salesforce, https://www.salesforce.com/commerce/)."
+  ],
+  "share_indicators": [
+    {
+      "competitor": "BigCommerce",
+      "type": "pr_estimate",
+      "value": null,
+      "pct": null,
+      "as_of": null,
+      "source": null,
+      "url": null,
+      "note": "no free data found this period"
+    },
+    {
+      "competitor": "Shopify",
+      "type": "revenue",
+      "pinned": true,
+      "value": "$3,583M Q2 2026 total revenue (+34% y/y)",
+      "pct": null,
+      "as_of": "2026-06",
+      "source": "Shopify 10-Q (SEC EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1594805/000159480526000047/shop-20260630.htm",
+      "note": "Total revenues for the three months ended 2026-06-30; H1 2026 was $6,753M (+34% y/y)."
+    },
+    {
+      "competitor": "Shopify",
+      "type": "pr_estimate",
+      "pinned": true,
+      "value": ">14% US ecommerce market share; $1.6T cumulative GMV",
+      "pct": 14,
+      "as_of": "2026-10",
+      "source": "Shopify investor page",
+      "url": "https://www.shopify.com/investors",
+      "note": "Company-stated claims ('>14% US ecommerce market share', '$1.6T cumulative GMV'); not independently verified."
+    },
+    {
+      "competitor": "Wix",
+      "type": "revenue",
+      "pinned": true,
+      "value": "$563M Q2 2026 revenue (+15% y/y)",
+      "pct": null,
+      "as_of": "2026-08",
+      "source": "Wix 6-K press release (SEC EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1576789/000162828026052108/secondquarter2026results.htm",
+      "note": "Q2 2026 revenue $563M; bookings $569M (+12% y/y)."
+    },
+    {
+      "competitor": "Wix",
+      "type": "install_base",
+      "pinned": true,
+      "value": "300M+ sites built on Wix (90K+ created daily)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "Wix homepage / pressroom",
+      "url": "https://www.wix.com/pressroom",
+      "note": "Company-stated site count (all Wix sites, not only ecommerce)."
+    },
+    {
+      "competitor": "WooCommerce",
+      "type": "install_base",
+      "pinned": true,
+      "value": "4.0M active stores (most of any platform, Oct 2026)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "Store Leads 'State of Ecommerce' report",
+      "url": "https://storeleads.app/reports",
+      "note": "4,002,439 active WooCommerce stores out of 13.8M tracked across 100 platforms (report updated 2026-10-09)."
+    },
+    {
+      "competitor": "Squarespace",
+      "type": "install_base",
+      "pinned": true,
+      "value": "392K active stores (Store Leads, Oct 2026)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "Store Leads 'State of Ecommerce' report",
+      "url": "https://storeleads.app/reports",
+      "note": "392,252 active Squarespace stores out of 13.8M tracked (report updated 2026-10-09)."
+    },
+    {
+      "competitor": "Salesforce Commerce Cloud",
+      "type": "pr_estimate",
+      "pinned": true,
+      "value": "Powers relatively few stores, but some of the biggest merchants (Patagonia, PUMA)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "Store Leads 'State of Ecommerce' report",
+      "url": "https://storeleads.app/reports",
+      "note": "Qualitative positioning note from the Store Leads report; no store count disclosed."
+    },
+    {
+      "competitor": "Medusa",
+      "type": "other",
+      "pinned": true,
+      "value": "36,734 GitHub stars (medusajs/medusa, MIT)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo medusajs/medusa",
+      "url": "https://github.com/medusajs/medusa",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    },
+    {
+      "competitor": "Saleor",
+      "type": "other",
+      "pinned": true,
+      "value": "23,436 GitHub stars (saleor/saleor, BSD-3-Clause)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo saleor/saleor",
+      "url": "https://github.com/saleor/saleor",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    },
+    {
+      "competitor": "Bagisto",
+      "type": "other",
+      "pinned": true,
+      "value": "28,232 GitHub stars (bagisto/bagisto, MIT)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo bagisto/bagisto",
+      "url": "https://github.com/bagisto/bagisto",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    },
+    {
+      "competitor": "Spree",
+      "type": "other",
+      "pinned": true,
+      "value": "15,752 GitHub stars (spree/spree, BSD-3-Clause)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo spree/spree",
+      "url": "https://github.com/spree/spree",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    },
+    {
+      "competitor": "Shopware",
+      "type": "other",
+      "pinned": true,
+      "value": "3,447 GitHub stars (shopware/shopware, MIT)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo shopware/shopware",
+      "url": "https://github.com/shopware/shopware",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    },
+    {
+      "competitor": "nopCommerce",
+      "type": "other",
+      "pinned": true,
+      "value": "10,156 GitHub stars (nopSolutions/nopCommerce, GPL-3.0)",
+      "pct": null,
+      "as_of": "2026-10",
+      "source": "GitHub repo nopSolutions/nopCommerce",
+      "url": "https://github.com/nopSolutions/nopCommerce",
+      "note": "GitHub star count as a popularity/maintenance proxy (checked 2026-10-14); not an install-base or revenue figure."
+    }
+  ],
+  "competitors": [
+    {
+      "name": "Shopify",
+      "segment": "Core SaaS",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Ecommerce platform",
+          "display": "Ecommerce platform",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/investors",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 39,
+          "display": "$39/mo (Basic)",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "top_price": {
+          "value": 2300,
+          "display": "$2,300/mo (Plus)",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": "0.6% third-party on Basic; 0.2% on Grow",
+          "display": "0.6% third-party on Basic; 0.2% on Grow",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Unlimited web hosting, custom domain, free SSL",
+          "display": "Unlimited web hosting, custom domain, free SSL",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "1000s of apps, custom apps via APIs",
+          "display": "1000s of apps, custom apps via APIs",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Shopify Payments, PayPal, MB WAY, Bizum, USDC",
+          "display": "Shopify Payments, PayPal, MB WAY, Bizum, USDC",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "POS, social, marketplaces, AI chats, in-person",
+          "display": "POS, social, marketplaces, AI chats, in-person",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "support": {
+          "value": "24/7 live chat; priority 24/7 phone on Plus",
+          "display": "24/7 live chat; priority 24/7 phone on Plus",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": "Import unlimited orders from marketplaces",
+          "display": "Import unlimited orders from marketplaces",
+          "source": "Shopify",
+          "url": "https://www.shopify.com/pricing",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Competitive tiered pricing, credits, and 1% sales back support strong merchant value."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "Vendor emphasizes simple tools, AI store creation, and easy in-person sales."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Extensive checkout, AI, POS, marketplace, B2B, and API features across plans."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "24/7 live chat on all plans and priority 24/7 phone support on Plus."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "BigCommerce",
+      "segment": "Core SaaS",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Ecommerce platform",
+          "display": "Ecommerce platform",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 39,
+          "display": "$39/mo (Core)",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "top_price": {
+          "value": 1499,
+          "display": "$1,499/mo (Performance, starting)",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": "0% embedded; 2.0% Core, 1.0% Growth, 0.6% Scale, custom Performance",
+          "display": "0% embedded; 2.0% Core, 1.0% Growth, 0.6% Scale, custom Performance",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Free sitewide HTTPS and dedicated SSL",
+          "display": "Free sitewide HTTPS and dedicated SSL",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "POS, marketplace, and ad channel integrations",
+          "display": "POS, marketplace, and ad channel integrations",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "payments": {
+          "value": "BigCommerce Payments; embedded providers incl. Adyen, Stripe",
+          "display": "BigCommerce Payments; embedded providers incl. Adyen, Stripe",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "POS, Amazon, eBay, Walmart, Google, Meta, TikTok",
+          "display": "POS, Amazon, eBay, Walmart, Google, Meta, TikTok",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "open_source": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "support": {
+          "value": "24/7 chat/email; phone on higher plans; CSM on Performance",
+          "display": "24/7 chat/email; phone on higher plans; CSM on Performance",
+          "source": "BigCommerce",
+          "url": "https://www.bigcommerce.com/pricing/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "migration": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Transparent plans, zero embedded fees, but open-provider fees and GMV caps."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Mobile app, single-page checkout, and user-friendly promotions suggest solid usability."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Broad built-in features: multi-currency, B2B, shipping rules, POS, marketplaces."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "24/7 chat/email, phone on higher plans, dedicated CSM for Performance."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Salesforce Commerce Cloud",
+      "segment": "Core SaaS",
+      "note": "Enterprise SaaS commerce, rebranded from Demandware.",
+      "facts": {
+        "platform_type": {
+          "value": "Cloud commerce platform",
+          "display": "Cloud commerce platform",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "top_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Cloud",
+          "display": "Cloud",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Partner ecosystem and embedded apps",
+          "display": "Partner ecosystem and embedded apps",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Configurable secure payments",
+          "display": "Configurable secure payments",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Web, mobile, POS, marketplaces, stores",
+          "display": "Web, mobile, POS, marketplaces, stores",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "support": {
+          "value": "Expert support and implementation",
+          "display": "Expert support and implementation",
+          "source": "Salesforce",
+          "url": "https://www.salesforce.com/commerce/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Vendor cites lower TCO and cost reduction, but no pricing details are provided."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "No-code POS CMS and AI tools suggest usability, but enterprise scope remains complex."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Broad B2B/B2C, order management, POS, payments, composable, and AI features."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Vendor highlights industry experts, ongoing support, and expert consultation."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Adobe Commerce",
+      "segment": "Open Source — Monolithic",
+      "note": "Open-source core is Magento Open Source (github.com/magento/magento2); Adobe Commerce is the commercial edition (Magento rebranded 2018). Keep the OSS (Magento) and commercial (Adobe Commerce) editions distinct in facts.\n",
+      "facts": {
+        "platform_type": {
+          "value": "Cloud-native, API-first composable commerce platform",
+          "display": "Cloud-native, API-first composable commerce platform",
+          "source": "Adobe",
+          "url": "https://business.adobe.com/products/commerce.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Adobe-hosted cloud architecture",
+          "display": "Adobe-hosted cloud architecture",
+          "source": "GitHub",
+          "url": "https://github.com/magento/magento2",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "App library and extensible services",
+          "display": "App library and extensible services",
+          "source": "Adobe",
+          "url": "https://business.adobe.com/products/commerce.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Multi-site, B2C, B2B, B2B2C channels",
+          "display": "Multi-site, B2C, B2B, B2B2C channels",
+          "source": "Adobe",
+          "url": "https://business.adobe.com/products/commerce.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "PHP",
+          "display": "PHP",
+          "source": "GitHub",
+          "url": "https://github.com/magento/magento2",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": "Storefront and extension migration accelerators",
+          "display": "Storefront and extension migration accelerators",
+          "source": "Adobe",
+          "url": "https://business.adobe.com/products/commerce.html",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Yes — the open-source core is Magento Open Source (github.com/magento/magento2, MIT); Adobe Commerce is the commercial edition",
+          "source": "GitHub (magento/magento2)",
+          "source_url": "https://github.com/magento/magento2",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14 per owner correction: the OSS version of Adobe Commerce is called Magento Open Source.",
+          "pinned": true
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "No pricing shown; enterprise-focused features suggest mid-market value."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "Prebuilt storefront, visual editor, and low-code tools simplify setup."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "AI, personalization, B2B, and high-scale operations are extensive."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Limited support details; community channels and demo only."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "WooCommerce",
+      "segment": "Open Source — Monolithic",
+      "note": "WordPress plugin; free core, paid extensions.",
+      "facts": {
+        "platform_type": {
+          "value": "Open-source commerce platform for WordPress",
+          "display": "Open-source commerce platform for WordPress",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 0,
+          "display": "Free (open-source core; paid extensions)",
+          "source": "WooCommerce website",
+          "url": "https://woocommerce.com/",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Any host",
+          "display": "Any host",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Hundreds of extensions and themes",
+          "display": "Hundreds of extensions and themes",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "WooPayments, Apple Pay, any payments",
+          "display": "WooPayments, Apple Pay, any payments",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Online/offline, TikTok, Amazon, retailers",
+          "display": "Online/offline, TikTok, Amazon, retailers",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Open source",
+          "display": "Open source",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "WordPress",
+          "display": "WordPress",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "Customer Success team, dedicated manager",
+          "display": "Customer Success team, dedicated manager",
+          "source": "woocommerce.com",
+          "url": "https://woocommerce.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Open-source with full cost control and no platform ceiling."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Flexible but requires customization and developer control."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Hundreds of extensions, themes, multichannel, and payment options."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Dedicated Customer Success Manager and global support teams."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "PrestaShop",
+      "segment": "Open Source — Monolithic",
+      "note": "PHP/Symfony; strong European localization.",
+      "facts": {
+        "platform_type": {
+          "value": "Open source ecommerce platform",
+          "display": "Open source ecommerce platform",
+          "source": "prestashop.com",
+          "url": "https://www.prestashop.com/en/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 0,
+          "display": "Free (open-source core, self-hosted)",
+          "source": "PrestaShop website",
+          "url": "https://www.prestashop.com/en/",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Thousands of modules and themes",
+          "display": "Thousands of modules and themes",
+          "source": "prestashop.com",
+          "url": "https://www.prestashop.com/en/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Open source",
+          "display": "Open source",
+          "source": "prestashop.com",
+          "url": "https://www.prestashop.com/en/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "support": {
+          "value": "Dedicated support team, experts, resources",
+          "display": "Dedicated support team, experts, resources",
+          "source": "prestashop.com",
+          "url": "https://www.prestashop.com/en/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "PHP",
+          "source": "PrestaShop docs",
+          "source_url": "https://www.prestashop.com/en/",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14: PHP-based (PSR-compliant), self-hosted.",
+          "pinned": true
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Open-source ownership and broad ecosystem suggest average value."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Vendor claims anyone can start, but no usability evidence."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Thousands of modules/themes, customization, scalability, and full ownership."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Dedicated support team, experts, and resources are advertised."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "OpenCart",
+      "segment": "Open Source — Monolithic",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Open-source free eCommerce platform",
+          "display": "Open-source free eCommerce platform",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 0,
+          "display": "$0/mo (free download)",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Fully hosted OpenCart Cloud on NVMe SSD",
+          "display": "Fully hosted OpenCart Cloud on NVMe SSD",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "13,000+ modules and themes marketplace",
+          "display": "13,000+ modules and themes marketplace",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Renowned payment gateways and shipping methods integrated",
+          "display": "Renowned payment gateways and shipping methods integrated",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Open source with free downloads and updates",
+          "display": "Open source with free downloads and updates",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "Free community forum or dedicated commercial support",
+          "display": "Free community forum or dedicated commercial support",
+          "source": "opencart.com",
+          "url": "https://www.opencart.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "PHP",
+          "source": "OpenCart docs",
+          "source_url": "https://www.opencart.com/",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14: PHP/MySQL, self-hosted.",
+          "pinned": true
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Free open-source download with zero monthly fees and large marketplace."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "Vendor claims simple start, easy run, and 5-minute store setup."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Built-in SEO, store management, 13,000+ modules/themes, and payment/shipping integrations."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Free community forum plus optional dedicated commercial technical support."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Squarespace",
+      "segment": "Website Builders w/ Commerce",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Website builder with ecommerce",
+          "display": "Website builder with ecommerce",
+          "source": "Squarespace",
+          "url": "https://www.squarespace.com/pricing",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null
+        },
+        "top_price": {
+          "value": null,
+          "display": null
+        },
+        "transaction_fee": {
+          "value": "2% Basic; 0% Core",
+          "display": "2% Basic; 0% Core",
+          "source": "Squarespace",
+          "url": "https://www.squarespace.com/pricing",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null
+        },
+        "hosting": {
+          "value": null,
+          "display": null
+        },
+        "app_ecosystem": {
+          "value": null,
+          "display": null
+        },
+        "payments": {
+          "value": "Squarespace Payments; major cards; 2.9% + $0.30",
+          "display": "Squarespace Payments; major cards; 2.9% + $0.30",
+          "source": "Squarespace",
+          "url": "https://www.squarespace.com/pricing",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": null,
+          "display": null
+        },
+        "open_source": {
+          "value": null,
+          "display": null
+        },
+        "tech_stack": {
+          "value": "CSS and Javascript customization",
+          "display": "CSS and Javascript customization",
+          "source": "Squarespace",
+          "url": "https://www.squarespace.com/pricing",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "support": {
+          "value": null,
+          "display": null
+        },
+        "migration": {
+          "value": null,
+          "display": null
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Free trial, annual discount, and lower fees on higher plans."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Templates and built-in tools suggest ease, but no explicit usability data."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Unlimited products, analytics, CSS/JS, API, shipping, and tax tools."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "No support details in source; neutral score."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Wix",
+      "segment": "Website Builders w/ Commerce",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Website builder with eCommerce",
+          "display": "Website builder with eCommerce",
+          "source": "Wix",
+          "url": "https://www.wix.com/pressroom",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 159,
+          "display": "$159/mo (Core)",
+          "source": "Wix",
+          "url": "https://www.wix.com/plans",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "top_price": {
+          "value": 159,
+          "display": "$159/mo (Business Elite)",
+          "source": "Wix",
+          "url": "https://www.wix.com/plans",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Reliable multi-cloud web hosting with 99.99% uptime",
+          "display": "Reliable multi-cloud web hosting with 99.99% uptime",
+          "source": "Wix",
+          "url": "https://www.wix.com/plans",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Built-in tools; zero plugins",
+          "display": "Built-in tools; zero plugins",
+          "source": "Wix",
+          "url": "https://www.wix.com/pressroom",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Built-in payments via leading payment methods",
+          "display": "Built-in payments via leading payment methods",
+          "source": "Wix",
+          "url": "https://www.wix.com/pressroom",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "24/7 customer care",
+          "display": "24/7 customer care",
+          "source": "Wix",
+          "url": "https://www.wix.com/plans",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Free plan, 14-day refund, free domain; pricing details are limited."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "AI creation, drag-and-drop editor, and five simple setup steps."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "eCommerce, scheduling, marketing, AI tools, templates, and developer platform."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "24/7 customer care, help center, chat, and pro services."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Lightspeed",
+      "segment": "Website Builders w/ Commerce",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Ecommerce website builder",
+          "display": "Ecommerce website builder",
+          "source": "Lightspeed",
+          "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Online and curbside payments",
+          "display": "Online and curbside payments",
+          "source": "Lightspeed",
+          "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "POS, social, Amazon, eBay, Walmart, Google Shopping",
+          "display": "POS, social, Amazon, eBay, Walmart, Google Shopping",
+          "source": "Lightspeed",
+          "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "support": {
+          "value": "One-on-one onboarding, webinars, demos, videos, unlimited 24/7 support",
+          "display": "One-on-one onboarding, webinars, demos, videos, unlimited 24/7 support",
+          "source": "Lightspeed",
+          "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+          "as_of": "2026-06",
+          "estimated": false
+        },
+        "migration": {
+          "value": "Connect existing WordPress, Wix, Weebly sites",
+          "display": "Connect existing WordPress, Wix, Weebly sites",
+          "source": "Lightspeed",
+          "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+          "as_of": "2026-06",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "No pricing provided, so value cannot be assessed beyond neutral."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "No coding required, simple builder, and store running in minutes."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Omnichannel, POS sync, marketplaces, social, AI, SEO, ads, loyalty, shipping."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Unlimited 24/7 support plus onboarding, webinars, demos, and videos."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Medusa",
+      "segment": "Open Source — Headless / API-first",
+      "note": "Node.js/TypeScript headless commerce; modular, plugin ecosystem.",
+      "facts": {
+        "platform_type": {
+          "value": "Open-source commerce platform",
+          "display": "Open-source commerce platform",
+          "source": "Medusa",
+          "url": "https://medusajs.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 29,
+          "display": "$29/mo (Cloud)",
+          "source": "Medusa",
+          "url": "https://medusajs.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": "No GMV tax; pay infrastructure only",
+          "display": "No GMV tax; pay infrastructure only",
+          "source": "Medusa",
+          "url": "https://medusajs.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Medusa Cloud infrastructure",
+          "display": "Medusa Cloud infrastructure",
+          "source": "Medusa",
+          "url": "https://medusajs.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Modules and integrations",
+          "display": "Modules and integrations",
+          "source": "GitHub",
+          "url": "https://github.com/medusajs/medusa",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Multi-store, POS, apps, sales channels",
+          "display": "Multi-store, POS, apps, sales channels",
+          "source": "Medusa",
+          "url": "https://medusajs.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Open-source core; open-core model",
+          "display": "Open-source core; open-core model",
+          "source": "GitHub",
+          "url": "https://github.com/medusajs/medusa",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "Node.js, TypeScript (React admin)",
+          "source": "GitHub (medusajs/medusa)",
+          "source_url": "https://github.com/medusajs/medusa",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14.",
+          "pinned": true
+        },
+        "support": {
+          "value": "GitHub Discussions; Discord",
+          "display": "GitHub Discussions; Discord",
+          "source": "GitHub",
+          "url": "https://github.com/medusajs/medusa",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Open-source core, low $29 Cloud entry, no GMV tax."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Developer-focused, but Cloud offers SaaS-like setup and AI tooling."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Advanced product, inventory, promotions, multi-channel, multi-regional, and AI modules."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Cloud support tools plus GitHub Discussions and Discord community."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Saleor",
+      "segment": "Open Source — Headless / API-first",
+      "note": "Python/Django GraphQL-native headless commerce.",
+      "facts": {
+        "platform_type": {
+          "value": "Open source headless API-first commerce platform",
+          "display": "Open source headless API-first commerce platform",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "top_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Self-hosted or Saleor Cloud",
+          "display": "Self-hosted or Saleor Cloud",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Apps via iframe; Adyen, Stripe, CMS, search, email",
+          "display": "Apps via iframe; Adyen, Stripe, CMS, search, email",
+          "source": "docs.saleor.io",
+          "url": "https://docs.saleor.io/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Multi-gateway payment orchestration; Stripe and Adyen apps",
+          "display": "Multi-gateway payment orchestration; Stripe and Adyen apps",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Native multichannel; marketplace and click-and-collect recipes",
+          "display": "Native multichannel; marketplace and click-and-collect recipes",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Yes; open source single version",
+          "display": "Yes; open source single version",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "Python (Django), GraphQL API",
+          "source": "GitHub (saleor/saleor)",
+          "source_url": "https://github.com/saleor/saleor",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14.",
+          "pinned": true
+        },
+        "support": {
+          "value": "Community Discord and contribution mentorship",
+          "display": "Community Discord and contribution mentorship",
+          "source": "GitHub",
+          "url": "https://github.com/saleor/saleor",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Open source avoids platform fees, but no pricing details provided."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Dashboard is user-friendly, but API-only architecture can be complex for non-developers."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Rich enterprise features: multichannel, multi-currency, promotions, CMS, payments, marketplace."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Community Discord and mentorship available, but no formal support plans shown."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Bagisto",
+      "segment": "Open Source — Headless / API-first",
+      "note": "PHP/Laravel; multi-vendor/multi-store out of the box.",
+      "facts": {
+        "platform_type": {
+          "value": "Open source headless ecommerce platform",
+          "display": "Open source headless ecommerce platform",
+          "source": "bagisto.com",
+          "url": "https://bagisto.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": 25,
+          "display": "$25/mo (Bagisto Hosting)",
+          "source": "bagisto.com",
+          "url": "https://bagisto.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Bagisto Cloud Hosting (managed, optimized)",
+          "display": "Bagisto Cloud Hosting (managed, optimized)",
+          "source": "GitHub",
+          "url": "https://github.com/bagisto/bagisto",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "200+ pre-built extensions marketplace",
+          "display": "200+ pre-built extensions marketplace",
+          "source": "GitHub",
+          "url": "https://github.com/bagisto/bagisto",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "PayPal, Stripe, Authorize.net, PayTabs via extensions",
+          "display": "PayPal, Stripe, Authorize.net, PayTabs via extensions",
+          "source": "bagisto.com",
+          "url": "https://bagisto.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Website, mobile app, POS, marketplace",
+          "display": "Website, mobile app, POS, marketplace",
+          "source": "bagisto.com",
+          "url": "https://bagisto.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Open source",
+          "display": "Open source",
+          "source": "bagisto.com",
+          "url": "https://bagisto.com/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "Laravel, Vue.js",
+          "display": "Laravel, Vue.js",
+          "source": "GitHub",
+          "url": "https://github.com/bagisto/bagisto",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "Community forum, Facebook group, expert cloud support",
+          "display": "Community forum, Facebook group, expert cloud support",
+          "source": "GitHub",
+          "url": "https://github.com/bagisto/bagisto",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Open-source platform with $25/mo hosting and broad commerce features offers strong cost flexibility."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Docker one-command install and live demo help, but self-hosted setup remains developer-oriented."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "B2B, marketplace, headless, multi-tenant, POS, mobile, AI, and 200+ extensions show strong breadth."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Community forum and Facebook group provide peer help; expert support tied to cloud hosting."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Spree",
+      "segment": "Open Source — Headless / API-first",
+      "note": "Ruby on Rails; modular, API-first, B2B/marketplace modules.",
+      "facts": {
+        "platform_type": {
+          "value": "Open-source, headless, API-first commerce platform",
+          "display": "Open-source, headless, API-first commerce platform",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "top_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Self-hosted via Docker; own infrastructure",
+          "display": "Self-hosted via Docker; own infrastructure",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Admin dashboard plugins, CLI, SDKs, agent skills",
+          "display": "Admin dashboard plugins, CLI, SDKs, agent skills",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Stripe payments in Next.js storefront; Stripe Connect payouts",
+          "display": "Stripe payments in Next.js storefront; Stripe Connect payouts",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Web, mobile, POS, B2B panels, marketplaces via channels",
+          "display": "Web, mobile, POS, B2B panels, marketplaces via channels",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "BSD 3-Clause licensed open source",
+          "display": "BSD 3-Clause licensed open source",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "Ruby on Rails",
+          "source": "GitHub (spree/spree)",
+          "source_url": "https://github.com/spree/spree",
+          "estimated": false,
+          "note": "Hand-pinned 2026-10-14: Spree is a Ruby on Rails app; the extracted Node.js value came from storefront examples in the README.",
+          "pinned": true
+        },
+        "support": {
+          "value": "Community Discord, documentation, API reference",
+          "display": "Community Discord, documentation, API reference",
+          "source": "GitHub",
+          "url": "https://github.com/spree/spree",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Open-source core with full code/data ownership; no vendor pricing shown."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Quickstart CLI and docs, but requires Node, Docker, and developer setup."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Marketplace, B2B, headless, cross-border, and multi-tenant features in open-source core."
+        },
+        "support": {
+          "score": 3,
+          "rationale": "Community Discord and docs available; no explicit paid support plans shown."
+        }
+      },
+      "review_data": []
+    },
+    {
+      "name": "Shopware",
+      "segment": "Open Source — Monolithic",
+      "note": "",
+      "facts": {
+        "platform_type": {
+          "value": "Open source commerce platform",
+          "display": "Open source commerce platform",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "top_price": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "transaction_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null,
+          "source": null,
+          "url": null,
+          "as_of": null,
+          "estimated": false
+        },
+        "hosting": {
+          "value": "Self-hosted, PaaS, SaaS",
+          "display": "Self-hosted, PaaS, SaaS",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "3,100+ extensions in community store",
+          "display": "3,100+ extensions in community store",
+          "source": "GitHub",
+          "url": "https://github.com/shopware/shopware",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": "Shopware Payments",
+          "display": "Shopware Payments",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "multichannel": {
+          "value": "Omnichannel B2B and B2C",
+          "display": "Omnichannel B2B and B2C",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "open_source": {
+          "value": "Yes",
+          "display": "Yes",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "Symfony 7 and Vue.js 3",
+          "display": "Symfony 7 and Vue.js 3",
+          "source": "GitHub",
+          "url": "https://github.com/shopware/shopware",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "Dedicated account manager, 1-hour reaction, onboarding",
+          "display": "Dedicated account manager, 1-hour reaction, onboarding",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": "Legacy platform migrations shown in cases",
+          "display": "Legacy platform migrations shown in cases",
+          "source": "shopware.com",
+          "url": "https://shopware.com/en/",
+          "as_of": "2026-10",
+          "estimated": false
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 3,
+          "rationale": "Open-source base and commercial plans exist, but no pricing details to judge value."
+        },
+        "ease_of_use": {
+          "score": 4,
+          "rationale": "Drag-and-drop editing, SaaS hosting, and web installer suggest strong ease of use."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Enterprise B2B, CMS, SEO, analytics, AI, and large extension ecosystem indicate strong features."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Dedicated account manager, 1-hour reaction time, and personal onboarding indicate strong support."
+        }
+      },
+      "review_data": [
+        {
+          "site": "G2",
+          "score": 4.2,
+          "url": "https://www.g2.com/products/shopware/reviews",
+          "as_of": "2026-10"
+        }
+      ]
+    },
+    {
+      "name": "nopCommerce",
+      "segment": "Open Source — Monolithic",
+      "note": "ASP.NET Core/C#; multi-store/multi-vendor native.",
+      "facts": {
+        "platform_type": {
+          "value": "Open source eCommerce platform",
+          "display": "Open source eCommerce platform",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "entry_price": {
+          "value": null,
+          "display": null
+        },
+        "top_price": {
+          "value": null,
+          "display": null
+        },
+        "transaction_fee": {
+          "value": null,
+          "display": null
+        },
+        "setup_fee": {
+          "value": null,
+          "display": null
+        },
+        "hosting": {
+          "value": "Self-hosted on Windows, Linux, Mac; Docker and Azure supported",
+          "display": "Self-hosted on Windows, Linux, Mac; Docker and Azure supported",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "app_ecosystem": {
+          "value": "Thousands of integrations on nopCommerce Marketplace; Web API plugin",
+          "display": "Thousands of integrations on nopCommerce Marketplace; Web API plugin",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "payments": {
+          "value": null,
+          "display": null
+        },
+        "multichannel": {
+          "value": null,
+          "display": null
+        },
+        "open_source": {
+          "value": "Free and open source",
+          "display": "Free and open source",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "tech_stack": {
+          "value": "ASP.NET Core/.NET 9; MS SQL, PostgreSQL, MySQL",
+          "display": "ASP.NET Core/.NET 9; MS SQL, PostgreSQL, MySQL",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "support": {
+          "value": "Community forum, documentation, online course, professional support within 24 hours",
+          "display": "Community forum, documentation, online course, professional support within 24 hours",
+          "source": "GitHub",
+          "url": "https://github.com/nopSolutions/nopCommerce",
+          "as_of": "2026-10",
+          "estimated": false
+        },
+        "migration": {
+          "value": null,
+          "display": null
+        }
+      },
+      "ratings": {
+        "value": {
+          "score": 4,
+          "rationale": "Free open-source platform with no license fees and optional professional support."
+        },
+        "ease_of_use": {
+          "score": 3,
+          "rationale": "Documentation and online course help developers, but self-hosted setup may require technical skill."
+        },
+        "features": {
+          "score": 4,
+          "rationale": "Powerful out-of-the-box features, marketplace integrations, web API, MFA, and web farm support."
+        },
+        "support": {
+          "score": 4,
+          "rationale": "Community forum, documentation, online course, and professional support within 24 hours."
+        }
+      },
+      "review_data": []
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://www.shopify.com/pricing",
+      "competitors": [
+        "Shopify"
+      ]
+    },
+    {
+      "url": "https://www.shopify.com/investors",
+      "competitors": [
+        "Shopify"
+      ]
+    },
+    {
+      "url": "https://www.bigcommerce.com/pricing/",
+      "competitors": [
+        "BigCommerce"
+      ]
+    },
+    {
+      "url": "https://business.adobe.com/products/commerce.html",
+      "competitors": [
+        "Adobe Commerce"
+      ]
+    },
+    {
+      "url": "https://github.com/magento/magento2",
+      "competitors": [
+        "Adobe Commerce"
+      ]
+    },
+    {
+      "url": "https://woocommerce.com/",
+      "competitors": [
+        "WooCommerce"
+      ]
+    },
+    {
+      "url": "https://storeleads.app/reports",
+      "competitors": [
+        "all"
+      ]
+    },
+    {
+      "url": "https://www.prestashop.com/en/",
+      "competitors": [
+        "PrestaShop"
+      ]
+    },
+    {
+      "url": "https://www.opencart.com/",
+      "competitors": [
+        "OpenCart"
+      ]
+    },
+    {
+      "url": "https://shopware.com/en/",
+      "competitors": [
+        "Shopware"
+      ]
+    },
+    {
+      "url": "https://github.com/shopware/shopware",
+      "competitors": [
+        "Shopware"
+      ]
+    },
+    {
+      "url": "https://github.com/nopSolutions/nopCommerce",
+      "competitors": [
+        "nopCommerce"
+      ]
+    },
+    {
+      "url": "https://medusajs.com/",
+      "competitors": [
+        "Medusa"
+      ]
+    },
+    {
+      "url": "https://github.com/medusajs/medusa",
+      "competitors": [
+        "Medusa"
+      ]
+    },
+    {
+      "url": "https://docs.saleor.io/",
+      "competitors": [
+        "Saleor"
+      ]
+    },
+    {
+      "url": "https://github.com/saleor/saleor",
+      "competitors": [
+        "Saleor"
+      ]
+    },
+    {
+      "url": "https://bagisto.com/",
+      "competitors": [
+        "Bagisto"
+      ]
+    },
+    {
+      "url": "https://github.com/bagisto/bagisto",
+      "competitors": [
+        "Bagisto"
+      ]
+    },
+    {
+      "url": "https://spree.com/",
+      "competitors": [
+        "Spree"
+      ]
+    },
+    {
+      "url": "https://github.com/spree/spree",
+      "competitors": [
+        "Spree"
+      ]
+    },
+    {
+      "url": "https://www.salesforce.com/commerce/",
+      "competitors": [
+        "Salesforce Commerce Cloud"
+      ]
+    },
+    {
+      "url": "https://www.squarespace.com/pricing",
+      "competitors": [
+        "Squarespace"
+      ]
+    },
+    {
+      "url": "https://www.wix.com/plans",
+      "competitors": [
+        "Wix"
+      ]
+    },
+    {
+      "url": "https://www.wix.com/pressroom",
+      "competitors": [
+        "Wix"
+      ]
+    },
+    {
+      "url": "https://www.lightspeedhq.com/retail/ecommerce/",
+      "competitors": [
+        "Lightspeed"
+      ]
+    }
+  ]
+}

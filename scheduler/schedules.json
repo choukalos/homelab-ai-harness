@@ -43,6 +43,39 @@
       },
       "enabled": true,
       "timezone": "America/Chicago"
+    },
+    {
+      "id": "monthly-ecommerce-platforms-brief",
+      "name": "Monthly Ecommerce Platforms Market Brief",
+      "cron": "30 9 1 * *",
+      "skill": "ecommerce_platforms_brief",
+      "params": {
+        "publish": true
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
+      "id": "annual-ecommerce-platforms-reference",
+      "name": "Annual Ecommerce Platforms Reference Rebuild (Jan, before brief)",
+      "cron": "0 7 1 1 *",
+      "skill": "market_research_reference",
+      "params": {
+        "market": "ecommerce_platforms"
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
+      "id": "annual-smarthome-homesecurity-reference",
+      "name": "Annual Smart Home & Home Security Reference Rebuild (Jan, before brief)",
+      "cron": "0 8 1 1 *",
+      "skill": "market_research_reference",
+      "params": {
+        "market": "smarthome_homesecurity"
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
     }
   ]
 }

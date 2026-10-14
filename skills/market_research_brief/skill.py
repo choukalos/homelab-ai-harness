@@ -127,6 +127,9 @@ YEARLY_BRIEF_CHARS = 4000           # per-brief truncation inside the yearly con
 
 logger = logging.getLogger("skill.market_research_brief")
 
+# Lazily-loaded reference.py module (see _ref_module).
+_REF_MODULE: Optional[Any] = None
+
 # ---------------------------------------------------------------------------
 # Timeout enforcement
 # ---------------------------------------------------------------------------
@@ -448,6 +451,9 @@ def _load_profile(name: str) -> dict:
         "yearly_month": int(data.get("yearly_month", YEARLY_MONTH)),
         "yearly_min_briefs": int(data.get("yearly_min_briefs", YEARLY_MIN_BRIEFS)),
         "slug": slug,
+        # Annual reference config (aspects, sources, share indicators) —
+        # passed through raw; consumed by reference.py / _reference_sections.
+        "reference": data.get("reference") or {},
     }
 
 
@@ -870,18 +876,20 @@ def _synthesize(
     context: str,
     job=None,
     max_tokens: int = 16000,
+    max_tokens_cap: int = 32768,
 ) -> str:
-    """One LLM synthesis call via LiteLLM, with a single retry on empty
-    visible content (reasoning models can burn the token budget on
-    reasoning_content)."""
+    """One LLM synthesis call via LiteLLM, with a retry on empty visible
+    content (reasoning models can burn the token budget on
+    reasoning_content) and a retry with a larger budget when the output is
+    truncated (finish_reason=length)."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": context},
     ]
 
-    def _call_once() -> tuple[Optional[str], str]:
+    def _call_once(tokens: int) -> tuple[Optional[str], str]:
         result = client.chat_completion(
-            MODEL_ALIAS, messages, max_tokens=max_tokens, temperature=0.3, stream=False
+            MODEL_ALIAS, messages, max_tokens=tokens, temperature=0.3, stream=False
         )
         choices = result.get("choices", []) if isinstance(result, dict) else []
         if not choices:
@@ -890,11 +898,11 @@ def _synthesize(
         finish = str(choices[0].get("finish_reason") or "")
         return message.get("content") or None, finish
 
-    content, finish = _call_once()
+    content, finish = _call_once(max_tokens)
     if not content:
         if hasattr(job, "add_log"):
             job.add_log(f"LLM returned empty content (finish_reason={finish}) — retrying once")
-        content, finish = _call_once()
+        content, finish = _call_once(max_tokens)
     if not content:
         if hasattr(job, "add_log"):
             job.add_log(f"LLM retry also returned empty content (finish_reason={finish})")
@@ -902,6 +910,19 @@ def _synthesize(
             f"LLM returned empty content (finish_reason={finish}; the model likely "
             "spent its token budget on internal reasoning)"
         )
+    if finish == "length" and max_tokens < max_tokens_cap:
+        # Output truncated — a reasoning model likely burned most of the
+        # budget on internal reasoning. Retry once with a larger budget and
+        # keep the longer of the two outputs.
+        bumped = min(max_tokens * 2, max_tokens_cap)
+        if hasattr(job, "add_log"):
+            job.add_log(
+                f"Synthesis truncated at {max_tokens} tokens (finish_reason=length) — "
+                f"retrying with {bumped} tokens"
+            )
+        retry_content, retry_finish = _call_once(bumped)
+        if retry_content and len(retry_content) > len(content):
+            content, finish = retry_content, retry_finish
     return _strip_code_fence(content)
 
 
@@ -1204,6 +1225,72 @@ def _render_report_html(
 
 
 # ---------------------------------------------------------------------------
+# Annual reference data (references/<market>.json — built by reference.py)
+# ---------------------------------------------------------------------------
+
+
+_REF_MODULE: Optional[Any] = None
+
+
+def _ref_module() -> Any:
+    """Load reference.py from this skill's directory.
+
+    Works whether the engine is run directly (skill dir on sys.path) or
+    loaded via importlib by a wrapper skill / the skill-runner, where the
+    engine dir is NOT on sys.path and a bare `import reference` fails.
+    """
+    global _REF_MODULE
+    if _REF_MODULE is None:
+        try:
+            import reference as _ref
+        except ImportError:
+            import importlib.util
+            ref_path = Path(__file__).resolve().parent / "reference.py"
+            spec = importlib.util.spec_from_file_location(
+                "market_research_reference_engine", ref_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Could not load reference module spec from {ref_path}")
+            _ref = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(_ref)
+        _REF_MODULE = _ref
+    return _REF_MODULE
+
+
+def _reference_sections(market: str, profile: dict, mode: str = "compact"):
+    """Render the annual reference section for this market, if available.
+
+    Returns (html, md, ref_dict) or (None, None, None) when no reference
+    JSON exists yet (or the profile has no reference block). The reference
+    is a deterministic, yearly-rebuilt dataset — monthly briefs embed the
+    compact version; the yearly summary embeds the full version.
+    """
+    try:
+        _ref = _ref_module()
+    except Exception as exc:  # noqa: BLE001 — reference must never break the brief
+        logger.warning("reference module unavailable — skipping reference section: %s", exc)
+        return None, None, None
+    ref_path = _ref.reference_path(market)
+    if not ref_path.is_file():
+        return None, None, None
+    try:
+        ref = json.loads(ref_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not load reference %s: %s", ref_path, exc)
+        return None, None, None
+    ref_block = profile.get("reference") or {}
+    if not ref_block.get("aspects"):
+        return None, None, None
+    try:
+        html = _ref.render_reference_html(ref, ref_block, mode=mode)
+        md = _ref.render_reference_md(ref, ref_block)
+        return html, md, ref
+    except Exception as exc:  # noqa: BLE001 — reference must never break the brief
+        logger.warning("Reference render failed for %s: %s", market, exc)
+        return None, None, None
+
+
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Artifact generation + publishing
 # ---------------------------------------------------------------------------
@@ -1343,6 +1430,27 @@ def run(
     except ProfileError as exc:
         return {"error": str(exc)}
 
+    # Optional: (re)build the annual reference first (January run / on demand).
+    # NOTE: a full reference build takes ~15-30 min — outside this skill's
+    # 600 s budget. The recommended January flow is a separate n8n job that
+    # runs `python3 reference.py --market <market>` BEFORE this skill; this
+    # param then only refreshes when the existing reference is stale/missing
+    # and the build happens to fit (e.g. warm crawl cache).
+    if params.get("build_reference"):
+        try:
+            _ref = _ref_module()
+            if _ref.reference_is_stale(market):
+                if hasattr(job, "add_log"):
+                    job.add_log("Annual reference stale/missing — building (may exceed runtime budget)...")
+                _ref.build_reference(market)
+            else:
+                if hasattr(job, "add_log"):
+                    job.add_log("Annual reference fresh — skipping build")
+        except Exception as exc:  # noqa: BLE001 — brief proceeds with existing data
+            logger.warning("Reference build failed (continuing): %s", exc)
+            if hasattr(job, "add_log"):
+                job.add_log(f"Reference build failed, continuing with existing: {exc}")
+
     try:
         period_days = int(params.get("period_days", DEFAULT_PERIOD_DAYS))
     except (TypeError, ValueError):
@@ -1464,18 +1572,50 @@ def run(
             "(paywalled analyst figures are flagged, never fabricated)."
         )
         html = _render_report_html(report, title, meta_line, footer_note)
+
+        # ---- Phase 5b: annual reference section (compact, deterministic) ----
+        ref_html, ref_md, ref_data = _reference_sections(
+            profile["market"], profile, mode="compact"
+        )
+        if ref_html:
+            html = html.replace(
+                "<footer>", f'<section class="report">{ref_html}</section>\n<footer>', 1
+            )
+            if ref_md:
+                report = report.rstrip() + "\n\n" + ref_md
+            if hasattr(job, "add_log"):
+                job.add_log(
+                    f"Embedded annual reference section (compact; built {ref_data.get('built_at', '?')})"
+                )
+
         artifact_path = _write_artifact(report, profile["market"])
         html_artifact_path = _write_artifact(html, profile["market"], "html")
 
         # ---- Phase 6: publish to the blog drop zone ----
         published_path = published_url = None
         dated_path = dated_url = None
+        reference_published_path = reference_published_url = None
         if params.get("publish"):
             target = Path(params.get("publish_path") or str(PUBLIC_ROOT / "briefs" / f"{slug}.html"))
             published_path = _publish(html, target, job)
             if published_path:
                 published_url = _public_url(Path(published_path))
             dated_path, dated_url = _publish_dated(html, slug, job)
+            # Standalone annual reference page (full table + ratings), kept
+            # fresh by every published run; the January run rebuilds it.
+            if ref_data is not None:
+                try:
+                    _ref = _ref_module()
+                    base = slug[: -len("_brief")] if slug.endswith("_brief") else slug
+                    ref_target = (
+                        PUBLIC_ROOT / "briefs" / DATED_DIRNAME / f"{base}_reference.html"
+                    )
+                    ref_doc = _ref.render_standalone_html(ref_data, profile.get("reference") or {}, mode="full")
+                    reference_published_path = _publish(ref_doc, ref_target, job)
+                    if reference_published_path:
+                        reference_published_url = _public_url(ref_target)
+                except Exception as exc:  # noqa: BLE001 — never break the brief publish
+                    logger.warning("Reference publish failed for %s: %s", profile["market"], exc)
 
         # ---- Phase 7: yearly summary (January run, 12+ monthly briefs) ----
         yearly: dict[str, Any] = {}
@@ -1505,6 +1645,17 @@ def run(
                         f"covering {briefs[0][0]} through {briefs[-1][0]}",
                         "Synthesized from the 12 most recent monthly briefs.",
                     )
+                    # Full annual reference in the yearly summary (the monthly
+                    # briefs only carry the compact version).
+                    yr_ref_html, _, _ = _reference_sections(
+                        profile["market"], profile, mode="full"
+                    )
+                    if yr_ref_html:
+                        yearly_html = yearly_html.replace(
+                            "<footer>",
+                            f'<section class="report">{yr_ref_html}</section>\n<footer>',
+                            1,
+                        )
                     yearly_md = _write_artifact(
                         yearly_report, profile["market"], "md", suffix=f"yearly_{label}_"
                     )

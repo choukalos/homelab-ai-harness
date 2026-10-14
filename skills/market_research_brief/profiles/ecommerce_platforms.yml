@@ -1,0 +1,190 @@
+# Market profile: Ecommerce Platforms
+# Consumed by the market_research_brief engine (profiles/<market>.yml).
+# Competitor entries may be a plain string (name == search term) or a
+# mapping: {name, search: [terms], note}.
+#
+# 2026-10-14: expanded per chuck — added the major open-source platforms
+# (headless/API-first: Medusa, Saleor, Bagisto, Spree; monolithic:
+# Shopware, nopCommerce) and fixed the Adobe Commerce / Magento naming
+# (OSS core = Magento Open Source, github.com/magento/magento2).
+
+market: ecommerce_platforms
+title: "Ecommerce Platforms"
+description: >
+  Software platforms for running online stores: SaaS ecommerce suites
+  (Shopify, BigCommerce, Salesforce Commerce Cloud), open-source platforms
+  (WooCommerce, Magento/Adobe Commerce, PrestaShop, OpenCart, Shopware,
+  nopCommerce) and headless/API-first commerce frameworks (Medusa, Saleor,
+  Bagisto, Spree), plus website builders with commerce (Squarespace, Wix,
+  Lightspeed).
+
+segments:
+  - id: saas_core
+    label: "Core SaaS"
+    competitors:
+      - Shopify
+      - BigCommerce
+      - name: "Salesforce Commerce Cloud"
+        search: ["Salesforce Commerce Cloud", "Demandware"]
+        note: "Enterprise SaaS commerce, rebranded from Demandware."
+  - id: open_source_headless
+    label: "Open Source — Headless / API-first"
+    competitors:
+      - name: Medusa
+        search: ["Medusa", "Medusa.js"]
+        note: "Node.js/TypeScript headless commerce; modular, plugin ecosystem."
+      - name: Saleor
+        search: ["Saleor", "Saleor GraphQL"]
+        note: "Python/Django GraphQL-native headless commerce."
+      - name: Bagisto
+        search: ["Bagisto", "Bagisto Laravel"]
+        note: "PHP/Laravel; multi-vendor/multi-store out of the box."
+      - name: Spree
+        search: ["Spree Commerce", "Spree Ruby"]
+        note: "Ruby on Rails; modular, API-first, B2B/marketplace modules."
+  - id: open_source_monolithic
+    label: "Open Source — Monolithic"
+    competitors:
+      - name: WooCommerce
+        search: ["WooCommerce", "WooCommerce WordPress"]
+        note: "WordPress plugin; free core, paid extensions."
+      - name: "Adobe Commerce"
+        search: ["Adobe Commerce", "Magento"]
+        note: >
+          Open-source core is Magento Open Source (github.com/magento/magento2);
+          Adobe Commerce is the commercial edition (Magento rebranded 2018).
+          Keep the OSS (Magento) and commercial (Adobe Commerce) editions
+          distinct in facts.
+      - name: PrestaShop
+        search: ["PrestaShop", "PrestaShop Symfony"]
+        note: "PHP/Symfony; strong European localization."
+      - OpenCart
+      - Shopware
+      - name: nopCommerce
+        search: ["nopCommerce", "nopCommerce .NET"]
+        note: "ASP.NET Core/C#; multi-store/multi-vendor native."
+  - id: website_builders
+    label: "Website Builders w/ Commerce"
+    competitors:
+      - Squarespace
+      - Wix
+      - Lightspeed
+
+# Analyst firms to watch (free coverage only — paywalled reports are
+# referenced, never fabricated).
+analyst_firms:
+  - name: "Gartner"
+    note: "Magic Quadrant for B2C Commerce — paywalled; use free press coverage."
+  - name: "Forrester"
+    note: "B2C Commerce Wave — paywalled; use free press coverage."
+  - name: "Digital Commerce 360"
+    note: "Ecommerce industry intelligence; some free articles."
+
+# Broad market-level news sweep (in addition to per-competitor queries).
+seed_queries:
+  - "ecommerce platform news"
+  - "Shopify BigCommerce news"
+  - "Magento WooCommerce PrestaShop news"
+  - "Medusa Saleor headless commerce news"
+
+# Market-size / market-share queries (search_web, free sources only).
+market_size_queries:
+  - "e-commerce platform market size"
+  - "ecommerce SaaS market size"
+  - "e-commerce software market size"
+  - "ecommerce platform market size 2026 forecast"
+
+# Yearly summary: generated on the run whose UTC month == yearly_month,
+# from the last 12 distinct monthly briefs (needs >= yearly_min_briefs).
+yearly_month: 1
+yearly_min_briefs: 12
+
+# Publishing (blog drop zone).
+publish:
+  slug: ecommerce_platforms_brief
+  cadence: monthly
+
+# ---------------------------------------------------------------------------
+# Annual reference data (comparison + market context).
+# Rebuilt on the January run (or via reference.py CLI).
+# Aspect set is per-market — this one differs from smarthome_homesecurity.
+# See market_research_todo.md §6.2.
+# ---------------------------------------------------------------------------
+reference:
+  stale_after_days: 365
+  aspects:
+    - {id: platform_type, label: "Platform type", type: text}
+    - {id: entry_price, label: "Entry plan (monthly)", type: usd}
+    - {id: top_price, label: "Top plan (monthly)", type: usd}
+    - {id: transaction_fee, label: "Transaction fee", type: text}
+    - {id: setup_fee, label: "Setup fee", type: usd}
+    - {id: hosting, label: "Hosting", type: text}
+    - {id: app_ecosystem, label: "App ecosystem", type: text}
+    - {id: payments, label: "Built-in payments", type: text}
+    - {id: multichannel, label: "Multichannel (POS/marketplace)", type: text}
+    - {id: open_source, label: "Open source", type: text}
+    - {id: tech_stack, label: "Tech stack / language", type: text}
+    - {id: support, label: "Support", type: text}
+    - {id: migration, label: "Migration / import", type: text}
+  rating_aspects:
+    - {id: value, label: "Value"}
+    - {id: ease_of_use, label: "Ease of use"}
+    - {id: features, label: "Features"}
+    - {id: support, label: "Support"}
+  review_sites: [PCMag, TechRadar, G2, Digital Commerce 360]
+  sources:
+    - {url: "https://www.shopify.com/pricing", competitors: [Shopify]}
+    - {url: "https://www.shopify.com/investors", competitors: [Shopify]}
+    - {url: "https://www.bigcommerce.com/pricing/", competitors: [BigCommerce]}
+    - {url: "https://business.adobe.com/products/commerce.html", competitors: [Adobe Commerce]}
+    - {url: "https://github.com/magento/magento2", competitors: [Adobe Commerce]}
+    - {url: "https://woocommerce.com/", competitors: [WooCommerce]}
+    - {url: "https://storeleads.app/reports", competitors: [all]}
+    - {url: "https://www.prestashop.com/en/", competitors: [PrestaShop]}
+    - {url: "https://www.opencart.com/", competitors: [OpenCart]}
+    - {url: "https://shopware.com/en/", competitors: [Shopware]}
+    - {url: "https://github.com/shopware/shopware", competitors: [Shopware]}
+    - {url: "https://github.com/nopSolutions/nopCommerce", competitors: [nopCommerce]}
+    - {url: "https://medusajs.com/", competitors: [Medusa]}
+    - {url: "https://github.com/medusajs/medusa", competitors: [Medusa]}
+    - {url: "https://docs.saleor.io/", competitors: [Saleor]}
+    - {url: "https://github.com/saleor/saleor", competitors: [Saleor]}
+    - {url: "https://bagisto.com/", competitors: [Bagisto]}
+    - {url: "https://github.com/bagisto/bagisto", competitors: [Bagisto]}
+    - {url: "https://spree.com/", competitors: [Spree]}
+    - {url: "https://github.com/spree/spree", competitors: [Spree]}
+    - {url: "https://www.salesforce.com/commerce/", competitors: [Salesforce Commerce Cloud]}
+    - {url: "https://www.squarespace.com/pricing", competitors: [Squarespace]}
+    - {url: "https://www.wix.com/plans", competitors: [Wix]}
+    - {url: "https://www.wix.com/pressroom", competitors: [Wix]}
+    # Lightspeed Commerce rebranded to lightspeedhq.com (2026); the old
+    # lightspeed.com/retail pages are thin.
+    - {url: "https://www.lightspeedhq.com/retail/ecommerce/", competitors: [Lightspeed]}
+    # NOTE: w3techs.com usage tables are JS-gated (crawl returns no rows) —
+    # storeleads.app/reports is the working install-base source.
+  share_indicators:
+    - {competitor: Shopify, type: revenue, source: "Shopify 10-Q (SEC EDGAR, latest quarter)"}
+    - {competitor: Shopify, type: pr_estimate, source: "Shopify investor page (US ecommerce market share, cumulative GMV)"}
+    - {competitor: Wix, type: revenue, source: "Wix 6-K quarterly press release (SEC EDGAR)"}
+    - {competitor: Wix, type: install_base, source: "Wix homepage (sites built on Wix)"}
+    - {competitor: WooCommerce, type: install_base, source: "Store Leads 'State of Ecommerce' report (active store counts)"}
+    - {competitor: Squarespace, type: install_base, source: "Store Leads 'State of Ecommerce' report (active store counts)"}
+    - {competitor: BigCommerce, type: pr_estimate, source: "BigCommerce press releases (private since 2024)"}
+    - {competitor: Salesforce Commerce Cloud, type: pr_estimate, source: "Salesforce Commerce Cloud positioning (top-merchant focus)"}
+    # Open-source platforms: GitHub stars as a popularity proxy (type
+    # `other`) — no install-base data exists for most of them.
+    - {competitor: Medusa, type: other, source: "GitHub repo medusajs/medusa (stars)"}
+    - {competitor: Saleor, type: other, source: "GitHub repo saleor/saleor (stars)"}
+    - {competitor: Bagisto, type: other, source: "GitHub repo bagisto/bagisto (stars)"}
+    - {competitor: Spree, type: other, source: "GitHub repo spree/spree (stars)"}
+    - {competitor: Shopware, type: other, source: "GitHub repo shopware/shopware (stars)"}
+    - {competitor: nopCommerce, type: other, source: "GitHub repo nopSolutions/nopCommerce (stars)"}
+    # NOTE: Adobe does not disclose Commerce-segment revenue in its 10-K —
+    # no revenue indicator for Adobe Commerce (would be fabricated).
+    # NOTE: Magento Open Source install counts are not extractable from
+    # free sources (W3Techs table is JS-gated) — left to the LLM's best effort.
+  market_size_queries:
+    - "e-commerce platform market size"
+    - "ecommerce SaaS market size"
+    - "e-commerce software market size"
+    - "ecommerce platform market size 2026 forecast"
