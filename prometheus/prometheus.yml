@@ -89,9 +89,14 @@ scrape_configs:
     labels:
       instance: lego
 - job_name: cadvisor-lego
+  # QNAP Container Station cadvisor runs in a container on lego at :9000.
+  # (8081 is the QTS SSL management UI — the old target scraped a 400.)
+  # NOTE: this build labels containers by id only (no name label) and
+  # exposes container_last_seen as a timestamp, so "is running" queries
+  # must be of the form: container_last_seen{id="/docker/<id>"} > (time() - 120)
   static_configs:
   - targets:
-    - lego:8081
+    - lego:9000
     labels:
       instance: lego
 

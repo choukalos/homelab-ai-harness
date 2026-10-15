@@ -4,6 +4,7 @@
 FROM python:3.12-slim
 
 COPY server.py /app/server.py
+COPY statusd.py /app/statusd.py
 
 # Run as uid 1000 (matches host owner chuck:chuck — all mounted dirs are
 # owned by 1000 and world-readable). No user entry needed.
