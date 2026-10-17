@@ -13,5 +13,16 @@
     "Symbol.isActive = 1 for currently tracked symbols; filter with it when listing universe-wide results.",
     "JobRun, LoginHistory, User, and _prisma_migrations are app-internal (job logs, auth, migration bookkeeping) — ignore them for investment questions.",
     "DividendHistory.amount is the per-share dividend in `currency` (USD); hasFullData=0 on return tables marks partial years.",
-    "LandingLeaderboardRow.type is an enum: HIGH_YIELD, TOP_YTD_RETURN, TOP_RSI, LOW_RSI."  ]
+    "LandingLeaderboardRow.type is an enum: HIGH_YIELD, TOP_YTD_RETURN, TOP_RSI, LOW_RSI."
+  ],
+  "finance": [
+    "Money is INTEGER CENTS everywhere (amount_cents, income_cents, ...): debits/spend are NEGATIVE, credits positive. 'Spend' = SUM(-amount_cents) over negative amounts, presented as positive dollars (divide by 100). Spend EXCLUDES the Transfer and Income buckets (transfers are not consumption; Income is credits); 'deposits' = positive amounts in the Income bucket.",
+    "Prefer `monthly_category_summary` (year, month, category_id, amount_cents, txn_count) for monthly trends over scanning `transactions`: it is pre-aggregated and LEAF-granularity only (category_id is always a leaf with parent_id <> 0). For bucket rollups join categories twice: `JOIN categories leaf ON leaf.id = mcs.category_id JOIN categories bucket ON bucket.id = leaf.parent_id`. The trailing 12/24-month window ends at the latest (year, month) present (derive it in SQL; no hardcoded dates).",
+    "`categories` is a 2-level tree: 21 top-level buckets (parent_id = 0, where `bucket` = the row's own name) plus ~95 leaves. Get the current bucket list with `SELECT name FROM categories WHERE parent_id = 0` — do not hardcode it. A leaf's bucket is its parent's name.",
+    "Kid spend (v1 definition): transactions whose category leaf is under the Kids bucket (id 58: Kids Activities, Toys, Babysitter & Daycare) OR the Education bucket (id 16: Books & Supplies, Education, Tuition) — i.e. `JOIN categories c ON c.id = t.category_id WHERE c.parent_id IN (58, 16)` and amount_cents < 0. Kids = direct kid costs (activities, toys, daycare); Education is overwhelmingly kid school/college costs (tuition, university fees, ACT/College Board/AP, HS district fees, driving school). A few adult-leaning items (e.g. Codecademy) are small; payee-keyword matching across other buckets proved fragile, so v1 is category-based.",
+    "`tax_years` is one row per calendar year (2009-2026): income_cents, income_tax_paid_cents, savings_est_cents, savings_rate (FRACTION: 0.15 = 15%). Latest year = MAX(year); it may be partial/estimated.",
+    "`load_log` is the ingest provenance report: one row per source file (ts, source_file, sha256, adapter, rows_total/rows_new/rows_updated/rows_skipped, date_min/date_max, status, issues JSON). Last ingest = the row with MAX(ts).",
+    "`transactions.content_hash` = sha256(account_id|txn_date|amount_cents|payee) and is UNIQUE — the dedupe key. Re-ingesting an overlapping file UPDATES existing rows (newer exports win for mutable fields description/external_txn_id); it never duplicates, so row counts are stable across re-ingests.",
+    "Data range (as of 2026-10): 2021-01-02 → 2026-10-16, 9,810 transactions across 3 accounts (`accounts`). The latest month is partial while the current month is in progress."
+  ]
 }
