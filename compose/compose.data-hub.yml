@@ -1,0 +1,60 @@
+# Docker Compose for data-hub (ingest/ETL) + report-hub (read-only reporting UI)
+#
+# One-time provisioning (as root):
+#   bash /home/chuck/homelab/data-hub/provision.sh
+#
+# Access (LAN only, no auth by design):
+#   data-hub:   http://thor.local:8100  (API: /api/health, /api/loads, ...)
+#   report-hub: http://thor.local:8101  (dashboards: /, /d/<slug>)
+#
+# Code lives in GitHub repos cloned under /home/chuck/workspace/code/.
+
+name: data-hub
+
+services:
+  data-hub:
+    build:
+      context: /home/chuck/workspace/code/data-hub
+    container_name: data-hub
+    env_file:
+      - ../.env
+    environment:
+      - MYSQL_HOST=thor.local
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${DH_APP_USER}
+      - MYSQL_PASSWORD=${DH_APP_PASS}
+      - FINANCE_DB=finance
+      - INBOX_ROOT=/data
+      - LITELLM_API_BASE=http://litellm-proxy:4000
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+    ports:
+      - "192.168.4.54:8100:8100"
+    volumes:
+      # /home/chuck/data/finance -> /data (bank/, bank-raw/, tax/, processed/)
+      - /home/chuck/data/finance:/data:rw
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  report-hub:
+    build:
+      context: /home/chuck/workspace/code/report-hub
+    container_name: report-hub
+    env_file:
+      - ../.env
+    environment:
+      - MYSQL_HOST=thor.local
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${DH_REPORTS_USER}
+      - MYSQL_PASSWORD=${DH_REPORTS_PASS}
+      - FINANCE_DB=finance
+      - REPORTS_DB=reports
+    ports:
+      - "192.168.4.54:8101:8101"
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+networks:
+  ai-net:
+    external: true
