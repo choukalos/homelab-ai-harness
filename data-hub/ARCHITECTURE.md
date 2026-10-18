@@ -253,6 +253,17 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 - alert push (n8n), backups for finance/reports, more chart types (later)
 - blog/site engagement + work app analytics (separate projects, same stack)
 
+### v3
+- **Multi-year finance review** (done 2026-10-18, v3-a): `/d/yearly` —
+  year-parameterized full-year review (spend + YoY vs prior calendar
+  year, monthly, category mix, payees, all transactions) covering the
+  full history of the data (2021+); report-hub only, no engine changes
+- **report-hub over hub generic data** (done 2026-10-18, v3-b):
+  `/d/datahub` (dataset registry + ingest history + rows-loaded chart)
+  and the per-dataset dashboard pattern (reference example
+  `/d/demo-weather`, demo dataset ingested through the v2 pipeline);
+  design + verification: `workspace/code/data-hub/docs/v3-plan.md`
+
 ### Out
 - auth/multi-user, public exposure, budgets (per chuck's call)
 
@@ -268,3 +279,5 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 | 5 | first real ingest + categorization review with chuck | ingest **done** (7 loads ok); review walk-through pending with chuck |
 | v2-a | generic CSV/TSV dataset adapter | **done 2026-10-18** (19+5+1 tests green; prod E2E verified 2026-10-18 incl. post-fix re-verify; hyphen-table bug fixed d8bc9d3) |
 | v2-b | mcp_datahub MCP wrapper | **done 2026-10-18** (10 tools; MCP handshake + read-only calls + ingest_file verified over live SSE with a real hub load) |
+| v3-a | multi-year finance review dashboard | **done 2026-10-18** (`/d/yearly`: year selector 2021+, 9 cards; param validation + fallback verified; rendered values match DB) |
+| v3-b | report-hub dashboards over hub generic data | **done 2026-10-18** (`/d/datahub` + `/d/demo-weather`; per-dataset pattern documented; demo dataset via v2 pipeline) |
