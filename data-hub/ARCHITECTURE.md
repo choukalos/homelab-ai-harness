@@ -1,8 +1,10 @@
 # Data-Hub + Report-Hub — Architecture & Scope
 
-Status: **v1 complete** (2026-10-17); **v2 code complete** (2026-10-18) —
+Status: **v1 complete** (2026-10-17); **v2 complete** (2026-10-18) —
 v2-a generic-dataset adapter + v2-b mcp_datahub MCP wrapper implemented &
-tested; production E2E pending `hub` db provisioning (needs root) + data-hub restart
+production-E2E-verified (`hub` db provisioned; scratch-dataset E2E + MCP
+ingest E2E over live SSE; hyphenated-table bug found & fixed d8bc9d3,
+post-fix re-verified 2026-10-18 23:21 UTC)
 Access: homelab LAN only, **no auth** (by design)
 Code: two GitHub repos cloned at `/home/chuck/workspace/code/{data-hub,report-hub}`
 Ports: data-hub `:8100`, report-hub `:8101` (LAN only, not on cloudflared)
@@ -264,5 +266,5 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 | 3 | report-hub UI: engine, cards, dashboards, pagination | **done 2026-10-17** (KPI deltas, live charts, 250-row pagination, query safety) |
 | 4 | 5 v1 dashboards + mcp_mysql hints + docs | **done 2026-10-17** (seed/v1_finance_dashboards.sql, 38 queries, 32 cards; finance hints live) |
 | 5 | first real ingest + categorization review with chuck | ingest **done** (7 loads ok); review walk-through pending with chuck |
-| v2-a | generic CSV/TSV dataset adapter | **code done 2026-10-18** (19 tests green; prod E2E pending `hub` db provisioning) |
-| v2-b | mcp_datahub MCP wrapper | **code done 2026-10-18** (10 tools; MCP handshake + read-only calls verified; ingest verified w/ scratch file) |
+| v2-a | generic CSV/TSV dataset adapter | **done 2026-10-18** (19+5+1 tests green; prod E2E verified 2026-10-18 incl. post-fix re-verify; hyphen-table bug fixed d8bc9d3) |
+| v2-b | mcp_datahub MCP wrapper | **done 2026-10-18** (10 tools; MCP handshake + read-only calls + ingest_file verified over live SSE with a real hub load) |
