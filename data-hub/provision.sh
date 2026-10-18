@@ -18,6 +18,7 @@ cat <<SQL | sudo mysql
 -- data-hub / report-hub provisioning (rendered from homelab/.env)
 CREATE DATABASE IF NOT EXISTS finance  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE IF NOT EXISTS reports  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE IF NOT EXISTS hub      CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE USER IF NOT EXISTS '${DH_APP_USER}'@'%'         IDENTIFIED BY '${DH_APP_PASS}';
 CREATE USER IF NOT EXISTS '${DH_APP_USER}'@'localhost' IDENTIFIED BY '${DH_APP_PASS}';
@@ -31,10 +32,17 @@ GRANT SELECT ON finance.* TO '${DH_REPORTS_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON reports.* TO '${DH_REPORTS_USER}'@'%';
 GRANT ALL PRIVILEGES ON reports.* TO '${DH_REPORTS_USER}'@'localhost';
 
+-- v2: generic datasets (hub db): dh_app writes, dh_reports + ai read
+GRANT ALL PRIVILEGES ON hub.* TO '${DH_APP_USER}'@'%';
+GRANT ALL PRIVILEGES ON hub.* TO '${DH_APP_USER}'@'localhost';
+GRANT SELECT ON hub.* TO '${DH_REPORTS_USER}'@'%';
+GRANT SELECT ON hub.* TO '${DH_REPORTS_USER}'@'localhost';
+GRANT SELECT ON hub.* TO 'ai'@'%';
+
 -- existing AI read-only user: finance access for mcp_mysql Q&A
 GRANT SELECT ON finance.* TO 'ai'@'%';
 
 FLUSH PRIVILEGES;
 SQL
 
-echo "provisioned: finance + reports DBs; ${DH_APP_USER} (finance writer); ${DH_REPORTS_USER} (reports owner, finance read-only); ai SELECT on finance"
+echo "provisioned: finance + reports + hub DBs; ${DH_APP_USER} (finance/hub writer); ${DH_REPORTS_USER} (reports owner, finance+hub read-only); ai SELECT on finance+hub"

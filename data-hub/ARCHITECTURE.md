@@ -1,6 +1,8 @@
 # Data-Hub + Report-Hub — Architecture & Scope
 
-Status: **phase 0 built** (2026-10-17); phases 1–2 waiting on sample files
+Status: **v1 complete** (2026-10-17); **v2 code complete** (2026-10-18) —
+v2-a generic-dataset adapter + v2-b mcp_datahub MCP wrapper implemented &
+tested; production E2E pending `hub` db provisioning (needs root) + data-hub restart
 Access: homelab LAN only, **no auth** (by design)
 Code: two GitHub repos cloned at `/home/chuck/workspace/code/{data-hub,report-hub}`
 Ports: data-hub `:8100`, report-hub `:8101` (LAN only, not on cloudflared)
@@ -213,7 +215,9 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
   direct SQL on `reports.*` (the read-only contract makes the AI the sole
   editor).
 - **Categorization**: data-hub calls LiteLLM for payee→category suggestions.
-- **v2**: `mcp_datahub` MCP server wrapping ingest/loads/review.
+- **v2 (done 2026-10-18)**: `mcp_datahub` MCP server wrapping
+  ingest/loads/review + the v2a generic-dataset registry
+  (`homelab/mcp/servers/datahub/`; SSE at `mcp_datahub:8000`; 10 tools).
 
 ## 8. Security / ops
 
@@ -236,13 +240,15 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 - 5 v1 dashboards; mcp_mysql grants + schema hints; docs
 
 ### v2
-- **Generic-dataset ETL adapter**: CSV/TSV → flexible import into tables in
-  a database (dataset registry, column inference, configurable target
-  schema; the daily-ingest-into-MySQL pattern for future data)
-- **MCP wrapper for data-hub** (`mcp_datahub`): ingest_file, list_loads,
-  load_detail, pending_categories, review_category — so any LLM client can
-  drive ingestion/review
-- alert push (n8n), backups for finance/reports, more chart types
+- **Generic-dataset ETL adapter** (done 2026-10-18, v2-a): CSV/TSV → flexible
+  import into tables in the `hub` db (dataset registry, column inference,
+  configurable target schema; the daily-ingest-into-MySQL pattern for future
+  data)
+- **MCP wrapper for data-hub** (done 2026-10-18, v2-b): `mcp_datahub` with
+  health, ingest_file, list_loads, load_detail, pending_categories,
+  list_categories, suggest_categories, review_category, list_datasets,
+  dataset_preview — so any LLM client can drive ingestion/review
+- alert push (n8n), backups for finance/reports, more chart types (later)
 - blog/site engagement + work app analytics (separate projects, same stack)
 
 ### Out
@@ -252,11 +258,11 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 
 | Phase | Work | Status |
 |---|---|---|
-| 0 | schemas, migrations, MySQL users/grants (provision.sh), compose, repo skeletons, docs | **done 2026-10-17** (provisioning + first `compose up` pending root + files) |
-| 1 | data-hub core: watcher, ingest, staging, upsert, load_log | waiting on files |
-| 2 | categorization + AI suggestions + review flow | waiting on files |
-| 3 | report-hub UI: engine, cards, dashboards, pagination | skeleton done; dashboards in phase 4 |
-| 4 | 5 v1 dashboards + mcp_mysql hints + docs | waiting on 1–3 |
-| 5 | first real ingest + categorization review with chuck | waiting on files |
-| v2-a | generic CSV/TSV dataset adapter | later |
-| v2-b | mcp_datahub MCP wrapper | later |
+| 0 | schemas, migrations, MySQL users/grants (provision.sh), compose, repo skeletons, docs | **done 2026-10-17** |
+| 1 | data-hub core: watcher, ingest, staging, upsert, load_log | **done 2026-10-17** (7 files ingested, 9,810 txns) |
+| 2 | categorization + AI suggestions + review flow | **done 2026-10-17** (rules engine, LiteLLM suggestions, review API) |
+| 3 | report-hub UI: engine, cards, dashboards, pagination | **done 2026-10-17** (KPI deltas, live charts, 250-row pagination, query safety) |
+| 4 | 5 v1 dashboards + mcp_mysql hints + docs | **done 2026-10-17** (seed/v1_finance_dashboards.sql, 38 queries, 32 cards; finance hints live) |
+| 5 | first real ingest + categorization review with chuck | ingest **done** (7 loads ok); review walk-through pending with chuck |
+| v2-a | generic CSV/TSV dataset adapter | **code done 2026-10-18** (19 tests green; prod E2E pending `hub` db provisioning) |
+| v2-b | mcp_datahub MCP wrapper | **code done 2026-10-18** (10 tools; MCP handshake + read-only calls verified; ingest verified w/ scratch file) |

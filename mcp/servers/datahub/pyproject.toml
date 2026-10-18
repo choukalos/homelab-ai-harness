@@ -1,0 +1,14 @@
+[project]
+name = "mcp-datahub"
+version = "0.1.0"
+description = "MCP server wrapping the data-hub REST API: ingest, load reports, categorization review, generic datasets"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "mcp>=1.10,<2",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+mcp-datahub = "server:main"

@@ -194,6 +194,21 @@ services:
     networks:
       - ai-net
 
+  mcp_datahub:
+    build:
+      context: ../mcp/servers/datahub
+    container_name: mcp_datahub
+    # Thin REST wrapper over data-hub (ingest/loads/categorization review).
+    # Inbox is read-only: data-hub owns the file lifecycle (moves to processed/).
+    environment:
+      - DATAHUB_URL=http://data-hub:8100
+      - INBOX_DIR=/inbox
+    volumes:
+      - /home/chuck/data/finance/inbox:/inbox:ro
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Skills (cross-client skill discovery + execution) -------------------
   mcp_skills:
     build:
