@@ -263,6 +263,12 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
   and the per-dataset dashboard pattern (reference example
   `/d/demo-weather`, demo dataset ingested through the v2 pipeline);
   design + verification: `workspace/code/data-hub/docs/v3-plan.md`
+- **Drill-downs** (done 2026-10-19, v3.1): click-through navigation
+  `yearly → categories → transactions` (table-row + chart-point links,
+  server-side URL-encoded hrefs; multi-picker `param_nav`; year-scoped
+  `/d/categories` + new `/d/transactions` category×month dashboard);
+  report-hub engine + seeds only — design + verification:
+  `workspace/code/data-hub/docs/v3.1-drilldowns.md`
 
 ### Out
 - auth/multi-user, public exposure, budgets (per chuck's call)
@@ -281,3 +287,4 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 | v2-b | mcp_datahub MCP wrapper | **done 2026-10-18** (10 tools; MCP handshake + read-only calls + ingest_file verified over live SSE with a real hub load) |
 | v3-a | multi-year finance review dashboard | **done 2026-10-18** (`/d/yearly`: year selector 2021+, 9 cards; param validation + fallback verified; rendered values match DB) |
 | v3-b | report-hub dashboards over hub generic data | **done 2026-10-18** (`/d/datahub` + `/d/demo-weather`; per-dataset pattern documented; demo dataset via v2 pipeline) |
+| v3.1 | drill-downs: yearly → categories → transactions | **done 2026-10-19** (multi-picker nav + server-side row/chart link machinery; year-scoped `/d/categories`; new `/d/transactions`; 19/19 live checks + unit tests green) |
