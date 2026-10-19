@@ -269,6 +269,14 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
   `/d/categories` + new `/d/transactions` category×month dashboard);
   report-hub engine + seeds only — design + verification:
   `workspace/code/data-hub/docs/v3.1-drilldowns.md`
+- **Landing grouping + full-year forecast** (done 2026-10-19, v3.2):
+  report-hub index page now renders grouped sections (Finance — expense
+  analysis incl. data health, Data Hub, Demo / test data) via
+  `dashboards.section`/`sort_order` (migration 0002); `/d/yearly` adds a
+  linear-trend **full-year forecast** for the current partial year and a
+  forecast-based YoY delta (full years compared); report-hub migration +
+  engine + seeds only — design + verification:
+  `workspace/code/data-hub/docs/v3.2-landing-forecast.md`
 
 ### Out
 - auth/multi-user, public exposure, budgets (per chuck's call)
@@ -288,3 +296,4 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 | v3-a | multi-year finance review dashboard | **done 2026-10-18** (`/d/yearly`: year selector 2021+, 9 cards; param validation + fallback verified; rendered values match DB) |
 | v3-b | report-hub dashboards over hub generic data | **done 2026-10-18** (`/d/datahub` + `/d/demo-weather`; per-dataset pattern documented; demo dataset via v2 pipeline) |
 | v3.1 | drill-downs: yearly → categories → transactions | **done 2026-10-19** (multi-picker nav + server-side row/chart link machinery; year-scoped `/d/categories`; new `/d/transactions`; 19/19 live checks + unit tests green) |
+| v3.2 | landing-page grouping + full-year forecast | **done 2026-10-19** (migration 0002 `dashboards.section`/`sort_order`; grouped index page — Finance/Data Hub/Demo; `/d/yearly` linear-trend full-year forecast + forecast-based YoY delta for the partial year; all 9 dashboards render, unit tests green) |
