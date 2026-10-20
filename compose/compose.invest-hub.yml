@@ -24,6 +24,64 @@ services:
     networks:
       - public-net
 
+  # ---------------------------------------------------------------------------
+  # Shared deploy runners (one per repo).
+  #
+  # GitHub ties each self-hosted runner to a single repo scope, and
+  # choukalos is a user account (not an org), so one runner cannot serve
+  # all three repos. We therefore run one runner container per repo.
+  #
+  # CPU serialization: all three deploy workflows (invest-hub, data-hub,
+  # report-hub) take an exclusive flock on /tmp/runner/.thor-deploy.lock
+  # before building. /tmp/runner is host-mounted in every runner container,
+  # so only ONE docker build ever runs on thor at a time; the others wait.
+  # ---------------------------------------------------------------------------
+  data-hub-runner:
+    image: myoung34/github-runner:latest
+    container_name: data-hub-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/choukalos/data-hub
+      - ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - RUNNER_NAME=data-hub-runner
+      - RUNNER_SCOPE=repo
+      - RUNNER_WORKDIR=/tmp/runner/work-data
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner/data
+      - DISABLE_AUTO_UPDATE=true
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
+      - LABELS=self-hosted,linux,docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/chuck/data/data-hub-runner:/runner/data
+      - /tmp/runner:/tmp/runner
+      - /home/chuck/homelab/compose:/home/github-runner/work/compose
+      - /home/chuck/homelab/.env:/home/github-runner/work/.env
+    networks:
+      - public-net
+
+  report-hub-runner:
+    image: myoung34/github-runner:latest
+    container_name: report-hub-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/choukalos/report-hub
+      - ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - RUNNER_NAME=report-hub-runner
+      - RUNNER_SCOPE=repo
+      - RUNNER_WORKDIR=/tmp/runner/work-report
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner/data
+      - DISABLE_AUTO_UPDATE=true
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
+      - LABELS=self-hosted,linux,docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/chuck/data/report-hub-runner:/runner/data
+      - /tmp/runner:/tmp/runner
+      - /home/chuck/homelab/compose:/home/github-runner/work/compose
+      - /home/chuck/homelab/.env:/home/github-runner/work/.env
+    networks:
+      - public-net
+
   invest-hub-server:
     image: invest-hub-server:latest
     # BUILD CONTEXT IS A CI PLACEHOLDER — do NOT "fix" these paths.

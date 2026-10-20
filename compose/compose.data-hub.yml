@@ -13,6 +13,13 @@ name: data-hub
 
 services:
   data-hub:
+    # BUILD CONTEXT IS A CI PLACEHOLDER — do NOT "fix" this path.
+    # The data-hub repo's .github/workflows/deploy.yml (runs on the
+    # self-hosted data-hub-runner) copies this file and rewrites the
+    # context line below (via sed) to point at the fresh GitHub
+    # checkout, then builds from that copy. CI always deploys from the
+    # GitHub checkout — there is no local build path anymore. The string
+    # below is the sed anchor: if it changes, the workflow guard fails loudly.
     build:
       context: /home/chuck/workspace/code/data-hub
     container_name: data-hub
@@ -37,6 +44,13 @@ services:
       - ai-net
 
   report-hub:
+    # BUILD CONTEXT IS A CI PLACEHOLDER — do NOT "fix" this path.
+    # The report-hub repo's .github/workflows/deploy.yml (runs on the
+    # self-hosted report-hub-runner) copies this file and rewrites the
+    # context line below (via sed) to point at the fresh GitHub
+    # checkout, then builds from that copy. CI always deploys from the
+    # GitHub checkout — there is no local build path anymore. The string
+    # below is the sed anchor: if it changes, the workflow guard fails loudly.
     build:
       context: /home/chuck/workspace/code/report-hub
     container_name: report-hub
