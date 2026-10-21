@@ -215,6 +215,17 @@
     `homelab_reports/memory_review/<user>/` (private, never published).
   - `scripts/memory-regression.sh` requires a clean git tree and leaves
     Qdrant clean.
+  - **Key sync (added 2026-10-21):** after rotating any key in `.env` or
+    recreating/restarting `skill-runner` or `mcp_*` containers, run
+    `scripts/key-sync-check.sh` (repo root). It compares every
+    security-critical env var present in both `.env` and a running
+    container and flags stale keys (exit 1 = drift; the printed fix line
+    recreates the flagged container). Origin: `mcp_skills` presented a
+    pre-rotation `LITELLM_KEY_CHUCK` and skill-runner 403'd
+    `list_skills`/`run_skill`; the same-day sweep found 7 more containers
+    with pre-rotation keys (`MEMORY_LITELLM_KEY`, `LITELLM_KEY_CHUCK`,
+    `LITELLM_KEY_DYLAN` in data-hub, report-hub, invest-hub x2, caddy,
+    cloudflared, searxng, plausible).
 - **Identity map is shared with the per-user key workstream** (complete
   2026-09-04/06; plan file `auth_todo.md` deleted 2026-09-10):
   `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for
