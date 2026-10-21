@@ -51,24 +51,30 @@ lives only in the session — nothing lands in memory. Two parts:
 
 ## 3. Retrieval quality (medium — do when it feels needed)
 
-- **3a. Recency weighting for volatile topics.** A 3-month-old medical
-  fact ranks the same as last week's. Option: in `/api/memory/search`,
-  boost hits by recency of `updated_at`/`created_at` (e.g. score × 1.0–1.2
-  decay), or a `recent_first=true` mode. Timestamps are now carried
-  through `_normalize_hit` (2026-10-21 fix) so this is straightforward.
+**Phase 1 (3a/3c/3e) CODE DONE 2026-10-21** (deploy + live A/B pending —
+see phase log 5th entry): recency + importance ranking boosts in
+`search_memory` (env-gated, raw-gate invariant), provenance prefix in the
+chat context block, unit suite fixed (stale `prompt=` kwarg fakes).
+
+- **3a. Recency weighting for volatile topics.** ✅ CODE DONE 2026-10-21 —
+  `rank_score = raw × recency × importance` in `search_memory`; recency
+  `1 + (max−1)·0.5^(age/halflife)` on `updated_at`/`created_at`
+  (`MEMORY_RECENCY_BOOST_MAX=1.2`, `MEMORY_RECENCY_HALF_LIFE_DAYS=30`).
+  Threshold gate stays on the RAW score. Pending: deploy + live A/B.
 - **3b. Multi-query retrieval.** Chat retrieval does a single query;
   deriving 2–3 subqueries (question + named entities) would catch facts
   phrased differently.
-- **3c. Provenance in answers.** Surface `source` + `created_at` in
-  retrieved facts ("per your chat on 2026-09-02…") so the user can trust
-  and correct.
+- **3c. Provenance in answers.** ✅ CODE DONE 2026-10-21 — context block
+  bullets carry `[YYYY-MM-DD · source]` + preamble instructs date citation;
+  `/api/memory/search` already returned dates (MCP/pi surfaces covered).
+  Pending: deploy.
 - **3d. Weekly memory review digest (trust + pruning).** A scheduled skill
   ("here's what I've stored about you this week — correct or delete
   anything wrong") using `list_memories` + admin delete. Good for
   catching extraction errors before they compound.
-- **3e. `importance` as a ranker.** Currently provenance-only; weight
-  `importance=high` hits in search (e.g. ×1.15). Small change in the
-  search endpoint.
+- **3e. `importance` as a ranker.** ✅ CODE DONE 2026-10-21 — flat
+  `MEMORY_IMPORTANCE_BOOST=1.15` for `importance=high` in `rank_score`
+  (same change as 3a). Pending: deploy.
 
 ## 4. Optional: pi memory-conventions skill — ✅ DONE 2026-10-21
 

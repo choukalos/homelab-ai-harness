@@ -17,6 +17,7 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 # Ensure the runner root is importable (memory is a package under it).
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -398,12 +399,13 @@ def test_phase5_writeback():
             self.last_text = ""  # last user message content passed to add()
             self.deleted = []  # memory ids
 
-        def add(self, messages, user_id=None, metadata=None, infer=True):
+        def add(self, messages, user_id=None, metadata=None, infer=True,
+                prompt=None):
             self.last_text = next(
                 (m.get("content") for m in messages if m.get("role") == "user"),
                 "",
             )
-            self.added.append((user_id, dict(metadata or {}), infer))
+            self.added.append((user_id, dict(metadata or {}), infer, prompt))
             return {"results": [{"id": f"new{len(self.added)}"}]}
 
         def search(self, query, filters=None, top_k=10):
@@ -450,7 +452,7 @@ def test_phase5_writeback():
             [{"role": "user", "content": "I switched to oat milk flat whites"}],
             source="chat", agent_id="siri_chat", run_id="run123",
         )
-        uid, meta, infer = fake._mem.added[-1]
+        uid, meta, infer, _prompt = fake._mem.added[-1]
         check("learn: user routed", uid == "chuck", uid)
         check("learn: infer default", infer is True, str(infer))
         check("learn: source metadata", meta.get("source") == "chat", str(meta))
@@ -464,7 +466,7 @@ def test_phase5_writeback():
         ids = interface.remember_direct(
             "chuck", "Remember that my birthday is June 4th", run_id="r9")
         check("remember: stored", len(ids) == 1, str(ids))
-        uid, meta, infer = fake._mem.added[-1]
+        uid, meta, infer, _prompt = fake._mem.added[-1]
         check("remember: infer=False (no LLM)", infer is False, str(infer))
         check("remember: prefix stripped",
               fake._mem.last_text == "my birthday is June 4th",
@@ -565,10 +567,11 @@ def test_phase7_jobctx():
             self.searched = []  # user_id
             self.fail = False
 
-        def add(self, messages, user_id=None, metadata=None, infer=True):
+        def add(self, messages, user_id=None, metadata=None, infer=True,
+                prompt=None):
             if self.fail:
                 raise RuntimeError("boom")
-            self.added.append((user_id, dict(metadata or {}), infer))
+            self.added.append((user_id, dict(metadata or {}), infer, prompt))
             return {"results": [{"id": f"new{len(self.added)}"}]}
 
         def search(self, query, filters=None, top_k=10):
@@ -650,7 +653,7 @@ def test_phase7_jobctx():
             source="chat",
         )
         check("writeback: user -> stored", len(ids) == 1, str(ids))
-        uid, meta, infer = fake2._mem.added[-1]
+        uid, meta, infer, _prompt = fake2._mem.added[-1]
         check("writeback: user routed", uid == "chuck", uid)
         check("writeback: source=chat", meta.get("source") == "chat", str(meta))
         check("writeback: turn_id=run_id", meta.get("turn_id") == "r77", str(meta))
@@ -676,7 +679,7 @@ def test_phase7_jobctx():
             agent="deep_research",
         )
         check("outcome: user -> stored", len(ids) == 1, str(ids))
-        uid, meta, infer = fake3._mem.added[-1]
+        uid, meta, infer, _prompt = fake3._mem.added[-1]
         check("outcome: source=agent_result",
               meta.get("source") == "agent_result", str(meta))
         check("outcome: confidence=normal (lower trust)",
@@ -857,6 +860,147 @@ def test_phase8_admin():
         interface._reset_singleton()
 
 
+def test_ranking_provenance():
+    print("ranking boosts + provenance (memory_todo 3a/3e/3c):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_SCORE_THRESHOLD",
+        "MEMORY_RECENCY_BOOST_MAX", "MEMORY_RECENCY_HALF_LIFE_DAYS",
+        "MEMORY_IMPORTANCE_BOOST",
+    )}
+
+    now = datetime.now(timezone.utc)
+    iso = lambda dt: dt.isoformat()
+    fresh = iso(now - timedelta(hours=1))
+    stale = iso(now - timedelta(days=90))
+
+    class _FakeMem0:
+        def __init__(self, data):
+            self._data = data
+
+        def search(self, query, filters=None, top_k=10):
+            uid = (filters or {}).get("user_id")
+            return [dict(h) for h in self._data.get(uid, [])]
+
+    class _FakeClient:
+        def __init__(self, data):
+            self._mem = _FakeMem0(data)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0.5"
+        os.environ["MEMORY_RECENCY_BOOST_MAX"] = "1.2"
+        os.environ["MEMORY_RECENCY_HALF_LIFE_DAYS"] = "30"
+        os.environ["MEMORY_IMPORTANCE_BOOST"] = "1.15"
+        interface._reset_singleton()
+        cfg = interface._get_config()
+
+        # ── _rank_score math ────────────────────────────────────────
+        base = {"id": "x", "text": "t", "score": 0.8, "source": "private",
+                "metadata": {}}
+        r_fresh = interface._rank_score(
+            {**base, "created_at": fresh, "updated_at": fresh}, cfg, now=now)
+        r_stale = interface._rank_score(
+            {**base, "created_at": stale, "updated_at": stale}, cfg, now=now)
+        r_high = interface._rank_score(
+            {**base, "created_at": fresh, "updated_at": fresh,
+             "metadata": {"importance": "high"}}, cfg, now=now)
+        check("fresh fact boosted ~max", abs(r_fresh - 0.8 * 1.2) < 0.02,
+              f"{r_fresh:.4f}")
+        check("stale fact barely boosted", abs(r_stale - 0.8 * 1.025) < 0.02,
+              f"{r_stale:.4f}")
+        check("fresh > stale", r_fresh > r_stale)
+        check("importance=high compounds", abs(r_high - 0.8 * 1.2 * 1.15) < 0.02,
+              f"{r_high:.4f}")
+        # No timestamp -> recency boost skipped, importance still applies.
+        r_notime = interface._rank_score(
+            {**base, "metadata": {"importance": "high"}}, cfg, now=now)
+        check("no timestamp -> importance only",
+              abs(r_notime - 0.8 * 1.15) < 0.02, f"{r_notime:.4f}")
+        # Disabling: both boosts 1.0 -> identity.
+        cfg_off = memconfig.MemoryConfig(recency_boost_max=1.0,
+                                         importance_boost=1.0)
+        check("disabled boosts are identity",
+              interface._rank_score(
+                  {**base, "created_at": fresh, "updated_at": fresh,
+                   "metadata": {"importance": "high"}}, cfg_off, now=now)
+              == 0.8)
+        # updated_at wins over created_at (supersede refreshes recency).
+        r_upd = interface._rank_score(
+            {**base, "created_at": stale, "updated_at": fresh}, cfg, now=now)
+        check("updated_at refreshes recency", r_upd > r_stale,
+              f"{r_upd:.4f} vs {r_stale:.4f}")
+
+        # ── search_memory: raw vs rank + gate on raw ───────────────
+        fake = _FakeClient({
+            "chuck": [
+                {"id": "stale", "memory": "old fact", "score": 0.75,
+                 "created_at": stale, "updated_at": stale,
+                 "metadata": {"importance": "normal", "source": "chat"}},
+                {"id": "fresh", "memory": "new fact", "score": 0.6,
+                 "created_at": fresh, "updated_at": fresh,
+                 "metadata": {"importance": "high", "source": "chat"}},
+                {"id": "low", "memory": "irrelevant fresh fact",
+                 "score": 0.4, "created_at": fresh, "updated_at": fresh,
+                 "metadata": {"importance": "high", "source": "chat"}},
+            ],
+            "household": [],
+        })
+        interface._client = fake
+        hits = interface.search_memory("chuck", "fact")
+        ids = [h["id"] for h in hits]
+        check("fresh+high outranks stale normal",
+              ids and ids[0] == "fresh", str(ids))
+        check("below-threshold fresh hit still gated on RAW score",
+              "low" not in ids, str(ids))
+        by_id = {h["id"]: h for h in hits}
+        check("raw_score preserved", by_id["stale"]["raw_score"] == 0.75
+              and by_id["stale"]["score"] == 0.75)
+        check("rank_score present + boosted",
+              by_id["fresh"]["rank_score"] > by_id["fresh"]["raw_score"])
+
+        # ── context rendering: provenance (3c) ─────────────────────
+        block = interface.render_context("chuck", "fact")
+        check("block renders", bool(block))
+        check("provenance prefix in block", "[" + fresh[:10] in block,
+              block[:300])
+        check("source label in block", "· chat]" in block)
+        check("preamble cites dates", "cite its date" in block)
+        # Hits without timestamps render without a prefix (backward compat).
+        bare = context.render_memory_block(
+            [{"text": "no date fact", "score": 0.9, "source": "private"}],
+            memconfig.MemoryConfig())
+        check("no-date hit renders bare", "- no date fact" in bare, bare)
+        # rank_score drives the budget-drop order (not raw score).
+        tiny = context.render_memory_block(
+            [
+                {"text": "old high-raw", "score": 0.9, "rank_score": 0.5,
+                 "source": "private"},
+                {"text": "new low-raw", "score": 0.6, "rank_score": 0.9,
+                 "source": "private"},
+            ],
+            memconfig.MemoryConfig(max_context_tokens=40))
+        if tiny:
+            check("budget drop keeps higher rank_score first",
+                  tiny.index("new low-raw") < tiny.index("old high-raw")
+                  or "old high-raw" not in tiny, tiny)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -870,6 +1014,7 @@ def main():
     test_phase5_writeback()
     test_phase7_jobctx()
     test_phase8_admin()
+    test_ranking_provenance()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")

@@ -77,6 +77,22 @@ class MemoryConfig:
     # similarity are dropped (conservative — an unrelated memory injected
     # into an unrelated task is worse than none). 0 disables the gate.
     score_threshold: float = 0.5
+    # Ranking boosts (memory_todo 3a/3e, 2026-10-21): multiplicative boosts
+    # applied to the RAW score AFTER the relevance gate, before ranking —
+    # a boost can never admit an irrelevant fact, only reorder relevant
+    # ones. 1.0 disables each boost.
+    #   recency_boost_max: max boost for a just-updated fact, decaying with
+    #   a half-life of recency_half_life_days (volatile topics — medical
+    #   status, appointments — should outrank months-old equivalents).
+    #   importance_boost: flat boost for importance=high facts.
+    recency_boost_max: float = 1.2
+    recency_half_life_days: float = 30.0
+    importance_boost: float = 1.15
+    # Multi-query retrieval (memory_todo 3b): derive up to
+    # multiquery_max total queries (original + heuristic subqueries) and
+    # merge with reciprocal rank fusion. Off by default (A/B first).
+    multiquery_enabled: bool = False
+    multiquery_max: int = 3
     # Retrieval timeout (blocks the chat response — must stay fast).
     timeout_ms: int = 1500
     # Writeback timeout (LLM extraction is slow; runs as a background task
@@ -136,6 +152,11 @@ def load_config() -> MemoryConfig:
         embed_dim=_env_int("MEMORY_EMBED_DIM", 768),
         top_k=_env_int("MEMORY_TOP_K", 6),
         score_threshold=_env_float("MEMORY_SCORE_THRESHOLD", 0.5),
+        recency_boost_max=_env_float("MEMORY_RECENCY_BOOST_MAX", 1.2),
+        recency_half_life_days=_env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 30.0),
+        importance_boost=_env_float("MEMORY_IMPORTANCE_BOOST", 1.15),
+        multiquery_enabled=_env_bool("MEMORY_MULTIQUERY", False),
+        multiquery_max=_env_int("MEMORY_MULTIQUERY_MAX", 3),
         timeout_ms=_env_int("MEMORY_TIMEOUT_MS", 1500),
         writeback_timeout_ms=_env_int("MEMORY_WRITEBACK_TIMEOUT_MS", 30000),
         admin_timeout_ms=_env_int("MEMORY_ADMIN_TIMEOUT_MS", 10000),

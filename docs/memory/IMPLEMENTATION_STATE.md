@@ -901,6 +901,37 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (5th entry)** — **Retrieval quality Phase 1 (memory_todo
+  3a/3e/3c): recency + importance ranking, provenance in the context
+  block.** `skills/runner/memory/` (baked into `skill-runner:local`):
+  1. **Ranking boosts (3a/3e)** — `interface._rank_score`: `rank_score =
+     raw × recency × importance`. Recency: `1 + (max−1)·0.5^(age/halflife)`
+     on `updated_at` (fallback `created_at`) — `MEMORY_RECENCY_BOOST_MAX=
+     1.2`, `MEMORY_RECENCY_HALF_LIFE_DAYS=30`; importance: flat
+     `MEMORY_IMPORTANCE_BOOST=1.15` for `importance=high`. Applied AFTER
+     the raw-score relevance gate, so boosts can only reorder hits that
+     already cleared the gate — never admit irrelevant ones. Hits now
+     carry `score` (raw cosine) + `raw_score` + `rank_score`; `search_memory`
+     sorts by `rank_score`. Env-gated; 1.0/0 disables (rollback without
+     rebuild).
+  2. **Provenance (3c)** — `context.py` bullets now carry a
+     `[YYYY-MM-DD · source]` prefix (created_at + metadata.source) and the
+     preamble instructs the model to cite dates when referencing memories
+     ("per your chat on 2026-09-02"). `/api/memory/search` responses
+     already carried dates, so the MCP/pi surfaces get 3c for free. Also
+     fixed the `context._sort_key` recency tiebreak to read TOP-LEVEL
+     timestamps (the 2026-10-21 sweep fix) instead of metadata-only
+     (which was always empty — the tiebreak was a no-op).
+  3. **Unit-suite fix (pre-existing red since Phase 12)** — the test
+     fakes' `add()` predated the `prompt=` kwarg Phase 12 added to
+     `learn_from_turn`, so `test_phase5_writeback` silently no-stored and
+     IndexErrors. Fakes now accept + record `prompt`.
+  Verified: unit suite ALL PASS (163 checks incl. new
+  `test_ranking_provenance`: boost math, raw-gate invariance,
+  fresh-outranks-stale, provenance render, budget-drop order); identity
+  suite ALL PASS (39). Deploy pending (image rebuild + recreate); live A/B
+  in the Phase 2/3 verification pass. New env in `.env` +
+  `compose/compose.skill-runner.yml`.
 - **2026-10-21 (4th entry)** — **Memory-conventions pi skill (memory_todo
   #1a + #4).** `agents-skills/memory-conventions/SKILL.md` — pure pi-native
   skill (no `skill.yml`, no skill-runner job, no Skill Hub registration —

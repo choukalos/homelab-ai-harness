@@ -15,14 +15,18 @@ Functions:
     delete_user_memories(user_id) -> int
     is_healthy() -> bool
 
-Search hits are dicts: ``{id, text, score, source, metadata}`` where
-``source`` is ``"private"`` or ``"household"``.
+Search hits are dicts: ``{id, text, score, source, metadata, created_at,
+updated_at, raw_score, rank_score}`` where ``source`` is ``"private"`` or
+``"household"``, ``score`` is the raw cosine similarity, and
+``rank_score`` = raw score x recency boost x importance boost (memory_todo
+3a/3e) — the value hits are ranked by.
 """
 from __future__ import annotations
 
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from . import context as _context
@@ -119,6 +123,49 @@ def _extract_ids(res: Any) -> List[str]:
     return ids
 
 
+def _parse_ts(value: Any) -> Optional[datetime]:
+    """Parse an ISO-8601 timestamp (mem0 format). ``None`` on failure."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _rank_score(hit: dict, cfg: MemoryConfig, now: Optional[datetime] = None) -> float:
+    """Rank score = raw score x recency boost x importance boost (3a/3e).
+
+    The relevance gate (``cfg.score_threshold``) is applied to the RAW
+    score before this runs, so a boost can only reorder hits that already
+    cleared the gate — it can never admit an irrelevant fact.
+
+    - recency: ``1 + (max-1) * 0.5**(age_days / half_life)`` on
+      ``updated_at`` (fallback ``created_at``). A just-updated fact gets
+      the full boost; it decays to half at one half-life, so volatile
+      topics (medical status, appointments) outrank months-old
+      equivalents while stable facts are barely affected.
+    - importance: flat multiplier for ``importance=high`` facts.
+    """
+    score = float(hit.get("score", 0.0) or 0.0)
+    if score <= 0.0:
+        return score
+    boosted = score
+    if cfg.recency_boost_max > 1.0:
+        ts = _parse_ts(hit.get("updated_at")) or _parse_ts(hit.get("created_at"))
+        if ts is not None:
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            now = now or datetime.now(timezone.utc)
+            age_days = max(0.0, (now - ts).total_seconds() / 86400.0)
+            half = cfg.recency_half_life_days if cfg.recency_half_life_days > 0 else 30.0
+            boosted *= 1.0 + (cfg.recency_boost_max - 1.0) * (0.5 ** (age_days / half))
+    if (hit.get("metadata") or {}).get("importance") == "high":
+        if cfg.importance_boost > 1.0:
+            boosted *= cfg.importance_boost
+    return boosted
+
+
 # ── Public API ────────────────────────────────────────────────────────
 def search_memory(
     user_id: str,
@@ -128,10 +175,12 @@ def search_memory(
     """Search the user's private + household memories for ``query``.
 
     Returns a list of normalized hits (private + household merged, deduped,
-    sorted by score desc, truncated to ``top_k``). Hits scoring below
-    ``cfg.score_threshold`` are dropped (conservative relevance gate — an
-    unrelated memory is worse than none). Returns ``[]`` on error, timeout,
-    or when retrieval is disabled / the user is unknown.
+    ranked by ``rank_score`` desc, truncated to ``top_k``). Hits scoring
+    below ``cfg.score_threshold`` are dropped (conservative relevance gate
+    — an unrelated memory is worse than none). Each hit carries both
+    ``score`` (raw cosine) and ``rank_score`` (raw x recency x importance
+    boosts — memory_todo 3a/3e). Returns ``[]`` on error, timeout, or when
+    retrieval is disabled / the user is unknown.
     """
     cfg = _get_config()
     if not cfg.retrieval_allowed:
@@ -184,7 +233,13 @@ def search_memory(
             degraded = True
             _metrics.get_metrics().record_error("search")
 
-    hits.sort(key=lambda h: h["score"], reverse=True)
+    # Ranking (3a/3e): keep the raw score for transparency, rank by the
+    # boosted score. The threshold gate above already ran on raw scores, so
+    # the boosts only reorder relevant hits — never admit new ones.
+    for h in hits:
+        h["raw_score"] = h["score"]
+        h["rank_score"] = _rank_score(h, cfg)
+    hits.sort(key=lambda h: h["rank_score"], reverse=True)
     result = hits[:k]
     _metrics.get_metrics().record_search(
         "degraded" if degraded else "ok",
