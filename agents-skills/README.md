@@ -83,8 +83,13 @@ digest per type stored in the KB via `kb_digest_store` (`attention_transformer`,
 ### Other pi-native skills
 - `business-analyst`, `content-writer`, `deep-research`, `demo-browse`,
   `demo-workflow`, `homelab-report`, `investment-brief`, `marketing-strategy`,
-  `morning-brief`, `presentation-build`, `presentation-update`,
-  `publish-file`, `research-brief`, `siri-ask`, `siri-chat`.
+  `memory-conventions`, `morning-brief`, `presentation-build`,
+  `presentation-update`, `publish-file`, `research-brief`, `siri-ask`,
+  `siri-chat`.
+- **`memory-conventions`** — pure instruction skill (no runner job): when to
+  `memory_search`/`memory_remember`, the research-note convention, and the
+  medical-reference split (reference-grade → `kb_medical` KB, conversational
+  → memory). Closes `memory_todo.md` items 1a + 4 (2026-10-21).
 
 ## Verification strategy
 

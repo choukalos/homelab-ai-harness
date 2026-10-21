@@ -5,18 +5,23 @@ MCP tool + `POST /api/memory/remember` endpoint + household bucket writes.
 These are the remaining items from the 2026-10-21 memory-improvement plan
 (see `docs/memory/IMPLEMENTATION_STATE.md`, phase log 2026-10-21 entries).
 
+**Done 2026-10-21 (post-Phase 12):** 1a + 4 — `agents-skills/memory-conventions/
+SKILL.md` (pi-native instruction skill: memory_search/remember conventions,
+research-note convention, medical KB split). Distributed via the existing
+`agents-skills/` path — `git pull` + pi restart/`/reload` on each client,
+no install step.
+
 ## 1. Research-outcome capture (from pi sessions)
 
 When research is done IN PI (e.g. wife's medical condition), the outcome
 lives only in the session — nothing lands in memory. Two parts:
 
-- **1a. Research-note convention (no code needed).** Now that
-  `memory_remember` exists, add a pi skill/instruction (on the Mac,
-  `~/.pi/agent/skills/`): "When you finish substantive research (medical,
-  technical deep-dive, decision support), call `memory_remember` with a
-  structured note — topic, date, key findings, sources — at
-  `importance='high'`." Example phrasing:
-  "Research on <topic> (2026-10-21): <2-4 key findings>. Sources: <...>."
+- **1a. Research-note convention (no code needed).** ✅ DONE 2026-10-21 —
+  lives in `agents-skills/memory-conventions/SKILL.md` (research-note
+  section; structured note at `importance='high'`, `household=true` for
+  family-relevant research). Note: the skill was distributed via the repo's
+  `agents-skills/` dir (already in pi's settings) instead of a per-machine
+  `~/.pi/agent/skills/` copy — version-controlled, one source of truth.
 - **1b. `kb_medical` KB domain for reference-grade material (small).**
   mem0 is add-only (changes become new supersede statements); the KB
   (`mcp_knowledge`) supports `kb_correct`/`kb_forget` — better for
@@ -65,14 +70,17 @@ lives only in the session — nothing lands in memory. Two parts:
   `importance=high` hits in search (e.g. ×1.15). Small change in the
   search endpoint.
 
-## 4. Optional: pi memory-conventions skill on the Mac
+## 4. Optional: pi memory-conventions skill — ✅ DONE 2026-10-21
 
-A single skill covering: when to call `memory_search` (start of
-conversations about known topics), when to call `memory_remember`
-(durable personal info / "remember this"), the research-note convention
-(1a), and the medical KB convention (1b). The MCP tool descriptions
-already carry the core guidance — the skill adds examples and the
-research/KB conventions.
+Built as `agents-skills/memory-conventions/SKILL.md` (repo, not Mac-local):
+when to call `memory_search` (start of conversations about known topics),
+when to call `memory_remember` (durable personal info / "remember this"),
+the research-note convention (1a), the medical KB convention (1b), the
+memory/KB store split, and provenance in cited answers. The MCP tool
+descriptions already carry the core guidance — the skill adds the
+research/KB conventions. Distribution: `git pull` + pi restart (or
+`/reload`) on each client; Dylan's machine gets it via the same clone
+(part of 2a).
 
 ## Housekeeping
 

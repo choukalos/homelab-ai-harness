@@ -901,6 +901,23 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (4th entry)** — **Memory-conventions pi skill (memory_todo
+  #1a + #4).** `agents-skills/memory-conventions/SKILL.md` — pure pi-native
+  skill (no `skill.yml`, no skill-runner job, no Skill Hub registration —
+  same shape as the digest family): when to `memory_search` (start of known
+  topics, past references), when to `memory_remember` (durable personal
+  info / "remember this"; `household=true` for family-shared; `importance=
+  'high'` for critical; writes land under the caller's own identity), the
+  research-note convention (structured note — topic/date/findings/sources —
+  at `importance='high'`, `household=true` when family-relevant), the
+  medical KB convention (reference-grade evolving material → `kb_medical`
+  via `kb_add_fact`/`kb_correct`/`kb_forget`; conversational medical facts →
+  memory), the memory/KB store split, and provenance in cited answers.
+  Distribution is the existing Layer-3 path (`docs/thor_cross_client_skills
+  .md`): the repo's `agents-skills/` is already in pi's settings, so
+  `git pull` + pi restart (or `/reload`) on each client activates it — no
+  per-machine install; Dylan's machine gets it via the same clone (2a).
+  Verified: `tests/test_skills_yaml.py` green (strict YAML, name/dir match).
 - **2026-10-21 (3rd entry)** — **Phase 12: cross-machine memory WRITE path +
   household scope — `memory_remember` for pi (Mac) and family-shared facts.**
   Gap: memory was centralized (one store, thor) and pi-on-Mac could READ it
