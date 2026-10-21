@@ -901,6 +901,35 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (8th entry)** — **Deploy + live A/B verification of the
+  retrieval-quality phases (1–3).** `skill-runner:local` rebuilt from the
+  Phase 3 tree + recreated; all three phases confirmed live in-container.
+  Live A/B results (real Qdrant store, chuck's 9 private facts):
+  1. **Ranking (3a/3e)** — hits carry `raw_score` + `rank_score`; fresh
+     fact (2026-10-21) raw 0.872 → rank 1.044 (×1.2 recency, exact);
+     stale fact (2026-09-02, ~50d) raw 0.619 → rank 0.658 (×1.063
+     half-life decay); a fresh fact with LOWER raw (0.545→0.653) nearly
+     closes the gap on the stale one (0.619→0.658) — reordering works as
+     designed, gate untouched.
+  2. **Provenance (3c)** — live context block renders
+     `[2026-10-21 · scheduled]` / `[2026-09-02 · scheduled]` bullets +
+     the cite-the-date preamble.
+  3. **Multi-query (3b)** — "what did we add to the Homelab Blog this
+     week" derives subquery `Homelab Blog`; merged hits carry
+     `rrf_score` (arcade fact 0.0328, solar 0.0315 — RRF balancing a
+     fact ranked #1 on the subquery vs #5 on the original); OFF/ON top
+     sets identical on this query (no regression); unit tests cover the
+     below-threshold rescue path. **`MEMORY_MULTIQUERY` flipped to
+     `true` in `.env`** (A/B passed; rollback = set false + recreate).
+  4. **Weekly digest (3d)** — live run `memory_review {user: chuck,
+     days: 7}`: 5 new/updated of 9 stored (4 stale Sept facts correctly
+     window-excluded), per-fact IDs + dates + sources, private artifact
+     written to `homelab_reports/memory_review/chuck/`. First scheduled
+     run: Sun 18:00 CT.
+  Note: the very first search after a container (re)start can hit the
+  2.4s retrieval timeout on cold Qdrant/embedding init (degrades to [],
+  non-fatal, next search warm succeeds) — pre-existing behavior, not
+  changed by these phases.
 - **2026-10-21 (7th entry)** — **Retrieval quality Phase 3 (memory_todo
   3d): weekly memory review digest — the trust + pruning loop.**
   New skill `skills/memory_review/` (skill.yml + skill.py + test_skill.py):
@@ -930,7 +959,7 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
   Verified: `skills/memory_review/test_skill.py` ALL PASS (13 checks:
   window math incl. naive-UTC + updated_at refresh, renderer sections /
   provenance / importance / written_by / footer / empty-window note).
-  Deploy pending with Phases 1–2 (skill-runner rebuild).
+  Deployed + live-verified 2026-10-21 (8th entry).
 - **2026-10-21 (6th entry)** — **Retrieval quality Phase 2 (memory_todo
   3b): heuristic multi-query retrieval + RRF merge.**
   `skills/runner/memory/interface.py` (baked into `skill-runner:local`):
@@ -959,9 +988,9 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
      rank boosts (Phase 1) → truncate.
   Verified: unit suite ALL PASS (178 checks; new `test_multiquery`: derive
   cases, RRF math, end-to-end rescue of a below-threshold fact via
-  subquery, off = single query x 2 scopes). Deploy pending with Phase 3;
-  live A/B (on/off) in the verification pass, then flip
-  `MEMORY_MULTIQUERY=true` in `.env`.
+  subquery, off = single query x 2 scopes). Deployed + live A/B'd
+  2026-10-21; `MEMORY_MULTIQUERY` flipped to `true` in `.env` (8th
+  entry).
 - **2026-10-21 (5th entry)** — **Retrieval quality Phase 1 (memory_todo
   3a/3e/3c): recency + importance ranking, provenance in the context
   block.** `skills/runner/memory/` (baked into `skill-runner:local`):
@@ -990,9 +1019,8 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
   Verified: unit suite ALL PASS (163 checks incl. new
   `test_ranking_provenance`: boost math, raw-gate invariance,
   fresh-outranks-stale, provenance render, budget-drop order); identity
-  suite ALL PASS (39). Deploy pending (image rebuild + recreate); live A/B
-  in the Phase 2/3 verification pass. New env in `.env` +
-  `compose/compose.skill-runner.yml`.
+  suite ALL PASS (39). Deployed + live A/B'd 2026-10-21 (8th entry).
+  New env in `.env` + `compose/compose.skill-runner.yml`.
 - **2026-10-21 (4th entry)** — **Memory-conventions pi skill (memory_todo
   #1a + #4).** `agents-skills/memory-conventions/SKILL.md` — pure pi-native
   skill (no `skill.yml`, no skill-runner job, no Skill Hub registration —
