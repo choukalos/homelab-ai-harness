@@ -363,3 +363,51 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 4. `sudo ufw disable`
 5. `internal-service` key (Phase 8): revert consumer env vars to master key, recreate, `./homelab.sh key delete internal-service`
 6. Re-run §7 verification
+
+---
+
+## 9. CVE cross-check — 2026-10-21 (web research + public-surface audit)
+
+> Session 2026-10-21, triggered by the Oct 20–21 security-news flood.
+> Scope: every **internet-facing** service (the 6 tunnel domains) + notable
+> LAN services, cross-checked against CVEs published 2026-09-01 → 2026-10-21
+> (NVD, GitHub/GHSA, OSV.dev, vendor advisories). **Incremental** to Phases
+> 1–8 above — does not replace them.
+
+### 9.1 What the "flood" was
+
+| Source | What | Relevance to Thor |
+|---|---|---|
+| Oracle Oct 2026 CPU (pub 10-20) | ~1,000+ CVEs incl. MySQL Server | **Yes** — MySQL 8.4.11 affected (9.3-M1) |
+| Microsoft Oct Patch Tuesday (10-13) | 1,413 CVEs; exploited Win Shell zero-day (CVE-2026-96951) | No (Linux) |
+| CISA KEV additions (10-13 → 10-20) | Plex ×4, PAN-OS, BeyondTrust, Fortinet, Ivanti, Atlassian, Cisco SEG | **None run in the stack** |
+
+### 9.2 Internet-facing services — CVE status
+
+| Public service | Component / version | Recent CVEs? | Status |
+|---|---|---|---|
+| `llm.choukalos.com` | litellm **1.104.0** | CVE-2026-84377 (auth'd SSRF / provider-cred exfil), fixed 1.96.2 | ✅ Patched |
+| (front) | Caddy **2.11.7** | CVE-2026-77281 / -92284 / -92700 (placeholder injection, body DoS, file-hide bypass) — all fixed 2.11.4 | ✅ Patched, latest |
+| (tunnel) | cloudflared **2026.9.3** | none recent | ✅ OK — 2026.10.3 out (9.3-V1) |
+| `invest`/`api.choukalos.com` | investhub API (Express 5.2.1, Prisma 7.8, mysql2) | npm deps clean (OSV); JWT on protected routes | ✅ OK |
+| `invest.choukalos.com` | nginx **1.31.7** (client, was 1.27.5) | 5 advisories affect ≤1.31.6 (CVE-2026-42533 "major" map+regex; -97629 TLS tickets; -97205 AIO; -95101 HTTP/3; -15176 alias+rewrite) | ✅ **Resolved 2026-10-21** — bumped to `nginx:1.31-alpine` (1.31.7 ≥ "not vulnerable" floor for all 5); config still minimal (no map/regex, alias/rewrite, TLS, HTTP/3, AIO) — 9.3-N1 |
+| `choukalos.com` (blog) | Hugo **0.165.0** static + portal (Py stdlib, read-only) | several medium (build-time/theme + 2 stored-XSS) | ⚠️ 3 releases behind (0.168.0) — 9.3-H1 |
+| `siri.choukalos.com` | skill-runner (FastAPI 0.156.8) | none recent; uploads auth-gated (X-Api-Key) | ✅ OK |
+| `plausible.choukalos.com` | Plausible CE **3.2.0** | none recent; admin UI blocked from internet (only `/js`, `/api/event`) | ✅ OK |
+
+**No active-attack patterns** in Caddy / invest-hub / portal / skill-runner logs (48h) — traffic is Chuck's own (WARP egress 104.5.56.59) + local scrapers.
+
+### 9.3 New items to track
+
+| # | Sev | Item | Where | Fix / action |
+|---|---|---|---|---|
+| 9.3-M1 | MED | **MySQL 8.4.11** hit by Oracle Oct CPU: CVE-2026-101679 (7.5, unauth, network → DoS/crash) + replication/optimizer CVEs (affected 8.4.0–8.4.12). **LAN-only** (0.0.0.0:3306, not tunnel-routed) → risk = bad LAN device, not internet. Ubuntu apt has **no 8.4.13 yet** (candidate still 8.4.11). | host `mysql-server` 8.4.11 | Wait for Ubuntu to ship 8.4.13+ (then `apt upgrade`), or add Oracle MySQL apt repo. Low urgency (LAN-only). |
+| 9.3-N1 | LOW | ✅ **RESOLVED 2026-10-21** — **nginx** (invest-hub client) bumped `1.27-alpine` → `1.31-alpine` in the invest-hub repo `client/Dockerfile`; CI rebuilt + redeployed (image 976a00c55f2c, 18:53Z); running `nginx/1.31.7` = at/above the "not vulnerable" floor (1.31.7+) for all 5 advisories. Note: mainline 1.31 chosen over stable 1.30 — fully patched either way. Config re-verified minimal (listen 80, try_files, proxy_pass only). | `choukalos/invest-hub` → `client/Dockerfile` | Done. (Future: consider pinning exact patch version, e.g. `nginx:1.31.7-alpine`, for reproducibility.) |
+| 9.3-H1 | LOW | **Hugo 0.165.0** → 0.168.0. Recent advisories are build-time/theme + 2 stored-XSS in generated HTML; blog content is own git-synced repo → low runtime risk. | blog build (Hugo) | Rebuild blog on Hugo 0.168.0. |
+| 9.3-O1 | MED | **Open WebUI 0.11.4** behind a 2026-10-18 advisory (fixed 0.12.2; latest 0.12.3) **and** running with placeholder `WEBUI_SECRET_KEY=replace-with-a-long-random-string` (`.env:37`). **LAN-only** (0.0.0.0:3000, no public route). | `compose/compose.ai-core.yml`, `.env:37` | Set a real random `WEBUI_SECRET_KEY`; bump image to `:0.12.3`. (Open question: still needed?) |
+| 9.3-V1 | INFO | **cloudflared 2026.9.3** → 2026.10.3 (no CVE, just lag). **Qdrant 1.18.1** → 1.19.2 (LAN-only, no critical CVE). | `compose/*.yml` | Optional version bumps. |
+
+### 9.4 Overlap with existing plan
+- Secret sprawl = **F6/F7** above (master key + 0.0.0.0 bindings). No new finding.
+- Caddy key-gate gap = **F1** (still open). The CVE cross-check confirms Caddy *itself* is patched, but the missing public-route gate is unchanged.
+- **Caveat:** only the 6 known tunnel domains were verified. If the Cloudflare Tunnel has extra public hostnames in the CF dashboard (pointing straight at other services, bypassing Caddy), review those separately.
