@@ -101,6 +101,11 @@ def _normalize_hit(hit: dict, source: str) -> Dict[str, Any]:
         "score": float(hit.get("score", 0.0) or 0.0),
         "source": source,
         "metadata": hit.get("metadata", {}) or {},
+        # mem0 2.0.19 get_all hits carry created_at/updated_at at the TOP
+        # LEVEL (not in metadata) — carry them through so callers (sweep
+        # lookback, introspection) can filter by age.
+        "created_at": hit.get("created_at"),
+        "updated_at": hit.get("updated_at"),
     }
 
 
@@ -198,6 +203,7 @@ def learn_from_turn(
     importance: str = "normal",
     confidence: str = "normal",
     infer: bool = True,
+    prompt: Optional[str] = None,
 ) -> List[str]:
     """Extract + store durable facts from a conversation turn.
 
@@ -247,7 +253,7 @@ def learn_from_turn(
 
     def _add_op():
         return client._ensure_client().add(
-            cleaned, user_id=user_id, metadata=metadata, infer=infer
+            cleaned, user_id=user_id, metadata=metadata, infer=infer, prompt=prompt
         )
 
     t0 = time.monotonic()
@@ -366,7 +372,10 @@ def list_memories(user_id: str, limit: int = 20) -> List[dict]:
         )
 
     try:
-        raw = client._with_timeout(_get_all_private)
+        # get_all is a Qdrant scroll: ~2.3s measured cold, so the 1.5s
+        # chat-retrieval budget makes it flaky. List runs in non-blocking
+        # contexts (sweep, admin, MCP introspection) → admin budget.
+        raw = client._with_timeout(_get_all_private, timeout_s=cfg.admin_timeout_s)
         for h in _as_list(raw):
             nh = _normalize_hit(h, "private")
             if nh["id"] not in seen_ids:
@@ -382,7 +391,7 @@ def list_memories(user_id: str, limit: int = 20) -> List[dict]:
             )
 
         try:
-            raw = client._with_timeout(_get_all_household)
+            raw = client._with_timeout(_get_all_household, timeout_s=cfg.admin_timeout_s)
             for h in _as_list(raw):
                 nh = _normalize_hit(h, "household")
                 if nh["id"] not in seen_ids:

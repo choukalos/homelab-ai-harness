@@ -901,6 +901,85 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (2nd entry)** — **Sweep residuals (b)+(c) resolved: GitHub input
+  rebuilt, two latent sweep bugs fixed, mem0 capture made reliable.**
+  The sweep had been re-emitting the same stale bullets daily (self-feeding
+  loop) because its inputs were stale. Found + fixed, all verified live:
+  1. **GitHub input (residual b):** the public events API now returns
+     truncated `PushEvent` payloads (`payload.commits` empty, `size` null),
+     so pushes were silently dropped. `recent_activity` now collects
+     pushes via the repos API — `GET /users/{login}/repos?sort=pushed&
+     type=owner` (public repos pushed in window) then
+     `GET /repos/{full}/commits?since={cutoff}` (≤5 first-line messages per
+     repo, ≤5 repos); PR/issue events still from the events API (payloads
+     intact). Verified: 5 repos / this week's commits captured (data-hub,
+     report-hub, homelab-ai-harness, homelab-internal-portal, homelab-blog).
+  2. **Memories lookback was a no-op:** mem0 2.0.19 `get_all` hits carry
+     `created_at`/`updated_at` at the TOP LEVEL of the hit (`metadata` is a
+     passthrough copy without them), so the sweep's 7-day cutoff read
+     `metadata.updated_at` → always empty → ALL memories kept regardless of
+     age. Fixed in `recent_activity._recent_memories` (top-level first,
+     metadata fallback) AND `memory.interface._normalize_hit` now carries
+     `created_at`/`updated_at` through. Verified: 7-day lookback now
+     correctly returns 0 for the 4 Sept memories.
+  3. **`list_memories` flakily timed out:** it used the 1.5s chat-retrieval
+     budget, but `get_all` is a Qdrant scroll measured at ~2.3s cold →
+     intermittent empty lists (sweep, admin, MCP). Now uses the 10s admin
+     budget (non-blocking contexts). Verified: 4 hits in 2.4s, no timeout.
+  4. **Mem0 stored 0 facts from the fresh summary:** the default mem0
+     extraction prompt treats a dense dated work-log as "no personal facts"
+     (observed 0/0 on the 9-bullet summary; 1–2 on shorter/first-person
+     variants — model variance). Fix: `learn_from_turn` gained an optional
+     `prompt` param (passed to mem0 `add`); the sweep passes a work-log
+     extraction prompt ("extract durable facts about ongoing projects;
+     merge related items; keep dates; don't invent"). Verified: run-now
+     sweep stored 5 facts (data-hub v2b/v3.2, report-hub v3.2, deploy
+     runners, portal tile, arcade games) + KB fact + fresh artifact.
+  5. **Residual (c) `jobs=0` — by design, no code change:** scheduled jobs
+     run under `service` (D10 + Phase 7 isolation); the jobs input only
+     sees jobs the user explicitly triggered (chat surface with the user's
+     key, or mcp_skills from pi). With GitHub fixed, the sweep's main
+     activity signal (repos) is fresh daily, so the empty jobs input no
+     longer produces stale output. Test pollution from verification (11
+     facts) admin-deleted; store = original 4 + the sweep's 5 new facts.
+  Deploy note: `memory/` package is BAKED into the `skill-runner:local`
+  image (Dockerfile `COPY memory/`), so interface changes need
+  `docker build -t skill-runner:local skills/runner` + recreate (skills
+  themselves are bind-mounted and hot). Image rebuilt + recreated
+  2026-10-21; no 401s; health green.
+
+- **2026-10-21** — **Ops incident: `MEMORY_LITELLM_KEY` deleted from
+  LiteLLM → every mem0 embed/extract call 401 (writes AND semantic
+  search dead) since ~2026-10-05.** Symptom: `daily-recent-activity`
+  sweep ran daily but `learn_from_turn` failed (401, `token_not_found_in_
+  db`); `memory_search` always returned 0 hits (query-embedding 401, silent
+  degradation); only `memory_list` + the sweep's `kb_user` write worked.
+  Root cause: the dedicated `memory-service` key was deleted from the
+  LiteLLM token table (user-key rotation 2026-10-04/10/17; `.env` rotated
+  2026-10-17) while `MEMORY_LITELLM_KEY` in `.env` still pointed at the
+  dead key; skill-runner (started 2026-10-15) also carried stale
+  `SKILL_RUNNER_API_KEY`/`MEMORY_USER_KEYS` env. **Fix (2026-10-21):**
+  re-minted `memory-service` key scoped to `[matrix-coder,
+  homelab-embedding-v1]` (no budget), updated `.env`, recreated
+  skill-runner via `docker compose --env-file ../.env up -d` (NOTE: plain
+  `docker compose up -d` from `compose/` WITHOUT `--env-file ../.env`
+  bakes EMPTY values into all `${VAR}` env — first attempt did this;
+  `homelab.sh` always passes `--env-file`). Verified live: search hit
+  (Porsche fact, score 0.80); explicit remember stored + retrieved
+  (score 0.72, `source=direct_user`) then admin-deleted (store back to 4
+  points); run-now sweep completed with no 401s (mem0 stored 0 facts —
+  correct, inputs were the 4 existing memories only). **Residual:**
+  (a) `mcp_memory` container's `MEMORY_USER_KEY` fallback was the OLD
+  chuck key — recreated 2026-10-21 with the current `LITELLM_KEY_CHUCK`
+  (compose already interpolates it) so pi-on-Mac (no forwarded
+  Authorization) keeps working; (b) sweep GitHub input
+  is dead in practice: public events API returns truncated PushEvent
+  payloads (0 commit messages) so pushes are filtered out — only PR/
+  issue events would count — **FIXED in the 2nd 2026-10-21 entry above**;
+  (c) sweep `jobs=0` for chuck because recent jobs run under `service`
+  identity (D10), not the user — **by design, explained in that entry**.
+
+
 - **2026-08-29** — **KB v2 rebuild COMPLETE (separate workstream,
   `kb-todo.md` K1–K7) — D6 CLOSED; D9 left open per owner.**
   `mcp_knowledge` v2: Qdrant `kb_*` collections (one per domain, 768-dim

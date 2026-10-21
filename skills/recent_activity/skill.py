@@ -182,7 +182,16 @@ def _recent_memories(user: str, days: int) -> list[dict]:
         recent: list[dict] = []
         for h in hits:
             meta = h.get("metadata") or {}
-            ts = str(meta.get("updated_at") or meta.get("created_at") or "")
+            # mem0 2.0.19 get_all hits carry created_at/updated_at at the
+            # TOP LEVEL of the hit (metadata is a passthrough copy without
+            # them). Check both so the 7-day cutoff actually filters.
+            ts = str(
+                h.get("updated_at")
+                or h.get("created_at")
+                or meta.get("updated_at")
+                or meta.get("created_at")
+                or ""
+            )
             # Keep recent items; keep undated items too (context beats none).
             if not ts or ts >= cutoff:
                 recent.append({"text": str(h.get("text") or "")[:300], "ts": ts[:16]})
@@ -192,11 +201,8 @@ def _recent_memories(user: str, days: int) -> list[dict]:
         return []
 
 
-def _github_events(login: str, days: int) -> list[dict]:
-    """Public GitHub events for a known identity (token required)."""
-    if not GITHUB_TOKEN:
-        return []
-    url = f"https://api.github.com/users/{login}/events/public?per_page=100"
+def _github_api(url: str) -> Any:
+    """GET a GitHub API URL with the token; return parsed JSON or None."""
     req = urllib.request.Request(
         url,
         headers={
@@ -207,53 +213,95 @@ def _github_events(login: str, days: int) -> list[dict]:
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            events = json.loads(r.read().decode())
+            return json.loads(r.read().decode())
     except Exception as exc:  # noqa: BLE001
-        logger.warning("recent_activity: GitHub events failed for %s: %s", login, exc)
+        logger.warning("recent_activity: GitHub API failed for %s: %s", url, exc)
+        return None
+
+
+def _github_events(login: str, days: int) -> list[dict]:
+    """GitHub activity for a known identity (token required).
+
+    Pushes: the public events API returns truncated ``PushEvent`` payloads
+    (``payload.commits`` empty, ``size`` null) since ~2026-10, so pushes
+    come from the repos API instead: recently-pushed public repos owned by
+    the login, then per-repo commit messages. PRs/issues: still from the
+    events API (those payloads are intact).
+    """
+    if not GITHUB_TOKEN:
         return []
     cutoff = _now() - timedelta(days=days)
+    cutoff_iso = cutoff.isoformat().replace("+00:00", "Z")
     out: list[dict] = []
-    for ev in events:
-        try:
-            ts = datetime.fromisoformat(ev["created_at"].replace("Z", "+00:00"))
-        except Exception:  # noqa: BLE001
-            continue
-        if ts < cutoff:
-            continue
-        et = ev.get("type")
-        repo = ev.get("repo", {}).get("name", "")
-        if et == "PushEvent":
+
+    # --- pushes via repos + commits API (events PushEvents are truncated) ---
+    repos = _github_api(
+        f"https://api.github.com/users/{login}/repos?sort=pushed&per_page=30&type=owner"
+    )
+    if isinstance(repos, list):
+        for r in repos:
+            if len(out) >= MAX_GITHUB_EVENTS:
+                break
+            if r.get("private"):
+                continue
+            pa = r.get("pushed_at") or ""
+            try:
+                if datetime.fromisoformat(pa.replace("Z", "+00:00")) < cutoff:
+                    continue
+            except Exception:  # noqa: BLE001
+                continue
+            full_name = r.get("full_name") or r.get("name") or ""
+            if not full_name:
+                continue
+            commits = _github_api(
+                f"https://api.github.com/repos/{full_name}/commits?since={cutoff_iso}&per_page=30"
+            )
+            if not isinstance(commits, list):
+                continue
             msgs = [
-                c.get("message", "").split("\n")[0]
-                for c in ev.get("payload", {}).get("commits", [])
-                if c.get("message")
+                (c.get("commit", {}).get("message") or "").split("\n")[0]
+                for c in commits
+                if (c.get("commit", {}).get("message") or "").strip()
             ][:5]
             if msgs:
-                out.append({"repo": repo, "commits": msgs, "ts": ev["created_at"][:10]})
-        elif et == "PullRequestEvent":
-            action = ev.get("payload", {}).get("action")
-            if action in ("opened", "closed", "merged"):
-                out.append(
-                    {
-                        "repo": repo,
-                        "what": f"PR {action}: "
-                        + str(ev.get("payload", {}).get("pull_request", {}).get("title", ""))[:100],
-                        "ts": ev["created_at"][:10],
-                    }
-                )
-        elif et == "IssuesEvent":
-            action = ev.get("payload", {}).get("action")
-            if action in ("opened", "closed"):
-                out.append(
-                    {
-                        "repo": repo,
-                        "what": f"issue {action}: "
-                        + str(ev.get("payload", {}).get("issue", {}).get("title", ""))[:100],
-                        "ts": ev["created_at"][:10],
-                    }
-                )
-        if len(out) >= MAX_GITHUB_EVENTS:
-            break
+                out.append({"repo": full_name, "commits": msgs, "ts": pa[:10]})
+
+    # --- PRs + issues via events API (payloads intact) ---
+    events = _github_api(f"https://api.github.com/users/{login}/events/public?per_page=100")
+    if isinstance(events, list):
+        for ev in events:
+            if len(out) >= MAX_GITHUB_EVENTS:
+                break
+            try:
+                ts = datetime.fromisoformat(ev["created_at"].replace("Z", "+00:00"))
+            except Exception:  # noqa: BLE001
+                continue
+            if ts < cutoff:
+                continue
+            et = ev.get("type")
+            repo = ev.get("repo", {}).get("name", "")
+            if et == "PullRequestEvent":
+                action = ev.get("payload", {}).get("action")
+                if action in ("opened", "closed", "merged"):
+                    out.append(
+                        {
+                            "repo": repo,
+                            "what": f"PR {action}: "
+                            + str(ev.get("payload", {}).get("pull_request", {}).get("title", ""))[:100],
+                            "ts": ev["created_at"][:10],
+                        }
+                    )
+            elif et == "IssuesEvent":
+                action = ev.get("payload", {}).get("action")
+                if action in ("opened", "closed"):
+                    out.append(
+                        {
+                            "repo": repo,
+                            "what": f"issue {action}: "
+                            + str(ev.get("payload", {}).get("issue", {}).get("title", ""))[:100],
+                            "ts": ev["created_at"][:10],
+                        }
+                    )
     return out
 
 
@@ -310,7 +358,13 @@ def _write_kb(client: Any, user: str, date_str: str, summary: str) -> bool:
 
 
 def _write_memory(user: str, date_str: str, summary: str) -> bool:
-    """Mem0 write for the user (source=scheduled; LLM-extracted facts)."""
+    """Mem0 write for the user (source=scheduled; LLM-extracted facts).
+
+    Uses a work-log extraction prompt: the default mem0 prompt treats a
+    dense, dated activity summary as "no personal facts" and stores 0
+    (observed live 2026-10-21), while the work-log prompt reliably extracts
+    durable project facts (shipped features, infra changes).
+    """
     try:
         from memory import interface
 
@@ -324,6 +378,13 @@ def _write_memory(user: str, date_str: str, summary: str) -> bool:
             ],
             source="scheduled",
             importance="normal",
+            prompt=(
+                "The user message is a weekly work-activity summary of the user's own "
+                "project work. Extract durable facts about the user's ongoing projects "
+                "and work: what they are building, features shipped, and infrastructure "
+                "changes. These ARE worth remembering as user facts. Merge related items "
+                "into concise facts. Keep meaningful dates. Do not invent details."
+            ),
         )
         logger.info("recent_activity: mem0 stored %d fact(s) for %s", len(ids), user)
         return True
