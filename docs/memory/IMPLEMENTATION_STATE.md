@@ -901,6 +901,48 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (9th entry)** — **Cold-start degradation flag + 1b
+  `kb_medical` verification + 2b Dylan GitHub identity.**
+  1. **Degraded/cold-start flag (client-visible retry signal).** The
+     first search after a process start can hit the retrieval timeout
+     while Qdrant/embedding init runs (the startup warmup thread races
+     the first request) — an empty result then meant "transient" but
+     looked like "no memories". Now:
+     - `interface.LAST_SEARCH` side-channel (`{degraded, reason, retry}`)
+       updated by every `search_memory` call (return value stays a plain
+       list — non-breaking for the chat path); reset at call start so a
+       stale flag never leaks into the next response. `_search_scopes`
+       reports the failure kind (`timeout` vs `error` — both have empty
+       `str()`, classified by type: `TimeoutError` covers
+       `concurrent.futures.TimeoutError`, `MemoryTimeout` added explicitly).
+     - First search since process start that times out → reason
+       `"cold_start: first search after process start (Qdrant/embedding
+       init) — retry once"`; later timeouts → `"timeout"`; other
+       failures → `"error"`. `retry=true` whenever degraded.
+     - `POST /api/memory/search` response now carries `degraded`,
+       `degraded_reason`, `retry` (always present; non-breaking
+       additions). `mcp_memory` passes the response through; the
+       `memory_search` tool description + docstring document the retry
+       contract ("if retry=true, call memory_search again ONCE before
+       concluding there are no memories").
+     - Live-verified: restart + immediate search (100ms test budget) →
+       `degraded=true, reason=cold_start…, retry=true, count=0`; retry →
+       6 hits, flag clean. Restored `MEMORY_TIMEOUT_MS=1500`.
+     - Unit: `test_search_status_flag` (error path, success clears flag,
+     cold-start tagging, warm-timeout distinction). 188/188 unit green.
+  2. **1b `kb_medical` verified live** (memory_todo 1b) —
+     `kb_medical` collection created on the fly via
+     `kb_add_fact(kb="medical", description=…)` (persistent manifest);
+     end-to-end in `mcp_knowledge`: add → search (score 0.88) →
+     two-step `kb_forget` → 0 hits after delete (test fact cleaned up).
+     The medical-KB convention already lives in
+     `agents-skills/memory-conventions/SKILL.md`; item 1b closed.
+  3. **2b Dylan GitHub identity** (memory_todo 2b) — `GITHUB_USERS` in
+     `skills/recent_activity/skill.py` maps `"dylan":
+     os.environ.get("GITHUB_USER_DYLAN", "")`; `GITHUB_USER_DYLAN=` added
+     to `.env` (empty until his login is set; the sweep skips empty
+     logins). Deployed with the skill-runner recreate.
+  Images: `skill-runner:local` + `ai-mcp-mcp_memory` rebuilt + recreated.
 - **2026-10-21 (8th entry)** — **Deploy + live A/B verification of the
   retrieval-quality phases (1–3).** `skill-runner:local` rebuilt from the
   Phase 3 tree + recreated; all three phases confirmed live in-container.

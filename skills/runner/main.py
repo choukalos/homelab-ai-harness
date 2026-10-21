@@ -1373,7 +1373,21 @@ def memory_search_scoped(
         except (TypeError, ValueError):
             k = None
     hits = interface.search_memory(user_id, body.query, top_k=k)
-    return {"user_id": user_id, "count": len(hits), "memories": hits}
+    # Status side-channel: degraded=true means the retrieval backend
+    # partially failed (e.g. cold-start timeout on the first search after
+    # a process start) and the empty/partial result is TRANSIENT — clients
+    # should retry once when retry=true. A clean response has
+    # degraded=false and the fields are always present (non-breaking
+    # additions to the response shape).
+    st = interface.LAST_SEARCH
+    return {
+        "user_id": user_id,
+        "count": len(hits),
+        "memories": hits,
+        "degraded": st["degraded"],
+        "degraded_reason": st["reason"],
+        "retry": st["retry"],
+    }
 
 
 @app.post("/api/memory/list")

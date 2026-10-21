@@ -51,6 +51,9 @@ GITHUB_TOKEN = os.environ.get("GITHUB_ACCESS_TOKEN", "")
 # user_id -> GitHub login. ONLY users with a known identity are scanned.
 GITHUB_USERS: dict[str, str] = {
     "chuck": os.environ.get("GITHUB_USER_CHUCK", "choukalos"),
+    # Dylan onboarding (memory_todo 2b): empty until his login is set in
+    # .env (GITHUB_USER_DYLAN) — empty login is skipped by the sweep.
+    "dylan": os.environ.get("GITHUB_USER_DYLAN", ""),
 }
 KB_NAME = os.environ.get("RECENT_ACTIVITY_KB", "user")  # kb_user collection
 MAX_JOBS = int(os.environ.get("RECENT_ACTIVITY_MAX_JOBS", "40"))

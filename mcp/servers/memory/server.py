@@ -116,7 +116,11 @@ mcp = FastMCP(
     name="memory_search",
     description=(
         "Semantic search over the authenticated user's long-term memories "
-        "(private + household). Returns hits with id, text, score, source."
+        "(private + household). Returns hits with id, text, score, source. "
+        "Response also carries degraded/retry: if degraded=true the backend "
+        "retrieval partially failed (e.g. cold-start timeout right after a "
+        "restart) and results may be empty — if retry=true, call "
+        "memory_search again ONCE before concluding there are no memories."
     ),
 )
 def memory_search(
@@ -131,7 +135,9 @@ def memory_search(
         top_k: Max hits to return (1-20; default: server config, usually 6).
 
     Returns:
-        {user_id, count, memories: [{id, text, score, source, metadata}]}.
+        {user_id, count, memories: [{id, text, score, source, metadata}],
+         degraded, degraded_reason, retry}. degraded=true means the search
+        backend partially failed (transient) — retry once when retry=true.
     """
     payload: dict = {"query": query}
     if top_k is not None:

@@ -43,6 +43,16 @@ _cfg: Optional[MemoryConfig] = None
 _client: Optional[MemoryClient] = None
 _lock = threading.Lock()
 
+# ── Search status side-channel (cold-start / degradation flag) ────────
+# ``search_memory`` keeps returning a plain list (non-breaking for the
+# chat path), but every call updates ``LAST_SEARCH`` so the REST/MCP
+# surfaces can surface a "degraded — retry" signal. This matters most
+# for COLD START: the first search after process start can hit the
+# retrieval timeout while Qdrant/embedding init runs, and an empty
+# result then means "transient — retry once", not "no memories".
+LAST_SEARCH: Dict[str, Any] = {"degraded": False, "reason": "", "retry": False}
+_first_search_done = False
+
 
 def _get_config() -> MemoryConfig:
     global _cfg
@@ -70,12 +80,13 @@ def _get_client() -> MemoryClient:
 
 def _reset_singleton() -> None:
     """Test hook: drop the cached config + client."""
-    global _cfg, _client
+    global _cfg, _client, _first_search_done
     with _lock:
         if _client is not None:
             _client.reset()
         _cfg = None
         _client = None
+        _first_search_done = False
 
 
 def _valid_user(user_id: Optional[str]) -> bool:
@@ -275,10 +286,12 @@ def _search_scopes(
     Each op carries the retrieval timeout (``cfg.timeout_s``); the total
     wait is capped at 2x that (the client pool has enough workers that
     wall time is ~one op, not the sum — the pre-3b single-query path also
-    ran 2 ops, sequentially). Returns ``(per_query_hits, degraded)`` where
-    ``per_query_hits[i]`` is the scope-merged, deduped, threshold-gated
-    hit list for ``queries[i]``. Any op failure degrades (empty list for
-    that query/scope) — never raises into the chat path.
+    ran 2 ops, sequentially). Returns ``(per_query_hits, degraded,
+    reason)`` where ``per_query_hits[i]`` is the scope-merged, deduped,
+    threshold-gated hit list for ``queries[i]``. ``reason`` is
+    ``"timeout"`` or ``"error"`` when degraded ("" when healthy) so the
+    caller can surface a retry hint. Any op failure degrades (empty list
+    for that query/scope) — never raises into the chat path.
     """
     scopes = [("private", user_id)]
     if cfg.household_enabled:
@@ -296,6 +309,7 @@ def _search_scopes(
     per_query: List[List[dict]] = [[] for _ in queries]
     seen: List[set] = [set() for _ in queries]
     degraded = False
+    reason = ""
     budget_end = time.monotonic() + 2.0 * cfg.timeout_s
     for fut, qi, scope_name in futures:
         remaining = max(0.05, budget_end - time.monotonic())
@@ -305,6 +319,14 @@ def _search_scopes(
             logger.warning("memory search (%s, query %d) failed: %s",
                            scope_name, qi, e)
             degraded = True
+            if not reason:
+                # TimeoutError (built-in) covers
+                # concurrent.futures.TimeoutError (budget exhausted);
+                # MemoryTimeout is the per-op timeout. Both have empty
+                # str(), so classify by type, not message.
+                reason = ("timeout"
+                          if isinstance(e, (TimeoutError, MemoryTimeout))
+                          else "error")
             _metrics.get_metrics().record_error("search")
             continue
         for h in _as_list(raw):
@@ -312,7 +334,7 @@ def _search_scopes(
             if nh["id"] not in seen[qi] and nh["score"] >= threshold:
                 seen[qi].add(nh["id"])
                 per_query[qi].append(nh)
-    return per_query, degraded
+    return per_query, degraded, reason
 
 
 # ── Public API ────────────────────────────────────────────────────────
@@ -336,8 +358,18 @@ def search_memory(
     parallel with the original and merged with reciprocal rank fusion —
     catches facts phrased differently. Each query is still threshold-gated
     on its own raw scores.
+
+    Side-channel: every call updates the module-level ``LAST_SEARCH``
+    dict (``{degraded, reason, retry}``) so the REST/MCP surfaces can
+    tell a TRANSIENT empty (cold-start timeout — retry once) from a real
+    "no memories". The return value stays a plain list.
     """
+    global _first_search_done
     cfg = _get_config()
+    # Reset the status side-channel for this call — the early returns
+    # below leave it clean, so a stale degraded flag from a previous
+    # request can never leak into the next REST/MCP response.
+    LAST_SEARCH.update(degraded=False, reason="", retry=False)
     if not cfg.retrieval_allowed:
         return []
     if not _valid_user(user_id) or not query or not str(query).strip():
@@ -357,10 +389,21 @@ def search_memory(
         if subs:
             queries = [query] + subs
 
-    per_query, degraded = _search_scopes(
+    per_query, degraded, reason = _search_scopes(
         client, cfg, user_id, queries, k, threshold
     )
     hits = per_query[0] if len(queries) == 1 else _merge_rrf(per_query)
+
+    # Status side-channel: surface degradation (esp. cold start) so
+    # REST/MCP clients can retry once instead of concluding "no
+    # memories". One retry is cheap; the reason string carries the
+    # detail (cold_start vs timeout vs error).
+    if degraded:
+        if not _first_search_done and reason == "timeout":
+            reason = ("cold_start: first search after process start "
+                      "(Qdrant/embedding init) — retry once")
+        LAST_SEARCH.update(degraded=True, reason=reason, retry=True)
+    _first_search_done = True
 
     # Ranking (3a/3e): keep the raw score for transparency, rank by the
     # boosted score. The threshold gate above already ran on raw scores, so

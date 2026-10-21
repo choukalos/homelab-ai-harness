@@ -1121,6 +1121,117 @@ def test_multiquery():
         interface._reset_singleton()
 
 
+def test_search_status_flag():
+    print("search status side-channel (cold-start / degraded flag):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_TIMEOUT_MS",
+    )}
+
+    class _BoomMem0:
+        def search(self, query, filters=None, top_k=10):
+            raise RuntimeError("qdrant down")
+
+    class _BoomClient:
+        def __init__(self):
+            self._mem = _BoomMem0()
+            self._pool = ThreadPoolExecutor(max_workers=4)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    class _OkMem0:
+        def search(self, query, filters=None, top_k=10):
+            return [{"id": "1", "memory": "m", "score": 0.9}]
+
+    class _OkClient:
+        def __init__(self):
+            self._mem = _OkMem0()
+            self._pool = ThreadPoolExecutor(max_workers=4)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    class _SlowMem0:
+        def search(self, query, filters=None, top_k=10):
+            time.sleep(1.0)  # longer than the 2x budget
+            return []
+
+    class _SlowClient:
+        def __init__(self):
+            self._mem = _SlowMem0()
+            self._pool = ThreadPoolExecutor(max_workers=4)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+
+        # ── hard error: degraded + reason=error, retry hint ────────
+        interface._reset_singleton()
+        interface._first_search_done = True  # skip the cold-start path
+        interface._client = _BoomClient()
+        hits = interface.search_memory("chuck", "anything")
+        check("degraded search returns []", hits == [])
+        check("LAST_SEARCH degraded", interface.LAST_SEARCH["degraded"] is True)
+        check("LAST_SEARCH reason=error",
+              interface.LAST_SEARCH["reason"] == "error",
+              interface.LAST_SEARCH["reason"])
+        check("LAST_SEARCH retry hint", interface.LAST_SEARCH["retry"] is True)
+
+        # ── success clears the flag ────────────────────────────────
+        interface._client = _OkClient()
+        hits = interface.search_memory("chuck", "anything")
+        check("success returns hits", len(hits) == 1)
+        check("LAST_SEARCH clean after success",
+              interface.LAST_SEARCH["degraded"] is False
+              and interface.LAST_SEARCH["reason"] == ""
+              and interface.LAST_SEARCH["retry"] is False)
+
+        # ── cold start: FIRST search since process start times out ─
+        os.environ["MEMORY_TIMEOUT_MS"] = "300"  # budget = 600ms
+        interface._reset_singleton()  # _first_search_done -> False
+        interface._client = _SlowClient()
+        hits = interface.search_memory("chuck", "anything")
+        check("cold-start: returns []", hits == [])
+        check("cold-start: reason tagged",
+              interface.LAST_SEARCH["reason"].startswith("cold_start"),
+              interface.LAST_SEARCH["reason"])
+        check("cold-start: retry hint", interface.LAST_SEARCH["retry"] is True)
+
+        # ── warm timeout: plain timeout, not cold_start ────────────
+        interface._client = _SlowClient()
+        interface.search_memory("chuck", "anything")
+        check("warm timeout: reason=timeout",
+              interface.LAST_SEARCH["reason"] == "timeout",
+              interface.LAST_SEARCH["reason"])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -1136,6 +1247,7 @@ def main():
     test_phase8_admin()
     test_ranking_provenance()
     test_multiquery()
+    test_search_status_flag()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")

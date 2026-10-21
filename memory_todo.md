@@ -11,6 +11,17 @@ research-note convention, medical KB split). Distributed via the existing
 `agents-skills/` path — `git pull` + pi restart/`/reload` on each client,
 no install step.
 
+**Done 2026-10-21 (retrieval-quality phases):** 3a–3e all CODE DONE,
+deployed (skill-runner:local rebuilt + recreated), and live A/B verified —
+`MEMORY_MULTIQUERY=true` now on in `.env`. See IMPLEMENTATION_STATE.md
+phase log (5th–8th entries). Cold-start degradation now flagged in the
+search response (`degraded`/`degraded_reason`/`retry`) so clients can
+retry once instead of concluding "no memories".
+
+**Done 2026-10-21 (1b + 2b):** `kb_medical` KB domain verified live
+(created on the fly, searched, two-step forget, test fact cleaned up);
+Dylan's GitHub identity wired into the recent_activity sweep.
+
 ## 1. Research-outcome capture (from pi sessions)
 
 When research is done IN PI (e.g. wife's medical condition), the outcome
@@ -23,14 +34,16 @@ lives only in the session — nothing lands in memory. Two parts:
   `agents-skills/` dir (already in pi's settings) instead of a per-machine
   `~/.pi/agent/skills/` copy — version-controlled, one source of truth.
 - **1b. `kb_medical` KB domain for reference-grade material (small).**
-  mem0 is add-only (changes become new supersede statements); the KB
-  (`mcp_knowledge`) supports `kb_correct`/`kb_forget` — better for
-  evolving reference material like a medical condition (diagnosis,
-  symptoms, treatment, vet, next appointment). Create a `kb_medical`
-  collection (kb_add_fact creates collections on the fly — just use
-  `kb="medical"`), and a pi convention: medical reference → KB,
-  conversational facts → memory. Both stores are already searchable from
-  pi (mcp_knowledge + mcp_memory).
+  ✅ DONE + VERIFIED 2026-10-21 — `kb_medical` collection exists (created
+  on the fly via `kb_add_fact(kb="medical", description=...)` with a
+  persistent manifest description). Live-verified end-to-end in
+  `mcp_knowledge`: add → search (score 0.88) → two-step `kb_forget`
+  (candidates → confirmed delete) → clean. Convention lives in
+  `agents-skills/memory-conventions/SKILL.md`: medical reference-grade
+  material (diagnosis, symptoms, treatment, vet, next appointment) →
+  `kb_medical` (evolving, correctable via kb_correct/kb_forget);
+  conversational durable facts → `mcp_memory`. Both stores searchable
+  from pi (mcp_knowledge + mcp_memory).
 
 ## 2. Dylan onboarding (trivial once he's ready)
 
@@ -41,45 +54,48 @@ lives only in the session — nothing lands in memory. Two parts:
   `MEMORY_USER_KEY` (chuck's key) — so the header matters. Same key works
   for the Siri chat surface (`/api/chat`) — his identity is already mapped
   (`MEMORY_USER_KEYS=dylan=LITELLM_KEY_DYLAN`).
-- **2b. Sweep GitHub identity (if he has GitHub).** The sweep only scans
-  users in `GITHUB_USERS` (`skills/recent_activity/skill.py`, line ~51):
-  add `"dylan": os.environ.get("GITHUB_USER_DYLAN", "")` (and set
-  `GITHUB_USER_DYLAN` in `.env`) so his repo activity feeds his sweep.
+- **2b. Sweep GitHub identity (if he has GitHub).** ✅ DONE 2026-10-21 —
+  `GITHUB_USERS` in `skills/recent_activity/skill.py` now maps
+  `"dylan": os.environ.get("GITHUB_USER_DYLAN", "")`; `GITHUB_USER_DYLAN=`
+  added to `.env` (empty — his repo activity is skipped until his login
+  is set; the sweep already skips empty logins).
 - **2c. First-use ritual.** First thing he says: "remember this: ..." —
   his memory starts accumulating immediately (private scope; household
   facts from chuck are already visible to him).
 
 ## 3. Retrieval quality (medium — do when it feels needed)
 
-**Phase 1 (3a/3c/3e) CODE DONE 2026-10-21** (deploy + live A/B pending —
-see phase log 5th entry): recency + importance ranking boosts in
-`search_memory` (env-gated, raw-gate invariant), provenance prefix in the
-chat context block, unit suite fixed (stale `prompt=` kwarg fakes).
+**DEPLOYED + LIVE A/B VERIFIED 2026-10-21** (skill-runner:local rebuilt
++ recreated; `MEMORY_MULTIQUERY=true` in `.env`; see phase log 5th–8th
+entries). Cold-start degradation now flagged in the search response
+(`degraded`/`degraded_reason`/`retry` — retry once when true).
 
-- **3a. Recency weighting for volatile topics.** ✅ CODE DONE 2026-10-21 —
+- **3a. Recency weighting for volatile topics.** ✅ DONE + DEPLOYED 2026-10-21 —
   `rank_score = raw × recency × importance` in `search_memory`; recency
   `1 + (max−1)·0.5^(age/halflife)` on `updated_at`/`created_at`
   (`MEMORY_RECENCY_BOOST_MAX=1.2`, `MEMORY_RECENCY_HALF_LIFE_DAYS=30`).
-  Threshold gate stays on the RAW score. Pending: deploy + live A/B.
-- **3b. Multi-query retrieval.** ✅ CODE DONE 2026-10-21 (Phase 2) —
+  Threshold gate stays on the RAW score. Live A/B: fresh fact raw=0.545
+  ranks just under stale raw=0.619 (boost closing the gap).
+- **3b. Multi-query retrieval.** ✅ DONE + DEPLOYED + ON 2026-10-21 (Phase 2) —
   heuristic subqueries (quoted phrases + capitalized entities, no LLM)
   searched in parallel with the original, merged with reciprocal rank
-  fusion (`MEMORY_MULTIQUERY`, off by default; `MEMORY_MULTIQUERY_MAX=3`).
-  Per-query raw-score gating preserved. Pending: deploy + live A/B, then
-  flip on in `.env`.
-- **3c. Provenance in answers.** ✅ CODE DONE 2026-10-21 — context block
+  fusion (`MEMORY_MULTIQUERY=true`; `MEMORY_MULTIQUERY_MAX=3`).
+  Per-query raw-score gating preserved. Live A/B: subquery derived,
+  RRF scores present, no ranking regression vs off.
+- **3c. Provenance in answers.** ✅ DONE + DEPLOYED 2026-10-21 — context block
   bullets carry `[YYYY-MM-DD · source]` + preamble instructs date citation;
   `/api/memory/search` already returned dates (MCP/pi surfaces covered).
-  Pending: deploy.
-- **3d. Weekly memory review digest (trust + pruning).** ✅ CODE DONE
+  Live A/B: `[2026-10-21 · scheduled]` bullets confirmed in the block.
+- **3d. Weekly memory review digest (trust + pruning).** ✅ DONE + DEPLOYED
   2026-10-21 (Phase 3) — new `memory_review` skill: identity-safe per-user
   digest of new/updated private + household memories (ID + date + source
   + importance) with a correction/deletion footer; private artifact;
   scheduled Sun 18:00 CT (`weekly-memory-review`); pi wrapper
-  `agents-skills/memory-review`. Pending: deploy + first live run.
-- **3e. `importance` as a ranker.** ✅ CODE DONE 2026-10-21 — flat
+  `agents-skills/memory-review`. Live run: 5/9 facts in the 7d window
+  (4 stale correctly excluded), artifact on disk.
+- **3e. `importance` as a ranker.** ✅ DONE + DEPLOYED 2026-10-21 — flat
   `MEMORY_IMPORTANCE_BOOST=1.15` for `importance=high` in `rank_score`
-  (same change as 3a). Pending: deploy.
+  (same change as 3a).
 
 ## 4. Optional: pi memory-conventions skill — ✅ DONE 2026-10-21
 
