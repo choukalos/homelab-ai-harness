@@ -37,7 +37,9 @@
 - **Long-term memory (in-process Mem0, Phases 0–9 complete 2026-08-28):**
   automatic pre-request retrieval + post-turn writeback, household scope,
   secret filtering, admin REST (`/api/memory/*`, `X-Api-Key` header) + CLI +
-  `/metrics`. Plan: `memory_todo.md`; state: `docs/memory/IMPLEMENTATION_STATE.md`.
+  `/metrics`. State: `docs/memory/IMPLEMENTATION_STATE.md` (single source
+  of truth; the former root `memory_todo.md` plan ledger was folded in and
+  deleted 2026-10-21).
 - **Observability:** `/metrics` (Prometheus) scraped by VictoriaMetrics
   (job `skill-runner`).
 - **Scheduler:** cron jobs via `dispatch_job()` under `service` identity.

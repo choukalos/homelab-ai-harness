@@ -156,17 +156,65 @@
   containers), research_brief (15 sources, method=mcp), recent_activity
   (kb_add_fact 200), investment_brief SQL + news, morning_brief news,
   deep_research web/kb/crawl extractors (unit-level against live MCP).
+- **2026-10-21 (current state):** Phases 11/11.5 (mcp_memory MCP server —
+  `memory_search`/`memory_list`/`memory_remember` on `thor:8005` SSE,
+  per-user via forwarded Authorization) + Phase 12 (pi write path +
+  household scope) COMPLETE. Retrieval quality (plan items 3a–3e)
+  COMPLETE, deployed, live A/B verified: recency+importance ranking
+  (`rank_score`), heuristic multi-query + RRF (`MEMORY_MULTIQUERY=true`),
+  provenance in the context block, weekly `memory_review` digest skill
+  (Sun 18:00 CT). Cold-start/degraded flag in the search response
+  (`degraded`/`degraded_reason`/`retry` — retry once when true).
+  `kb_medical` KB domain verified live (medical reference material → KB,
+  conversational facts → memory). Pi skills: `agents-skills/
+  memory-conventions` + `agents-skills/memory-review`. Tests: 188 memory
+  unit + 39 identity + 14 skill + 7 yaml. Details: phase log 2026-10-21
+  entries (2nd–9th). The former root `memory_todo.md` (2026-10-21 plan
+  ledger) was folded into this doc and deleted 2026-10-21.
 
 ## Open items / future work (post-completion, 2026-08-29)
 
 - **D9 — Qdrant exposure**: `0.0.0.0:6333` without TLS. Owner decision
   2026-08-29 (revisited after the KB work): **leave as-is** — other
   services/tooling use the port. Revisit if the LAN trust model changes.
-- **Phase 6 — MCP memory tools**: optional read-only memory tools for MCP
-  clients (search/get/list against `mem0_memories`). Gated on a week of
-  production use before building. Design notes: Qdrant JWT RBAC evaluates
-  access BEFORE the existence check (403 not 404); a scoped read-only key
-  per the auth workstream is the natural credential.
+- **Phase 6 — MCP memory tools**: ✅ COMPLETE (2026-09-02 scoped search
+  endpoint + pi wiring; 2026-10-21 `mcp_memory` server) — `mcp_memory`
+  serves `memory_search`/`memory_list`/`memory_remember` on `thor:8005`
+  (SSE), per-user identity via forwarded Authorization (falls back to
+  `MEMORY_USER_KEY` = chuck when absent), LAN-published. Search responses
+  carry the degraded/cold-start flag (see 2026-10-21 9th phase-log entry).
+- **Dylan onboarding (only remaining memory-system work — pending his key)**
+  (2026-10-21 plan items 2a/2c; 2b done):
+  - **2a. His pi/MCP config.** `mcp_memory` is LAN-published on
+    `thor:8005` (SSE). His pi config must connect with HIS key:
+    `Authorization: Bearer <LITELLM_KEY_DYLAN>` (from `.env`, don't
+    commit). Without a forwarded Authorization, the server falls back to
+    `MEMORY_USER_KEY` (chuck's key) — so the header matters. Same key
+    works for the Siri chat surface (`/api/chat`) — his identity is
+    already mapped (`MEMORY_USER_KEYS=dylan=LITELLM_KEY_DYLAN`).
+  - **2c. First-use ritual.** First thing he says: "remember this: ..." —
+    his memory starts accumulating immediately (private scope; household
+    facts from chuck are already visible to him). His pi client also gets
+    the `agents-skills/` memory skills via the same repo clone.
+  - **2b (DONE 2026-10-21).** Sweep GitHub identity wired: `GITHUB_USERS`
+    in `skills/recent_activity/skill.py` maps `"dylan" →
+    GITHUB_USER_DYLAN` (empty in `.env` until his login is set; the sweep
+    skips empty logins).
+- **Memory-system ops notes** (from the 2026-10-21 plan's housekeeping):
+  - `.env` is gitignored — never commit it.
+  - `memory/` is BAKED into `skill-runner:local` (`COPY memory/`):
+    interface changes need `docker build -t skill-runner:local
+    skills/runner` + recreate. `mcp_memory` is baked too (`docker compose
+    -f compose/compose.mcp.yml build mcp_memory` + recreate). Skills
+    under `skills/` are volume-mounted — new skills need no rebuild.
+  - Compose commands from `compose/` always use `--env-file ../.env`.
+  - Test pollution: after any live test of remember/search, admin-delete
+    the test facts (`GET /api/memory/users/{user}` + `DELETE
+    /api/memory/{id}` with `MEMORY_ADMIN_API_KEY`).
+  - `memory_review` artifacts land in
+    `homelab_reports/memory_review/<user>/` (private, never published).
+  - `scripts/memory-regression.sh` requires a clean git tree and leaves
+    Qdrant clean.
 - **Identity map is shared with the per-user key workstream** (complete
   2026-09-04/06; plan file `auth_todo.md` deleted 2026-09-10):
   `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for

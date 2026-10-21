@@ -89,7 +89,8 @@ digest per type stored in the KB via `kb_digest_store` (`attention_transformer`,
 - **`memory-conventions`** — pure instruction skill (no runner job): when to
   `memory_search`/`memory_remember`, the research-note convention, and the
   medical-reference split (reference-grade → `kb_medical` KB, conversational
-  → memory). Closes `memory_todo.md` items 1a + 4 (2026-10-21).
+  → memory). Closes the 2026-10-21 memory-plan items 1a (research-outcome
+  convention) + 4 (pi memory-conventions skill).
 
 ## Verification strategy
 

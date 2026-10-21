@@ -8,7 +8,8 @@ Purpose:
   so the user can review what the assistant has stored about them and
   correct or delete anything wrong before it compounds.
 
-  This is the trust/pruning loop of the memory system (memory_todo 3d):
+  This is the trust/pruning loop of the memory system (2026-10-21 memory
+  plan item 3d):
   extraction is LLM-driven and occasionally wrong; a periodic
   "here's what I've stored about you" digest catches errors early.
 

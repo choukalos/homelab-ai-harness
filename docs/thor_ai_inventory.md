@@ -34,8 +34,8 @@
   8 MCP dispatch,
   **in-process long-term memory** (Mem0 OSS → Qdrant `mem0_memories`, identity
   map, retrieval/writeback, admin REST + CLI, `/metrics`) — see
-  `memory_todo.md` + `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete
-  2026-08-28). Admin endpoints use the `X-Api-Key` header.
+  `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete 2026-08-28;
+  current state 2026-10-21 — retrieval quality, mcp_memory, cold-start flag). Admin endpoints use the `X-Api-Key` header.
 - **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
   `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
   `hf-sd3`. 11 MCP servers / **71 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28; 46 → 56 with `mcp_knowledge` v2 + `mcp_skills` on 2026-08-29; 56 → 64 with the 8 media post-gen edit/file-movement tools on 2026-09-07; 64 → 71 on 2026-09-20: `mcp_memory` added (2 tools) + `mcp_knowledge` digest tools (5) — and transport migrated streamable-http → SSE).
