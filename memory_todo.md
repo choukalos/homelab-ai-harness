@@ -71,10 +71,12 @@ chat context block, unit suite fixed (stale `prompt=` kwarg fakes).
   bullets carry `[YYYY-MM-DD · source]` + preamble instructs date citation;
   `/api/memory/search` already returned dates (MCP/pi surfaces covered).
   Pending: deploy.
-- **3d. Weekly memory review digest (trust + pruning).** A scheduled skill
-  ("here's what I've stored about you this week — correct or delete
-  anything wrong") using `list_memories` + admin delete. Good for
-  catching extraction errors before they compound.
+- **3d. Weekly memory review digest (trust + pruning).** ✅ CODE DONE
+  2026-10-21 (Phase 3) — new `memory_review` skill: identity-safe per-user
+  digest of new/updated private + household memories (ID + date + source
+  + importance) with a correction/deletion footer; private artifact;
+  scheduled Sun 18:00 CT (`weekly-memory-review`); pi wrapper
+  `agents-skills/memory-review`. Pending: deploy + first live run.
 - **3e. `importance` as a ranker.** ✅ CODE DONE 2026-10-21 — flat
   `MEMORY_IMPORTANCE_BOOST=1.15` for `importance=high` in `rank_score`
   (same change as 3a). Pending: deploy.

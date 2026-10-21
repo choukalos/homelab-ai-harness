@@ -1,0 +1,24 @@
+name: memory_review
+version: "1.0"
+description: "Weekly memory review digest — lists the caller's new/updated private + household memories (with IDs + dates) so the user can correct or delete anything wrong. Private artifact, never published."
+inputs:
+  - name: user
+    type: string
+    required: false
+    description: "User to review. Omit for interactive runs (uses the caller's own identity); scheduled runs must set it."
+  - name: days
+    type: integer
+    required: false
+    default: 7
+    description: "Window in days of new/updated memories to list."
+  - name: limit
+    type: integer
+    required: false
+    default: 50
+    description: "Max memories to fetch (private + household merged)."
+config:
+  artifact_dir: /home/chuck/data/media/homelab_reports/memory_review
+tools: []
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 120

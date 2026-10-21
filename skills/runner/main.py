@@ -434,6 +434,7 @@ _SKILL_TIMEOUTS = {
     "business_analyst": 330,
     "content_writer": 510,
     "marketing_strategy": 330,
+    "memory_review": 120,  # matches skill.yml max_runtime (list_memories, no LLM)
     "code_review": 120,
     "repo_maintenance": 120,
 }

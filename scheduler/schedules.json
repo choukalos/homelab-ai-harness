@@ -12,6 +12,18 @@
       "timezone": "America/Chicago"
     },
     {
+      "id": "weekly-memory-review",
+      "name": "Weekly Memory Review (chuck)",
+      "cron": "0 18 * * 0",
+      "skill": "memory_review",
+      "params": {
+        "user": "chuck",
+        "days": 7
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
       "id": "weekday-morning-brief",
       "name": "Weekday Morning Brief",
       "cron": "0 9 * * 1-5",

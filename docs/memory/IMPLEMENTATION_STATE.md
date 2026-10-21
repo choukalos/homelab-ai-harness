@@ -901,6 +901,36 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (7th entry)** — **Retrieval quality Phase 3 (memory_todo
+  3d): weekly memory review digest — the trust + pruning loop.**
+  New skill `skills/memory_review/` (skill.yml + skill.py + test_skill.py):
+  1. **Identity-safe target resolution** — explicit `user` param must be a
+     known personal user (MEMORY_USER_KEYS; never service/unknown); no
+     param → the job's own identity (interactive runs via the caller's
+     key); scheduled jobs carry the service identity, so they MUST pass
+     `user`. Never cross-user.
+  2. **`interface.list_memories(user, limit)`** — the user's own scopes
+     only (private + household merged), read-only w.r.t. memory (the
+     skill never writes or deletes; correction goes through
+     "remember this: ..." / "forget that ...", deletion through
+     `cli/memory-admin.sh`).
+  3. **Window filter** — keeps facts whose created_at or updated_at fall
+     in the last `days` days (default 7, cap 31); undated facts are kept
+     (a trust digest over-includes rather than silently hides).
+  4. **Digest** — markdown with per-scope sections and per-fact ID (8-hex
+     prefix) + date + source + importance + written_by, plus a
+     "How to correct or delete" footer. Saved as a PRIVATE artifact
+     under `homelab_reports/memory_review/<user>/` (per-user dir; never
+     published to the drop zone).
+  5. **Scheduling** — `weekly-memory-review` in `scheduler/schedules.json`
+     (Sun 18:00 America/Chicago, `user: chuck, days: 7`); `memory_review: 120`
+     in main.py `_SKILL_TIMEOUTS` (list_memories ~2.4s cold, no LLM).
+  6. **pi wrapper** — `agents-skills/memory-review/SKILL.md` (description
+     consistent with skill.yml; test_skills_yaml green).
+  Verified: `skills/memory_review/test_skill.py` ALL PASS (13 checks:
+  window math incl. naive-UTC + updated_at refresh, renderer sections /
+  provenance / importance / written_by / footer / empty-window note).
+  Deploy pending with Phases 1–2 (skill-runner rebuild).
 - **2026-10-21 (6th entry)** — **Retrieval quality Phase 2 (memory_todo
   3b): heuristic multi-query retrieval + RRF merge.**
   `skills/runner/memory/interface.py` (baked into `skill-runner:local`):
