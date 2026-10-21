@@ -1,6 +1,6 @@
 ---
 name: market-research-brief
-description: Generic market research brief engine — competitor scan (last month's moves + trend), market size & share, analyst watch, outlook. Driven by market profiles (skills/market_research_brief/profiles/); artifacts retained for multi-year trends, yearly summary on the January run. Free sources only.
+description: Market research brief — competitor scan (last month's moves + trend), market size & share, analyst watch, outlook. Generic engine driven by market profiles (profiles/<market>.yml); monthly cadence, artifacts retained for multi-year trend tracking, yearly summary on the January run. Free sources only; paywalled analyst data is flagged, never fabricated.
 ---
 
 # Market Research Brief

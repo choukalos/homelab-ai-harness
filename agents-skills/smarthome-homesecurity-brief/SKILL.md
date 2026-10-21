@@ -1,6 +1,6 @@
 ---
 name: smarthome-homesecurity-brief
-description: Monthly market research brief for the Smart Home & Home Security market — competitor scan (Ring, SimpliSafe, ADT, Brinks, Xfinity Home, Xfinity Shield, Nest, Arlo + up-and-comers Wyze/Eufy/Blink), market size & share, Parks Associates / Gartner watch, outlook.
+description: Monthly market research brief for the Smart Home & Home Security market — competitor scan (Ring, SimpliSafe, ADT, Brinks, Xfinity Home, Xfinity Shield, Nest, Arlo, plus up-and-comers Wyze/Eufy/Blink), market size & share, Parks Associates / Gartner watch, outlook. Runs the market_research_brief engine with the smarthome_homesecurity profile; publishes smarthome_homesecurity_brief.html to the blog (last 3 dated copies retained).
 ---
 
 # Smart Home & Home Security Brief
