@@ -1321,6 +1321,30 @@ class MemoryListRequest(BaseModel):
     limit: int = 20  # clamped to 1..100
 
 
+class MemoryRememberRequest(BaseModel):
+    text: str
+    importance: Optional[str] = None  # "normal" | "high" (default normal)
+    household: Optional[bool] = None  # write to the shared family scope
+    source: Optional[str] = None  # provenance label (default "pi_chat")
+
+
+# Fact-extraction prompt for the remember path. The default mem0 prompt is
+# tuned for conversational turns and under-extracts from direct statements
+# (observed live 2026-10-21: a 3-sentence medical update extracted 0 facts
+# with the default prompt, 3 with this one). "Under" is the failure mode we
+# care about for explicit remember calls — the caller already decided this
+# is worth keeping.
+REMEMBER_EXTRACT_PROMPT = (
+    "The user message contains personal information the user wants kept in "
+    "long-term memory. Extract the durable facts it states: health/medical "
+    "details, people and relationships, projects, preferences, family "
+    "matters, and key dates. Keep each fact specific and self-contained "
+    "(names, dates, places). Do not drop facts because they seem minor — "
+    "the user explicitly asked to remember this. Do not invent details "
+    "that are not in the message."
+)
+
+
 @app.post("/api/memory/search")
 def memory_search_scoped(
     body: MemorySearchRequest,
@@ -1369,6 +1393,54 @@ def memory_list_scoped(
     limit = max(1, min(int(body.limit or 20), 100))
     hits = interface.list_memories(user_id, limit=limit)
     return {"user_id": user_id, "count": len(hits), "memories": hits}
+
+
+@app.post("/api/memory/remember")
+def memory_remember_scoped(
+    body: MemoryRememberRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Store a durable fact for the CALLER (Phase 12 write path).
+
+    Same per-user auth model as ``/api/memory/search`` — the caller's own
+    ``X-API-Key`` → ``resolve_user_id()``; writes land under THAT user's
+    private scope (or the shared household scope when ``household=true``,
+    which is merged into every user's reads). This is the write half of
+    cross-machine memory: pi (Mac) and any other MCP surface can now store
+    what the user says, scoped to the caller's identity. The policy
+    pre-filter (secret detection, etc.) still applies inside
+    ``learn_from_turn``.
+    """
+    if not SKILL_RUNNER_API_KEY:
+        raise HTTPException(status_code=503, detail="API keys not configured")
+    allowed = [k.strip() for k in SKILL_RUNNER_API_KEY.split(",") if k.strip()]
+    if x_api_key not in allowed:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    user_id = resolve_user_id(x_api_key)
+    if user_id == USER_UNKNOWN:
+        raise HTTPException(status_code=403, detail="Key not mapped to a user")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if len(text) > 4000:
+        raise HTTPException(status_code=400, detail="text too long (max 4000 chars)")
+    importance = body.importance if body.importance in ("normal", "high") else "normal"
+    source = (body.source or "pi_chat")[:32] or "pi_chat"
+    household = bool(body.household)
+    ids = interface.learn_from_turn(
+        user_id,
+        [{"role": "user", "content": text}],
+        source=source,
+        importance=importance,
+        household=household,
+        prompt=REMEMBER_EXTRACT_PROMPT,
+    )
+    return {
+        "user_id": user_id,
+        "scope": "household" if household else "private",
+        "stored": len(ids),
+        "memory_ids": ids,
+    }
 
 
 @app.get("/metrics")

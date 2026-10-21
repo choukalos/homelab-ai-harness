@@ -204,6 +204,7 @@ def learn_from_turn(
     confidence: str = "normal",
     infer: bool = True,
     prompt: Optional[str] = None,
+    household: bool = False,
 ) -> List[str]:
     """Extract + store durable facts from a conversation turn.
 
@@ -223,12 +224,23 @@ def learn_from_turn(
     as *scope* keys (which would also scope mem0's internal dedup search
     per-turn, breaking cross-turn dedup). Provenance is therefore stored
     under the free-form keys ``agent`` / ``turn_id``.
+
+    ``household=True`` writes to the shared family scope
+    (``cfg.household_user_id``) instead of the caller's private scope —
+    family facts visible in every user's reads (merged by
+    search_memory / list_memories). ``user_id`` is still validated as the
+    CALLER (provenance ``written_by``), never as the write scope.
     """
     cfg = _get_config()
     if not cfg.writeback_allowed:
         return []
     if not _valid_user(user_id):
         return []
+    # Household scope: family-shared facts. The caller is still validated
+    # above; the write lands in the shared bucket every user's reads merge.
+    write_scope = (
+        cfg.household_user_id if (household and cfg.household_enabled) else user_id
+    )
 
     ok, reason = _policy.should_store(messages)
     if not ok:
@@ -250,10 +262,14 @@ def learn_from_turn(
         metadata["agent"] = agent_id
     if run_id:
         metadata["turn_id"] = run_id
+    if write_scope != user_id:
+        # Provenance: who wrote a household fact (mem0 strips identity keys
+        # from metadata, but free-form keys survive).
+        metadata["written_by"] = user_id
 
     def _add_op():
         return client._ensure_client().add(
-            cleaned, user_id=user_id, metadata=metadata, infer=infer, prompt=prompt
+            cleaned, user_id=write_scope, metadata=metadata, infer=infer, prompt=prompt
         )
 
     t0 = time.monotonic()

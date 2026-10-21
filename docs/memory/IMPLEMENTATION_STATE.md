@@ -901,6 +901,46 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (3rd entry)** — **Phase 12: cross-machine memory WRITE path +
+  household scope — `memory_remember` for pi (Mac) and family-shared facts.**
+  Gap: memory was centralized (one store, thor) and pi-on-Mac could READ it
+  (mcp_memory: memory_search/memory_list), but writes only happened from the
+  Siri chat surface + sweep + research writeback — so conversations/research
+  done in pi (medical research, arcade work) were never stored. Also the
+  household bucket (merged into every user's reads) had no write path, so
+  family facts couldn't be shared (e.g. with Dylan).
+  Built + verified live:
+  1. **`POST /api/memory/remember`** (skill-runner `main.py`): same per-user
+     auth model as /api/memory/search (caller's X-API-Key →
+     resolve_user_id; never cross-user). Body: {text (≤4000 chars),
+     importance normal|high, household bool, source label (default
+     "pi_chat")}. Runs `learn_from_turn` with a dedicated
+     REMEMBER_EXTRACT_PROMPT — the default mem0 prompt under-extracts from
+     direct statements (observed: a 3-sentence medical update stored 0
+     facts by default, 3 with the prompt: condition, doctor+clinic,
+     appointment date).
+  2. **Household scope** (`memory/interface.py`): `learn_from_turn(...,
+     household=True)` writes to `cfg.household_user_id` ("household")
+     instead of the caller's private scope; caller still validated (provenance
+     `written_by` in metadata). Reads already merged household for every
+     user (search_memory/list_memories) — now the bucket is actually
+     writable. Verified: chuck's household fact (dog vet) visible to BOTH
+     chuck and dylan (score 0.83 each); chuck's private fact invisible to
+     dylan; dylan's private fact invisible to chuck (isolation matrix clean).
+  3. **`memory_remember` MCP tool** (`mcp/servers/memory/server.py`):
+     text + importance + household; identity threading already existed
+     (forwarded Authorization → per-user; fallback MEMORY_USER_KEY for
+     direct pi connections). 90s HTTP timeout (LLM extraction server-side).
+     Tool descriptions + server instructions carry the "when to use it"
+     convention (durable personal info / 'remember this' / family-shared).
+  Verified end-to-end: endpoint matrix (private/household/dylan/bad-key/empty
+  all correct), MCP tool registered (memory_search, memory_list,
+  memory_remember) and round-trips (remember → search 0.82). Deploy: both
+  images rebuilt + recreated (main.py/memory baked into skill-runner:local;
+  server.py baked into ai-mcp-mcp_memory). Test pollution (8 facts) admin-
+  deleted. Remaining items (research-note convention, kb_medical domain,
+  Dylan onboarding, retrieval quality) tracked in `memory_todo.md` (repo
+  root).
 - **2026-10-21 (2nd entry)** — **Sweep residuals (b)+(c) resolved: GitHub input
   rebuilt, two latent sweep bugs fixed, mem0 capture made reliable.**
   The sweep had been re-emitting the same stale bullets daily (self-feeding
