@@ -226,6 +226,17 @@
     with pre-rotation keys (`MEMORY_LITELLM_KEY`, `LITELLM_KEY_CHUCK`,
     `LITELLM_KEY_DYLAN` in data-hub, report-hub, invest-hub x2, caddy,
     cloudflared, searxng, plausible).
+  - **Never restart `litellm-proxy` without an explicit ask (rule set by
+    Chuck, 2026-10-21):** he handles litellm restarts manually — a
+    recreate drops his in-flight session. Preparing/committing config
+    changes (compose, `.env`, `config.yaml`) is fine; the apply step
+    (`docker compose up -d` / restart / recreate) on litellm or any
+    session-carrying service is his to run, or must be explicitly
+    requested. Origin: the proxy was recreated at 15:45 on 2026-10-21
+    while applying the `latest → v1.104.0` image pin (1.107.0
+    supply-chain hardening) without an explicit request — the image was
+    bit-identical (same digest) so no behavior change, but the restart
+    was not authorized.
 - **Identity map is shared with the per-user key workstream** (complete
   2026-09-04/06; plan file `auth_todo.md` deleted 2026-09-10):
   `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for
