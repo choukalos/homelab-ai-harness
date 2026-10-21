@@ -61,9 +61,12 @@ chat context block, unit suite fixed (stale `prompt=` kwarg fakes).
   `1 + (max−1)·0.5^(age/halflife)` on `updated_at`/`created_at`
   (`MEMORY_RECENCY_BOOST_MAX=1.2`, `MEMORY_RECENCY_HALF_LIFE_DAYS=30`).
   Threshold gate stays on the RAW score. Pending: deploy + live A/B.
-- **3b. Multi-query retrieval.** Chat retrieval does a single query;
-  deriving 2–3 subqueries (question + named entities) would catch facts
-  phrased differently.
+- **3b. Multi-query retrieval.** ✅ CODE DONE 2026-10-21 (Phase 2) —
+  heuristic subqueries (quoted phrases + capitalized entities, no LLM)
+  searched in parallel with the original, merged with reciprocal rank
+  fusion (`MEMORY_MULTIQUERY`, off by default; `MEMORY_MULTIQUERY_MAX=3`).
+  Per-query raw-score gating preserved. Pending: deploy + live A/B, then
+  flip on in `.env`.
 - **3c. Provenance in answers.** ✅ CODE DONE 2026-10-21 — context block
   bullets carry `[YYYY-MM-DD · source]` + preamble instructs date citation;
   `/api/memory/search` already returned dates (MCP/pi surfaces covered).

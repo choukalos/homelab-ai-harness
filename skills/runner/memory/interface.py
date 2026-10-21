@@ -24,6 +24,7 @@ updated_at, raw_score, rank_score}`` where ``source`` is ``"private"`` or
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -166,6 +167,154 @@ def _rank_score(hit: dict, cfg: MemoryConfig, now: Optional[datetime] = None) ->
     return boosted
 
 
+# ── Multi-query retrieval (memory_todo 3b) ────────────────────────────
+# Sentence-initial / function words that must not be treated as entities.
+_SUBQUERY_STOPWORDS = frozenset({
+    "the", "a", "an", "what", "when", "where", "which", "who", "whom",
+    "why", "how", "did", "does", "do", "is", "are", "was", "were", "have",
+    "has", "had", "i", "you", "he", "she", "it", "we", "they", "my",
+    "your", "his", "her", "its", "our", "their", "this", "that", "these",
+    "those", "there", "here", "and", "or", "but", "if", "then", "than",
+    "so", "not", "no", "yes", "please", "can", "could", "would",
+    "should", "will", "about", "for", "with", "from", "to", "of", "in",
+    "on", "at", "by",
+})
+
+
+def _derive_subqueries(query: str, max_total: int) -> List[str]:
+    """Heuristic subqueries for multi-query retrieval (memory_todo 3b).
+
+    Deterministic, no LLM call: extracts quoted phrases ("..." / '...')
+    and capitalized entity sequences (2+ consecutive capitalized words,
+    or a single capitalized word of length >= 4). Returns up to
+    ``max_total - 1`` subqueries, each distinct from the original query
+    (case-insensitive) and from each other, at most 5 words each.
+    ``[]`` when the query has fewer than 3 words (short queries don't
+    benefit) or nothing qualifies.
+    """
+    max_total = max(2, int(max_total))
+    q = (query or "").strip()
+    words = q.split()
+    if len(words) < 3:
+        return []
+    candidates: List[str] = []
+    # 1) Quoted phrases.
+    for m in re.finditer(r'"([^"\n]{3,60})"|\'([^\'\n]{3,60})\'', q):
+        phrase = (m.group(1) or m.group(2) or "").strip()
+        if phrase:
+            candidates.append(phrase)
+    # 2) Capitalized entity sequences.
+    caps = [
+        i for i, w in enumerate(words)
+        if len(w) >= 3 and w[0].isupper()
+        and w.lower() not in _SUBQUERY_STOPWORDS
+    ]
+    i = 0
+    while i < len(caps):
+        j = i
+        while j + 1 < len(caps) and caps[j + 1] == caps[j] + 1:
+            j += 1
+        span = caps[i:j + 1]
+        if len(span) >= 2:
+            candidates.append(" ".join(words[k] for k in span))
+        elif len(words[span[0]]) >= 4:
+            candidates.append(words[span[0]])
+        i = j + 1
+    # Dedup (case-insensitive), drop the original query, cap at max_total-1.
+    out: List[str] = []
+    seen = {q.lower()}
+    for c in candidates:
+        key = c.lower()
+        if key in seen or len(c.split()) > 5:
+            continue
+        seen.add(key)
+        out.append(c)
+        if len(out) >= max_total - 1:
+            break
+    return out
+
+
+def _merge_rrf(per_query_hits: List[List[dict]], k: int = 60) -> List[dict]:
+    """Reciprocal rank fusion over multiple ranked hit lists (memory_todo 3b).
+
+    ``score`` on merged hits = the BEST raw cosine seen for that id across
+    queries (so the relevance gate + score semantics stay comparable);
+    ranking uses the RRF score, which is robust to a fact scoring mid on
+    several differently-phrased queries. Ties break on raw score.
+    """
+    rrf: Dict[str, float] = {}
+    best: Dict[str, dict] = {}
+    for ranked in per_query_hits:
+        for rank, h in enumerate(ranked, start=1):
+            mid = h.get("id")
+            if not mid:
+                continue
+            rrf[mid] = rrf.get(mid, 0.0) + 1.0 / (k + rank)
+            cur = best.get(mid)
+            if cur is None or float(h.get("score", 0.0) or 0.0) > \
+                    float(cur.get("score", 0.0) or 0.0):
+                best[mid] = h
+    merged = [dict(h) for h in best.values()]
+    for h in merged:
+        h["rrf_score"] = rrf[h["id"]]
+    merged.sort(key=lambda h: (h["rrf_score"], h.get("score", 0.0)),
+                reverse=True)
+    return merged
+
+
+def _search_scopes(
+    client: MemoryClient,
+    cfg: MemoryConfig,
+    user_id: str,
+    queries: List[str],
+    k: int,
+    threshold: float,
+) -> tuple:
+    """Run all (query, scope) mem0 searches concurrently (memory_todo 3b).
+
+    Each op carries the retrieval timeout (``cfg.timeout_s``); the total
+    wait is capped at 2x that (the client pool has enough workers that
+    wall time is ~one op, not the sum — the pre-3b single-query path also
+    ran 2 ops, sequentially). Returns ``(per_query_hits, degraded)`` where
+    ``per_query_hits[i]`` is the scope-merged, deduped, threshold-gated
+    hit list for ``queries[i]``. Any op failure degrades (empty list for
+    that query/scope) — never raises into the chat path.
+    """
+    scopes = [("private", user_id)]
+    if cfg.household_enabled:
+        scopes.append(("household", cfg.household_user_id))
+
+    futures = []
+    for qi, q in enumerate(queries):
+        for scope_name, uid in scopes:
+            def _op(q=q, uid=uid):
+                return client._ensure_client().search(
+                    q, filters={"user_id": uid}, top_k=k
+                )
+            futures.append((client._pool.submit(_op), qi, scope_name))
+
+    per_query: List[List[dict]] = [[] for _ in queries]
+    seen: List[set] = [set() for _ in queries]
+    degraded = False
+    budget_end = time.monotonic() + 2.0 * cfg.timeout_s
+    for fut, qi, scope_name in futures:
+        remaining = max(0.05, budget_end - time.monotonic())
+        try:
+            raw = fut.result(timeout=remaining)
+        except Exception as e:  # noqa: BLE001 - degrade
+            logger.warning("memory search (%s, query %d) failed: %s",
+                           scope_name, qi, e)
+            degraded = True
+            _metrics.get_metrics().record_error("search")
+            continue
+        for h in _as_list(raw):
+            nh = _normalize_hit(h, scope_name)
+            if nh["id"] not in seen[qi] and nh["score"] >= threshold:
+                seen[qi].add(nh["id"])
+                per_query[qi].append(nh)
+    return per_query, degraded
+
+
 # ── Public API ────────────────────────────────────────────────────────
 def search_memory(
     user_id: str,
@@ -181,6 +330,12 @@ def search_memory(
     ``score`` (raw cosine) and ``rank_score`` (raw x recency x importance
     boosts — memory_todo 3a/3e). Returns ``[]`` on error, timeout, or when
     retrieval is disabled / the user is unknown.
+
+    Multi-query (memory_todo 3b, ``cfg.multiquery_enabled``): heuristic
+    subqueries (quoted phrases / capitalized entities) are searched in
+    parallel with the original and merged with reciprocal rank fusion —
+    catches facts phrased differently. Each query is still threshold-gated
+    on its own raw scores.
     """
     cfg = _get_config()
     if not cfg.retrieval_allowed:
@@ -191,47 +346,21 @@ def search_memory(
     k = top_k or cfg.top_k
     threshold = cfg.score_threshold or 0.0
     client = _get_client()
-    hits: List[dict] = []
-    seen_ids = set()
     degraded = False
     t0 = time.monotonic()
 
-    # Private memories.
-    try:
-        def _private_op():
-            return client._ensure_client().search(
-                query, filters={"user_id": user_id}, top_k=k
-            )
+    # Multi-query (3b): original + up to cfg.multiquery_max - 1 heuristic
+    # subqueries. Short / entity-free queries keep the single-query path.
+    queries = [query]
+    if cfg.multiquery_enabled:
+        subs = _derive_subqueries(query, cfg.multiquery_max)
+        if subs:
+            queries = [query] + subs
 
-        raw = client._with_timeout(_private_op)
-        for h in _as_list(raw):
-            nh = _normalize_hit(h, "private")
-            if nh["id"] not in seen_ids and nh["score"] >= threshold:
-                seen_ids.add(nh["id"])
-                hits.append(nh)
-    except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
-        logger.warning("memory search (private) failed for %s: %s", user_id, e)
-        degraded = True
-        _metrics.get_metrics().record_error("search")
-
-    # Household memories (explicitly shared facts), if enabled.
-    if cfg.household_enabled:
-        try:
-            def _household_op():
-                return client._ensure_client().search(
-                    query, filters={"user_id": cfg.household_user_id}, top_k=k
-                )
-
-            raw = client._with_timeout(_household_op)
-            for h in _as_list(raw):
-                nh = _normalize_hit(h, "household")
-                if nh["id"] not in seen_ids and nh["score"] >= threshold:
-                    seen_ids.add(nh["id"])
-                    hits.append(nh)
-        except (MemoryTimeout, Exception) as e:  # noqa: BLE001 - degrade
-            logger.warning("memory search (household) failed: %s", e)
-            degraded = True
-            _metrics.get_metrics().record_error("search")
+    per_query, degraded = _search_scopes(
+        client, cfg, user_id, queries, k, threshold
+    )
+    hits = per_query[0] if len(queries) == 1 else _merge_rrf(per_query)
 
     # Ranking (3a/3e): keep the raw score for transparency, rank by the
     # boosted score. The threshold gate above already ran on raw scores, so

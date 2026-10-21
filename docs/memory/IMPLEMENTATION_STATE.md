@@ -901,6 +901,37 @@ data persisted in `/home/chuck/data/victoria-metrics`). Applied the
 
 ## Phase log
 
+- **2026-10-21 (6th entry)** — **Retrieval quality Phase 2 (memory_todo
+  3b): heuristic multi-query retrieval + RRF merge.**
+  `skills/runner/memory/interface.py` (baked into `skill-runner:local`):
+  1. **`_derive_subqueries(query, max_total)`** — deterministic, no LLM:
+     quoted phrases ("..." / '...') + capitalized entity sequences (2+
+     consecutive capitalized words, or a single capitalized word of length
+     >= 4; stopword-filtered). Up to `MEMORY_MULTIQUERY_MAX - 1` (default
+     2) subqueries, each distinct from the original, <= 5 words. `[]` for
+     queries < 3 words (short queries don't benefit).
+  2. **`_search_scopes`** — all (query, scope) mem0 searches fan out
+     CONCURRENTLY on the client pool (bumped 4 → 8 workers in
+     `client.py`), each op with the retrieval timeout, total wait capped at
+     2x it — wall time ~one op, not the sum (pre-3b ran 2 ops
+     sequentially). Per-query/scope degradation preserved (empty list,
+     never raises).
+  3. **`_merge_rrf`** — reciprocal rank fusion (k=60) across per-query
+     ranked lists. `score` on merged hits = BEST raw cosine seen (gate +
+     score semantics stay comparable); ranking by RRF score (robust to a
+     fact scoring mid on several differently-phrased queries), ties break
+     on raw score. Each query is still threshold-gated on its OWN raw
+     scores, so multi-query can only ADD hits the original query missed —
+     never weaken the gate.
+  4. `search_memory` now: original + subqueries (when
+     `MEMORY_MULTIQUERY=true`, off by default pending live A/B) →
+     `_search_scopes` → RRF merge (single query keeps the direct path) →
+     rank boosts (Phase 1) → truncate.
+  Verified: unit suite ALL PASS (178 checks; new `test_multiquery`: derive
+  cases, RRF math, end-to-end rescue of a below-threshold fact via
+  subquery, off = single query x 2 scopes). Deploy pending with Phase 3;
+  live A/B (on/off) in the verification pass, then flip
+  `MEMORY_MULTIQUERY=true` in `.env`.
 - **2026-10-21 (5th entry)** — **Retrieval quality Phase 1 (memory_todo
   3a/3e/3c): recency + importance ranking, provenance in the context
   block.** `skills/runner/memory/` (baked into `skill-runner:local`):

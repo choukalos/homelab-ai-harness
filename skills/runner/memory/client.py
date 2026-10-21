@@ -42,7 +42,10 @@ class MemoryClient:
         self._lock = threading.Lock()
         self._init_error: Optional[str] = None
         # Small pool dedicated to timeout enforcement for sync mem0 calls.
-        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="memory")
+        # 8 workers: the multi-query retrieval fan-out (memory_todo 3b)
+        # submits up to (multiquery_max x scopes) ops concurrently, so the
+        # wall time is ~one op instead of a queue of ops.
+        self._pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="memory")
         # Health cache.
         self._healthy: Optional[bool] = None
         self._healthy_at: float = 0.0

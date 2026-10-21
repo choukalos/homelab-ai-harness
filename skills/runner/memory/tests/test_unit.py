@@ -17,6 +17,7 @@ import os
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 # Ensure the runner root is importable (memory is a package under it).
@@ -249,6 +250,7 @@ def test_delete_user_count():
     class _FakeClient:
         def __init__(self, data):
             self._mem = _FakeMem0(data)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -305,6 +307,7 @@ def test_score_threshold():
     class _FakeClient:
         def __init__(self, data):
             self._mem = _FakeMem0(data)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -424,6 +427,7 @@ def test_phase5_writeback():
     class _FakeClient:
         def __init__(self, hits):
             self._mem = _FakeMem0(hits)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -584,6 +588,7 @@ def test_phase7_jobctx():
     class _FakeClient:
         def __init__(self, hits):
             self._mem = _FakeMem0(hits)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -750,6 +755,7 @@ def test_phase8_admin():
     class _FakeClient:
         def __init__(self, data):
             self._mem = _FakeMem0(data)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -884,6 +890,7 @@ def test_ranking_provenance():
     class _FakeClient:
         def __init__(self, data):
             self._mem = _FakeMem0(data)
+            self._pool = ThreadPoolExecutor(max_workers=4)
 
         def _ensure_client(self):
             return self._mem
@@ -1001,6 +1008,119 @@ def test_ranking_provenance():
         interface._reset_singleton()
 
 
+def test_multiquery():
+    print("multi-query retrieval (memory_todo 3b):")
+    saved = {k: os.environ.get(k) for k in (
+        "MEMORY_ENABLED", "MEMORY_SCORE_THRESHOLD",
+        "MEMORY_MULTIQUERY", "MEMORY_MULTIQUERY_MAX",
+    )}
+
+    class _FakeMem0:
+        def __init__(self):
+            self.queries = []
+
+        def search(self, query, filters=None, top_k=10):
+            uid = (filters or {}).get("user_id")
+            self.queries.append(query)
+            if uid != "chuck":
+                return []
+            if query == "where did the family go for the Round Rock trip":
+                return [{"id": "x", "memory": "m", "score": 0.45}]  # below 0.5
+            if query == "Round Rock":
+                return [{"id": "x", "memory": "m", "score": 0.8}]   # clears
+            return []
+
+    class _FakeClient:
+        def __init__(self):
+            self._mem = _FakeMem0()
+            self._pool = ThreadPoolExecutor(max_workers=4)
+
+        def _ensure_client(self):
+            return self._mem
+
+        def _with_timeout(self, fn, timeout_s=None):
+            return fn()
+
+        def reset(self):
+            pass
+
+    try:
+        os.environ["MEMORY_ENABLED"] = "true"
+        os.environ["MEMORY_SCORE_THRESHOLD"] = "0.5"
+        interface._reset_singleton()
+
+        # ── _derive_subqueries ────────────────────────────────────
+        check("short query -> no subqueries",
+              interface._derive_subqueries("coffee", 3) == [])
+        check("entity-free query -> no subqueries",
+              interface._derive_subqueries(
+                  "what did we decide about the plan", 3) == [])
+        subs = interface._derive_subqueries(
+            "what did we decide about the Round Rock trip", 3)
+        check("entity run extracted", "Round Rock" in subs, str(subs))
+        subs2 = interface._derive_subqueries(
+            "when is Bella's next cheer competition", 3)
+        check("single entity extracted",
+              any("bella" in s.lower() for s in subs2), str(subs2))
+        subs3 = interface._derive_subqueries('what did the "Peanut vet" say', 3)
+        check("quoted phrase extracted",
+              any("peanut vet" in s.lower() for s in subs3), str(subs3))
+        subs4 = interface._derive_subqueries(
+            "a b Cedar Dog e Fox Goat h Ibis Jay k", 3)
+        check("cap at max_total-1", len(subs4) == 2, str(subs4))
+        q = "what did we decide about the Round Rock trip"
+        check("original never returned",
+              q.lower() not in [s.lower() for s in
+                                interface._derive_subqueries(q, 5)])
+
+        # ── _merge_rrf ────────────────────────────────────────────
+        merged = interface._merge_rrf([
+            [{"id": "a", "score": 0.9}, {"id": "b", "score": 0.7}],
+            [{"id": "b", "score": 0.8}, {"id": "c", "score": 0.6}],
+        ])
+        mids = [h["id"] for h in merged]
+        check("RRF: multi-query hit ranked first", mids[0] == "b", str(mids))
+        by_id = {h["id"]: h for h in merged}
+        check("RRF: score = best raw cosine", by_id["b"]["score"] == 0.8)
+        check("RRF: rrf_score present + positive",
+              all(h["rrf_score"] > 0 for h in merged))
+
+        # ── end-to-end: subquery rescues a below-threshold fact ───
+        os.environ["MEMORY_MULTIQUERY"] = "true"
+        os.environ["MEMORY_MULTIQUERY_MAX"] = "3"
+        interface._reset_singleton()
+        fake = _FakeClient()
+        interface._client = fake
+        hits = interface.search_memory(
+            "chuck", "where did the family go for the Round Rock trip")
+        ids = [h["id"] for h in hits]
+        check("multiquery on: subquery rescued below-threshold fact",
+              "x" in ids, str(ids))
+        check("multiquery on: original + subquery both searched",
+              "Round Rock" in fake._mem.queries, str(fake._mem.queries))
+        check("multiquery on: rescued hit carries rrf_score",
+              all("rrf_score" in h for h in hits))
+
+        # Off: single-query path, fact stays gated out.
+        os.environ["MEMORY_MULTIQUERY"] = "false"
+        interface._reset_singleton()
+        fake2 = _FakeClient()
+        interface._client = fake2
+        hits_off = interface.search_memory(
+            "chuck", "where did the family go for the Round Rock trip")
+        check("multiquery off: below-threshold fact gated out",
+              hits_off == [], str(hits_off))
+        check("multiquery off: one query x two scopes",
+              len(fake2._mem.queries) == 2, str(fake2._mem.queries))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        interface._reset_singleton()
+
+
 def main():
     test_policy()
     test_context()
@@ -1015,6 +1135,7 @@ def main():
     test_phase7_jobctx()
     test_phase8_admin()
     test_ranking_provenance()
+    test_multiquery()
     print()
     if FAILURES:
         print(f"RESULT: FAIL ({FAIL} failed: {FAILURES})")
