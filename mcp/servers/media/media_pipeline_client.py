@@ -222,11 +222,18 @@ class MediaPipelineClient:
     def finalize_job(self, job: dict) -> dict:
         """Convert a DONE job dict into the payload the blocking tools
         return: media files -> {path, location}; storyboard -> the parsed
-        shot list; other flows (e.g. add_voice) -> the raw output mapping."""
+        shot list; transcribe -> all artifact paths; other flows (e.g.
+        add_voice) -> the raw output mapping."""
         out = job.get("output") or {}
         if "storyboard" in out:
             local = self.fetch(out["storyboard"], "/tmp")
             return json.loads(Path(local).read_text())
+        if "tab" in out:
+            # transcribe flow (2026-10-31): multi-file output — return every
+            # artifact path (media_fetch / media_pull each one by path).
+            return {k: out[k] for k in ("analysis", "tab", "lyrics", "midi",
+                                        "audio") if k in out} | {
+                       "location": "gpu_host"}
         for k in ("video", "image", "audio"):
             if k in out:
                 return {"path": out[k], "location": "gpu_host"}
@@ -552,6 +559,27 @@ class MediaPipelineClient:
         if non_blocking:
             return {"job_id": jid}
         return self._wait(jid, timeout)["video"]
+
+    # ------------------------------------------------- song transcription (2026-10-31)
+    def transcribe(self, path: str, instrument: str = "guitar", lyrics: bool = True,
+                   stems: bool = False, whisper_model: str | None = None,
+                   user: str | None = None, client: str | None = None,
+                   non_blocking: bool = False, timeout: float = 1800) -> dict:
+        """Audio/video (media_jobs path) -> guitar tab + timestamped lyrics
+        (POST /transcribe, job). `path` MUST be a media_jobs path — stage
+        external files with download/put/upload_local first (YouTube ingest
+        happens on the MCP-server side, which owns yt-dlp). Returns the job
+        output {analysis, tab, lyrics, midi, audio} (GPU-host paths).
+        non_blocking=True -> submit only; returns {"job_id"} immediately
+        (poll with poll_job + finalize_job)."""
+        payload = {"path": path, "instrument": instrument, "lyrics": lyrics,
+                   "stems": stems}
+        if whisper_model is not None:
+            payload["whisper_model"] = whisper_model
+        jid = self._post_json("/transcribe", payload, user, client)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout)
 
     def info(self, path: str, timeout: float = 60) -> dict:
         """ffprobe metadata for a matrix path (sync).

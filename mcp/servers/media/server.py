@@ -11,6 +11,7 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_add_voice(name, source, ...)             Register voice from reference wav (job)
   - media_delete_voice(name)                       Remove a TTS voice (sync)
   - media_generate_music(prompt, lyrics, ...)      Prompt -> song/instrumental
+  - media_transcribe_song(source, instrument, ...)  Song -> guitar tab + lyrics (/transcribe)
   - media_sfx(video, description, duration)        Video -> synced SFX bed
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
   - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
@@ -50,6 +51,9 @@ import asyncio
 import json
 import logging
 import os
+import re
+import shutil
+import subprocess
 import tempfile
 import urllib.error
 import urllib.request
@@ -59,7 +63,7 @@ from typing import Any, List, Optional, Union
 from mcp.server import FastMCP
 from mcp.server.fastmcp import Context
 
-from media_pipeline_client import MediaPipelineClient, _JOB_PREFIX
+from media_pipeline_client import MediaPipelineClient, PipelineError, _JOB_PREFIX
 
 logger = logging.getLogger("mcp_media")
 
@@ -262,6 +266,71 @@ def _staging_error(path: str, what: str = "file") -> Optional[dict]:
                      "root the media pipeline container can read."),
         }
     return None
+
+
+# ---------------------------------------------------------------------------
+# Song transcription source resolution (2026-10-31)
+# ---------------------------------------------------------------------------
+
+# YouTube URL detection (same pattern as mcp_vision).
+YOUTUBE_RE = re.compile(
+    r"(youtube\.com/(watch\?v=|shorts/|embed/)|youtu\.be/)", re.I)
+
+# yt-dlp budget for a song's audio (metadata + download).
+_YTDLP_TIMEOUT_S = 600
+
+
+def _youtube_audio_download(url: str, tmpdir: str) -> str:
+    """yt-dlp: YouTube URL -> local audio file (bestaudio; no ffmpeg needed —
+    the pipeline decodes the container). Returns the local file path."""
+    cmd = ["yt-dlp", "--no-warnings", "--no-playlist",
+           "-f", "bestaudio/best",
+           "--output", os.path.join(tmpdir, "song.%(ext)s"), url]
+    r = subprocess.run(cmd, capture_output=True, text=True,
+                       timeout=_YTDLP_TIMEOUT_S)
+    if r.returncode != 0:
+        raise PipelineError(
+            f"yt-dlp failed (rc={r.returncode}): {r.stderr.strip()[-300:]}")
+    for ext in ("m4a", "webm", "mp3", "ogg", "opus", "aac", "wav", "flac"):
+        p = os.path.join(tmpdir, f"song.{ext}")
+        if os.path.isfile(p):
+            return p
+    raise PipelineError(f"yt-dlp produced no audio file: {r.stdout[-300:]}")
+
+
+def _resolve_transcribe_source(source: str) -> str:
+    """Resolve a media_transcribe_song `source` to a GPU-host media_jobs path.
+
+    - GPU-host path -> pass through.
+    - YouTube URL -> yt-dlp audio (container-local) -> /upload.
+    - other http(s) URL -> pipeline /download (sync, on the GPU host).
+    - local file -> must be under MEDIA_STAGING_DIR -> /upload.
+    Raises PipelineError on anything else."""
+    if _is_host_path(source):
+        return source
+    if source.startswith(("http://", "https://")):
+        if YOUTUBE_RE.search(source):
+            tmpdir = tempfile.mkdtemp(prefix="mcp_media_yt_")
+            try:
+                audio = _youtube_audio_download(source, tmpdir)
+                return PIPELINE.put(audio, "transcribe")
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+        return PIPELINE.download(source, "transcribe")
+    err = _staging_error(source, "source")
+    if err:
+        raise PipelineError(err["error"])
+    return PIPELINE.put(source, "transcribe")
+
+
+def _transcribe_pipeline(source: str, instrument: str, lyrics: bool,
+                         stems: bool, user: str,
+                         non_blocking: bool) -> dict:
+    """Source resolution + POST /transcribe (sync; runs in a worker thread)."""
+    path = _resolve_transcribe_source(source)
+    return PIPELINE.transcribe(path, instrument, lyrics, stems,
+                               user=user, client=MEDIA_CLIENT,
+                               non_blocking=non_blocking)
 
 
 # ---------------------------------------------------------------------------
@@ -535,6 +604,51 @@ async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30
     if non_blocking:
         return _non_blocking_result(res)
     return {"path": res, "location": "gpu_host", "note": _HOST_PATH_NOTE}
+
+
+@mcp.tool(
+    name="media_transcribe_song",
+    description=(
+        "Transcribe a song into a GUITAR tab + timestamped lyrics via the "
+        "GPU-host media-pipeline /transcribe flow (deterministic DSP + ASR + "
+        "LLM polish — a strong DRAFT; verify against the recording). "
+        "`source` = a YouTube URL (audio downloaded here via yt-dlp, then "
+        "uploaded), a direct http(s) media URL (fetched on the GPU host), a "
+        "GPU-host media_jobs path, or a local file under the staging dir "
+        f"{MEDIA_STAGING_DIR} (auto-uploaded). v1: instrument='guitar' only "
+        "(6-string, standard tuning). `stems=true` runs vocal-stem separation "
+        "first (cleaner lyrics on dense mixes, +1-2 min). Returns the job "
+        "output paths {analysis, tab, lyrics, midi, audio} (GPU-host paths — "
+        "media_fetch / media_pull each one) + the original source. Expect "
+        "minutes per song: non_blocking=true returns {job_id} in ~1s — poll "
+        "media_job_result(job_id, wait_seconds=20) until done."
+    ),
+)
+async def media_transcribe_song(
+    source: str,
+    instrument: str = "guitar",
+    lyrics: bool = True,
+    stems: bool = False,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """YouTube URL / URL / host path / staging file -> guitar tab + lyrics."""
+    if instrument != "guitar":
+        return {"error": f"v1 supports instrument='guitar' only (got {instrument!r})"}
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    try:
+        res = await asyncio.to_thread(
+            _transcribe_pipeline, source, instrument, lyrics, stems,
+            user, non_blocking)
+    except Exception as exc:
+        return _pipeline_error(exc, {"source": source})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["source"] = source
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
 
 
 @mcp.tool(

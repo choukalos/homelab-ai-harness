@@ -463,7 +463,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_mysql` | MySQL (InvestorHub) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_homelab_status` | Docker API + Victoria Metrics | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_filesystem` | Read/write `/home/chuck/workspace` | ✅ Implemented | ✅ Container on `ai-net` |
-| `mcp_media` | Media generation via GPU-host media-pipeline + post-gen edit/file movement (trim, freeze, caption, info, upload, download, put, pull) | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_media` | Media generation via GPU-host media-pipeline + post-gen edit/file movement (trim, freeze, caption, info, upload, download, put, pull) + song transcription (YouTube URL → guitar tab + timestamped lyrics) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_skills` | Skill-runner gateway (list/run/get skill jobs) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_memory` | Long-term memory (mem0/Qdrant) — memory_search, memory_list | ✅ Implemented | ✅ Container on `ai-net` |
@@ -635,6 +635,7 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **list-presentations** — List existing presentations
 - **list-images** — List generated images with accessible URLs
 - **media-generate** — Generate an image via `mcp_media.media_generate_image` (GPU-host media-pipeline) + `media_fetch`
+- **song-transcribe** — Transcribe a song (YouTube URL / media URL / local file) into a guitar tab + timestamped lyrics via `mcp_media.media_transcribe_song` (GPU-host `/transcribe`: DSP note events + chords + key/BPM, whisper lyrics, LLM polish) + `media_fetch`/`media_pull`
 - **business-analyst** — NL→SQL data analysis over the family MySQL (~300s; returns a Markdown report + Grafana suggestions)
 - **content-writer** — Multi-format content generation (social/blog/video, ~480s)
 - **marketing-strategy** — Go-To-Market (GTM) strategy generation (~300s)
@@ -824,7 +825,7 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_mysql` — Database queries via MySQL (InvestorHub): read-only SELECTs, NL-to-SQL with full schema intelligence (join graph, curated domain hints, data samples)
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
 - `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
-- `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch)
+- `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch) + song transcription (`media_transcribe_song`: YouTube URL → guitar tab + timestamped lyrics)
 - `mcp_vision` — Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp)
 - `mcp_skills` — Cross-client skill gateway: 3 meta-tools (list_skills, run_skill, get_skill_job) wrapping the skill-runner; forwards the caller's LiteLLM key for per-user attribution
 

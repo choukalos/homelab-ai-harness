@@ -23,6 +23,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
 | `media_delete_voice` | `/voices/{name}` (sync) | Remove a voice (ref + sample + manifest entry); `trailer`/`default` protected |
 | `media_generate_music` | `/music` | Prompt(+lyrics) → song/instrumental wav (ACE-Step) |
+| `media_transcribe_song` | `/transcribe` (job) | Song → **guitar tab + timestamped lyrics** (deterministic DSP + ASR + LLM polish; `source` = YouTube URL / http(s) URL / GPU-host path / staging file; v1 `instrument="guitar"` only; `stems=true` = demucs vocal stem for cleaner lyrics) |
 | `media_sfx` | `/sfx` | Video → synced SFX bed (MMAudio, upload) |
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
@@ -148,6 +149,22 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-10-31: `media_transcribe_song` — song → guitar tab + lyrics (new
+`/transcribe` job flow on the GPU host, per
+`docs/song_transcribe_matrix_handoff.md`). `source` = YouTube URL (yt-dlp
+audio in-container, then `/upload` — `yt-dlp` added to the Dockerfile,
+`mcp_vision` pattern) | direct http(s) URL (pipeline `/download`) | GPU-host
+media_jobs path | staging file (auto-`/upload`). `instrument` v1 = `guitar`
+only (clean error otherwise); `lyrics` (ASR on/off), `stems` (demucs vocal
+stem, +1–2 min). Returns the job output paths
+`{analysis, tab, lyrics, midi, audio}` (+ `source` echo when blocking) —
+`media_fetch` / `media_pull` each one; `media_job_result` polls it
+(`finalize_job` gained a transcribe branch — output has `tab` → all 5 paths
++ `location`). Identity threading automatic (user/client on the POST).
+Verified 2026-10-31: 27/27 mock-pipeline checks (`test_transcribe.py` —
+local stdlib stub, live pipeline untouched) + tool schema via MCP
+`tools/list` (23 tools).
 
 2026-10-31: shot-model update (matrix pipeline update, per
 `thor_mcp_shot_model_snippet.md`) — `media_generate_shot` gains `model`

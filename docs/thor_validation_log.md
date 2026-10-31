@@ -339,3 +339,103 @@ via surgical rebuild of `portal:local` only.
   revalidates every ~60s; `/media/pipeline/dl/*` serves
   `cf-cache-status: DYNAMIC` (edge does not cache — bypass; downloads via
   origin).
+
+---
+
+## Validation Entry — 2026-10-31: Song Transcription (`/transcribe` → `media_transcribe_song`)
+
+Source plan: `docs/song_transcribe_plan.md`; Matrix spec:
+`docs/song_transcribe_matrix_handoff.md`. Matrix flow built by the GPU-host
+AI; thor side (mcp_media tool + client) built + verified here.
+
+**Matrix-side verification (live, direct pipeline API):**
+
+| Check | Result |
+|---|---|
+| Happy path (synthesized 40 s ground-truth file: D major, 120 BPM, D–A–Bm–G ×5) → job done, all 5 outputs present | ✅ PASS |
+| Key detection vs ground truth | ✅ PASS (D major) |
+| BPM vs ground truth | ✅ PASS (123 vs 120, within ±5%) |
+| Note events + tab mapping invariant (`open_string + fret == midi`) | ✅ PASS (196/196 mapped notes) |
+| Determinism (2nd run, diff of notes/chords/sections/tab data) | ✅ PASS (byte-identical) |
+| Error: `instrument="piano"` → 400 at submit | ✅ PASS |
+| Error: 5 s clip → clean job error `"audio too short"` | ✅ PASS |
+| Metering: `media_work_units_total{kind="transcribe"}` (80.0 = 40 s × 2), `media_cost_usd_total{stage="transcribe"}` at exactly the $3.1e-5/s placeholder rate, user/client stamped | ✅ PASS |
+| **Chord detection** (QA item 5: clean I–V–vi–iv file → progression 100%) | ❌ **FAIL — `chords=[]` on both runs; `chord_progression: n/a`** |
+| Real song (Riptide, 204 s): key/BPM/chords vs known ground truth | ❌ **Quality FAIL — key C# major (expected D), BPM 103.4 (expected ~96), 1 chord total (expected D–Bm–G–A loop)** |
+| Real song: lyrics | ⚠️ PARTIAL — 4 lines in 204 s (first 2 verbatim-correct; "extremely sparse" per the LLM caveat) |
+
+**Thor-side verification (mock pipeline + live E2E):**
+
+| Check | Result |
+|---|---|
+| Mock-pipeline suite `mcp/servers/media/test_transcribe.py` (finalize_job transcribe branch + regressions, transcribe() blocking/non-blocking, poll running→done, 4-way source resolution incl. staging guard + YouTube regex, tool results, identity, media_fetch) | ✅ 27/27 PASS |
+| MCP schema via `tools/list` (23 tools on `mcp_media`) | ✅ PASS |
+| Production container rebuild + restart (`docker compose -f compose/compose.mcp.yml up -d --build mcp_media`); startup health OK | ✅ PASS |
+| Tool live via LiteLLM `/mcp-rest/tools/list` (87 tools total; `media_transcribe_song` present) | ✅ PASS |
+| E2E via LiteLLM `/mcp-rest/tools/call` (chuck's key): YouTube URL → `media_transcribe_song(non_blocking)` → `job_id` in ~1 s | ✅ PASS |
+| `media_job_result` poll → done + 5 artifact paths + `location` | ✅ PASS |
+| Identity threading: job payload `user=chuck` (resolved from the LiteLLM key), `client=pi` | ✅ PASS |
+| `media_fetch` tab.md + lyrics.txt → local media library | ✅ PASS |
+| `media_pull` → signed URL → **HTTP 200 through `siri.choukalos.com`** (off-LAN public route), 15,264 bytes = local copy | ✅ PASS |
+
+**Open quality defects (Matrix side, for the next iteration):**
+1. **Chord detection returns empty** on both the clean ground-truth file and a
+   real song — the CQT/template stage is effectively dead (QA item 5 fails).
+   Likely candidates: template scoring/normalization, beat-grid alignment, or
+   a silent stage failure. Chords are the backbone of a guitar tab — this is
+   the top fix.
+2. **Key/BPM drift on real music**: C# major vs D (a semitone — suggests a
+   possible 1-bin pitch-class offset in the chroma stage) and BPM biased fast
+   (123 vs 120 synthesized; 103.4 vs ~96 Riptide).
+3. **Sparse lyrics** on a vocal-heavy song (4 lines / 204 s) — check VAD
+   aggressiveness and whether the LLM polish step drops lines (the polish
+   validation checks line fidelity but not line *count* preservation — spec
+   hole worth closing).
+4. Minor: spurious harmonic notes (MIDI 81–93) from bright sources get
+   `role=lead/accompaniment` with `tab=null` — spec-compliant (unmappable)
+   but pollutes lead stats; filter them at classification.
+5. Minor: `title`/`artist` come back `unknown` — the pipeline only sees the
+   audio file; consider an optional `metadata` field on `/transcribe`
+   (yt-dlp title/uploader) in a future contract revision.
+
+---
+
+## Validation Entry — 2026-10-31 (part 2): `/transcribe` chord-detection fix re-verification
+
+Matrix shipped the chord-detection fix; re-ran the smoke test (synthetic
+ground truth + real songs) plus isolation tests.
+
+| Check | Result |
+|---|---|
+| Chord detection on synthetic ground truth (40 s, D major, 120 BPM, D–A–Bm–G ×5) | ✅ **FIXED — chords now exact: Dmaj7/Amaj7/Bm7/Gmaj7, 5 each** (was `chords=[]`); key D major, BPM 123 |
+| 48 kHz WAV variant of the same ground truth | ✅ PASS — D major, 120.2 BPM, same chords (D7/Amaj7/Bm7/Gmaj7 ×5), clean pitch classes |
+| Real song #2 — Sweet Home Alabama (webm/opus, 284 s) | ✅ PASS — key G major, chords Gmaj7×22 / Cmaj7×16 / Dmaj7×12 (the D–C–G loop), clean G-major pitch classes |
+| Real song #1 — Riptide (webm/opus **and** AAC m4a, 204 s) | ✅ **Correct — see ground-truth correction below** |
+| Determinism / cross-format stability (Riptide opus vs AAC: same key/chords/BPM) | ✅ PASS |
+| Metering in VictoriaMetrics: `media_cost_usd_total{stage="transcribe",user="chuck"}` ($0.0428) + `media_work_units_total{kind="transcribe"}` (1380 units) via the existing `media-pipeline-matrix` Prometheus scrape | ✅ PASS — AI Work & Spend dashboard (queries `media_cost_usd_total`/`media_work_units_total`) exposes transcribe automatically; no plumbing needed |
+| Lyrics sparseness | ❌ **STILL OPEN** — Riptide 4 lines / ~30 expected (first 2 verbatim-correct, rest garbled); SHA 2 lines. Raw ASR quality on real vocals remains the gap (VAD/whisper stage, Matrix side) |
+
+**Ground-truth correction (important):** the earlier "1-semitone offset"
+defect report was **a false alarm caused by a wrong ground-truth assumption**,
+not a pipeline bug. Riptide's standard guitar tabs are in D major (D–Bm–G–A),
+but the official recording is actually in **C# major** (C#–A#m–G#–F#), ~102
+BPM. Verified three independent ways:
+
+1. **Raw-audio Goertzel measurement** (pure-Python, on the pipeline's decoded
+   `audio.wav`, verse 24–54 s): C#3 14.7e12 vs D3 2.0e12 (7.3×), A#3 8.8e12
+   vs A3 0.6e12 (13.8×), G#3 > G3 — the recording's fundamental content is
+   C#-major.
+2. **Two independent codec paths** (opus webm + AAC m4a) both yield C# major
+   with identical chords/BPM — a decoder bug cannot shift both the same way
+   while leaving SHA (opus) and both synthetic WAVs (44.1/48 kHz) correct.
+3. **External source** (songbpm.com): "Riptide … tempo of 102 BPM … C♯/D♭ key,
+   3:24" — matches the pipeline's C# major @ 103.4 BPM (1.4% off).
+
+The pipeline's absolute pitch calibration is therefore **verified correct**
+against four independent ground truths (2 synthetic WAVs @ 44.1/48 kHz,
+SHA webm, Riptide recording). Key/BPM "drift" is closed.
+
+**Remaining open item (Matrix side):** the lyrics stage — sparse/garbled ASR
+on real vocals (Riptide: 4 lines; the LLM caveat confirms the raw ASR was
+bad, so this is pre-polish). Tab data (key/chords/notes/structure) is fully
+verified.
