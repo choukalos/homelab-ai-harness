@@ -313,25 +313,34 @@ class MediaPipelineClient:
             return {"job_id": jid}
         return self._wait(jid, timeout)["image"]
 
-    def generate_shot(self, keyframe: str, prompt: str, width: int = 768,
-                      height: int = 512, frames: int = 97, fps: float = 24.0,
-                      seed: int = 42, strength: float = 0.7,
+    def generate_shot(self, keyframe: str, prompt: str, width: int | None = None,
+                      height: int | None = None, frames: int | None = None,
+                      fps: float | None = None, seed: int = 42,
+                      strength: float = 0.7, model: str | None = None,
                       user: str | None = None, client: str | None = None,
                       non_blocking: bool = False, timeout: float = 3600) -> str | dict:
-        """Keyframe (LOCAL path) + style prompt -> ~4s I2V clip. Returns host path.
+        """Keyframe (LOCAL path) + style prompt -> I2V clip. Returns host path.
 
-        strength: how strongly the keyframe anchors the clip. Lower = less
-        warble/morphing (0.7 is the tuned default; 0.6 marginally smoother,
-        0.8+ more motion but more warble). Prompt for visual STYLE, not motion.
+        model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512, 97f,
+        25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q5 —
+        832x480 ONLY, 81f (4n+1), 16fps, ~10-12 min/clip; 720p is rejected
+        with a 400 — VRAM OOM gate 2026-10-25). None = server default
+        (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted
+        width/height/frames/fps -> the server applies the selected model's
+        native defaults.
+        strength: ltxv2b only — how strongly the keyframe anchors the clip
+        (0.7 is the tuned default; lower = less warble). Ignored for wan14b.
         non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
-        jid = self._post_multipart("/shots", keyframe,
-                                   {"prompt": prompt, "width": str(width),
-                                    "height": str(height),
-                                    "frames": str(frames), "fps": str(fps),
-                                    "seed": str(seed),
-                                    "strength": str(strength)},
-                                   user, client)
+        fields = {"prompt": prompt, "seed": str(seed),
+                  "strength": str(strength)}
+        for k, v in (("width", width), ("height", height),
+                     ("frames", frames), ("fps", fps)):
+            if v is not None:
+                fields[k] = str(v)
+        if model is not None:
+            fields["model"] = model
+        jid = self._post_multipart("/shots", keyframe, fields, user, client)
         if non_blocking:
             return {"job_id": jid}
         return self._wait(jid, timeout)["video"]

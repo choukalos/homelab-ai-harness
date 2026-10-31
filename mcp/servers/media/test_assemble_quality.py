@@ -55,12 +55,12 @@ local_img = p.fetch(img, "/tmp")
 print(f"   {local_img}")
 check("local keyframe exists", os.path.isfile(local_img), f"({local_img})")
 
-t("3. I2V shot (LTXV)")
+t("3. I2V shot (ltxv2b — explicit model; dims omitted = model-native defaults)")
 t0 = time.time()
 shot = p.generate_shot(
     local_img, "gentle mist drifting through the pines, subtle slow camera "
               "push-in, cinematic, soft volumetric light",
-    width=768, height=512, frames=97, fps=24, seed=42, strength=0.7,
+    model="ltxv2b", seed=42, strength=0.7,
     user="chuck", client="pi")
 print(f"   ({time.time()-t0:.0f}s) {shot}")
 check("shot path", shot.startswith(m._JOB_PREFIX))

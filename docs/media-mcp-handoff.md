@@ -1,5 +1,16 @@
 # media-mcp → media-pipeline handoff
 
+> **2026-10-31 update (shot model):** `/shots` gains a `model` form field —
+> **Wan 2.2 14B** (`model=wan14b`, quality — **832×480 only**, 81f (4n+1),
+> 16fps, ~10–12 min/clip; 720p failed the VRAM gate 2026-10-25 and is
+> rejected with a clean 400) alongside **LTXV 2B** (`model=ltxv2b`, fast
+> draft — 768×512, 97f, 25fps, ~8s/clip). Omitted `width`/`height`/`frames`/`fps`
+> → the server applies the selected model's native defaults. **The default
+> is now `MEDIA_SHOT_MODEL=wan14b` (QA passed 2026-10-31)** — old callers
+> sending the legacy 768×512/97f/24fps dims get a 400; the client/tool below
+> make the dims optional and forward `model` only when set. `strength` is
+> ltxv2b-only (still forwarded for both; ignored by the server for wan14b).
+>
 > **2026-09-23 update (Qwen-Image-2.1):** `/images` + `/images/edit` now default to
 > **Qwen-Image-2.1** (unified create+edit, 25 steps, ~30–120 s at 1280×720). Client step
 > defaults updated 4/8 → 25; both image tools gain `model` (`qwen21` default | `legacy` =
@@ -301,21 +312,31 @@ class MediaPipelineClient:
         return self._wait(self._post_multipart("/images/edit", image, fields),
                           timeout)["image"]
 
-    def generate_shot(self, keyframe: str, prompt: str, width: int = 768,
-                      height: int = 512, frames: int = 97, fps: float = 24.0,
-                      seed: int = 42, strength: float = 0.7, timeout: float = 3600) -> str:
-        """Keyframe (LOCAL path) + style prompt -> ~4s I2V clip. Returns host path.
+    def generate_shot(self, keyframe: str, prompt: str, width: int | None = None,
+                      height: int | None = None, frames: int | None = None,
+                      fps: float | None = None, seed: int = 42, strength: float = 0.7,
+                      model: str | None = None, timeout: float = 3600) -> str:
+        """Keyframe (LOCAL path) + style prompt -> I2V clip. Returns host path.
 
-        strength: how strongly the keyframe anchors the clip. Lower = less
-        warble/morphing (0.7 is the tuned default; 0.6 marginally smoother,
-        0.8+ more motion but more warble). Prompt for visual STYLE, not motion.
+        model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512, 97f,
+        25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q5 —
+        832x480 ONLY, 81f (4n+1), 16fps, ~10-12 min/clip; 720p is rejected
+        with a 400 — VRAM OOM gate 2026-10-25). None = server default
+        (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted
+        width/height/frames/fps -> the server applies the selected model's
+        native defaults.
+        strength: ltxv2b only — how strongly the keyframe anchors the clip
+        (0.7 is the tuned default; lower = less warble). Ignored for wan14b.
         """
-        return self._wait(self._post_multipart("/shots", keyframe,
-                                               {"prompt": prompt, "width": str(width),
-                                                "height": str(height),
-                                                "frames": str(frames), "fps": str(fps),
-                                                "seed": str(seed),
-                                                "strength": str(strength)}), timeout)["video"]
+        fields = {"prompt": prompt, "seed": str(seed), "strength": str(strength)}
+        for k, v in (("width", width), ("height", height),
+                     ("frames", frames), ("fps", fps)):
+            if v is not None:
+                fields[k] = str(v)
+        if model is not None:
+            fields["model"] = model
+        return self._wait(self._post_multipart("/shots", keyframe, fields),
+                          timeout)["video"]
 
     def text_to_speech(self, text: str, voice: str = "trailer",
                        timeout: float = 1800) -> str:
@@ -579,15 +600,20 @@ def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 25,
 
 
 @mcp.tool()
-def media_generate_shot(keyframe: str, prompt: str, width: int = 768, height: int = 512,
-                        frames: int = 97, fps: float = 24.0, seed: int = 42,
-                        strength: float = 0.7) -> str:
-    """Animate a keyframe into a ~4s video clip (LTXV I2V). `keyframe` is a
-    local image path. `prompt` should describe VISUAL STYLE (not fast motion)
-    to minimize warble. `strength` = how strongly the keyframe anchors the clip
-    (lower = less warble; 0.7 is the tuned default). Returns a video path."""
+def media_generate_shot(keyframe: str, prompt: str, width: int | None = None,
+                        height: int | None = None, frames: int | None = None,
+                        fps: float | None = None, seed: int = 42, strength: float = 0.7,
+                        model: str | None = None) -> str:
+    """Animate a keyframe into a video clip (I2V). `keyframe` is a local
+    image path. `model`: 'wan14b' (quality; Wan 2.2 14B — 832x480 only,
+    ~5s clip, ~10-12 min) | 'ltxv2b' (fast draft; LTXV 2B — 768x512, ~4s
+    clip, ~8s). Omitted = server default (wan14b as of 2026-10-31). Omitted
+    width/height/frames/fps -> model-native defaults. `prompt` should
+    describe VISUAL STYLE (not fast motion) to minimize warble. `strength`
+    = how strongly the keyframe anchors the clip (ltxv2b only; 0.7 is the
+    tuned default; ignored for wan14b). Returns a video path."""
     return _localize(pipe.generate_shot(keyframe, prompt, width, height, frames,
-                                        fps, seed, strength), "shot")
+                                        fps, seed, strength, model), "shot")
 
 
 @mcp.tool()
@@ -727,7 +753,7 @@ Base URL: `http://<gpu-host>:8189`. Job lifecycle: `queued` → `running` → `d
 | POST | `/storyboard` | JSON `{brief, n_shots=5, aspect="16:9"}` | `{"storyboard":"<path>/storyboard.json","n_shots":N}` |
 | POST | `/images` | JSON `{prompt, width=1280, height=720, seed=42, steps=25, model?="qwen21"\|"legacy", lora? (legacy only)}` | `{"image":"<path>.png","model":"<model>"}` |
 | POST | `/images/edit` | multipart `file, prompt, seed=42, steps=25, model?="qwen21"\|"legacy", references? (qwen21 only, comma-separated)` | `{"image":"<path>.png","model":"<model>","references":N}` |
-| POST | `/shots` | multipart `file(keyframe), prompt, width=768, height=512, frames=97, fps=24, strength=0.7, seed=42` | `{"video":"<path>.mp4"}` |
+| POST | `/shots` | multipart `file(keyframe), prompt, model?="wan14b"\|"ltxv2b" (omitted = server default `MEDIA_SHOT_MODEL` — wan14b as of 2026-10-31), width?, height?, frames?, fps? (omitted = model-native defaults: wan14b 832×480 / 81f / 16fps; ltxv2b 768×512 / 97f / 25fps), strength=0.7 (ltxv2b only; ignored for wan14b), seed=42` | `{"video":"<path>.mp4"}` |
 | POST | `/tts` | JSON `{text, voice="trailer"}` | `{"audio":"<path>/vo.wav"}` |
 | POST | `/music` | JSON `{prompt, lyrics="", duration=30, seed=42}` | `{"audio":"<path>/music.wav"}` |
 | POST | `/sfx` | multipart `file(video), duration=8, steps=25, cfg=4.5, seed=42, prompt="", negative_prompt="", fps=24` | `{"audio":"<path>.flac"}` |
@@ -765,7 +791,7 @@ Base URL: `http://<gpu-host>:8189`. Job lifecycle: `queued` → `running` → `d
 | `media_storyboard` | `/storyboard` | `brief:str, n_shots:int=5, aspect:str="16:9"` | `{"shots":[{id,visual,vo}]}` |
 | `media_generate_image` | `/images` | `prompt:str, width=1280, height=720, seed=42, steps=25, model?="qwen21"\|"legacy"` | image path |
 | `media_edit_image` | `/images/edit` | `image:path, prompt:str, seed=42, steps=25, model?="qwen21"\|"legacy", references?:list[str] (max 9, qwen21 only)` | image path |
-| `media_generate_shot` | `/shots` | `keyframe:path, prompt:str, width=768, height=512, frames=97, fps=24, strength=0.7, seed=42` | video path |
+| `media_generate_shot` | `/shots` | `keyframe:path, prompt:str, width?, height?, frames?, fps?, seed=42, strength=0.7 (ltxv2b only), model?="wan14b"\|"ltxv2b" (omitted = server default, wan14b)` | video path |
 | `media_text_to_speech` | `/tts` | `text:str, voice="trailer"` | wav path |
 | `media_generate_music` | `/music` | `prompt:str, lyrics="", duration=30, seed=42` | wav path |
 | `media_sfx` | `/sfx` | `video:path, description="", duration=8.0` | audio path |
@@ -834,16 +860,26 @@ isn't already in the environment — so an exported env var always wins.
 
 These make the output look good (tuned on the GPU host):
 
-- **Prompt visual STYLE, not fast motion.** LTXV warbles when the prompt describes big
-  movement. Describe appearance/lighting/mood + *gentle* motion only.
-- **`strength` (I2V):** default **0.7** is the tuned knee — erratic motion drops ~80× vs 1.0
-  with minimal sharpness loss. `0.6` = marginally smoother/less sharp; `0.8+` = more motion but
-  more warble. Expose it per-shot if you want to tune.
-- **1080p quality:** assemble from **B-upscaled (SeedVR2) shots**, never raw 768×512. Either
+- **Pick the shot model (`model` on `/shots`).** `wan14b` (Wan 2.2 14B) is the
+  quality default (since 2026-10-31): ~5s clips at 832×480 (the ONLY supported
+  resolution — 720p 400s on the VRAM gate), 81f @ 16fps, ~10–12 min/clip.
+  `ltxv2b` (LTXV 2B) is the fast draft: ~4s clips at 768×512, 97f @ 25fps,
+  ~8s/clip — use it for iteration, then re-cut the keeper as wan14b.
+- **Prompt visual STYLE, not fast motion.** LTXV (ltxv2b) warbles when the
+  prompt describes big movement. Describe appearance/lighting/mood + *gentle*
+  motion only.
+- **`strength` (I2V, ltxv2b only):** default **0.7** is the tuned knee — erratic
+  motion drops ~80× vs 1.0 with minimal sharpness loss. `0.6` = marginally
+  smoother/less sharp; `0.8+` = more motion but more warble. Expose it per-shot
+  if you want to tune. Ignored by the server for wan14b (still forwarded; the
+  tool signature stays stable).
+- **1080p quality:** assemble from **B-upscaled (SeedVR2) shots**, never raw
+  832×480 (wan14b) or 768×512 (ltxv2b). Either
   call `media_upscale_video(pipeline="b")` per shot, or let the pipeline's `/assemble` do it
   with `upscale_each=true` (the MCP `media_assemble` doesn't currently expose that flag — call
   the pipeline directly or extend the tool).
-- **Readable text:** don't bake text into the video (LTXV warps it). Composite crisp titles in
+- **Readable text:** don't bake text into the video (both I2V models warp it).
+  Composite crisp titles in
   post via the pipeline's `/assemble` `text_overlays` (list of `{text,start,end,position,size,color}`)
   → ffmpeg `drawtext`.
 - **Character consistency:** build a character sheet first (Qwen-Image T2I), then compose each

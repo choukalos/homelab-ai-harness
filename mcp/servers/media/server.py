@@ -5,7 +5,7 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_storyboard(brief, n_shots, aspect)       LLM shot list (JSON)
   - media_generate_image(prompt, ...)              Text -> keyframe image
   - media_edit_image(image, prompt, ...)           Image + text -> edited image
-  - media_generate_shot(keyframe, prompt, ...)     Keyframe -> ~4s I2V clip
+  - media_generate_shot(keyframe, prompt, ...)     Keyframe -> I2V clip (model: wan14b quality | ltxv2b fast)
   - media_text_to_speech(text, voice)              Script -> voice-over wav (voice = library name or ref wav path)
   - media_list_voices()                            TTS voice library (sync)
   - media_add_voice(name, source, ...)             Register voice from reference wav (job)
@@ -370,28 +370,34 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
 @mcp.tool(
     name="media_generate_shot",
     description=(
-        "Animate a keyframe into a ~4s video clip (LTXV I2V) via the GPU-host media "
-        "pipeline. `keyframe` may be a local image path OR a GPU-host path (auto-"
-        "fetched). `prompt` should describe VISUAL STYLE (not fast motion) to "
-        "minimize warble. `strength` = how strongly the keyframe anchors the clip "
-        "(lower = less warble; 0.7 is the tuned default). Returns {path, "
-        "location='gpu_host'}."
-" non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        "Animate a keyframe into a video clip (I2V) via the GPU-host media "
+        "pipeline. `model`: 'wan14b' (quality; Wan 2.2 14B — 832x480 only, "
+        "~5s clip, ~10-12 min) | 'ltxv2b' (fast draft; LTXV 2B — 768x512, "
+        "~4s clip, ~8s). Omitted = server default (wan14b as of 2026-10-31). "
+        "Omitted width/height/frames/fps -> model-native defaults. `keyframe` "
+        "may be a local image path OR a GPU-host path (auto-fetched). "
+        "`prompt` should describe VISUAL STYLE (not fast motion) to minimize "
+        "warble. `strength` = how strongly the keyframe anchors the clip "
+        "(ltxv2b only; 0.7 is the tuned default; ignored for wan14b). "
+        "Returns {path, location='gpu_host'}. non_blocking=true submits "
+        "without waiting — returns {job_id} in ~1s; poll "
+        "media_job_result(job_id) for the result."
     ),
 )
 async def media_generate_shot(
     keyframe: str,
     prompt: str,
-    width: int = 768,
-    height: int = 512,
-    frames: int = 97,
-    fps: float = 24.0,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    frames: Optional[int] = None,
+    fps: Optional[float] = None,
     seed: int = 42,
     strength: float = 0.7,
+    model: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
-    """Keyframe -> ~4s I2V clip (GPU host)."""
+    """Keyframe -> I2V clip (GPU host). model: wan14b (quality) | ltxv2b (fast)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         local_kf = await _ensure_local(keyframe)
@@ -399,7 +405,7 @@ async def media_generate_shot(
             return {"error": f"Keyframe not found (local or on GPU host): {keyframe}"}
         res = await asyncio.to_thread(
             PIPELINE.generate_shot, local_kf, prompt, width, height, frames, fps,
-            seed, strength, user=user, client=MEDIA_CLIENT,
+            seed, strength, model, user=user, client=MEDIA_CLIENT,
             non_blocking=non_blocking,
         )
     except Exception as exc:

@@ -17,7 +17,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_storyboard` | `/storyboard` | Brief → shot list JSON (VLLM) |
 | `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
 | `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
-| `media_generate_shot` | `/shots` | Keyframe → ~4s I2V clip (LTXV, upload) |
+| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B, ~5s clip, ~10–12 min, 832×480 only) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
 | `media_text_to_speech` | `/tts` | Script → voice-over wav (`voice` = library name — `trailer` default, `default`, `narrator_f`, `deep_m`, ... — or a reference wav path on the GPU host) |
 | `media_list_voices` | `/voices` (sync) | TTS voice library: name, description, gender, style, audition sample path |
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
@@ -148,6 +148,23 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-10-31: shot-model update (matrix pipeline update, per
+`thor_mcp_shot_model_snippet.md`) — `media_generate_shot` gains `model`
+(`wan14b` quality = Wan 2.2 14B I2V GGUF Q5 — 832×480 ONLY, 81f (4n+1),
+16fps, ~10–12 min/clip; 720p rejected with a clean 400, VRAM OOM gate
+2026-10-25 \| `ltxv2b` fast draft = LTXV 2B 0.9.6 distilled — 768×512,
+97f, 25fps, ~8s/clip). `width`/`height`/`frames`/`fps` are now optional —
+omitted = the selected model's native defaults (the tool no longer sends
+the old hardcoded 768×512/97f/24fps, which 400 against wan14b). `strength`
+stays in the signature (ltxv2b-only; forwarded for both, ignored by the
+server for wan14b). **Breaking for old callers:** the pipeline default
+flipped to `MEDIA_SHOT_MODEL=wan14b` (QA passed 2026-10-31), so pre-update
+calls with the old hardcoded dims 400 — this update is required, not
+optional. Client: `generate_shot` rewritten (optional dims, `model` field
+forwarded only when set). Verified: tool schema (model optional, dims
+optional) + smoke tests (ltxv2b non-blocking shot ≈4s; no-model/no-dims →
+wan14b 832×480 ≈5.1s; wan14b + 1280×720 → clean 400).
 
 2026-09-25: submit-and-poll for long jobs (fixes the 30 s client abort) —
 all 13 job tools (`media_storyboard`, `media_generate_image`,
