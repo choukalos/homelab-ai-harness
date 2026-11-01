@@ -723,3 +723,52 @@ client-agnostic (same `media_render_tab_pdf` tool).
 - The note-event positions in `analysis.json` (per-chord `tab` string/fret)
   are the raw DSP detections — noisy/incomplete (lead notes mixed in), so
   the clean `shape` field is the right source for diagrams.
+
+## Validation Entry — 2026-11-01 (part 7): measure-aligned SCORE layout + chord-shape correctness
+
+**Goal (user):** the PDF should let chuck and a friend jam — see the lyrics,
+the chord **shapes** (not just names) at the exact words being sung, and the
+solo tab, all in one place. The chord grid at the top was good ("we need to
+work on the rest").
+
+**Changes:**
+
+1. **SCORE section (replaces CHART + TAB)**: one measure-aligned block per
+   section (7 measures/row) with three lanes:
+   - **VOCALS**: words placed in the measure they start in (ASR word
+     timestamps vs `bar_length = 240/bpm`, 4/4 assumed); a **mini chord
+     diagram** (compact 6-string grid, 16px) floats above the measure where
+     each chord change lands — the shape is visible at the exact word sung.
+   - **RHYTHM**: chord diagrams per measure (instrumental sections).
+   - **SOLO**: compact 6-string tab of the lead notes (string letter + fret
+     digits, ≤12 chars, repeats collapsed to `×n`), measure-aligned — the
+     solo's position against the singing/rhythm is visible, so a friend can
+     play the SOLO lane while chuck sings.
+2. **Chord-shape correctness fixes** (found by a MIDI-based note-set audit):
+   - **A-shape power chords** were rendered on strings 4+3 (frets 2,3 of the
+     fret array) — wrong; now on strings 5+4 (`f[1]=fret, f[2]=fret+2`).
+     E-shape was already correct (strings 6+5).
+   - **Open-shape library**: 15 entries spelled wrong chords — fixed:
+     `C6` (had a D where the B should be → now x32333), `Gm`/`Gm7` (wrong
+     2nd string), `Dsus4`, `Am7` (had a G, not a C), `Emaj7` (had a D, not
+     the D#/E natural 7th), `Fmaj7`, `B7` (was actually B major, no D#/A),
+     `Bmaj7`, `Bbmaj7`, `F#m`, `F#m7`, `C9`, `F9`, `F#maj7`.
+   - `is_minor()` strips numeric quality suffixes (part 6) — kept.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| MIDI note-set audit of all 46 open-shape library entries (root/3rd/7th/9th present, no banned notes) | ✅ PASS (3 remaining "missing 5th" = valid voicings) |
+| All chord shapes in the 4 published tabs (power/barre/open, incl. C#m7 barre, D#maj7 barre, A#maj7 1st-fret barre) | ✅ PASS |
+| A5 power: strings 5+4 (open A + 2nd-fret E) | ✅ PASS (was 4+3 — fixed) |
+| SCORE: every lead-note section has a solo cell; every word present; mini tokens == chord changes (all 4 songs) | ✅ PASS |
+| All 4 re-rendered via the live MCP tool (`media_render_tab_pdf`) + re-published (`overwrite=true`) + verified publicly (sha256 match) | ✅ PASS |
+
+**Notes:**
+- Layout order is now: header → CHORDS (fingerings) → SCORE (SING & PLAY).
+- Measure alignment assumes 4/4 (all four songs are 4/4). Sections with no
+  BPM fall back to 1 measure/row.
+- The solo lane is the **lead** notes from `analysis.json` (role=lead),
+  measure-aligned — it is a positional reference, not a rhythmically exact
+  transcription (rhythm lives in the raw tab.md).

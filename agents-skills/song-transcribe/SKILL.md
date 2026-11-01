@@ -119,13 +119,14 @@ drives the MCP tools and presents the result.
                  "destination_name": "<slug>-tab.pdf", "subdirectory": "tabs"})
       ```
       → `https://choukalos.com/files/tabs/<slug>-tab.pdf` — styled header
-      (key/BPM/tuning/capo chips), then a **CHORDS** part (grid of
-      fixed-size chord fingering diagrams with starting-fret
-      annotations), then a **CHART** part (chords over the word-timed
-      lyrics — play & sing at the same time; chord symbols float above
-      the exact word where each change lands), then a **TAB** part
-      (fretboard reference: per-section chords + shape hints + boxed
-      ASCII tab), page numbers.
+      (key/BPM/tuning/capo chips), a **CHORDS** part (grid of fixed-size
+      chord fingering diagrams with starting-fret annotations), then a
+      **SCORE** part (SING & PLAY): per section, a measure-aligned block
+      with a **VOCALS** lane (word-timed lyrics + a mini chord diagram
+      above the measure where each change lands), a **RHYTHM** lane
+      (chord diagrams, instrumental sections) and a **SOLO** lane
+      (compact 6-string tab of the lead notes, measure-aligned — so a
+      friend can play the solo while you sing), page numbers.
    3. **Before publishing, tell the user**: the tab is a strong draft
       (verify before relying on it), and the lyrics are ASR of a commercial
       recording (publishing them is the user's call).

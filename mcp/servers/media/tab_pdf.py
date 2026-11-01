@@ -19,6 +19,7 @@ CLI (standalone container):
 import argparse
 import html
 import json
+import math
 import re
 from pathlib import Path
 
@@ -129,13 +130,15 @@ def parse_lyrics(text):
 
 
 def parse_analysis_sections(analysis):
-    """analysis.json -> chart sections with WORD-LEVEL timing.
+    """analysis.json -> score sections with WORD-LEVEL timing.
 
     [{label, start_s, end_s, chords: [(time_s, symbol)],
-      lines: [{start, end, words: [(time_s, text)]}]}]
+      lines: [{start, end, words: [(time_s, text)]}],
+      lead: [{t, string, fret}]}]
 
     Word timing comes from the ASR word timestamps; when a line lacks them,
-    words are interpolated evenly across the line's time window."""
+    words are interpolated evenly across the line's time window. `lead` is
+    the section's lead-guitar (solo/riff) notes, for the SCORE's SOLO lane."""
     out = []
     for sec in analysis.get("sections", []):
         chords = sorted(
@@ -158,37 +161,25 @@ def parse_analysis_sections(analysis):
                 words = [(a + i * step, w) for i, w in enumerate(ws)]
             lines.append({"start": float(l.get("start_s", 0.0)),
                           "end": float(l.get("end_s", 0.0)), "words": words})
+        lead = []
+        for n in sec.get("notes", []):
+            if n.get("role") != "lead":
+                continue
+            tab = n.get("tab") or {}
+            try:
+                s = int(tab.get("string"))
+                f = int(tab.get("fret"))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= s <= 6 and f >= 0:
+                lead.append({"t": float(n.get("start_s", 0.0)),
+                             "string": s, "fret": f})
+        lead.sort(key=lambda x: x["t"])
         out.append({"label": str(sec.get("label", "section")),
                     "start_s": float(sec.get("start_s", 0.0)),
                     "end_s": float(sec.get("end_s", 0.0)),
-                    "chords": chords, "lines": lines})
+                    "chords": chords, "lines": lines, "lead": lead})
     return out
-
-
-def place_chords(sec):
-    """Attach chord symbols to the word being sung at each chord change.
-
-    Returns lines of [(time_s, word, [chord_symbols])]. A word is 'active'
-    from its start until the next word starts, so a chord at time t lands on
-    the last word that started at or before t (or the first word if t is
-    before all words). Chords falling between lines attach to the first word
-    of the next line. Multiple changes on one word are listed together."""
-    lines = sec["lines"]
-    if not sec["chords"] or not lines:
-        return [[(t, w, []) for t, w in ln["words"]] for ln in lines]
-    placements = [{} for _ in lines]
-    for t, sym in sec["chords"]:
-        li = next((i for i, ln in enumerate(lines) if ln["start"] <= t < ln["end"]), None)
-        if li is None:
-            later = [i for i, ln in enumerate(lines) if ln["start"] > t]
-            li = min(later) if later else len(lines) - 1
-        words = lines[li]["words"]
-        before = [j for j, (wt, _) in enumerate(words) if wt <= t]
-        wi = max(before) if before else 0
-        placements[li].setdefault(wi, []).append(sym)
-    return [[(t, w, placements[i].get(j, []))
-             for j, (t, w) in enumerate(ln["words"])]
-            for i, ln in enumerate(lines)]
 
 
 def is_minor(symbol):
@@ -213,12 +204,13 @@ def _fret_note(fret):
 
 
 def _power_frets(base, fret):
-    """Power chord (root + 5th). base 'E' = 6th string, 'A' = 4th string."""
+    """Power chord (root + 5th). base 'E' = E-shape (root 6th str, 5th on 5th),
+    'A' = A-shape (root 5th str, 5th on 4th)."""
     f = [None] * 6
     if base == "E":
         f[0] = fret; f[1] = fret + 2
     else:
-        f[2] = fret; f[3] = fret + 2
+        f[1] = fret; f[2] = fret + 2
     return f
 
 
@@ -240,30 +232,30 @@ def _barre_frets(base, fret, minor):
 # Standard open chord shapes (strings 6->1; 0 = open, None = muted).
 OPEN_CHORDS = {
     "C": [None, 3, 2, 0, 1, 0], "Cmaj7": [None, 3, 2, 0, 0, 0],
-    "C7": [None, 3, 2, 3, 1, 0], "C6": [None, 3, 5, 3, 3, 2],
-    "C9": [None, 3, 2, 0, 2, 3], "Csus4": [None, 3, 3, 0, 2, 0],
+    "C7": [None, 3, 2, 3, 1, 0], "C6": [None, 3, 2, 2, 3, 3],
+    "C9": [None, 3, 2, 0, 3, 6], "Csus4": [None, 3, 3, 0, 2, 0],
     "G": [3, 2, 0, 0, 0, 3], "G7": [3, 2, 0, 0, 0, 1],
     "Gmaj7": [3, 2, 0, 0, 0, 2], "Gsus4": [3, 3, 2, 0, 0, 3],
-    "Gm": [3, 5, 5, 4, 3, 3], "Gm7": [3, 5, 3, 4, 3, 3],
+    "Gm": [3, 5, 5, 3, 3, 3], "Gm7": [3, 5, 3, 3, 3, 3],
     "D": [None, None, 0, 2, 3, 2], "D7": [None, None, 0, 2, 1, 2],
     "Dmaj7": [None, None, 0, 2, 2, 2], "Dm": [None, None, 0, 2, 3, 1],
-    "Dm7": [None, None, 0, 2, 1, 1], "Dsus4": [None, None, 0, 3, 3, 2],
+    "Dm7": [None, None, 0, 2, 1, 1], "Dsus4": [None, None, 0, 2, 3, 3],
     "A": [None, 0, 2, 2, 2, 0], "Am": [None, 0, 2, 2, 1, 0],
-    "Am7": [None, 0, 2, 1, 1, 0], "Amaj7": [None, 0, 2, 1, 2, 0],
+    "Am7": [None, 0, 2, 0, 1, 0], "Amaj7": [None, 0, 2, 1, 2, 0],
     "A7": [None, 0, 2, 0, 2, 0], "A6": [None, 0, 4, 2, 2, 0],
     "Asus4": [None, 0, 2, 2, 3, 0],
     "E": [0, 2, 2, 1, 0, 0], "Em": [0, 2, 2, 0, 0, 0],
-    "Em7": [0, 2, 0, 0, 0, 0], "Emaj7": [0, 2, 2, 0, 1, 0],
+    "Em7": [0, 2, 0, 0, 0, 0], "Emaj7": [0, 2, 2, 1, 4, 0],
     "E7": [0, 2, 0, 1, 0, 0], "Esus4": [0, 2, 2, 2, 0, 0],
     "F": [1, 3, 3, 2, 1, 1], "Fm": [1, 3, 3, 1, 1, 1],
     "Fm7": [1, 3, 1, 1, 1, 1], "F7": [1, 3, 1, 2, 1, 1],
-    "Fmaj7": [1, 2, 1, 0, 1, 1], "F9": [1, 3, 2, 3, 1, 1],
-    "B7": [None, 2, 1, 0, 0, 2], "Bm": [None, 2, 4, 4, 3, 2],
-    "Bmaj7": [None, 2, 1, 0, 3, 2],
-    "Bb": [None, 1, 3, 3, 3, 1], "Bbmaj7": [None, 1, 3, 1, 3, 1],
+    "Fmaj7": [1, 3, 2, 2, 1, 1], "F9": [1, 3, 7, 7, 4, 1],
+    "B7": [None, 2, 1, 2, 0, 2], "Bm": [None, 2, 4, 4, 3, 2],
+    "Bmaj7": [None, 2, 1, 3, 0, 2],
+    "Bb": [None, 1, 3, 3, 3, 1], "Bbmaj7": [None, 1, 3, 2, 3, 1],
     "Bbm7": [None, 1, 3, 1, 2, 1],
-    "F#m": [None, 2, 4, 4, 2, 2], "F#m7": [None, 2, 4, 2, 2, 2],
-    "F#maj7": [None, 2, 4, 3, 2, 2],
+    "F#m": [None, 2, 7, 4, 2, 2], "F#m7": [None, 2, 4, 2, 5, 2],
+    "F#maj7": [None, 2, 4, 3, 6, 2],
 }
 
 
@@ -296,12 +288,19 @@ def unique_chords(analysis):
     return list(seen.items())
 
 
-def chord_token_html(name, shape):
-    """One fixed-size chord diagram token (name + fingering + fret note)."""
+def chord_token_html(name, shape, mini=False):
+    """One fixed-size chord diagram token (name + fingering + fret note).
+
+    mini=True: compact variant for inline placement in the SCORE (above the
+    word where a chord change lands) — smaller diagram, no fret note."""
     frets, start, note = chord_frets(name, shape)
-    e = ["<div class='chordtok'>"]
+    cls = "chordtok mini" if mini else "chordtok"
+    e = [f"<div class='{cls}'>"]
     e.append(f"<div class='ct-name'>{esc(name)}</div>")
     if frets is None:
+        if mini:
+            e.append("</div>")
+            return e
         e.append("<div class='ct-diagwrap'><div class='ct-unknown'>n/a</div></div>")
         e.append("<div class='ct-note'>no shape</div>")
         e.append("</div>")
@@ -310,8 +309,8 @@ def chord_token_html(name, shape):
     for i in range(6):  # strings (6 vertical lines)
         e.append(f"<div class='ct-str' style='left:{i / 5 * 100}%'></div>")
     for j in range(5):  # fret lines (5 horizontal lines)
-        cls = "ct-nut" if (start == 1 and j == 0) else "ct-fret"
-        e.append(f"<div class='{cls}' style='top:{j / 4 * 100}%'></div>")
+        line_cls = "ct-nut" if (start == 1 and j == 0) else "ct-fret"
+        e.append(f"<div class='{line_cls}' style='top:{j / 4 * 100}%'></div>")
     if start == 1:  # X/O markers above the nut (open chords)
         for i, v in enumerate(frets):
             if v is None:
@@ -325,7 +324,8 @@ def chord_token_html(name, shape):
         if 0 <= r <= 3:
             e.append(f"<div class='ct-dot' style='left:{i / 5 * 100}%;top:{(r + 0.5) / 4 * 100}%'></div>")
     e.append("</div></div>")
-    e.append(f"<div class='ct-note'>{esc(note)}</div>")
+    if not mini:
+        e.append(f"<div class='ct-note'>{esc(note)}</div>")
     e.append("</div>")
     return e
 
@@ -378,29 +378,23 @@ section { margin-bottom: 12pt; }
 .section-name { font-size: 9.5pt; font-weight: 700; letter-spacing: 1.6pt;
                 text-transform: uppercase; color: #b0512f; }
 .section-time { font-size: 8pt; color: #98968c; }
-.chords { margin-bottom: 5pt; }
-.chord { display: inline-block; margin-right: 12pt; }
-.chord .n { font-family: 'Playfair Display', 'DejaVu Serif', serif; font-size: 14pt; font-weight: 700; }
-.chord .h { display: block; font-size: 7.5pt; color: #98968c; margin-top: 0.5pt; }
-pre.tab { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 9.5pt; line-height: 1.5;
-          background: #f7f6f2; border: 0.6pt solid #e3e0d6; border-radius: 4pt;
-          padding: 7pt 9pt; margin: 0 0 5pt 0; white-space: pre; }
 .section-lyrics { font-size: 9.5pt; font-style: italic; color: #6d6c66; margin-top: 4pt; }
 
-/* ── Chart (chords over lyrics) ─────────────────────────────────────── */
+/* ── Score (measure-aligned vocals · rhythm · solo) ──────────────────── */
 .part-kicker { font-size: 9pt; letter-spacing: 2.2pt; color: #b0512f; font-weight: 700;
                margin: 16pt 0 10pt 0; padding-top: 8pt; border-top: 1.6pt solid #23232e; }
-.lyr { border-collapse: collapse; margin: 0 0 5pt 0; }
-.lyr td { padding: 0 0.32em 0 0; vertical-align: bottom; }
-.lword { font-size: 11pt; color: #23232e; }
-.lchord { display: block; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-          font-size: 9.5pt; font-weight: 700; color: #b0512f; margin-bottom: 1.5pt; }
-.plain-line { font-size: 11pt; color: #23232e; margin-bottom: 5pt; }
-.chord-strip { display: flex; gap: 16pt; flex-wrap: wrap; margin-bottom: 4pt; }
-.cs-item { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-weight: 700;
-           font-size: 11pt; color: #23232e; }
-.cs-t { display: block; font-size: 7pt; color: #98968c; font-weight: 400; }
-.tab-part { page-break-before: always; }
+.score { border-collapse: collapse; width: 100%; margin: 0 0 6pt 0; page-break-inside: avoid; }
+.sc-lane { width: 40pt; min-width: 40pt; text-align: left; font-size: 6.8pt;
+           letter-spacing: 1.1pt; text-transform: uppercase; color: #98968c;
+           font-weight: 700; padding: 2pt 5pt 2pt 0; vertical-align: middle; }
+.score td { padding: 1.5pt 3pt; vertical-align: bottom; }
+tr.sc-ruler td { vertical-align: middle; padding: 0 3pt 1.5pt 3pt; }
+.sc-meas { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 6.8pt; color: #b8b5ab; }
+.sc-vcell { min-width: 54pt; }
+.sc-chords { display: flex; gap: 4pt; flex-wrap: wrap; margin-bottom: 2pt; }
+.sc-words { font-size: 10pt; color: #23232e; }
+.solo-cell { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 7.5pt;
+             line-height: 1.45; margin: 0; color: #23232e; width: 12ch; white-space: pre; }
 
 /* ── Chord tokens (fixed-size fingering diagrams) ─────────────────────── */
 .chord-grid { display: flex; flex-wrap: wrap; gap: 8pt 14pt; margin-bottom: 4pt; }
@@ -421,6 +415,12 @@ pre.tab { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-siz
 .ct-note { font-size: 7pt; color: #98968c; margin-top: 1pt; letter-spacing: 0.4pt;
            text-transform: uppercase; }
 .ct-unknown { font-size: 14pt; color: #98968c; text-align: center; padding-top: 14pt; }
+.chordtok.mini { width: 30pt; }
+.chordtok.mini .ct-name { font-size: 7.5pt; margin-bottom: 0; }
+.chordtok.mini .ct-diagwrap { width: 24pt; height: 30pt; }
+.chordtok.mini .ct-diag { left: 1.5pt; top: 7pt; width: 21pt; height: 24pt; }
+.chordtok.mini .ct-dot { width: 4.4pt; height: 4.4pt; }
+.chordtok.mini .ct-xo { top: -7pt; font-size: 6.5pt; }
 """
 
 
@@ -428,41 +428,134 @@ def esc(s):
     return html.escape(str(s), quote=True)
 
 
-def build_chart_section_html(cs):
-    """One chart section: heading + chord-over-lyrics lines (or a chord strip)."""
-    placed = place_chords(cs)
+# ── Score (measure-aligned vocals · rhythm · solo) ─────────────────────
+MEASURES_PER_ROW = 7          # keep one band within a Letter page width
+SOLO_CELL_CHARS = 12          # max fret digits per string per measure
+SOLO_REPEAT_CAP = 5           # max repeated fret digits per run
+STR_LABELS = {1: "e", 2: "B", 3: "G", 4: "D", 5: "A", 6: "E"}
+
+
+def bar_length(analysis):
+    """One bar in seconds (4 beats). Falls back to 2.0s when BPM is unknown."""
+    try:
+        bpm = float(analysis.get("bpm") or 0.0)
+    except (TypeError, ValueError):
+        bpm = 0.0
+    return 240.0 / bpm if bpm > 30.0 else 2.0
+
+
+def _measure_of(t, start, bar, nmeas):
+    """Time -> measure index within a section (clamped to [0, nmeas-1])."""
+    if bar <= 0:
+        return 0
+    return max(0, min(nmeas - 1, int((t - start) // bar)))
+
+
+def _solo_cell(lead, t0, t1):
+    """Compact 6-string tab for the lead notes in [t0, t1).
+
+    One row per string (e top -> E bottom, standard tab order); consecutive
+    repeats of the same fret collapse (capped at SOLO_REPEAT_CAP), so a
+    strummed '1111111' reads as '11111'. Fixed 12-char cells keep the
+    measure columns aligned."""
+    rows = {s: [] for s in range(1, 7)}
+    for n in lead:
+        if t0 <= n["t"] < t1:
+            rows[n["string"]].append(n["fret"])
+    out = []
+    for s in range(1, 7):
+        txt, run_f, run_n = "", None, 0
+        for f in rows[s]:
+            if f == run_f:
+                run_n += 1
+                if run_n <= SOLO_REPEAT_CAP:
+                    txt += str(f)
+            else:
+                run_f, run_n = f, 1
+                txt += str(f)
+        out.append(f"{STR_LABELS[s]}|{txt[:SOLO_CELL_CHARS]:<{SOLO_CELL_CHARS}}")
+    return "\n".join(out)
+
+
+def _mini_chords(chords, shape_map):
+    """Mini chord-diagram tokens (shape + name) for a list of symbols."""
     e = []
-    e.append("<section>")
+    for sym in chords:
+        e.extend(chord_token_html(sym, shape_map.get(sym), mini=True))
+    return e
+
+
+def _score_band_html(cs, m0, m1, bar, shape_map, words_by_meas, chords_by_meas,
+                     has_vocals, has_lead):
+    """One band (<= MEASURES_PER_ROW measures) of the section's score table.
+
+    Lanes: ruler (measure numbers), Vocals (words per measure, mini chord
+    diagram above the change), Rhythm (chord diagrams, instrumental
+    sections), Solo (compact 6-string tab cell per measure)."""
+    start = cs["start_s"]
+    e = ["<table class='score'>"]
+    e.append("<tr class='sc-ruler'><th class='sc-lane'></th>")
+    for m in range(m0, m1):
+        e.append(f"<td class='sc-meas'>{m + 1}</td>")
+    e.append("</tr>")
+    if has_vocals or (not has_vocals and cs["chords"]):
+        label = "Vocals" if has_vocals else "Rhythm"
+        e.append(f"<tr><th class='sc-lane'>{label}</th>")
+        for m in range(m0, m1):
+            e.append("<td class='sc-vcell'>")
+            if chords_by_meas[m]:
+                e.append("<div class='sc-chords'>")
+                e.extend(_mini_chords(chords_by_meas[m], shape_map))
+                e.append("</div>")
+            if has_vocals and words_by_meas[m]:
+                e.append(f"<span class='sc-words'>{esc(' '.join(words_by_meas[m]))}</span>")
+            e.append("</td>")
+        e.append("</tr>")
+    if has_lead:
+        e.append("<tr class='sc-solo'><th class='sc-lane'>Solo</th>")
+        for m in range(m0, m1):
+            t0 = start + m * bar
+            e.append(f"<td><pre class='solo-cell'>{esc(_solo_cell(cs['lead'], t0, t0 + bar))}</pre></td>")
+        e.append("</tr>")
+    e.append("</table>")
+    return e
+
+
+def build_score_section_html(cs, bar, shape_map):
+    """One SCORE section: heading + measure-aligned bands of the score.
+
+    Sections with no lyrics, no chords and no lead notes render nothing."""
+    start, end = cs["start_s"], cs["end_s"]
+    has_vocals = bool(cs["lines"])
+    has_lead = bool(cs["lead"])
+    has_chords = bool(cs["chords"])
+    if not (has_vocals or has_lead or has_chords):
+        return []
+    nmeas = max(1, math.ceil((end - start) / bar)) if bar > 0 else 1
+    words_by_meas = {m: [] for m in range(nmeas)}
+    for ln in cs["lines"]:
+        for wt, w in ln["words"]:
+            words_by_meas[_measure_of(wt, start, bar, nmeas)].append(w)
+    chords_by_meas = {m: [] for m in range(nmeas)}
+    for t, sym in cs["chords"]:
+        chords_by_meas[_measure_of(t, start, bar, nmeas)].append(sym)
+
+    e = ["<section>"]
     e.append(
         f"<div class='section-head'><span class='section-name'>{esc(cs['label'].title())}</span>"
-        f"<span class='section-time'>{fmt_time(cs['start_s'])}\u2013{fmt_time(cs['end_s'])}</span></div>"
+        f"<span class='section-time'>{fmt_time(start)}\u2013{fmt_time(end)}</span></div>"
     )
-    if placed and any(ln for ln in placed):
-        for ln in placed:
-            if not ln:
-                continue
-            has_chords = any(chs for _, _, chs in ln)
-            if not has_chords:
-                e.append("<div class='plain-line'>" + esc(" ".join(w for _, w, _ in ln)) + "</div>")
-                continue
-            e.append("<table class='lyr'><tr>")
-            for _, w, chs in ln:
-                if chs:
-                    e.append(f"<td><span class='lchord'>{esc(' '.join(chs))}</span>"
-                             f"<span class='lword'>{esc(w)}</span></td>")
-                else:
-                    e.append(f"<td><span class='lword'>{esc(w)}</span></td>")
-            e.append("</tr></table>")
-    elif cs["chords"]:
-        e.append("<div class='chord-strip'>")
-        for t, sym in cs["chords"]:
-            e.append(f"<span class='cs-item'><span class='cs-t'>{fmt_time(t)}</span>{esc(sym)}</span>")
-        e.append("</div>")
+    n_bands = max(1, math.ceil(nmeas / MEASURES_PER_ROW))
+    size = math.ceil(nmeas / n_bands)
+    for b in range(0, nmeas, size):
+        m0, m1 = b, min(b + size, nmeas)
+        e.extend(_score_band_html(cs, m0, m1, bar, shape_map, words_by_meas,
+                                  chords_by_meas, has_vocals, has_lead))
     e.append("</section>")
     return e
 
 
-def build_html(title, artist, meta, notes, sections, chart_secs, analysis):
+def build_html(title, artist, meta, notes, chart_secs, analysis):
     e = []
     e.append("<!DOCTYPE html><html><head><meta charset='utf-8'><style>" + CSS + "</style></head><body>")
 
@@ -488,42 +581,19 @@ def build_html(title, artist, meta, notes, sections, chart_secs, analysis):
         e.append(f"<div class='note'>{esc(n)}</div>")
     e.append("</header>")
 
-    # ── Chords: fixed-size fingering grid (above the lyrics) ─────────────
+    # ── Chords: fixed-size fingering grid (reference sheet) ─────────────
     chord_items = unique_chords(analysis)
     if chord_items:
-        e.append("<div class='part-kicker'>CHORDS — FINGERINGS</div>")
+        e.append("<div class='part-kicker'>CHORDS \u2014 FINGERINGS</div>")
         e.extend(chord_grid_html(chord_items))
 
-    # ── Chart: chords over lyrics (play & sing) ──────────────────────────
-    if any(cs["lines"] or cs["chords"] for cs in chart_secs):
-        e.append("<div class='part-kicker'>CHART \u2014 CHORDS OVER LYRICS (SING &amp; PLAY)</div>")
+    # ── Score: measure-aligned vocals · rhythm · solo (sing & play) ─────
+    bar = bar_length(analysis)
+    shape_map = dict(chord_items)
+    if any(cs["lines"] or cs["lead"] or cs["chords"] for cs in chart_secs):
+        e.append("<div class='part-kicker'>SCORE \u2014 SING &amp; PLAY (VOCALS \u00b7 RHYTHM \u00b7 SOLO)</div>")
         for cs in chart_secs:
-            if cs["lines"] or cs["chords"]:
-                e.extend(build_chart_section_html(cs))
-
-    # ── Tab: fretboard reference ──────────────────────────────────────────
-    e.append("<div class='tab-part'></div>")
-    e.append("<div class='part-kicker'>TAB \u2014 FRETBOARD REFERENCE</div>")
-    for s in sections:
-        e.append("<section>")
-        e.append(
-            f"<div class='section-head'><span class='section-name'>{esc(s['name'].title())}</span>"
-            f"<span class='section-time'>{esc(s['time'])}</span></div>"
-        )
-        if s["chords"]:
-            e.append("<div class='chords'>")
-            for name, hint in s["chords"]:
-                e.append(f"<span class='chord'><span class='n'>{esc(name)}</span>")
-                if hint:
-                    e.append(f"<span class='h'>{esc(hint)}</span>")
-                e.append("</span>")
-            e.append("</div>")
-        for block in s["blocks"]:
-            e.append("<pre class='tab'>" + esc("\n".join(block)) + "</pre>")
-        if s["lyrics"]:
-            for line in s["lyrics"]:
-                e.append(f"<div class='section-lyrics'>{esc(line)}</div>")
-        e.append("</section>")
+            e.extend(build_score_section_html(cs, bar, shape_map))
 
     e.append("</body></html>")
     return "\n".join(e)
@@ -531,9 +601,9 @@ def build_html(title, artist, meta, notes, sections, chart_secs, analysis):
 def render(song_dir, out_path, title=None, artist=None):
     """Render <song_dir>/tab.md (+ analysis.json/lyrics.txt) to a PDF.
 
-    Layout: CHART (chords over word-timed lyrics — play & sing) then
-    TAB (fretboard reference). Returns {pdf, pages, title, artist,
-    sections, chart_lines}. Importable by the mcp_media server
+    Layout: CHORDS (fixed-size fingering grid) then SCORE (measure-aligned
+    vocals + rhythm + solo — sing & play with a friend). Returns {pdf, pages,
+    title, artist, sections, chart_lines}. Importable by the mcp_media server
     (media_render_tab_pdf tool)."""
     d = Path(song_dir)
     tab_path = d / "tab.md"
@@ -556,7 +626,7 @@ def render(song_dir, out_path, title=None, artist=None):
                 cs["lines"] = [{"start": 0.0, "end": 0.0,
                                 "words": [(0.0, w) for w in l.split()]}
                                for l in ts["lyrics"]]
-    doc_html = build_html(title, artist, meta, notes, sections, chart_secs, analysis)
+    doc_html = build_html(title, artist, meta, notes, chart_secs, analysis)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 

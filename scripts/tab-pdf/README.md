@@ -43,15 +43,20 @@ identity whenever it's known (the pipeline only sees audio).
   generated from the pipeline's `shape` hint (base E/A + fret, major/minor
   from the symbol), open chords from a standard-shape library; unknown
   shapes render name-only.
-- **CHART**: chords over the word-timed lyrics — play & sing. Each lyric
-  line is a row of word cells; a chord change renders as a symbol floating
-  above the word it lands on (ASR word timestamps vs chord event times
-  from `analysis.json`). Chords before a section's first word attach to
-  the first word; multiple changes on one word list together; sections
-  with chords but no lyrics (intros/outros) get a timed chord strip.
-- **TAB (second, page break)**: per-section name + time range, chord names
-  with shape hints (from the `Chords:` line), and the ASCII tab blocks
-  verbatim (JetBrains Mono, boxed).
+- **SCORE (SING & PLAY)**: one measure-aligned block per section (7
+  measures/row) with three lanes, so you can sing & play at once (with a
+  friend):
+  - **VOCALS**: the section's words in order, each placed in the measure it
+    starts in (ASR word timestamps vs the BPM-derived measure length, 4/4
+    assumed); a mini chord diagram floats above the measure where each chord
+    change lands (chord event times) — the shape is visible at the exact
+    word you're singing.
+  - **RHYTHM**: chord diagrams, one per measure (instrumental sections get
+    this instead of the vocals lane).
+  - **SOLO**: a compact 6-string tab of the section's lead notes (string
+    letter + fret digits, ≤12 chars, repeats collapsed), measure-aligned —
+    you can see where the solo falls against the singing/rhythm, so a
+    friend can play the SOLO lane while you sing.
 - **Footer** (every page): "strong draft; verify against the recording" +
   page numbers. Letter size.
 
