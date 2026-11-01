@@ -13,7 +13,7 @@ validated file operations.
 |---|---|---|---|
 | `source_path` | yes | — | absolute path under `/home/chuck/data/media/` or `/home/chuck/workspace/` |
 | `destination_name` | no | source basename | filename only (no path) |
-| `subdirectory` | no | `ai` | one of `ai, files, images, audio, video` |
+| `subdirectory` | no | `ai` | one of `ai, images, audio, video, tabs` (`files` is rejected) |
 | `overwrite` | no | `false` | `false` → collision-safe (fail if name exists) |
 
 ## Returns

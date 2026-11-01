@@ -10,6 +10,9 @@ Purpose:
   URL formula: the subdirectory is APPENDED to the /files/ base —
   e.g. subdirectory=ai → https://choukalos.com/files/ai/<name>.
   'files' is not a valid subdirectory (it would produce /files/files/<name>).
+  Typical subdirectories: ai (default), images, audio, video, tabs
+  (guitar tabs + lyrics from media_transcribe_song — one slug-prefixed
+  filename per song, e.g. riptide-tab.md / riptide-lyrics.txt).
 
 Security (blog-todo.md B5 / §2.3):
   - Source must be a regular file under an approved root
@@ -51,7 +54,9 @@ SOURCE_ROOTS = [
 # NOTE: 'files' is intentionally NOT in the allowlist — the drop zone itself
 # is served at https://choukalos.com/files/, so a 'files' subdirectory would
 # produce a confusing /files/files/<name> URL (see 2026-09-16 kaelen incident).
-SUBDIRS = ("ai", "images", "audio", "video")
+# 'tabs' (2026-11-01): guitar tabs + lyrics published from
+# media_transcribe_song artifacts (see song-transcribe skill).
+SUBDIRS = ("ai", "images", "audio", "video", "tabs")
 MAX_BYTES = int(os.environ.get("PUBLISH_FILE_MAX_BYTES", str(500 * 1024 * 1024)))
 PUBLIC_BASE = os.environ.get("PUBLISH_FILE_PUBLIC_BASE", "https://choukalos.com/files")
 MAX_NAME_LEN = 150

@@ -94,6 +94,37 @@ drives the MCP tools and presents the result.
    → signed public URL (`siri.choukalos.com/media/pipeline/dl/<token>`) —
    no homelab access needed.
 
+6. **Publish to the blog** (when the user wants it on the public site —
+   "publish this tab", "put it on the blog"). The media pipeline tools are
+   done at this point; publishing goes through the `publish-file` skill
+   (drop zone `tabs` → `https://choukalos.com/files/tabs/`):
+   1. Fetch the artifacts into a **per-song subdirectory** (the artifacts
+      have generic basenames — `tab.md`, `lyrics.txt` — so fetch each song
+      into its own folder to avoid clobbering):
+      ```
+      media_fetch(host_path=<tab>, subdirectory=<slug>)
+      media_fetch(host_path=<lyrics>, subdirectory=<slug>)
+      ```
+      → `/home/chuck/data/media/generated/pipeline/<slug>/tab.md` (an
+      approved publish source root).
+   2. Publish with **slug-prefixed names** (one flat file per song):
+      ```
+      run_skill(name="publish_file", params={"source_path": ".../<slug>/tab.md",
+                 "destination_name": "<slug>-tab.md", "subdirectory": "tabs"})
+      run_skill(name="publish_file", params={"source_path": ".../<slug>/lyrics.txt",
+                 "destination_name": "<slug>-lyrics.txt", "subdirectory": "tabs"})
+      ```
+      → `https://choukalos.com/files/tabs/<slug>-tab.md` + `-lyrics.txt`.
+   3. **Before publishing, tell the user**: the tab is a strong draft
+      (verify before relying on it), the title in the tab header is
+      LLM-guessed (the pipeline only sees audio — fix it in the file or
+      re-run with a known title), and the lyrics are ASR of a commercial
+      recording (publishing them is the user's call).
+   4. The portal serves `.md` as raw text (`text/markdown`) — the ASCII
+      tab renders in the browser's default font, so fretboard alignment can
+      look slightly off; the content is complete and correct. (A rendered
+      HTML song page is a possible follow-up.)
+
 ## Grounding rules
 - **Report what the pipeline returned** — don't invent chords, frets, or
   lyrics. If a section's chords are empty, say so (and offer to re-run with

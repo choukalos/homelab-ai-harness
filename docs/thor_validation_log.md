@@ -508,3 +508,43 @@ power / triad header lines + per-chord shape rendering.
 - Lyrics sparseness on real vocals remains the open Matrix-side item (see
   2026-10-31 entries) — unchanged by this update (the surface is
   deterministic post-processing and never touches lyrics).
+
+## Validation Entry — 2026-11-01 (part 2): Song-tab publishing (`/files/tabs/`)
+
+**Scope:** publish transcribed songs (tab + lyrics) to the public blog's
+`/files/tabs/` drop zone. Answer to "does the media MCP tool need expanding?"
+— **no**: `media_transcribe_song` + `media_fetch` already produce local
+artifacts; the only gap was the `publish_file` skill's subdirectory
+allowlist (no `tabs`).
+
+**Changes:**
+- `skills/publish_file/skill.py`: `tabs` added to `SUBDIRS` allowlist
+  (live bind mount — effective immediately, no rebuild/restart).
+- `agents-skills/publish-file/SKILL.md` + `skills/publish_file/README.md`:
+  `tabs` documented (README also fixed a stale list that wrongly included
+  `files`).
+- `agents-skills/song-transcribe/SKILL.md`: new step 6 — publish workflow
+  (fetch into per-song `subdirectory=<slug>` to dodge the generic
+  `tab.md`/`lyrics.txt` basenames, slug-prefixed `destination_name`,
+  pre-publish caveats: draft quality, LLM-guessed title, ASR lyrics).
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| `publish_file` accepts `subdirectory=tabs` (skill-runner job, real API path) | ✅ PASS |
+| Collision guard: second publish of same name fails cleanly (`overwrite=true` required) — exercised live when a duplicate lyrics publish raced the first | ✅ PASS |
+| Riptide e2e publish: `media_fetch` (per-song `subdirectory=riptide`) → `publish_file` ×2 → `https://choukalos.com/files/tabs/riptide-tab.md` + `riptide-lyrics.txt` | ✅ PASS |
+| Public verification through Cloudflare → Caddy → portal: `/files/tabs/` browse page lists both; both files serve 200 with correct content (`text/markdown` / `text/plain`) | ✅ PASS |
+| Tab header corrected before publish (LLM-guessed "Lady" → "Riptide — Vance Joy", known from the source URL) | ✅ PASS |
+
+**Notes:**
+- Per-song local organization: `media_fetch(host_path, subdirectory=<slug>)`
+  → `/home/chuck/data/media/generated/pipeline/<slug>/` (an approved
+  publish source root). No media MCP tool changes needed.
+- The portal serves `.md` as raw `text/markdown` (no rendering) — the ASCII
+  fretboard renders in the browser's default font, so alignment can look
+  slightly off; content is complete. A rendered HTML song page is a
+  possible follow-up.
+- Lyrics of commercial recordings are ASR output — publishing them is the
+  owner's call (stated in the skill's pre-publish caveat).
