@@ -439,3 +439,72 @@ SHA webm, Riptide recording). Key/BPM "drift" is closed.
 on real vocals (Riptide: 4 lines; the LLM caveat confirms the raw ASR was
 bad, so this is pre-polish). Tab data (key/chords/notes/structure) is fully
 verified.
+
+---
+
+## Validation Entry — 2026-11-01: `/transcribe` chord/key/fingering surface (`media_transcribe_song` update)
+
+Matrix spec: `transcribe_thor_spec.md` (repo root, delivered by the matrix AI
+2026-10-31 — "implemented + verified" on the media-pipeline; deterministic
+post-processing, worker stage 5.5 — the LLM never sees or touches any of it).
+Thor side (mcp_media client + tool + tests + docs) updated + verified here.
+The spec file was consumed and removed with this change.
+
+**Contract (what changed):** `/transcribe` gains `tuning` (v1 `standard`
+only), `stems` default flipped **false → true**, `full_notes`,
+`transpose_semitones` (int −12..12, bool rejected), `target_key` (tonic
+`^[A-G][#b]?m?$`, offset from the **detected** key, shortest direction ±6,
+wins over `transpose_semitones`), `chord_style` (`as_detected` | `triads` |
+`power`, case-insensitive), `capo` (bool), `shape_hints` (bool, default
+true). `analysis.json` echoes the four surface fields + `capo_suggestion`
+(non-null only when a capo was applied) + `caveats`; chord events gain
+`shape` when hints are on; `tab.md` gains `Transposed ±n` / `Capo: n` /
+power / triad header lines + per-chord shape rendering.
+
+**Live pipeline 400 contract (direct API, matrix :8189):**
+
+| Check | Result |
+|---|---|
+| `chord_style="sevenths"` → 400 `chord_style must be as_detected\|triads\|power` | ✅ PASS |
+| `transpose_semitones=13` → 400 (range) | ✅ PASS |
+| `transpose_semitones=true` → 400 (bool-as-int rejected) | ✅ PASS |
+| `target_key="Eb7"` → 400 (tonic regex) | ✅ PASS |
+| `capo=1` / `shape_hints="yes"` → 400 (bool-only) | ✅ PASS |
+| `tuning="drop_d"` → 400 (v1 standard only) | ✅ PASS |
+| `instrument="piano"` → 400 (v1 guitar only) | ✅ PASS |
+
+**Thor-side verification (mock pipeline):**
+
+| Check | Result |
+|---|---|
+| Mock-pipeline suite `mcp/servers/media/test_transcribe.py` — extended: mock now mirrors the submit-time 400 contract + echoes the new analysis fields (echoed params, per-chord `shape` only when `shape_hints`, `capo_suggestion` only when capo applied, caveats, tab.md headers) | ✅ **57/57 PASS** (was 27/27) |
+| Client `transcribe()`: faithful-to-recording defaults in payload (guitar/standard/lyrics=true/stems=**true**/full_notes=false/transpose=0/as_detected/capo=false/shape_hints=true; `whisper_model`/`target_key` omitted when unset) | ✅ PASS |
+| Client `transcribe()`: all 9 new params forwarded (case-sensitive values, negative transpose, target_key, whisper_model) | ✅ PASS |
+| Client → mock 400 at submit: 13 bad-payload cases (bad style, non-bool flags, ±13, bool-as-int, float transpose, bad tonics, bad tuning/instrument) | ✅ PASS |
+| Tool `media_transcribe_song`: new params accepted + `chord_style="POWER"` normalized to `power` in the payload; `target_key="Bb"` forwarded | ✅ PASS |
+| Tool: 10 clean client-side validation errors (no POST, no job) — tuning, chord_style, transpose ±13/bool, target_key ×2, capo/shape_hints/full_notes non-bool | ✅ PASS |
+| `finalize_job` transcribe branch + `media_job_result` poll (running → done, 5 paths + location) — regression | ✅ PASS |
+| `media_fetch` artifacts: analysis.json echoes the surface (defaults + capo job variants), tab.md shape-hint line + capo header | ✅ PASS |
+
+**Live E2E (via LiteLLM `/mcp-rest/tools/call`, chuck's key — the real agent path):**
+
+| Check | Result |
+|---|---|
+| Tool schema: 13 params on `media_transcribe_song` with correct types/defaults (MCP `tools/list` in-container **and** LiteLLM `/mcp-rest/tools/list`, 87 tools total) | ✅ PASS |
+| Tool client-side validation live (4 bad calls → clean errors, no jobs created) | ✅ PASS |
+| Job payload recorded on the pipeline carries the full surface + identity (`user=chuck`, `client=pi`) | ✅ PASS |
+| **Riptide e2e #1** — YouTube URL (yt-dlp ingest) + `chord_style=power` + `capo=true` + `shape_hints=true`: detected **C# major** (ground truth per 2026-10-31 entry); `capo_suggestion={capo:1, finger_key:C}`; shapes exactly match the spec's example table — A5 `open A5`, G5 `power @ 3 (E-shape)`, C5 `power @ 3 (A-shape)`, F5 `power @ 1 (E-shape)`; tab.md headers `Capo: 1 — chords shown as C finger shapes (sounding key C# major)` + `Chords shown as power chords (root + 5th)`; caveats (capo + power) present | ✅ PASS |
+| **Riptide e2e #2** — `target_key="E"`: `transpose_semitones=3` applied (C# → E, shortest direction), key **E major**, caveat `transposed +3 semitones (detected C# major -> E major)`, tab.md header `Transposed +3 semitones from the source recording`, progression C#m7–Bmaj7–Emaj7–Amaj7 (= the spec's +3 example), shape hints on the transposed chords (C#m7 `A-shape barre @ 4`, Emaj7/Bmaj7 `open`), `capo_suggestion: None` | ✅ PASS |
+| `media_job_result` poll path (transcribe job): running → done + 5 artifact paths + `location` | ✅ PASS |
+| Identity threading on the new-surface jobs (`user=chuck`, `client=pi` in the pipeline payload) | ✅ PASS |
+
+**Notes:**
+- `stems` default flipped false → true in the MCP tool to match the server
+  default (spec table); demucs failure falls back to full-mix ASR + caveat,
+  so the job is never blocked on stems.
+- v1 scope per spec: per-chord *easiest* shape (open if available, else
+  lowest-fret barre/power); a global "consistent position" pass is a v2
+  refinement.
+- Lyrics sparseness on real vocals remains the open Matrix-side item (see
+  2026-10-31 entries) — unchanged by this update (the surface is
+  deterministic post-processing and never touches lyrics).

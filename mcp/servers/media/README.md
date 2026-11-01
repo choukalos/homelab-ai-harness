@@ -23,7 +23,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
 | `media_delete_voice` | `/voices/{name}` (sync) | Remove a voice (ref + sample + manifest entry); `trailer`/`default` protected |
 | `media_generate_music` | `/music` | Prompt(+lyrics) → song/instrumental wav (ACE-Step) |
-| `media_transcribe_song` | `/transcribe` (job) | Song → **guitar tab + timestamped lyrics** (deterministic DSP + ASR + LLM polish; `source` = YouTube URL / http(s) URL / GPU-host path / staging file; v1 `instrument="guitar"` only; `stems=true` = demucs vocal stem for cleaner lyrics) |
+| `media_transcribe_song` | `/transcribe` (job) | Song → **guitar tab + timestamped lyrics** (deterministic DSP + ASR + LLM polish; `source` = YouTube URL / http(s) URL / GPU-host path / staging file; v1 `instrument="guitar"`, `tuning="standard"` only; `stems` default true = demucs vocal stem for cleaner lyrics; `full_notes` = full note events; `whisper_model` override). **Chord/key/fingering surface** (deterministic post-processing, 2026-10-31 — the LLM never touches it): `transpose_semitones` (−12..12) / `target_key` (tonic like `E`/`Bb`/`F#m`, offset from the detected key, wins over transpose) re-render tab + MIDI in the new key; `chord_style` = `as_detected` (default) / `triads` / `power` (root+5th, metal-friendly); `capo=true` suggests the smallest capo (0–5) when the key has no open shapes (chords shown as finger shapes); `shape_hints` (default true) annotates every chord with its easiest fingering (open / E- or A-shape barre / power) |
 | `media_sfx` | `/sfx` | Video → synced SFX bed (MMAudio, upload) |
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
@@ -149,6 +149,45 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-01: `media_transcribe_song` chord/key/fingering surface (matrix
+pipeline update, per `transcribe_thor_spec.md` — the spec file was consumed
+and removed with this change). The `/transcribe` API gained the
+**deterministic chord/key/fingering surface** (worker stage 5.5; the LLM
+never sees or touches it — binding design principle: tab data is
+deterministic from the audio): `tuning` (v1 `standard` only), `stems`
+default flipped **false → true** (vocal-stem ASR is now the faithful
+default; demucs failure falls back to full mix + caveat), `full_notes`
+(full note events), `whisper_model` (ASR model override),
+`transpose_semitones` (int −12..12, bool rejected — shifts note events,
+chord symbols and the key label; `notes.json` + `song.mid` re-rendered from
+the shifted events), `target_key` (tonic `^[A-G][#b]?m?$` — offset computed
+from the **detected** key, shortest direction ±6, wins over
+`transpose_semitones`), `chord_style` (`as_detected` | `triads` |
+`power`, case-insensitive — power = root+5th, a correction for metal where
+the CQT major/minor guess is arbitrary), `capo` (suggest smallest capo 0–5
+when the (transposed) key has no open shapes; chords shown as the finger
+shapes, like a capo tab site), `shape_hints` (default true — per-chord
+easiest fingering on the **final finger chord**, after transpose + capo).
+Client: `transcribe()` forwards the full surface (null-default fields
+`whisper_model`/`target_key` omitted when unset); MCP tool pre-validates
+with clean errors (v1 instrument/tuning, bool-only flags, transpose range
++ bool-as-int, chord_style enum normalized to lowercase, target_key tonic
+regex) — the pipeline re-validates with a 400 at submit as a backstop.
+Output schema: `analysis.json` echoes `transpose_semitones` /
+`chord_style` / `capo` / `shape_hints` + `capo_suggestion` (non-null only
+when a capo was actually applied) + human-readable `caveats`; chord events
+carry `shape` only when `shape_hints: true` (`{type: open|barre|power,
+base, fret}`); `tab.md` gains header lines (`Transposed ±n semitones…` /
+`Capo: n — chords shown as X finger shapes (sounding key Y)` / power /
+triad notes) and renders shapes on the `Chords:` line (`open` / `E-shape
+barre @ 4` / `open A5` / `power @ 3 (E-shape)`). Verified 2026-11-01:
+57/57 mock-pipeline checks (`test_transcribe.py` — mock now mirrors the
+submit-time 400 contract and echoes the new analysis fields; live pipeline
+untouched) + live smoke (8/8 pipeline 400 paths; MCP schema via SSE +
+LiteLLM `/mcp-rest/tools/list`; Riptide end-to-end with `chord_style=power`
++ `capo=true` via LiteLLM `/mcp-rest/tools/call` — see
+`docs/thor_validation_log.md`).
 
 2026-10-31: `media_transcribe_song` — song → guitar tab + lyrics (new
 `/transcribe` job flow on the GPU host, per

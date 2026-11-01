@@ -11,7 +11,9 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_add_voice(name, source, ...)             Register voice from reference wav (job)
   - media_delete_voice(name)                       Remove a TTS voice (sync)
   - media_generate_music(prompt, lyrics, ...)      Prompt -> song/instrumental
-  - media_transcribe_song(source, instrument, ...)  Song -> guitar tab + lyrics (/transcribe)
+  - media_transcribe_song(source, instrument, ...)  Song -> guitar tab + lyrics (/transcribe;
+                                                    transpose/target_key/chord_style/capo/
+                                                    shape_hints surface)
   - media_sfx(video, description, duration)        Video -> synced SFX bed
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
   - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
@@ -323,14 +325,63 @@ def _resolve_transcribe_source(source: str) -> str:
     return PIPELINE.put(source, "transcribe")
 
 
-def _transcribe_pipeline(source: str, instrument: str, lyrics: bool,
-                         stems: bool, user: str,
-                         non_blocking: bool) -> dict:
-    """Source resolution + POST /transcribe (sync; runs in a worker thread)."""
+# v1 chord/key/fingering surface (2026-10-31, transcribe_thor_spec.md):
+# deterministic post-processing on the pipeline — the LLM never touches it.
+_CHORD_STYLES = ("as_detected", "triads", "power")
+_TARGET_KEY_RE = re.compile(r"^[A-G][#b]?m?$")
+
+
+def _validate_transcribe_opts(instrument: str, tuning: str, lyrics: bool,
+                              stems: bool, full_notes: bool,
+                              transpose_semitones: int, target_key: str,
+                              chord_style: str, capo: bool,
+                              shape_hints: bool) -> Optional[dict]:
+    """Clean client-side validation of the /transcribe v1 surface (the
+    pipeline re-validates with a 400 at submit as a backstop). Returns an
+    error dict or None. chord_style is accepted case-insensitively and
+    normalized to lowercase before the pipeline sees it."""
+    if instrument != "guitar":
+        return {"error": f"v1 supports instrument='guitar' only (got {instrument!r})"}
+    if tuning != "standard":
+        return {"error": f"v1 supports tuning='standard' only (got {tuning!r})"}
+    for name, val in (("lyrics", lyrics), ("stems", stems),
+                      ("full_notes", full_notes), ("capo", capo),
+                      ("shape_hints", shape_hints)):
+        if not isinstance(val, bool):
+            return {"error": f"{name} must be a boolean (got {type(val).__name__}: {val!r})"}
+    if isinstance(transpose_semitones, bool) or \
+            not isinstance(transpose_semitones, int):
+        return {"error": (f"transpose_semitones must be an integer in -12..12 "
+                          f"(got {transpose_semitones!r})")}
+    if not (-12 <= transpose_semitones <= 12):
+        return {"error": (f"transpose_semitones must be in -12..12 "
+                          f"(got {transpose_semitones})")}
+    style = chord_style.strip().lower()
+    if style not in _CHORD_STYLES:
+        return {"error": (f"chord_style must be one of {', '.join(_CHORD_STYLES)} "
+                          f"(got {chord_style!r})")}
+    if target_key is not None and not _TARGET_KEY_RE.match(target_key):
+        return {"error": (f"target_key must be a tonic like 'E', 'Bb', 'F#m' "
+                          f"(got {target_key!r})")}
+    return None
+
+
+def _transcribe_pipeline(source: str, instrument: str, tuning: str,
+                         lyrics: bool, stems: bool, full_notes: bool,
+                         whisper_model: Optional[str],
+                         transpose_semitones: int, target_key: Optional[str],
+                         chord_style: str, capo: bool, shape_hints: bool,
+                         user: str, non_blocking: bool) -> dict:
+    """Source resolution + POST /transcribe (sync; runs in a worker thread).
+    `chord_style` must already be normalized to lowercase (see
+    _validate_transcribe_opts)."""
     path = _resolve_transcribe_source(source)
-    return PIPELINE.transcribe(path, instrument, lyrics, stems,
-                               user=user, client=MEDIA_CLIENT,
-                               non_blocking=non_blocking)
+    return PIPELINE.transcribe(
+        path, instrument=instrument, tuning=tuning, lyrics=lyrics,
+        stems=stems, full_notes=full_notes, whisper_model=whisper_model,
+        transpose_semitones=transpose_semitones, target_key=target_key,
+        chord_style=chord_style, capo=capo, shape_hints=shape_hints,
+        user=user, client=MEDIA_CLIENT, non_blocking=non_blocking)
 
 
 # ---------------------------------------------------------------------------
@@ -615,31 +666,64 @@ async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30
         "`source` = a YouTube URL (audio downloaded here via yt-dlp, then "
         "uploaded), a direct http(s) media URL (fetched on the GPU host), a "
         "GPU-host media_jobs path, or a local file under the staging dir "
-        f"{MEDIA_STAGING_DIR} (auto-uploaded). v1: instrument='guitar' only "
-        "(6-string, standard tuning). `stems=true` runs vocal-stem separation "
-        "first (cleaner lyrics on dense mixes, +1-2 min). Returns the job "
-        "output paths {analysis, tab, lyrics, midi, audio} (GPU-host paths — "
-        "media_fetch / media_pull each one) + the original source. Expect "
-        "minutes per song: non_blocking=true returns {job_id} in ~1s — poll "
-        "media_job_result(job_id, wait_seconds=20) until done."
+        f"{MEDIA_STAGING_DIR} (auto-uploaded). v1: instrument='guitar', "
+        "tuning='standard' only (6-string). `stems=true` (default) runs "
+        "vocal-stem separation first (cleaner lyrics on dense mixes, +1-2 min; "
+        "pass false to skip demucs). `full_notes=true` includes the full note "
+        "events. `whisper_model` overrides the ASR model (default large-v3). "
+        "CHORD/KEY/FINGERING SURFACE (deterministic post-processing — the LLM "
+        "never touches it; defaults are faithful to the recording, every "
+        "modification is opt-in): `transpose_semitones` (integer -12..12) "
+        "shifts note events, chord symbols and the key label (tab + MIDI are "
+        "re-rendered in the new key); `target_key` (a tonic like 'E', 'Bb', "
+        "'F#m') transposes from the DETECTED key to that key (shortest "
+        "direction, ±6; wins over transpose_semitones if both are given); "
+        "`chord_style`: 'as_detected' (default; 7ths/9ths/6ths as detected) | "
+        "'triads' (7th/9th/6th -> triad) | 'power' (every chord -> root+5th — "
+        "idiomatic for metal, where the detected mode is unreliable); "
+        "`capo=true` suggests the smallest capo (0-5) when the (transposed) "
+        "key has no open shapes — chords are then shown as the finger shapes "
+        "(shifted down by the capo, like a capo tab site); `shape_hints=true` "
+        "(default) annotates every chord with its easiest fingering (open / "
+        "E- or A-shape barre / power) computed on the final finger chord. "
+        "Returns the job output paths {analysis, tab, lyrics, midi, audio} "
+        "(GPU-host paths — media_fetch / media_pull each one) + the original "
+        "source. Expect minutes per song: non_blocking=true returns {job_id} "
+        "in ~1s — poll media_job_result(job_id, wait_seconds=20) until done."
     ),
 )
 async def media_transcribe_song(
     source: str,
     instrument: str = "guitar",
+    tuning: str = "standard",
     lyrics: bool = True,
-    stems: bool = False,
+    stems: bool = True,
+    full_notes: bool = False,
+    whisper_model: Optional[str] = None,
+    transpose_semitones: int = 0,
+    target_key: Optional[str] = None,
+    chord_style: str = "as_detected",
+    capo: bool = False,
+    shape_hints: bool = True,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
-    """YouTube URL / URL / host path / staging file -> guitar tab + lyrics."""
-    if instrument != "guitar":
-        return {"error": f"v1 supports instrument='guitar' only (got {instrument!r})"}
+    """YouTube URL / URL / host path / staging file -> guitar tab + lyrics.
+
+    Chord/key/fingering surface (deterministic on the pipeline): transpose
+    (semitones or target key), chord_style (as_detected/triads/power), capo
+    suggestion, per-chord shape hints."""
+    err = _validate_transcribe_opts(
+        instrument, tuning, lyrics, stems, full_notes, transpose_semitones,
+        target_key, chord_style, capo, shape_hints)
+    if err:
+        return err
     user = await asyncio.to_thread(_resolve_user, ctx)
     try:
         res = await asyncio.to_thread(
-            _transcribe_pipeline, source, instrument, lyrics, stems,
-            user, non_blocking)
+            _transcribe_pipeline, source, instrument, tuning, lyrics, stems,
+            full_notes, whisper_model, transpose_semitones, target_key,
+            chord_style.strip().lower(), capo, shape_hints, user, non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
     if non_blocking:

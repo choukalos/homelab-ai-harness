@@ -1,5 +1,16 @@
 # media-pipeline handoff: `/transcribe` flow (song → guitar tab + lyrics)
 
+> **2026-11-01 update:** the `/transcribe` contract was extended with the
+> **chord/key/fingering surface** (`transpose_semitones`, `target_key`,
+> `chord_style`, `capo`, `shape_hints`, `full_notes`, `stems` default
+> flipped to `true`) per the matrix spec `transcribe_thor_spec.md` (consumed
+> + removed 2026-11-01). The current API reference is the `/transcribe` row
+> in `docs/media-mcp-handoff.md`; the MCP-side changes + verification are in
+> `mcp/servers/media/README.md` (History) and `docs/thor_validation_log.md`
+> (2026-11-01 entry). The sections below are the original 2026-10-31
+> contract (still accurate for the base flow; its payload table predates the
+> new fields).
+>
 > **2026-10-31 (new flow).** Add one job flow to the media-pipeline service
 > (:8189): `POST /transcribe` — audio/video file → guitar transcription
 > (6-string, standard tuning) + timestamped lyrics. Companion planning doc on

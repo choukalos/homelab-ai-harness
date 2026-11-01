@@ -62,11 +62,30 @@ class MockState:
             jobdir = os.path.join(self.root, "media_jobs", jid)
             os.makedirs(jobdir, exist_ok=True)
             out = {}
+            # Echo the submitted chord/key/fingering surface into the mock
+            # analysis.json (like the real pipeline: fields echoed, shape per
+            # chord event only when shape_hints, capo_suggestion only when a
+            # capo was actually applied).
+            p = j["payload"]
+            analysis = {"version": 1, "key": "E minor", "bpm": 128,
+                        "transpose_semitones": p.get("transpose_semitones", 0),
+                        "chord_style": p.get("chord_style", "as_detected"),
+                        "capo": p.get("capo", False),
+                        "shape_hints": p.get("shape_hints", True)}
+            if p.get("capo"):
+                analysis["capo_suggestion"] = {"capo": 1, "finger_key": "Am"}
+            chord = {"time_s": 0.0, "symbol": "Em", "confidence": 0.9}
+            if p.get("shape_hints", True):
+                chord["shape"] = {"type": "open", "base": None, "fret": None}
+            analysis["sections"] = [{"name": "verse", "chords": [chord]}]
+            tab = "# Mock Song - guitar tab\n"
+            if p.get("shape_hints", True):
+                tab += "Chords: Em [open]\n"
+            if p.get("capo"):
+                tab += "Capo: 1 — chords shown as Am finger shapes\n"
             artifacts = (
-                ("analysis.json",
-                 json.dumps({"version": 1, "key": "E minor", "bpm": 128,
-                             "sections": []}).encode()),
-                ("tab.md", b"# Mock Song - guitar tab\n"),
+                ("analysis.json", json.dumps(analysis).encode()),
+                ("tab.md", tab.encode("utf-8")),
                 ("lyrics.txt", b"[0:01.0] hello world\n"),
                 ("song.mid", b"MThd-mock"),
                 ("audio.wav", b"RIFF-mock-wav"),
@@ -128,6 +147,11 @@ class _Handler(BaseHTTPRequestHandler):
             # Contract check: path must be a media_jobs path.
             if not str(payload.get("path", "")).startswith(JOB_PREFIX):
                 return self._json(400, {"error": "path must be in media_jobs"})
+            # v1 chord/key/fingering surface validation (400 at submit,
+            # before job creation — mirrors the pipeline contract).
+            err = _validate_transcribe_payload(payload)
+            if err:
+                return self._json(400, {"error": err})
             self.state.transcribe_payloads.append(payload)
             return self._json(200, {"job_id": self.state.new_job(
                 "transcribe", payload)})
@@ -148,6 +172,29 @@ class _Handler(BaseHTTPRequestHandler):
             self.state.files[rel] = b"mock-downloaded"
             return self._json(200, {"path": JOB_PREFIX + rel})
         return self._json(404, {"error": f"unhandled POST {self.path}"})
+
+
+def _validate_transcribe_payload(p: dict) -> str | None:
+    """Mirror of the pipeline's submit-time validation (400 paths):
+    v1 instrument/tuning, bool-only flags, transpose range + bool-as-int
+    rejection, chord_style enum (case-insensitive), target_key tonic regex."""
+    if p.get("instrument", "guitar") != "guitar":
+        return "v1 supports instrument=guitar only"
+    if p.get("tuning", "standard") != "standard":
+        return "v1 supports tuning=standard only"
+    for k in ("lyrics", "stems", "full_notes", "capo", "shape_hints"):
+        if k in p and not isinstance(p[k], bool):
+            return f"{k} must be a bool"
+    t = p.get("transpose_semitones", 0)
+    if isinstance(t, bool) or not isinstance(t, int) or not (-12 <= t <= 12):
+        return "transpose_semitones must be an integer in -12..12"
+    if str(p.get("chord_style", "as_detected")).lower() \
+            not in ("as_detected", "triads", "power"):
+        return "chord_style must be as_detected | triads | power"
+    tk = p.get("target_key")
+    if tk is not None and not re.match(r"^[A-G][#b]?m?$", str(tk)):
+        return "target_key must be a tonic like E, Bb, F#m"
+    return None
 
 
 def _start_mock(delay_polls: int = 10):
@@ -217,13 +264,59 @@ def main() -> int:
                                    user="u1", client="c1")
     ok("non_blocking -> {job_id}", set(r) == {"job_id"}, str(r))
     p = state.transcribe_payloads[-1]
-    ok("payload: path/instrument/lyrics/stems + identity",
+    ok("payload: faithful-to-recording defaults + identity",
        p["path"] == host_audio and p["instrument"] == "guitar"
-       and p["lyrics"] is True and p["stems"] is False
+       and p["tuning"] == "standard" and p["lyrics"] is True
+       and p["stems"] is True and p["full_notes"] is False
+       and p["transpose_semitones"] == 0
+       and p["chord_style"] == "as_detected" and p["capo"] is False
+       and p["shape_hints"] is True
+       and "whisper_model" not in p and "target_key" not in p
        and p["user"] == "u1" and p["client"] == "c1", str(p))
     r = server.PIPELINE.transcribe(host_audio, user="u1", client="c1")
     ok("blocking -> output dict with 5 keys",
        set(r) == {"analysis", "tab", "lyrics", "midi", "audio"}, str(r))
+
+    print("== client: transcribe() — chord/key/fingering surface ==")
+    r = server.PIPELINE.transcribe(
+        host_audio, tuning="standard", lyrics=False, stems=True,
+        full_notes=True, whisper_model="small", transpose_semitones=-3,
+        target_key="E", chord_style="power", capo=True, shape_hints=False,
+        user="u1", client="c1", non_blocking=True)
+    p = state.transcribe_payloads[-1]
+    ok("all new params forwarded",
+       p["tuning"] == "standard" and p["lyrics"] is False
+       and p["stems"] is True and p["full_notes"] is True
+       and p["whisper_model"] == "small" and p["transpose_semitones"] == -3
+       and p["target_key"] == "E" and p["chord_style"] == "power"
+       and p["capo"] is True and p["shape_hints"] is False, str(p))
+
+    print("== client: 400 at submit (pipeline contract) ==")
+    bad_payloads = (
+        (dict(chord_style="sevenths"), "chord_style"),
+        (dict(shape_hints="yes"), "shape_hints"),
+        (dict(capo=1), "capo"),
+        (dict(stems="no"), "stems"),
+        (dict(full_notes="yes"), "full_notes"),
+        (dict(transpose_semitones=13), "transpose_semitones"),
+        (dict(transpose_semitones=-13), "transpose_semitones"),
+        (dict(transpose_semitones=True), "transpose_semitones"),
+        (dict(transpose_semitones=3.0), "transpose_semitones"),
+        (dict(target_key="Eb7"), "target_key"),
+        (dict(target_key="H"), "target_key"),
+        (dict(tuning="drop_d"), "tuning"),
+        (dict(instrument="piano"), "instrument"),
+    )
+    for kwargs, frag in bad_payloads:
+        try:
+            server.PIPELINE.transcribe(host_audio, non_blocking=True,
+                                       **kwargs)
+            ok(f"400: {kwargs}", False, "no error raised")
+        except urllib.error.HTTPError as e:
+            body = json.loads(e.read().decode())
+            ok(f"400: {kwargs}",
+               e.code == 400 and frag in body.get("error", ""),
+               f"({e.code} {body})")
 
     print("== client: poll_job (running -> done) ==")
     jid = server.PIPELINE.transcribe(host_audio, non_blocking=True)["job_id"]
@@ -307,6 +400,42 @@ def main() -> int:
     ok("stems=true/lyrics=false in payload",
        p["stems"] is True and p["lyrics"] is False, str(p))
 
+    print("== tool: media_transcribe_song — chord/key/fingering surface ==")
+    r = asyncio.run(tool(source=staged, chord_style="POWER", capo=True,
+                         transpose_semitones=3, full_notes=True,
+                         whisper_model="small", shape_hints=False,
+                         non_blocking=True))
+    ok("valid new params accepted (chord_style case-insensitive)",
+       r.get("status") == "running" and "job_id" in r, str(r))
+    p = state.transcribe_payloads[-1]
+    ok("normalized + forwarded in payload",
+       p["chord_style"] == "power" and p["capo"] is True
+       and p["transpose_semitones"] == 3 and p["full_notes"] is True
+       and p["whisper_model"] == "small" and p["shape_hints"] is False
+       and p["tuning"] == "standard" and p["stems"] is True, str(p))
+
+    r = asyncio.run(tool(source=staged, target_key="Bb",
+                         non_blocking=True))
+    p = state.transcribe_payloads[-1]
+    ok("target_key forwarded", p["target_key"] == "Bb", str(p))
+
+    bad_opts = (
+        (dict(tuning="drop_d"), "tuning"),
+        (dict(chord_style="sevenths"), "chord_style"),
+        (dict(transpose_semitones=13), "transpose_semitones"),
+        (dict(transpose_semitones=-13), "transpose_semitones"),
+        (dict(transpose_semitones=True), "transpose_semitones"),
+        (dict(target_key="Eb7"), "target_key"),
+        (dict(target_key="H"), "target_key"),
+        (dict(capo="yes"), "capo"),
+        (dict(shape_hints=1), "shape_hints"),
+        (dict(full_notes="yes"), "full_notes"),
+    )
+    for kwargs, frag in bad_opts:
+        r = asyncio.run(tool(source=staged, non_blocking=True, **kwargs))
+        ok(f"clean client-side error: {kwargs}",
+           frag in r.get("error", ""), str(r))
+
     print("== tool: media_job_result (transcribe job) ==")
     r = asyncio.run(tool(source=staged, non_blocking=True))
     jid = r["job_id"]
@@ -324,8 +453,46 @@ def main() -> int:
     print("== fetch: transcribe artifacts ==")
     dest = tempfile.mkdtemp(prefix="mock_fetch_")
     local = server.PIPELINE.fetch(jr["tab"], dest)
-    ok("media_fetch tab.md", os.path.isfile(local)
-       and open(local, "rb").read() == b"# Mock Song - guitar tab\n")
+    ok("media_fetch tab.md (shape-hint line, no capo by default)",
+       os.path.isfile(local)
+       and open(local, "rb").read()
+       == b"# Mock Song - guitar tab\nChords: Em [open]\n",
+       open(local, "rb").read() if os.path.isfile(local) else "missing")
+    local = server.PIPELINE.fetch(jr["analysis"], dest)
+    ana = json.loads(Path(local).read_text())
+    ok("analysis.json echoes the new surface (defaults)",
+       ana["transpose_semitones"] == 0 and ana["chord_style"] == "as_detected"
+       and ana["capo"] is False and ana["shape_hints"] is True
+       and "capo_suggestion" not in ana
+       and ana["sections"][0]["chords"][0]["shape"]
+       == {"type": "open", "base": None, "fret": None}, str(ana))
+    # capo job: capo_suggestion + tab header present (the tool-surface job
+    # above used capo=true — fetch its analysis via its job id)
+    jid_capo = None
+    for j in state.jobs.values():
+        if j["flow"] == "transcribe" and j["payload"].get("capo") is True:
+            jid_capo = j["id"]
+    assert jid_capo, "capo job not found in mock registry"
+    # force-complete it (poll until done), then fetch its analysis
+    while server.PIPELINE.job_status(jid_capo)["status"] != "done":
+        time.sleep(0.2)
+    local = server.PIPELINE.fetch(
+        JOB_PREFIX + f"media_jobs/{jid_capo}/analysis.json", dest)
+    ana = json.loads(Path(local).read_text())
+    ok("capo job: capo_suggestion + caveat + shape omitted (hints off)",
+       ana["capo"] is True
+       and ana["capo_suggestion"] == {"capo": 1, "finger_key": "Am"}
+       and ana["shape_hints"] is False
+       and "shape" not in ana["sections"][0]["chords"][0]
+       and ana["transpose_semitones"] == 3
+       and ana["chord_style"] == "power",
+       str(ana))
+    local = server.PIPELINE.fetch(
+        JOB_PREFIX + f"media_jobs/{jid_capo}/tab.md", dest)
+    ok("capo job: tab.md has capo header, no shape brackets",
+       b"Capo: 1" in open(local, "rb").read()
+       and b"[open]" not in open(local, "rb").read(),
+       open(local, "rb").read())
 
     print(f"\nALL {passed} CHECKS PASSED (mock pipeline — live pipeline untouched)")
     httpd.shutdown()

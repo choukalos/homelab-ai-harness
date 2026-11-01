@@ -635,7 +635,7 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **list-presentations** — List existing presentations
 - **list-images** — List generated images with accessible URLs
 - **media-generate** — Generate an image via `mcp_media.media_generate_image` (GPU-host media-pipeline) + `media_fetch`
-- **song-transcribe** — Transcribe a song (YouTube URL / media URL / local file) into a guitar tab + timestamped lyrics via `mcp_media.media_transcribe_song` (GPU-host `/transcribe`: DSP note events + chords + key/BPM, whisper lyrics, LLM polish) + `media_fetch`/`media_pull`
+- **song-transcribe** — Transcribe a song (YouTube URL / media URL / local file) into a guitar tab + timestamped lyrics via `mcp_media.media_transcribe_song` (GPU-host `/transcribe`: DSP note events + chords + key/BPM, whisper lyrics, LLM polish) + `media_fetch`/`media_pull`; chord/key/fingering options: transpose (`transpose_semitones` / `target_key`), `chord_style` (as_detected/triads/power), `capo` suggestion, per-chord `shape_hints`
 - **business-analyst** — NL→SQL data analysis over the family MySQL (~300s; returns a Markdown report + Grafana suggestions)
 - **content-writer** — Multi-format content generation (social/blog/video, ~480s)
 - **marketing-strategy** — Go-To-Market (GTM) strategy generation (~300s)
@@ -825,7 +825,7 @@ MCP server containers (separate Docker Compose project `ai-mcp`):
 - `mcp_mysql` — Database queries via MySQL (InvestorHub): read-only SELECTs, NL-to-SQL with full schema intelligence (join graph, curated domain hints, data samples)
 - `mcp_homelab_status` — Infrastructure health (Docker API + Victoria Metrics)
 - `mcp_filesystem` — Read/write filesystem access (scoped to `/home/chuck/workspace`)
-- `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch) + song transcription (`media_transcribe_song`: YouTube URL → guitar tab + timestamped lyrics)
+- `mcp_media` — Media generation via the GPU-host media-pipeline on Matrix (storyboard, image gen/edit, I2V shots, TTS, music, SFX, upscale, assemble, fetch) + song transcription (`media_transcribe_song`: YouTube URL → guitar tab + timestamped lyrics, with transpose / target key / chord style / capo / shape-hint options)
 - `mcp_vision` — Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp)
 - `mcp_skills` — Cross-client skill gateway: 3 meta-tools (list_skills, run_skill, get_skill_job) wrapping the skill-runner; forwards the caller's LiteLLM key for per-user attribution
 

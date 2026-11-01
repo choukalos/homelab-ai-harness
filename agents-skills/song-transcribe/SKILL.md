@@ -18,13 +18,38 @@ drives the MCP tools and presents the result.
 - **source**: a YouTube URL (preferred), a direct http(s) media URL, a
   GPU-host media_jobs path, or a local file under the staging dir
   (`/home/chuck/workspace/media`).
-- **instrument**: `guitar` only in v1 (6-string, standard tuning).
-- **stems**: `true` for dense mixes (demucs vocal stem first — cleaner
-  lyrics, +1–2 min).
+- **instrument**: `guitar` only in v1 (6-string).
+- **tuning**: `standard` only in v1 (EADGBE).
+- **stems**: `true` by default (demucs vocal stem first — cleaner lyrics on
+  dense mixes, +1–2 min); pass `false` to skip it.
+- **full_notes**: `true` includes the full note events in the output.
+- **whisper_model**: override the ASR model (default `large-v3`).
+- **Chord/key/fingering options** (all deterministic post-processing on the
+  pipeline — the LLM never touches them; defaults are faithful to the
+  recording, every modification is opt-in):
+  - **transpose_semitones** (int −12..12): shift the key; tab + MIDI are
+    re-rendered in the new key.
+  - **target_key** (a tonic like `E`, `Bb`, `F#m`): transpose from the
+    *detected* key to that key (shortest direction, ±6). Wins over
+    `transpose_semitones` if both are given. ("Put this song in E" →
+    `target_key="E"`.)
+  - **chord_style**: `as_detected` (default; 7ths/9ths/6ths as detected) |
+    `triads` (7th/9th/6th → triad) | `power` (every chord → root+5th —
+    idiomatic for metal, where the detected mode is unreliable).
+  - **capo** (`true`): when the (transposed) key has no open shapes, the
+    pipeline suggests the smallest capo (0–5) landing on a friendly
+    open-shape key; chords are then shown as the finger shapes (shifted
+    down by the capo, like a capo tab site).
+  - **shape_hints** (default `true`): every chord annotated with its easiest
+    fingering (open / E- or A-shape barre / power) computed on the final
+    finger chord (after transpose + capo — what you actually play).
 
 ## Workflow
 
-1. **Submit** (always non-blocking — a song takes minutes):
+1. **Submit** (always non-blocking — a song takes minutes). Pass the
+   chord/key/fingering options the user asked for (e.g. `target_key="E"`,
+   `chord_style="power"`, `capo=true`); omit them for a faithful-to-the-
+   recording tab:
    ```
    media_transcribe_song(source=<url>, non_blocking=true)
    → {job_id, status: "running"}
@@ -49,9 +74,14 @@ drives the MCP tools and presents the result.
    key/BPM/chords/notes with per-note confidence.)
 
 4. **Present**:
-   - The tab (markdown, per section with chord symbols + ASCII 6-string tab).
+   - The tab (markdown, per section with chord symbols + ASCII 6-string tab;
+     shape hints like `E-shape barre @ 4` / `open A5` / `power @ 3` on the
+     `Chords:` line when `shape_hints` is on, plus `Capo:` / `Transposed` /
+     power / triad header lines when those options were used).
    - The lyrics (timestamped).
-   - Key / BPM / chord progression from the analysis.
+   - Key / BPM / chord progression from the analysis (note: when a capo was
+     applied, the *sounding* key and the *finger* key differ — report both,
+     e.g. "Capo 1, chords in A (sounds C#)").
    - **Always state the confidence caveat**: the output is a *strong draft* —
      chords/key/BPM/lyrics are high-confidence, the fret-by-fret lead line is
      medium-confidence. Encourage the user to verify against the recording;
@@ -83,3 +113,8 @@ drives the MCP tools and presents the result.
   per source.
 - Artifacts live in the pipeline job dir (14-day retention); `media_pull`
   works even after the job id is evicted from the registry.
+- The chord/key/fingering surface is **deterministic** (worker stage 5.5) —
+  re-running with the same options gives the same tab; the LLM only labels
+  sections / cleans ASR lyrics / writes confidence notes (validated, with a
+  deterministic fallback). v1 scope: per-chord *easiest* shape; a global
+  "consistent position" pass is a v2 refinement.

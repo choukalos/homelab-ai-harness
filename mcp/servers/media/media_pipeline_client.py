@@ -561,21 +561,63 @@ class MediaPipelineClient:
         return self._wait(jid, timeout)["video"]
 
     # ------------------------------------------------- song transcription (2026-10-31)
-    def transcribe(self, path: str, instrument: str = "guitar", lyrics: bool = True,
-                   stems: bool = False, whisper_model: str | None = None,
+    def transcribe(self, path: str, instrument: str = "guitar",
+                   tuning: str = "standard", lyrics: bool = True,
+                   stems: bool = True, full_notes: bool = False,
+                   whisper_model: str | None = None,
+                   transpose_semitones: int = 0, target_key: str | None = None,
+                   chord_style: str = "as_detected", capo: bool = False,
+                   shape_hints: bool = True,
                    user: str | None = None, client: str | None = None,
                    non_blocking: bool = False, timeout: float = 1800) -> dict:
         """Audio/video (media_jobs path) -> guitar tab + timestamped lyrics
         (POST /transcribe, job). `path` MUST be a media_jobs path — stage
         external files with download/put/upload_local first (YouTube ingest
-        happens on the MCP-server side, which owns yt-dlp). Returns the job
-        output {analysis, tab, lyrics, midi, audio} (GPU-host paths).
-        non_blocking=True -> submit only; returns {"job_id"} immediately
-        (poll with poll_job + finalize_job)."""
-        payload = {"path": path, "instrument": instrument, "lyrics": lyrics,
-                   "stems": stems}
+        happens on the MCP-server side, which owns yt-dlp).
+
+        Chord/key/fingering surface (2026-10-31) — all deterministic
+        post-processing on the pipeline (worker stage 5.5); the LLM never
+        sees or touches any of it. Defaults are faithful to the recording;
+        every modification is opt-in:
+          tuning: v1 'standard' only (EADGBE).
+          stems: vocal-stem ASR (default true; demucs failure falls back to
+            full mix + caveat).
+          full_notes: include the full note events in the output.
+          whisper_model: faster-whisper model name (default: pipeline env
+            MEDIA_TRANSCRIBE_WHISPER_MODEL, large-v3).
+          transpose_semitones: int in -12..12 (bool rejected). Shifts note
+            events, chord symbols (root shifted, quality preserved) and the
+            key label; notes.json + song.mid are rewritten from the shifted
+            events. Lyrics/BPM/section boundaries are time-based, unchanged.
+          target_key: tonic like "E" / "Bb" / "F#m" (^[A-G][#b]?m?$). The
+            offset is computed from the DETECTED key (shortest direction,
+            +/-6) and WINS over transpose_semitones if both are given.
+          chord_style: 'as_detected' | 'triads' | 'power' (case-insensitive).
+            triads: 7th/9th/6th -> triad (Dmaj7->D, Bm7->Bm; dim/aug/sus
+            kept). power: everything -> X5 (root + 5th, mode-agnostic —
+            Dmaj7->D5, A#m7->A#5; also a correction for metal, where the
+            CQT major/minor guess on power-chord material is arbitrary).
+          capo: when the (transposed) key has no open shapes, suggest the
+            smallest capo (0-5) landing the key on a friendly open-shape key
+            (G/C/D/A/E/Bm/Em/Am); chords are then shown as the finger shapes
+            (shifted down by the capo), like a capo tab site. Independent of
+            chord_style.
+          shape_hints: annotate every chord with its easiest fingering
+            (open / E- or A-shape barre / power) computed on the FINAL finger
+            chord (after transpose + capo — what you actually play).
+
+        Returns the job output {analysis, tab, lyrics, midi, audio}
+        (GPU-host paths). non_blocking=True -> submit only; returns
+        {"job_id"} immediately (poll with poll_job + finalize_job)."""
+        payload = {"path": path, "instrument": instrument, "tuning": tuning,
+                   "lyrics": lyrics, "stems": stems, "full_notes": full_notes,
+                   "transpose_semitones": transpose_semitones,
+                   "chord_style": chord_style, "capo": capo,
+                   "shape_hints": shape_hints}
         if whisper_model is not None:
             payload["whisper_model"] = whisper_model
+        if target_key is not None:
+            payload["target_key"] = target_key
         jid = self._post_json("/transcribe", payload, user, client)
         if non_blocking:
             return {"job_id": jid}
