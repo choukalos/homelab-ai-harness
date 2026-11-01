@@ -37,11 +37,17 @@ identity whenever it's known (the pipeline only sees audio).
 - **Header**: title (Playfair Display), artist, meta chips (KEY / BPM /
   TUNING / CAPO from `analysis.json`), plus any capo/transpose/power-chord
   note lines from the tab header.
-- **CHART (first)**: chords over the word-timed lyrics — play & sing. Each
-  lyric line is a row of word cells; a chord change renders as a symbol
-  floating above the word it lands on (ASR word timestamps vs chord event
-  times from `analysis.json`). Chords before a section's first word attach
-  to the first word; multiple changes on one word list together; sections
+- **CHORDS (first)**: a grid of fixed-size chord fingering diagrams
+  (name + 6-string × 4-fret shape + X/O markers + starting-fret
+  annotation), one per unique chord. Shapes are deterministic: power/barre
+  generated from the pipeline's `shape` hint (base E/A + fret, major/minor
+  from the symbol), open chords from a standard-shape library; unknown
+  shapes render name-only.
+- **CHART**: chords over the word-timed lyrics — play & sing. Each lyric
+  line is a row of word cells; a chord change renders as a symbol floating
+  above the word it lands on (ASR word timestamps vs chord event times
+  from `analysis.json`). Chords before a section's first word attach to
+  the first word; multiple changes on one word list together; sections
   with chords but no lyrics (intros/outros) get a timed chord strip.
 - **TAB (second, page break)**: per-section name + time range, chord names
   with shape hints (from the `Chords:` line), and the ASCII tab blocks

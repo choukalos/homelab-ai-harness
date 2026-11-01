@@ -684,3 +684,42 @@ README).
 - ASR lyric sparseness (Back in Black 8 lines, Submission 6) is unchanged —
   the chart only places chords where lyrics exist; the tab part is
   unaffected.
+
+## Validation Entry — 2026-11-01 (part 6): chord-fingering grid (CHORDS part)
+
+**Scope:** per the owner's suggestion, the PDF now opens (after the header)
+with a CHORDS part — a grid of fixed-size chord fingering diagrams
+("sheet of tokens"), one per unique chord, each annotated with the fret
+the chord starts on. Denser + more visually appealing than ASCII blocks;
+client-agnostic (same `media_render_tab_pdf` tool).
+
+**How it works (all deterministic):**
+- Shapes from the pipeline's `shape` field: `power`/`barre` generated
+  programmatically (base E/A + `fret`; major/minor from the symbol —
+  E-shape 022100/022000, A-shape x02220/x02210 shifted to the fret),
+  `open` chords from a ~45-shape standard open-shape library
+  (C/Cmaj7/C7/C6/G/G7/D/Dmaj7/A/Am/Am7/Emaj7/F/Fm7/B7/…).
+- Each token: chord name, 6-string × 4-fret-space diagram (finger dots,
+  X/O markers above the nut for open chords), starting-fret annotation
+  ("3rd fret" / "open"). Unknown shapes render name-only.
+- Rendered as HTML/CSS (crisp at any size, no images, no pre-built
+  sheets needed — generated in-process).
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Dot geometry (HTML): C5 power A@3 → dots at (40%,12.5%)+(60%,62.5%); A5 power E@0 → O on 6th str + dot (20%,37.5%); C open x32010 → dots (20,62.5)(40,37.5)(80,12.5) + X/O markers | ✅ PASS |
+| **Bug found + fixed**: `is_minor("C#m7")` was False (ends with "7") → C#m7 barre rendered as MAJOR (s2 at 6th fret). Fix: strip numeric quality suffix before the `m` test. Sweep of 10 symbols (C#m7/D#maj7/Am7/Fm7/Cmaj7/Bbm7/…) all correct; C#m7 dots now (80%,37.5%) | ✅ PASS |
+| Riptide grid: A5 (open) / C5 (3rd) / G5 (3rd) / F5 (1st) | ✅ PASS |
+| Back in Black grid: 9 tokens incl. C#m7 (4th fret barre) | ✅ PASS |
+| Old Porch grid: Fm7 / Dmaj7 / C6 / Cmaj7 (open) | ✅ PASS |
+| Submission grid: F7 / D#maj7 (6th) / G#6 (4th) / Fmaj7 / A#maj7 (1st) / Cmaj7 / C7 | ✅ PASS |
+| All 4 re-rendered via the MCP tool + re-published (overwrite=true) + verified publicly (sha256 match) | ✅ PASS |
+
+**Notes:**
+- Layout order is now: header → CHORDS (fingerings) → CHART (chords over
+  lyrics) → TAB (fretboard reference).
+- The note-event positions in `analysis.json` (per-chord `tab` string/fret)
+  are the raw DSP detections — noisy/incomplete (lead notes mixed in), so
+  the clean `shape` field is the right source for diagrams.

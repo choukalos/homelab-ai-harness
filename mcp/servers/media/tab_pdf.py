@@ -191,6 +191,153 @@ def place_chords(sec):
             for i, ln in enumerate(lines)]
 
 
+def is_minor(symbol):
+    s = re.sub(r"\d+$", "", str(symbol).lower())  # strip numeric quality (7, 9, ...)
+    if s.endswith("maj"):
+        return False
+    return s.endswith("m")
+
+
+def _ordinal(n):
+    n = int(n)
+    if 11 <= n % 100 <= 13:
+        suf = "th"
+    else:
+        suf = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suf}"
+
+
+def _fret_note(fret):
+    fret = int(fret)
+    return "open" if fret <= 0 else f"{_ordinal(fret)} fret"
+
+
+def _power_frets(base, fret):
+    """Power chord (root + 5th). base 'E' = 6th string, 'A' = 4th string."""
+    f = [None] * 6
+    if base == "E":
+        f[0] = fret; f[1] = fret + 2
+    else:
+        f[2] = fret; f[3] = fret + 2
+    return f
+
+
+def _barre_frets(base, fret, minor):
+    """Full barre chord. base 'E' = E-shape (root 6th str), 'A' = A-shape (root 5th str)."""
+    f = [None] * 6
+    if base == "E":
+        # open E 022100 (major) / Em 022000 (minor)
+        f[0] = fret; f[1] = fret + 2; f[2] = fret + 2
+        f[3] = fret + (1 if not minor else 0)
+        f[4] = fret; f[5] = fret
+    else:
+        # open A x02220 (major) / Am x02210 (minor)
+        f[0] = fret; f[1] = fret; f[2] = fret + 2; f[3] = fret + 2
+        f[4] = fret + (2 if not minor else 1); f[5] = fret
+    return f
+
+
+# Standard open chord shapes (strings 6->1; 0 = open, None = muted).
+OPEN_CHORDS = {
+    "C": [None, 3, 2, 0, 1, 0], "Cmaj7": [None, 3, 2, 0, 0, 0],
+    "C7": [None, 3, 2, 3, 1, 0], "C6": [None, 3, 5, 3, 3, 2],
+    "C9": [None, 3, 2, 0, 2, 3], "Csus4": [None, 3, 3, 0, 2, 0],
+    "G": [3, 2, 0, 0, 0, 3], "G7": [3, 2, 0, 0, 0, 1],
+    "Gmaj7": [3, 2, 0, 0, 0, 2], "Gsus4": [3, 3, 2, 0, 0, 3],
+    "Gm": [3, 5, 5, 4, 3, 3], "Gm7": [3, 5, 3, 4, 3, 3],
+    "D": [None, None, 0, 2, 3, 2], "D7": [None, None, 0, 2, 1, 2],
+    "Dmaj7": [None, None, 0, 2, 2, 2], "Dm": [None, None, 0, 2, 3, 1],
+    "Dm7": [None, None, 0, 2, 1, 1], "Dsus4": [None, None, 0, 3, 3, 2],
+    "A": [None, 0, 2, 2, 2, 0], "Am": [None, 0, 2, 2, 1, 0],
+    "Am7": [None, 0, 2, 1, 1, 0], "Amaj7": [None, 0, 2, 1, 2, 0],
+    "A7": [None, 0, 2, 0, 2, 0], "A6": [None, 0, 4, 2, 2, 0],
+    "Asus4": [None, 0, 2, 2, 3, 0],
+    "E": [0, 2, 2, 1, 0, 0], "Em": [0, 2, 2, 0, 0, 0],
+    "Em7": [0, 2, 0, 0, 0, 0], "Emaj7": [0, 2, 2, 0, 1, 0],
+    "E7": [0, 2, 0, 1, 0, 0], "Esus4": [0, 2, 2, 2, 0, 0],
+    "F": [1, 3, 3, 2, 1, 1], "Fm": [1, 3, 3, 1, 1, 1],
+    "Fm7": [1, 3, 1, 1, 1, 1], "F7": [1, 3, 1, 2, 1, 1],
+    "Fmaj7": [1, 2, 1, 0, 1, 1], "F9": [1, 3, 2, 3, 1, 1],
+    "B7": [None, 2, 1, 0, 0, 2], "Bm": [None, 2, 4, 4, 3, 2],
+    "Bmaj7": [None, 2, 1, 0, 3, 2],
+    "Bb": [None, 1, 3, 3, 3, 1], "Bbmaj7": [None, 1, 3, 1, 3, 1],
+    "Bbm7": [None, 1, 3, 1, 2, 1],
+    "F#m": [None, 2, 4, 4, 2, 2], "F#m7": [None, 2, 4, 2, 2, 2],
+    "F#maj7": [None, 2, 4, 3, 2, 2],
+}
+
+
+def chord_frets(symbol, shape):
+    """(frets[6..1], start_fret, note) for a chord symbol + pipeline shape hint.
+
+    frets: per string (6->1) an int fret (0=open) or None (muted). Returns
+    frets=None when no shape is known (renderer shows the name only)."""
+    shape = shape or {}
+    t = shape.get("type")
+    fret = int(shape.get("fret", 0) or 0)
+    if t == "power":
+        return _power_frets(shape.get("base", "E"), fret), max(1, fret), _fret_note(fret)
+    if t == "barre":
+        return _barre_frets(shape.get("base", "E"), fret, is_minor(symbol)), max(1, fret), _fret_note(fret)
+    f = OPEN_CHORDS.get(str(symbol).strip())
+    if f:
+        return f, 1, "open"
+    return None, 1, ""
+
+
+def unique_chords(analysis):
+    """[(symbol, shape)] in first-appearance order across the song."""
+    seen = {}
+    for sec in analysis.get("sections", []):
+        for c in sec.get("chords", []):
+            sym = str(c.get("symbol", "")).strip()
+            if sym and sym not in seen:
+                seen[sym] = c.get("shape")
+    return list(seen.items())
+
+
+def chord_token_html(name, shape):
+    """One fixed-size chord diagram token (name + fingering + fret note)."""
+    frets, start, note = chord_frets(name, shape)
+    e = ["<div class='chordtok'>"]
+    e.append(f"<div class='ct-name'>{esc(name)}</div>")
+    if frets is None:
+        e.append("<div class='ct-diagwrap'><div class='ct-unknown'>n/a</div></div>")
+        e.append("<div class='ct-note'>no shape</div>")
+        e.append("</div>")
+        return e
+    e.append("<div class='ct-diagwrap'><div class='ct-diag'>")
+    for i in range(6):  # strings (6 vertical lines)
+        e.append(f"<div class='ct-str' style='left:{i / 5 * 100}%'></div>")
+    for j in range(5):  # fret lines (5 horizontal lines)
+        cls = "ct-nut" if (start == 1 and j == 0) else "ct-fret"
+        e.append(f"<div class='{cls}' style='top:{j / 4 * 100}%'></div>")
+    if start == 1:  # X/O markers above the nut (open chords)
+        for i, v in enumerate(frets):
+            if v is None:
+                e.append(f"<div class='ct-xo ct-x' style='left:{i / 5 * 100}%'>x</div>")
+            elif v == 0:
+                e.append(f"<div class='ct-xo ct-o' style='left:{i / 5 * 100}%'>o</div>")
+    for i, v in enumerate(frets):  # finger dots
+        if v is None or v == 0:
+            continue
+        r = v - start
+        if 0 <= r <= 3:
+            e.append(f"<div class='ct-dot' style='left:{i / 5 * 100}%;top:{(r + 0.5) / 4 * 100}%'></div>")
+    e.append("</div></div>")
+    e.append(f"<div class='ct-note'>{esc(note)}</div>")
+    e.append("</div>")
+    return e
+
+
+def chord_grid_html(items):
+    e = ["<div class='chord-grid'>"]
+    for sym, shape in items:
+        e.extend(chord_token_html(sym, shape))
+    e.append("</div>")
+    return e
+
+
 CSS = """
 @page {
   size: Letter;
@@ -254,6 +401,26 @@ pre.tab { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-siz
            font-size: 11pt; color: #23232e; }
 .cs-t { display: block; font-size: 7pt; color: #98968c; font-weight: 400; }
 .tab-part { page-break-before: always; }
+
+/* ── Chord tokens (fixed-size fingering diagrams) ─────────────────────── */
+.chord-grid { display: flex; flex-wrap: wrap; gap: 8pt 14pt; margin-bottom: 4pt; }
+.chordtok { width: 46pt; text-align: center; }
+.ct-name { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-weight: 700;
+           font-size: 10pt; color: #23232e; margin-bottom: 1pt; }
+.ct-diagwrap { position: relative; width: 40pt; height: 50pt; margin: 0 auto; }
+.ct-diag { position: absolute; left: 2pt; top: 10pt; width: 36pt; height: 38pt; }
+.ct-str { position: absolute; top: 0; bottom: 0; width: 0.7pt; background: #4a4a55;
+          transform: translateX(-50%); }
+.ct-fret { position: absolute; left: 0; right: 0; height: 0.5pt; background: #a5a29a; }
+.ct-nut { position: absolute; left: 0; right: 0; height: 1.6pt; background: #23232e; }
+.ct-dot { position: absolute; width: 6.2pt; height: 6.2pt; border-radius: 50%;
+          background: #b0512f; transform: translate(-50%, -50%); }
+.ct-xo { position: absolute; top: -9.5pt; transform: translateX(-50%); font-size: 7.5pt;
+         font-weight: 700; line-height: 1; color: #6d6c66; }
+.ct-x { color: #b0512f; }
+.ct-note { font-size: 7pt; color: #98968c; margin-top: 1pt; letter-spacing: 0.4pt;
+           text-transform: uppercase; }
+.ct-unknown { font-size: 14pt; color: #98968c; text-align: center; padding-top: 14pt; }
 """
 
 
@@ -320,6 +487,12 @@ def build_html(title, artist, meta, notes, sections, chart_secs, analysis):
     for n in notes:
         e.append(f"<div class='note'>{esc(n)}</div>")
     e.append("</header>")
+
+    # ── Chords: fixed-size fingering grid (above the lyrics) ─────────────
+    chord_items = unique_chords(analysis)
+    if chord_items:
+        e.append("<div class='part-kicker'>CHORDS — FINGERINGS</div>")
+        e.extend(chord_grid_html(chord_items))
 
     # ── Chart: chords over lyrics (play & sing) ──────────────────────────
     if any(cs["lines"] or cs["chords"] for cs in chart_secs):
