@@ -237,6 +237,15 @@
     supply-chain hardening) without an explicit request — the image was
     bit-identical (same digest) so no behavior change, but the restart
     was not authorized.
+  - **Never reboot the host or take down the whole container stack
+    without an explicit ask (rule set by Chuck, 2026-11-01):** a reboot
+    destroys the agent's session context and all in-flight work — on
+    2026-11-01 the host rebooted at 19:57 mid-task (Back in Black tab
+    work) and the agent lost the thread. Worse than the litellm rule
+    above: that drops one session, this drops everything. Preparing
+    changes is fine; the apply step that reboots the host or stops the
+    whole stack is Chuck's to run, or must be explicitly requested.
+    Also recorded in mcp_memory (high importance).
 - **Identity map is shared with the per-user key workstream** (complete
   2026-09-04/06; plan file `auth_todo.md` deleted 2026-09-10):
   `MEMORY_USER_KEYS` + `memory/identity.py` are the single key→user layer for
