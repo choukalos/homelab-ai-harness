@@ -639,3 +639,48 @@ with one tool call.
   harmless — the font cache is built at image build time (`fc-cache` as
   root); family names resolve fine.
 - Tool count: mcp_media 24 (was 23), LiteLLM 88 (was 87).
+
+## Validation Entry — 2026-11-01 (part 5): chord-over-lyrics PDF layout
+
+**Scope:** the PDF tabs were hard to play AND sing from (lyrics were a
+separate page; the fretboard tab carries no lyric alignment). Restructured
+the `tab_pdf` generator into a **CHART** part (chords over the word-timed
+lyrics — lead-sheet style, play & sing at once) followed by a **TAB** part
+(fretboard reference). Same `media_render_tab_pdf` tool — no client change.
+
+**How placement works (all deterministic, from `analysis.json`):**
+- `sections[].lyrics[].words[].start_s` = ASR **word-level** timestamps;
+  `sections[].chords[].time_s` = chord event times.
+- A chord at time t lands on the last word that started at or before t
+  (a word is "active" until the next word starts); chords before the first
+  word attach to the first word; multiple changes on one word list
+  together; chords between lines attach to the first word of the next line.
+- Sections with chords but no lyrics (intros/outros) → timed chord strip.
+- Fallbacks: lines lacking word timestamps get words interpolated evenly
+  across the line window; sections missing from analysis keep the tab.md
+  `Lyrics:` lines as plain chart lines. The standalone lyrics page is gone.
+
+**Changes:** `mcp/servers/media/tab_pdf.py` (`parse_analysis_sections`,
+`place_chords`, `build_chart_section_html`, new two-part `build_html`,
+chart CSS), `server.py` tool description, docs (media README, skill, main
+README).
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Riptide (22 pp, 50 chart lines): chord bbox x-center vs word x-center — A5 at x=49–60 above "If" at x=49–56 (same column, 14 pt above) | ✅ PASS |
+| Riptide chorus: A5 above "Taking", C5 above "away" (chords 77.3/79.7 s before first word 89.7 s → both on first word, correct lead-sheet behavior) | ✅ PASS |
+| Back in Black (21 pp, 8 chart lines): Amaj7 over "be back. Yes, I'm letting loose"; 49 s intro shows as timed strip | ✅ PASS |
+| Old Porch (20 pp, 57 chart lines): Dmaj7 over "The best thing about the future…" | ✅ PASS |
+| Submission (27 pp, 6 chart lines): D#maj7 over "I'm on a submarine…"; lyric-less chorus renders as G#6 strip | ✅ PASS |
+| Fonts on all 4: Inter / Playfair-Display-Bold / JetBrains-Mono(-Bold) embedded, no DejaVu fallback | ✅ PASS |
+| All 4 re-published via `publish_file` (overwrite=true) and verified publicly (sha256 match) | ✅ PASS |
+
+**Notes:**
+- Root-owned PDFs left by the earlier standalone-container run blocked the
+  non-root mcp_media user from overwriting (`Permission denied`) — removed
+  the stale files (chuck-owned dirs) so the tool could re-render in place.
+- ASR lyric sparseness (Back in Black 8 lines, Submission 6) is unchanged —
+  the chart only places chords where lyrics exist; the tab part is
+  unaffected.

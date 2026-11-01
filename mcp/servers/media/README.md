@@ -28,7 +28,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
-| `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id). Returns `{local_path, size_bytes, pages, title, artist, sections}`. Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
+| `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). **Layout (2026-11-01 part 3): CHART first — chords over the word-timed lyrics so you can play & sing at once (chord symbols float above the exact word where each change lands, from ASR word timestamps + chord event times); then TAB — fretboard reference (per-section chords + shape hints, boxed monospace tab).** Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id). Returns `{local_path, size_bytes, pages, title, artist, sections}`. Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
 | `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
 
 **Submit-and-poll (2026-09-25):** every job tool above accepts
@@ -150,6 +150,22 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-01 (part 3): `media_render_tab_pdf` **chord-over-lyrics layout** —
+the PDF now opens with a CHART part: lyrics in reading order with chord
+symbols floating above the exact word where each chord change lands
+(lead-sheet style, so you can play and sing at the same time). Placement
+uses the ASR **word-level timestamps** in `analysis.json`
+(`sections[].lyrics[].words[].start_s`) against the chord event times
+(`sections[].chords[].time_s`) — a chord at time t lands on the last word
+that started at or before t; chords before the first word attach to the
+first word; multiple changes on one word list together. Sections with
+chords but no lyrics (intros/outros) get a timed chord strip. The
+fretboard tab moves to a second TAB part (page break). Fallbacks: lines
+without word timestamps get words interpolated evenly across the line's
+time window; sections missing from `analysis.json` keep the tab.md
+`Lyrics:` lines as plain chart lines. The standalone lyrics page is gone
+(lyrics now live in the chart).
 
 2026-11-01 (part 2): `media_render_tab_pdf` — transcribe job → styled PDF
 song sheet, in the MCP server (any client on any machine can call it;

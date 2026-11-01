@@ -37,10 +37,15 @@ identity whenever it's known (the pipeline only sees audio).
 - **Header**: title (Playfair Display), artist, meta chips (KEY / BPM /
   TUNING / CAPO from `analysis.json`), plus any capo/transpose/power-chord
   note lines from the tab header.
-- **Sections**: name + time range, chord names with shape hints (from the
-  `Chords:` line), and the ASCII tab blocks verbatim (JetBrains Mono, boxed).
-- **Lyrics page**: `lyrics.txt` timestamps stripped, grouped into stanzas on
-  a ≥4 s gap.
+- **CHART (first)**: chords over the word-timed lyrics — play & sing. Each
+  lyric line is a row of word cells; a chord change renders as a symbol
+  floating above the word it lands on (ASR word timestamps vs chord event
+  times from `analysis.json`). Chords before a section's first word attach
+  to the first word; multiple changes on one word list together; sections
+  with chords but no lyrics (intros/outros) get a timed chord strip.
+- **TAB (second, page break)**: per-section name + time range, chord names
+  with shape hints (from the `Chords:` line), and the ASCII tab blocks
+  verbatim (JetBrains Mono, boxed).
 - **Footer** (every page): "strong draft; verify against the recording" +
   page numbers. Letter size.
 
