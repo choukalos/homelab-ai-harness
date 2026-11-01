@@ -66,6 +66,7 @@ from mcp.server import FastMCP
 from mcp.server.fastmcp import Context
 
 from media_pipeline_client import MediaPipelineClient, PipelineError, _JOB_PREFIX
+import tab_pdf
 
 logger = logging.getLogger("mcp_media")
 
@@ -733,6 +734,68 @@ async def media_transcribe_song(
     out["location"] = "gpu_host"
     out["note"] = _HOST_PATH_NOTE
     return out
+
+
+@mcp.tool(
+    name="media_render_tab_pdf",
+    description=(
+        "Render a transcribe job's guitar tab into a styled PDF song sheet "
+        "(deterministic — no LLM). Fetches the job's tab.md / lyrics.txt / "
+        "analysis.json from the GPU host, renders a print-quality PDF "
+        "(Playfair Display title, key/BPM/tuning/capo chips, per-section "
+        "chords + shape hints, boxed monospace tab, lyrics page, page "
+        "numbers) and saves it to the local media library. Use after "
+        "media_transcribe_song: pass the job_id from the transcribe result "
+        "(or media_job_result). `title`/`artist` override the LLM-guessed "
+        "header — pass the real song identity whenever it's known. `slug` "
+        "names the output subdirectory (default: job_id). Returns "
+        "{local_path, size_bytes, pages, title, artist, sections}. The PDF "
+        "lands on the media host — publish it with the publish_file skill "
+        "(subdirectory 'tabs') for a public URL, or fetch the raw artifacts "
+        "with media_fetch."
+    ),
+)
+async def media_render_tab_pdf(
+    job_id: str,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    slug: Optional[str] = None,
+) -> dict:
+    """Transcribe job_id -> styled PDF song sheet (returns the local path)."""
+    if not re.fullmatch(r"[a-z0-9]{8,64}", job_id or ""):
+        return {"error": f"invalid job_id: {job_id!r} (expected a transcribe job id)"}
+    slug = (slug or job_id).strip()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", slug):
+        return {"error": f"invalid slug: {slug!r} (lowercase letters, digits, dashes)"}
+    out_dir = os.path.join(PIPELINE_FETCH_DIR, slug)
+    work = tempfile.mkdtemp(prefix="tabpdf_")
+    try:
+        for art, required in (("tab.md", True), ("lyrics.txt", False),
+                              ("analysis.json", False)):
+            host_path = f"{_JOB_PREFIX}{job_id}/{art}"
+            try:
+                await asyncio.to_thread(PIPELINE.fetch, host_path, work)
+            except Exception:
+                if required:
+                    return _pipeline_error(
+                        Exception(f"{art} missing for job {job_id} "
+                                  "(run media_transcribe_song first)"),
+                        {"job_id": job_id})
+        res = await asyncio.to_thread(
+            tab_pdf.render, work, os.path.join(out_dir, f"{slug}-tab.pdf"),
+            title, artist)
+        out = dict(res)
+        out["job_id"] = job_id
+        out["local_path"] = res["pdf"]
+        out["size_bytes"] = os.path.getsize(res["pdf"])
+        out["note"] = ("PDF is on the media host; publish it with the "
+                       "publish_file skill (subdirectory 'tabs') for a "
+                       "public URL.")
+        return out
+    except Exception as exc:
+        return _pipeline_error(exc, {"job_id": job_id})
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 @mcp.tool(

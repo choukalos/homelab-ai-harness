@@ -593,3 +593,49 @@ WeasyPrint 70, no LLM) and transcribed + published three more songs.
   three new PDFs ~30 s before the explicit publish call; the collision guard
   (`overwrite=false`) made it a harmless no-op — published files verified by
   sha256.
+
+## Validation Entry — 2026-11-01 (part 4): `media_render_tab_pdf` MCP tool
+
+**Scope:** the tab→PDF generator (previously a hand-typed `docker run` of
+the `homelab-tab-pdf` container on thor) is now a first-class `mcp_media`
+tool, so any client on any machine can render a transcribe job's tab PDF
+with one tool call.
+
+**Changes:**
+- `mcp/servers/media/tab_pdf.py` — canonical generator source (moved from
+  `scripts/tab-pdf/`); new importable `render(song_dir, out_path, title,
+  artist) -> {pdf, pages, title, artist, sections, lyric_lines}`; the CLI
+  `main()` now wraps it.
+- `mcp/servers/media/server.py` — new `media_render_tab_pdf(job_id,
+  title?, artist?, slug?)` tool: fetches the job's `tab.md` (required) /
+  `lyrics.txt` / `analysis.json` from the GPU host into a temp dir,
+  renders in-process (WeasyPrint), writes
+  `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`, returns
+  `{local_path, size_bytes, pages, title, artist, sections}`.
+- `mcp/servers/media/Dockerfile` — WeasyPrint 70 + pango/cairo system
+  deps + the song-sheet fonts (Playfair Display / Inter / JetBrains Mono
+  variable TTFs) + poppler-utils baked in.
+- `scripts/tab-pdf/` — now a standalone/QA wrapper: `Dockerfile` builds
+  from the repo root (`docker build -f scripts/tab-pdf/Dockerfile .`) and
+  COPYs the canonical `mcp/servers/media/tab_pdf.py`.
+- Docs: media README (tool row + history), song-transcribe skill (step 6
+  uses the MCP tool), main README skill line.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Container: weasyprint 70.0 importable, `tab_pdf.render` callable, all 4 fonts in `/usr/share/fonts/tabpdf/`, `pdffonts` present | ✅ PASS |
+| Agent path (LiteLLM `/mcp-rest/tools/call` → `media_render_tab_pdf`), job `99d8f532c3dc` (Back in Black), `slug=bib-mcp`: 20 pp, 16 sections, 8 lyric lines, 66 KB | ✅ PASS |
+| Font QA on the MCP-rendered PDF: `Inter` + `Playfair-Display-Bold` + `JetBrains-Mono` embedded, no `DejaVu-*` | ✅ PASS |
+| Layout QA (`pdftotext -layout` p1): "Back in Black" / "AC/DC" / chips (KEY A major, BPM 94.0, TUNING Standard, CAPO —) / "VERSE 0:00.0–0:49.4" | ✅ PASS |
+| Error: `job_id="../etc/passwd"` → `invalid job_id` (path traversal rejected) | ✅ PASS |
+| Error: nonexistent job `deadbeef0000` → `tab.md missing for job deadbeef0000 (run media_transcribe_song first)` | ✅ PASS |
+| Error: `slug="Bad_Slug"` → `invalid slug (lowercase letters, digits, dashes)` | ✅ PASS |
+| Schema via LiteLLM `tools/list`: 88 tools, `media_render_tab_pdf` params `[job_id, title, artist, slug]`, required `[job_id]` | ✅ PASS |
+
+**Notes:**
+- The fontconfig "No writable cache directories" warnings at runtime are
+  harmless — the font cache is built at image build time (`fc-cache` as
+  root); family names resolve fine.
+- Tool count: mcp_media 24 (was 23), LiteLLM 88 (was 87).

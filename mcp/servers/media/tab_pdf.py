@@ -3,11 +3,15 @@
 tab_pdf — render a transcribed song (tab.md + lyrics.txt + analysis.json)
 into a print-quality PDF song sheet.
 
-Deterministic — no LLM. The tab content is rendered verbatim from the
-pipeline's tab.md; --title/--artist override the LLM-guessed header when
-the real song identity is known.
+CANONICAL SOURCE — used by both:
+  - the `media_render_tab_pdf` MCP tool (mcp_media server, in-process), and
+  - the standalone `homelab-tab-pdf` container (scripts/tab-pdf/).
 
-Usage (inside the tab-pdf container):
+Deterministic — no LLM. The tab content is rendered verbatim from the
+pipeline's tab.md; title/artist overrides replace the LLM-guessed header
+when the real song identity is known.
+
+CLI (standalone container):
   python tab_pdf.py <song_dir> [-o out.pdf] [--title T] [--artist A]
 
 <song_dir> must contain tab.md (lyrics.txt / analysis.json optional).
@@ -236,21 +240,17 @@ def build_html(title, artist, meta, notes, sections, lyrics_stanzas, analysis):
     return "\n".join(e)
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("song_dir", help="dir with tab.md (lyrics.txt/analysis.json optional)")
-    ap.add_argument("-o", "--out", help="output PDF path (default: <song_dir>/<slug>-tab.pdf)")
-    ap.add_argument("--title", help="override the LLM-guessed title")
-    ap.add_argument("--artist", help="override the LLM-guessed artist")
-    args = ap.parse_args()
+def render(song_dir, out_path, title=None, artist=None):
+    """Render <song_dir>/tab.md (+ lyrics.txt/analysis.json) to a PDF.
 
-    d = Path(args.song_dir)
+    Returns {pdf, pages, title, artist, sections, lyric_lines}.
+    Importable by the mcp_media server (media_render_tab_pdf tool)."""
+    d = Path(song_dir)
     tab_path = d / "tab.md"
     if not tab_path.exists():
-        raise SystemExit(f"error: {tab_path} not found")
-    title, meta, notes, sections = parse_tab(tab_path.read_text())
-    title = args.title or title
-    artist = args.artist
+        raise FileNotFoundError(f"{tab_path} not found")
+    parsed_title, meta, notes, sections = parse_tab(tab_path.read_text())
+    title = title or parsed_title
     if not artist and meta.get("artist") and meta["artist"].lower() != "unknown":
         artist = meta["artist"]
 
@@ -262,15 +262,30 @@ def main():
         lyrics_stanzas = parse_lyrics((d / "lyrics.txt").read_text())
 
     doc_html = build_html(title, artist, meta, notes, sections, lyrics_stanzas, analysis)
-    out = Path(args.out) if args.out else d / f"{d.name}-tab.pdf"
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     from weasyprint import HTML
 
     document = HTML(string=doc_html).render()
     document.write_pdf(str(out))
-    print(json.dumps({"pdf": str(out), "pages": len(document.pages),
-                      "title": title, "artist": artist or None,
-                      "sections": len(sections), "lyric_lines": sum(len(s) for s in lyrics_stanzas)}))
+    return {"pdf": str(out), "pages": len(document.pages),
+            "title": title, "artist": artist or None,
+            "sections": len(sections),
+            "lyric_lines": sum(len(s) for s in lyrics_stanzas)}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("song_dir", help="dir with tab.md (lyrics.txt/analysis.json optional)")
+    ap.add_argument("-o", "--out", help="output PDF path (default: <song_dir>/<slug>-tab.pdf)")
+    ap.add_argument("--title", help="override the LLM-guessed title")
+    ap.add_argument("--artist", help="override the LLM-guessed artist")
+    args = ap.parse_args()
+
+    d = Path(args.song_dir)
+    out = args.out if args.out else str(d / f"{d.name}-tab.pdf")
+    print(json.dumps(render(d, out, title=args.title, artist=args.artist)))
 
 
 if __name__ == "__main__":

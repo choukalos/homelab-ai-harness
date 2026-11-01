@@ -100,29 +100,20 @@ drives the MCP tools and presents the result.
    (drop zone `tabs` → `https://choukalos.com/files/tabs/`). **The PDF is
    the primary published artifact** — the raw `tab.md` / `lyrics.txt` stay
    local and are only published if the user asks.
-   1. Fetch the artifacts into a **per-song subdirectory** (the artifacts
-      have generic basenames — `tab.md`, `lyrics.txt` — so fetch each song
-      into its own folder to avoid clobbering):
+   1. **Generate the PDF** with the media MCP tool (deterministic, no LLM —
+      runs on the media host; any client can call it):
       ```
-      media_fetch(host_path=<tab>, subdirectory=<slug>)
-      media_fetch(host_path=<lyrics>, subdirectory=<slug>)
-      media_fetch(host_path=<analysis>, subdirectory=<slug>)
+      media_render_tab_pdf(job_id=<transcribe job_id>,
+                           title="<real title>", artist="<real artist>",
+                           slug="<slug>")
       ```
-      → `/home/chuck/data/media/generated/pipeline/<slug>/` (an approved
-      publish source root).
-   2. **Generate the PDF** (deterministic, no LLM — `scripts/tab-pdf/`):
-      ```
-      docker run --rm -v /home/chuck/data/media/generated/pipeline:/work \
-        homelab-tab-pdf:local /work/<slug> -o /work/<slug>/<slug>-tab.pdf \
-        --title "<real title>" --artist "<real artist>"
-      ```
-      (Build the image first if it's missing:
-      `docker build -t homelab-tab-pdf:local scripts/tab-pdf`. Always pass
-      `--title`/`--artist` when the real identity is known — the pipeline's
-      header title is LLM-guessed from audio alone. QA: `--entrypoint
-      pdffonts` should show `Inter` + `Playfair-Display-Bold` +
-      `JetBrains-Mono`, not `DejaVu-*`.)
-   3. **Publish** with a slug-prefixed name:
+      → `{local_path: .../generated/pipeline/<slug>/<slug>-tab.pdf, pages,
+      sections, ...}`. The tool fetches the job's artifacts from the GPU
+      host itself. Always pass `title`/`artist` when the real identity is
+      known — the pipeline's header title is LLM-guessed from audio alone.
+      (Standalone alternative on thor: the `homelab-tab-pdf` container in
+      `scripts/tab-pdf/` wraps the same `tab_pdf.py` generator.)
+   2. **Publish** with a slug-prefixed name:
       ```
       run_skill(name="publish_file", params={"source_path": ".../<slug>/<slug>-tab.pdf",
                  "destination_name": "<slug>-tab.pdf", "subdirectory": "tabs"})
@@ -130,7 +121,7 @@ drives the MCP tools and presents the result.
       → `https://choukalos.com/files/tabs/<slug>-tab.pdf` — styled header
       (key/BPM/tuning/capo chips), per-section chords + shape hints + boxed
       ASCII tab, lyrics page, page numbers.
-   4. **Before publishing, tell the user**: the tab is a strong draft
+   3. **Before publishing, tell the user**: the tab is a strong draft
       (verify before relying on it), and the lyrics are ASR of a commercial
       recording (publishing them is the user's call).
 

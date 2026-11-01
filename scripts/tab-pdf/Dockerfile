@@ -1,14 +1,21 @@
 # tab-pdf — render a transcribed song (tab.md + analysis.json + lyrics.txt)
 # into a visually appealing PDF song sheet.
 #
-# Build:  docker build -t homelab-tab-pdf:local scripts/tab-pdf
-# Run:    docker run --rm -v /home/chuck/data/media/generated/pipeline:/work \
-#           homelab-tab-pdf:local riptide -o /work/riptide/riptide-tab.pdf \
-#           --title "Riptide" --artist "Vance Joy"
+# The generator's CANONICAL source is mcp/servers/media/tab_pdf.py (also
+# used in-process by the mcp_media `media_render_tab_pdf` tool). This image
+# is a standalone/QA wrapper around it (poppler-utils for pdffonts/pdftotext).
+#
+# Build (from the REPO ROOT — the generator lives in mcp/servers/media/):
+#   docker build -t homelab-tab-pdf:local -f scripts/tab-pdf/Dockerfile .
+#
+# Run:
+#   docker run --rm -v /home/chuck/data/media/generated/pipeline:/work \
+#     homelab-tab-pdf:local riptide -o /work/riptide/riptide-tab.pdf \
+#     --title "Riptide" --artist "Vance Joy"
 #
 # The generator is deterministic — no LLM involved.
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # WeasyPrint system deps (pango/cairo stack) + poppler-utils for QA rendering.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,6 +50,7 @@ for name, url in fonts.items():
 EOF
 RUN fc-cache -f
 
-COPY tab_pdf.py /app/tab_pdf.py
+# Canonical generator (shared with the mcp_media container).
+COPY mcp/servers/media/tab_pdf.py /app/tab_pdf.py
 WORKDIR /work
 ENTRYPOINT ["python", "/app/tab_pdf.py"]

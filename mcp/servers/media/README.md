@@ -28,6 +28,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
+| `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id). Returns `{local_path, size_bytes, pages, title, artist, sections}`. Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
 | `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
 
 **Submit-and-poll (2026-09-25):** every job tool above accepts
@@ -149,6 +150,18 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-01 (part 2): `media_render_tab_pdf` — transcribe job → styled PDF
+song sheet, in the MCP server (any client on any machine can call it;
+no local docker run needed). The deterministic generator
+(`tab_pdf.py`, canonical source; also wrapped by the standalone
+`homelab-tab-pdf` container in `scripts/tab-pdf/`) now runs in-process:
+WeasyPrint 70 + the song-sheet fonts (Playfair Display / Inter /
+JetBrains Mono variable TTFs) are baked into the `mcp_media` image.
+Fetches the job's artifacts from the GPU host, renders to
+`MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`, returns the local path
+(publish via the `publish_file` skill, subdirectory `tabs`, for a public
+URL).
 
 2026-11-01: `media_transcribe_song` chord/key/fingering surface (matrix
 pipeline update, per `transcribe_thor_spec.md` — the spec file was consumed

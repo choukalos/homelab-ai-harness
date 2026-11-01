@@ -635,7 +635,7 @@ Intent routing in `_detect_intent()` auto-detects from the user's `text`:
 - **list-presentations** — List existing presentations
 - **list-images** — List generated images with accessible URLs
 - **media-generate** — Generate an image via `mcp_media.media_generate_image` (GPU-host media-pipeline) + `media_fetch`
-- **song-transcribe** — Transcribe a song (YouTube URL / media URL / local file) into a guitar tab + timestamped lyrics via `mcp_media.media_transcribe_song` (GPU-host `/transcribe`: DSP note events + chords + key/BPM, whisper lyrics, LLM polish) + `media_fetch`/`media_pull`; chord/key/fingering options: transpose (`transpose_semitones` / `target_key`), `chord_style` (as_detected/triads/power), `capo` suggestion, per-chord `shape_hints`; publishable to the blog (`publish_file` → `https://choukalos.com/files/tabs/`)
+- **song-transcribe** — Transcribe a song (YouTube URL / media URL / local file) into a guitar tab + timestamped lyrics via `mcp_media.media_transcribe_song` (GPU-host `/transcribe`: DSP note events + chords + key/BPM, whisper lyrics, LLM polish) + `media_fetch`/`media_pull`; chord/key/fingering options: transpose (`transpose_semitones` / `target_key`), `chord_style` (as_detected/triads/power), `capo` suggestion, per-chord `shape_hints`; `media_render_tab_pdf` renders the job into a styled PDF song sheet (deterministic, in the MCP server — no local docker needed); publishable to the blog (`publish_file` → `https://choukalos.com/files/tabs/`)
 - **business-analyst** — NL→SQL data analysis over the family MySQL (~300s; returns a Markdown report + Grafana suggestions)
 - **content-writer** — Multi-format content generation (social/blog/video, ~480s)
 - **marketing-strategy** — Go-To-Market (GTM) strategy generation (~300s)

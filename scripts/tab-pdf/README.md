@@ -3,17 +3,27 @@
 Renders a transcribed song (the media pipeline's `tab.md` + `lyrics.txt` +
 `analysis.json`) into a print-quality PDF song sheet. Deterministic — no LLM.
 
-Part of the song-transcribe publish flow: the PDF is the primary published
-artifact (`/files/tabs/<slug>-tab.pdf`); the raw `.md`/`.txt` are kept local
-and only published on request.
+**Primary path (any client, any machine):** the `mcp_media` MCP tool
+**`media_render_tab_pdf(job_id, title?, artist?, slug?)`** — it fetches the
+job's artifacts from the GPU host and renders in-process (WeasyPrint + the
+song-sheet fonts are baked into the `mcp_media` image). The generator's
+**canonical source is `mcp/servers/media/tab_pdf.py`** (importable
+`render()` + CLI `main()`).
 
-## Usage
+This directory holds the **standalone/QA wrapper** image
+(`homelab-tab-pdf:local`) around the same generator, with poppler-utils for
+`pdffonts` / `pdftotext` QA. Use it when you want a one-off render from a
+local song dir without going through the pipeline.
+
+## Build (from the REPO ROOT — the generator lives in mcp/servers/media/)
 
 ```bash
-# build (fonts are downloaded at build time; best-effort with DejaVu fallback)
-docker build -t homelab-tab-pdf:local scripts/tab-pdf
+docker build -t homelab-tab-pdf:local -f scripts/tab-pdf/Dockerfile .
+```
 
-# render (song dir must contain tab.md; lyrics.txt/analysis.json optional)
+## Usage (standalone)
+
+```bash
 docker run --rm -v /home/chuck/data/media/generated/pipeline:/work \
   homelab-tab-pdf:local /work/<slug> -o /work/<slug>/<slug>-tab.pdf \
   --title "Riptide" --artist "Vance Joy"
@@ -36,8 +46,6 @@ identity whenever it's known (the pipeline only sees audio).
 
 ## QA
 
-The image includes poppler-utils:
-
 ```bash
 docker run --rm -v <dir>:/work --entrypoint pdffonts  homelab-tab-pdf:local /work/<slug>-tab.pdf
 docker run --rm -v <dir>:/work --entrypoint pdftotext homelab-tab-pdf:local -f 1 -l 1 -layout /work/<slug>-tab.pdf -
@@ -54,5 +62,5 @@ If you see `DejaVu-*` instead, a font failed to load — check
   fontconfig family names (`'JetBrains Mono'`, `'Playfair Display'`,
   `'Inter'`) rather than `@font-face`.
 - Fonts are variable TTFs from google/fonts baked into the image at
-  `/usr/share/fonts/tabpdf/` (build-time download; `fonts-dejavu-core` is the
-  fallback if the CDN is unreachable).
+  `/usr/share/fonts/tabpdf/` (build-time download; `fonts-dejavu-core` is
+  the fallback if the CDN is unreachable).
