@@ -548,3 +548,48 @@ allowlist (no `tabs`).
   possible follow-up.
 - Lyrics of commercial recordings are ASR output — publishing them is the
   owner's call (stated in the skill's pre-publish caveat).
+
+## Validation Entry — 2026-11-01 (part 3): PDF song sheets (`/files/tabs/*.pdf`)
+
+**Scope:** publish transcribed songs as visually appealing PDFs (the new
+primary published artifact — raw `.md`/`.txt` no longer published by
+default). Added the `scripts/tab-pdf/` generator (deterministic HTML→PDF,
+WeasyPrint 70, no LLM) and transcribed + published three more songs.
+
+**Changes:**
+- `scripts/tab-pdf/` — `tab_pdf.py` (parses the pipeline's `tab.md`
+  verbatim: header meta chips from `analysis.json` incl. capo suggestion,
+  per-section chords + shape hints, boxed monospace tab blocks, lyrics page
+  with timestamp-stripped stanzas) + `Dockerfile` (weasyprint + variable
+  TTFs baked in: Playfair Display / Inter / JetBrains Mono) + README.
+- `agents-skills/song-transcribe/SKILL.md` — step 6 rewritten: PDF is the
+  primary published artifact; raw files only on request.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Font QA: `pdffonts` shows `Inter` + `Playfair-Display-Bold` + `JetBrains-Mono` embedded (no `DejaVu-*` fallback) on all 4 PDFs | ✅ PASS |
+| Layout QA: `pdftotext -layout` — header chips (KEY/BPM/TUNING/CAPO), capo + power-chord notes, section heads with time ranges, monospace tab alignment intact, lyrics stanzas | ✅ PASS |
+| Riptide PDF: 21 pp, 11 sections, capo chip "1 (C finger)", 50 lyric lines | ✅ PASS |
+| Riptide: old `riptide-tab.md` + `riptide-lyrics.txt` removed from the public drop zone (PDF only) | ✅ PASS |
+| **Back in Black** (AC/DC official 4K, `99d8f532c3dc`): duration 4:13.8 = 254 s source ✓, A major / 94.0 BPM, 49 s instrumental intro (matches the song), distortion caveat; 20 pp | ✅ PASS |
+| **Old Porch** (Mike Foss & Merkules official, `09c97f3624ae`): duration 4:06.8 = 247 s source ✓, D major / 77.1 BPM; 19 pp | ✅ PASS |
+| **Submission** (Sex Pistols official, `213ee1a18c47`): duration 4:13.4 = 254 s source ✓, ASR caught "Submission going down"; 26 pp | ✅ PASS |
+| Public verification (Cloudflare → Caddy → portal): all 4 PDFs serve 200 `application/pdf`, sha256 matches the local files, browse page lists them | ✅ PASS |
+
+**Notes:**
+- WeasyPrint 70 resolves fonts via Pango/fontconfig; its `@font-face` path
+  cannot instantiate the JetBrains Mono variable font (silently falls back
+  to DejaVu). Fix: use fontconfig family names in CSS (`'JetBrains Mono'`,
+  `'Playfair Display'`, `'Inter'`) — no `@font-face` at all.
+- Song identity verified by duration match against the source video + key /
+  BPM / structure plausibility (the pipeline payload only retains the
+  ingested webm path, not the original URL).
+- ASR lyrics remain sparse/garbled on dense rock vocals (Back in Black: 8
+  lines, Submission: 6) — the known Matrix-side issue; the DSP tab content
+  is unaffected.
+- A duplicate publish loop (harness replay after compaction) published the
+  three new PDFs ~30 s before the explicit publish call; the collision guard
+  (`overwrite=false`) made it a harmless no-op — published files verified by
+  sha256.

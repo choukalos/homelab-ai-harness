@@ -97,33 +97,42 @@ drives the MCP tools and presents the result.
 6. **Publish to the blog** (when the user wants it on the public site —
    "publish this tab", "put it on the blog"). The media pipeline tools are
    done at this point; publishing goes through the `publish-file` skill
-   (drop zone `tabs` → `https://choukalos.com/files/tabs/`):
+   (drop zone `tabs` → `https://choukalos.com/files/tabs/`). **The PDF is
+   the primary published artifact** — the raw `tab.md` / `lyrics.txt` stay
+   local and are only published if the user asks.
    1. Fetch the artifacts into a **per-song subdirectory** (the artifacts
       have generic basenames — `tab.md`, `lyrics.txt` — so fetch each song
       into its own folder to avoid clobbering):
       ```
       media_fetch(host_path=<tab>, subdirectory=<slug>)
       media_fetch(host_path=<lyrics>, subdirectory=<slug>)
+      media_fetch(host_path=<analysis>, subdirectory=<slug>)
       ```
-      → `/home/chuck/data/media/generated/pipeline/<slug>/tab.md` (an
-      approved publish source root).
-   2. Publish with **slug-prefixed names** (one flat file per song):
+      → `/home/chuck/data/media/generated/pipeline/<slug>/` (an approved
+      publish source root).
+   2. **Generate the PDF** (deterministic, no LLM — `scripts/tab-pdf/`):
       ```
-      run_skill(name="publish_file", params={"source_path": ".../<slug>/tab.md",
-                 "destination_name": "<slug>-tab.md", "subdirectory": "tabs"})
-      run_skill(name="publish_file", params={"source_path": ".../<slug>/lyrics.txt",
-                 "destination_name": "<slug>-lyrics.txt", "subdirectory": "tabs"})
+      docker run --rm -v /home/chuck/data/media/generated/pipeline:/work \
+        homelab-tab-pdf:local /work/<slug> -o /work/<slug>/<slug>-tab.pdf \
+        --title "<real title>" --artist "<real artist>"
       ```
-      → `https://choukalos.com/files/tabs/<slug>-tab.md` + `-lyrics.txt`.
-   3. **Before publishing, tell the user**: the tab is a strong draft
-      (verify before relying on it), the title in the tab header is
-      LLM-guessed (the pipeline only sees audio — fix it in the file or
-      re-run with a known title), and the lyrics are ASR of a commercial
+      (Build the image first if it's missing:
+      `docker build -t homelab-tab-pdf:local scripts/tab-pdf`. Always pass
+      `--title`/`--artist` when the real identity is known — the pipeline's
+      header title is LLM-guessed from audio alone. QA: `--entrypoint
+      pdffonts` should show `Inter` + `Playfair-Display-Bold` +
+      `JetBrains-Mono`, not `DejaVu-*`.)
+   3. **Publish** with a slug-prefixed name:
+      ```
+      run_skill(name="publish_file", params={"source_path": ".../<slug>/<slug>-tab.pdf",
+                 "destination_name": "<slug>-tab.pdf", "subdirectory": "tabs"})
+      ```
+      → `https://choukalos.com/files/tabs/<slug>-tab.pdf` — styled header
+      (key/BPM/tuning/capo chips), per-section chords + shape hints + boxed
+      ASCII tab, lyrics page, page numbers.
+   4. **Before publishing, tell the user**: the tab is a strong draft
+      (verify before relying on it), and the lyrics are ASR of a commercial
       recording (publishing them is the user's call).
-   4. The portal serves `.md` as raw text (`text/markdown`) — the ASCII
-      tab renders in the browser's default font, so fretboard alignment can
-      look slightly off; the content is complete and correct. (A rendered
-      HTML song page is a possible follow-up.)
 
 ## Grounding rules
 - **Report what the pipeline returned** — don't invent chords, frets, or
