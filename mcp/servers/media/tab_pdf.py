@@ -129,6 +129,52 @@ def parse_lyrics(text):
     return stanzas
 
 
+def _line_timing_bad(words, sec_start, sec_end):
+    """True when a line's ASR word timestamps are broken.
+
+    Whisper word timestamps (and the LLM polish step that merges lines)
+    can produce: pile-ups (many words on one timestamp), words spilling
+    far past the section end (they would clamp into one measure),
+    non-monotonic times, or impossible rates. Mild spills (<=3 s) are
+    left alone — they clamp harmlessly into the last measure."""
+    ts = [t for t, _ in words]
+    n = len(ts)
+    if n < 3:
+        return False
+    lo, hi = min(ts), max(ts)
+    if min(b - a for a, b in zip(ts, ts[1:])) < -0.05:  # non-monotonic
+        return True
+    for j in range(n):  # pile-up: >4 words inside any 0.1 s window
+        if sum(1 for t in ts if 0 <= t - ts[j] < 0.1) > 4:
+            return True
+    if (hi - lo) < 0.10 * (n - 1):  # >10 words/s — impossible
+        return True
+    if hi > sec_end + 3.0 or lo < sec_start - 3.0:  # big spill
+        return True
+    return False
+
+
+def _retimed_lines(lines, start, end):
+    """Re-time a section's lines when the ASR timestamps are broken.
+
+    Splits the section window across the lines proportionally to word
+    count; words are placed evenly (centered) inside each slice. Keeps
+    the words in order, inside the section, and out of one measure."""
+    total = sum(len(l["words"]) for l in lines)
+    dur = end - start
+    if total <= 0 or dur <= 0:
+        return lines
+    t = start
+    for l in lines:
+        n = len(l["words"])
+        if n == 0:
+            continue
+        step = dur * n / total / n
+        l["words"] = [(t + (j + 0.5) * step, w) for j, (_, w) in enumerate(l["words"])]
+        t += dur * n / total
+    return lines
+
+
 def parse_analysis_sections(analysis):
     """analysis.json -> score sections with WORD-LEVEL timing.
 
@@ -137,10 +183,14 @@ def parse_analysis_sections(analysis):
       lead: [{t, string, fret}]}]
 
     Word timing comes from the ASR word timestamps; when a line lacks them,
-    words are interpolated evenly across the line's time window. `lead` is
+    words are interpolated evenly across the line's time window. Lines with
+    broken timestamps (pile-ups / big spills — a known whisper+polish
+    failure mode) are re-timed evenly across the section window. `lead` is
     the section's lead-guitar (solo/riff) notes, for the SCORE's SOLO lane."""
     out = []
     for sec in analysis.get("sections", []):
+        sec_start = float(sec.get("start_s", 0.0))
+        sec_end = float(sec.get("end_s", 0.0))
         chords = sorted(
             (float(c.get("time_s", 0.0)), str(c.get("symbol", "")).strip())
             for c in sec.get("chords", []) if c.get("symbol"))
@@ -161,6 +211,9 @@ def parse_analysis_sections(analysis):
                 words = [(a + i * step, w) for i, w in enumerate(ws)]
             lines.append({"start": float(l.get("start_s", 0.0)),
                           "end": float(l.get("end_s", 0.0)), "words": words})
+        if any(_line_timing_bad(l["words"], sec_start, sec_end)
+               for l in lines if l["words"]):
+            _retimed_lines(lines, sec_start, sec_end)
         lead = []
         for n in sec.get("notes", []):
             if n.get("role") != "lead":

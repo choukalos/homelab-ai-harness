@@ -151,6 +151,18 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-11-01 (part 8): `media_render_tab_pdf` **word-timing sanitization** —
+fixed cramped/garbled lyrics when the ASR word timestamps in
+`analysis.json` are broken (a known whisper + LLM-polish failure mode:
+pile-ups of 8–20 words on one timestamp, words spilling 10s+ past their
+section). `parse_analysis_sections` now detects broken lines (pile-up,
+non-monotonic, impossible rate, >3 s spill) and re-times the whole section
+evenly (section window split across lines by word count). Mild spills
+(≤3 s) are left alone. Fixed Submission's cramped verses; Back in Black's
+8 ASR-hallucinated lines now spread across the section (its lyrics are
+still missing — the ASR failed on the distorted audio; see validation log
+part 8).
+
 2026-11-01 (part 5): `media_render_tab_pdf` **measure-aligned SCORE layout** —
 replaced the CHART (chords over lyrics) + TAB (fretboard reference) parts
 with a single SCORE section per song part: a measure-aligned table (7

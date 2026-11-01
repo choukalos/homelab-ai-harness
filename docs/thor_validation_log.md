@@ -772,3 +772,104 @@ work on the rest").
 - The solo lane is the **lead** notes from `analysis.json` (role=lead),
   measure-aligned — it is a positional reference, not a rhythmically exact
   transcription (rhythm lives in the raw tab.md).
+
+## Validation Entry — 2026-11-01 (part 8): word-timing sanitization + Back in Black ASR failure
+
+**Goal (user):** Submission's words were "really cramped up on one of the
+counts"; Back in Black had lyrics only in the first section and "a ton of
+chorus but no lyrics" (some of which are actually verses).
+
+**Root causes (both in the pipeline's `analysis.json`, not the renderer):**
+
+1. **Submission — broken word timestamps.** Whisper word timestamps + the
+   LLM polish step (which merges lyric lines) produced: pile-ups (8–20 words
+   on one timestamp, e.g. 16 words at 97.86 s), and words spilling 12–76 s
+   past their section's end. The SCORE renderer placed words by timestamp
+   and clamped out-of-range words to the last measure → a wall of words in
+   one measure.
+2. **Back in Black — ASR failure.** The raw whisper output
+   (`lyrics_raw.txt`) is 8 hallucinated lines ("Be back. Yes, I'm letting
+   loose from the news…") on the distorted intro; nothing else was
+   transcribed. The pipeline's own caveats flag it: "Only one section
+   contains lyrics" (confidence: low). Re-ran the transcribe job with
+   `stems=false` (whisper on the full mix instead of the demucs vocal
+   stem, job `2c4ea2812fe8`) → **0 words** (VAD detects no speech in the
+   distorted mix). The vocal-stem run (`99d8f532c3dc`) is still the best
+   available. The section labels are all "chorus" because the deterministic
+   segmenter had no lyric content to distinguish verse from chorus.
+
+**Fix (renderer, deterministic):** `tab_pdf.parse_analysis_sections` now
+sanitizes word timing. A line is "broken" if any of: non-monotonic
+timestamps (gap < −0.05 s), a pile-up (>4 words in any 0.1 s window), an
+impossible rate (<0.10 s/word across the span), or a big spill (a word >3 s
+outside the section window). Mild spills (≤3 s) are left alone — they clamp
+harmlessly into the last measure. If any line in a section is broken, the
+whole section is re-timed: the section window is split across the lines
+proportionally to word count, words placed evenly (centered) in each slice.
+Order is preserved; words land inside the section; no measure gets a wall.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Riptide: only sections [3] (12 s spill) + [7] (7-word pile-up) re-timed; mild spills (≤1.2 s) untouched | ✅ PASS |
+| Old Porch: only section [4] (10-word pile-up) re-timed | ✅ PASS |
+| Submission: all 5 broken sections re-timed — max pile-up now 1 (was 8–20), all words inside section windows (was 12–76 s spills) | ✅ PASS |
+| Back in Black: 8 hallucinated lines now spread across the 49 s section (was clumped; last line spilled to 79 s) | ✅ PASS |
+| All 4: every word in HTML, solo cells intact, mini tokens == chord changes, all chord shapes correct | ✅ PASS |
+| All 4 re-rendered via the live MCP tool + re-published (`overwrite=true`) + verified publicly (sha256 match) | ✅ PASS |
+
+**Notes / open item:**
+- Back in Black's lyrics are still the 8 ASR hallucinations — the renderer
+  can't invent missing data. Options for the user: (a) re-rip a cleaner
+  source and re-transcribe, (b) manually add the real lyrics (the section
+  boundaries don't align cleanly with the known verse/chorus structure, so
+  that's a bigger data edit), (c) leave as-is (chords + solo are fine).
+- The re-run job `2c4ea2812fe8` (stems=false) is garbage (0 words) — do not
+  use it; `99d8f532c3dc` remains the canonical Back in Black job.
+
+## Validation Entry — 2026-11-01 (part 8): word-timing sanitization (cramped-lyrics fix)
+
+**Goal (user):** Submission's lyrics were "really cramped up on one of the
+counts"; Back in Black only had lyrics on the first verse then a ton of
+empty "chorus" sections.
+
+**Root causes (data, not layout):**
+- Submission: the word timestamps in `analysis.json` are broken — whisper
+  word-level timing + the LLM polish step (which merges lyric lines) produced
+  pile-ups (8–20 words sharing one timestamp) and words spilling 12–76 s
+  past their section end. The renderer clamped out-of-section words into the
+  last measure → a wall of words on one count.
+- Back in Black: ASR genuinely failed on the track. Raw whisper output
+  (`lyrics_raw.txt`) is 8 hallucinated lines over the distorted intro; the
+  pipeline flagged `confidence: low` ("Only one section contains lyrics").
+  Re-ran with `stems=false` (whisper on full mix, job `2c4ea2812fe8`) →
+  0 words (VAD detects nothing in the distorted mix). The old job
+  `99d8f532c3dc` (vocal stem) remains canonical.
+
+**Fix (renderer, deterministic):** `tab_pdf.parse_analysis_sections` now
+sanitizes word timing. A line is "broken" if: non-monotonic (gap < −0.05 s),
+pile-up (>4 words in any 0.1 s window), impossible rate (<0.10 s/word), or a
+word >3 s outside the section window. Mild spills (≤3 s) are left alone —
+they clamp harmlessly into the last measure. If any line in a section is
+broken, the whole section is re-timed: the section window is split across
+the lines proportionally to word count; words placed evenly (centered) in
+each slice. Order preserved; words land inside the section; no measure gets
+a wall.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Riptide: only [3] (12 s spill) + [7] (7-word pile-up) re-timed; mild spills (≤1.2 s) untouched | ✅ PASS |
+| Old Porch: only [4] (10-word pile-up) re-timed | ✅ PASS |
+| Submission: all 5 broken sections re-timed — max pile-up now 1 (was 8–20); all words inside section windows (was 12–76 s spills) | ✅ PASS |
+| Back in Black: 8 lines now spread across the 49 s section (last line spilled to 79 s before) | ✅ PASS |
+| All 4: every word in HTML, solo cells intact, mini tokens == chord changes, chord shapes correct | ✅ PASS |
+| All 4 re-rendered via the live MCP tool + re-published (overwrite=true) + verified publicly (sha256 match) | ✅ PASS |
+
+**Open item:** Back in Black's lyrics are still the 8 ASR hallucinations —
+the renderer can't invent missing data. Options: (a) re-rip a cleaner source
+and re-transcribe, (b) manually add the real lyrics (the detected section
+boundaries don't align cleanly with the known verse/chorus structure, so
+that's a bigger data edit), (c) leave as-is (chords + solo are fine).
