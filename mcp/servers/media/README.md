@@ -30,6 +30,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
 | `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). **Layout (2026-11-01 part 5): CHORDS — a grid of fixed-size chord fingering diagrams (name + shape + starting-fret annotation; power/barre shapes generated from the pipeline's `shape` hint, open chords from a standard-shape library); then SCORE — a measure-aligned score per section so you can sing & play at once (with a friend): VOCALS lane (word-timed lyrics with a mini chord diagram above the measure where each change lands, from ASR word timestamps + chord event times), RHYTHM lane (chord diagrams, instrumental sections), SOLO lane (compact 6-string tab of the lead notes, measure-aligned so you can see where the solo falls against the singing/rhythm).** Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id). Returns `{local_path, size_bytes, pages, title, artist, sections}`. Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
 | `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
+| `media_list_jobs` | `GET /jobs` (sync) | List jobs from the durable ledger (filters: `status`/`client`/`user`/`flow`/`since`/`limit`; newest-first) — the recovery path for lost `job_id`s; finished jobs survive pipeline restarts (2026-11-04) |
 
 **Submit-and-poll (2026-09-25):** every job tool above accepts
 `non_blocking: bool = False`. With `non_blocking=true` the tool returns
@@ -40,6 +41,47 @@ behavior (skill-runner / direct SSE callers unchanged). Why: pi's
 `pi-provider-litellm` aborts tool calls at a hardcoded 30 s while the job
 keeps running server-side — submit-and-poll keeps every tool call under the
 abort window without touching litellm/pi.
+
+**Job recovery + client tags (2026-11-04, thor handoff T1–T4):**
+
+- **`media_list_jobs`** (new) — lists jobs from the pipeline's **durable
+  ledger** (`GET /jobs`): `status` (`running`|`done`|`error`|`timeout`,
+  default `running`; comma-separated for multiple), `client`, `user`,
+  `flow`, `since` (ISO timestamp or epoch seconds), `limit` (default 50,
+  max 200) → `{count, jobs: [{job_id, flow, status, client, user, created,
+  done, model, duration_s, cost_usd, error, output, outputs}]}` newest-
+  first. **Finished jobs
+  survive pipeline restarts** (the `jobs.jsonl` ledger), and live in-flight
+  jobs are included — this is the recovery path when a `job_id` is lost to
+  a session reset, a timeout, or a crashed client. Find the `job_id`, then
+  `media_job_result(job_id)` for the result or `media_fetch(host_path)` for
+  the artifact. `media_job_result` on an unknown/evicted id returns a clean
+  error pointing here.
+- **`client` tag on every job tool** (new, optional, default `MEDIA_CLIENT`
+  = `pi`) — forwarded to the pipeline and recorded on the job. Use a stable
+  per-project tag (e.g. `client="my-project/shot3"`) so
+  `media_list_jobs(client="my-project")` finds all of a project's jobs even
+  after a restart. The tag is also logged (below).
+- **Container-log recovery (T1)** — `mcp_media` logs one line per submit
+  and one per terminal result, so `docker logs ai-mcp-mcp-mcp_media` is a
+  recovery path even before `media_list_jobs` is queried:
+  `SUBMIT kind=<tool> tag=<client> job_id=<id>` and
+  `DONE job_id=<id> status=<done|error|timeout> path=<path|->`.
+- **MCP gateway timeout + retry (T3)** — the MCP gateway has a **60 s hard
+  timeout**. Long orchestrations can legitimately exceed it; a transient
+  `MCP request timed out` is **expected** and the job is **unaffected**
+  (it keeps running on the GPU host). **Retry the call** (the job is
+  idempotent-safe to re-poll); wrap all calls in retry logic (≥3 attempts).
+  Submits return `503` + `retry_after_seconds` when the queue is full
+  (1 running + 5 queued) — **stop submitting and poll** instead of
+  retrying the submit. This text is also embedded in every job tool's
+  description + `media_job_result` + `media_list_jobs` so clients see it in
+  the tool schema.
+- **`media_fetch` collision-safety (T4)** — on a basename collision in
+  `MEDIA_PIPELINE_FETCH_DIR` the file is saved under a suffixed name
+  (`vo.wav` → `vo_2.wav`, `vo_3.wav`, …); **existing files are never
+  overwritten**. The tool returns `renamed: true` + a `note` when this
+  happens, and logs a `FETCH` line with the local path.
 
 **Post-gen edit + file movement (2026-09-07, media_pipeline_gaps.md M1–M8):**
 
@@ -150,6 +192,56 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-04: client-facing job recovery + reliability (thor handoff T1–T4,
+per `thor_media_mcp_handoff.md` — pipeline-side `/jobs` durable ledger +
+404 hints shipped on Matrix 2026-11-04):
+- **T2** — new `media_list_jobs` tool (durable `GET /jobs` with
+  status/client/user/flow/since/limit filters; finished jobs survive
+  pipeline restarts, live in-flight jobs included) + optional `client`
+  tag parameter on all 14 job tools (default `MEDIA_CLIENT`; recommended
+  convention `<project>/<shot>`) forwarded to the pipeline and logged.
+  `media_job_result` 404 errors now point to `media_list_jobs`.
+- **T1** — container-log recovery: `SUBMIT kind=<tool> tag=<client>
+  job_id=<id>` on every non-blocking submit + `DONE job_id=<id>
+  status=<...> path=<...>` on every terminal result in
+  `media_job_result` (one line per submit/terminal, greppable in
+  `docker logs ai-mcp-mcp-mcp_media`).
+- **T3** — 60 s MCP-gateway timeout + retry guidance embedded in the
+  server instructions, every job tool's description, `media_job_result`,
+  and `media_list_jobs` (transient `MCP request timed out` is expected on
+  long orchestrations; the job is unaffected; retry the call; 503 +
+  `retry_after_seconds` on a full queue means stop submitting and poll).
+- **T4** — `fetch()` is collision-safe: a basename collision in
+  `MEDIA_PIPELINE_FETCH_DIR` saves under a suffixed name
+  (`vo.wav` → `vo_2.wav`), never overwrites; `media_fetch` returns
+  `renamed: true` + a `note` and logs a `FETCH` line.
+Verified: 26/26 mock-pipeline handoff checks (`test_handoff.py` — local
+stdlib mock with the durable `/jobs` ledger, live pipeline untouched) +
+57/57 `test_transcribe.py` regression (unchanged) + live verification
+2026-11-04 (mcp_media rebuilt + restarted, mcp_vision rebuilt + restarted):
+- schema over the wire: 25 tools; `client` param on all 14 job tools;
+  `media_list_jobs` filters (status/client/user/flow/since/limit);
+  60 s timeout + retry text in `media_job_result`/job-tool descriptions;
+  collision note in `media_fetch` description.
+- T1: `SUBMIT kind=media_generate_image tag=handoff-check job_id=…` +
+  `DONE job_id=… status=done path=…` in `docker logs mcp_media` (image job
+  + no-client storyboard regression job, both live).
+- T2: `media_list_jobs(status=done)` returned live ledger jobs
+  (`{job_id, flow, status, client, user, created, done, model, duration_s,
+  cost_usd, error, output, outputs}`); `client=handoff-check` filter found
+  the tagged job; unknown job_id → clean error pointing to
+  `media_list_jobs`.
+- T4: live `media_fetch` of the same file twice → `mp_….png` then
+  `mp_…_2.png` (`renamed: true` + note; `FETCH … (basename collision —
+  suffixed, nothing overwritten)` in the log).
+- T5: `chown -R 1000:1000 /home/chuck/workspace/vision` (was root:root 755
+  — the 2026-11-02 permission-denied root cause); mcp_vision startup probe
+  logs `Output root /workspace/vision is writable (uid 1000)`; live
+  `vision_analyze_image` on a signed-URL source AND a local-path source
+  both succeeded with artifacts written to `/workspace/vision/<slug>/`.
+- regression: old call signatures (no `client`) unchanged — live storyboard
+  submit→poll→done with the default `pi` tag.
 
 2026-11-01 (part 8): `media_render_tab_pdf` **word-timing sanitization** —
 fixed cramped/garbled lyrics when the ASR word timestamps in

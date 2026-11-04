@@ -18,6 +18,7 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
   - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
   - media_job_result(job_id, wait_seconds)          Poll a job to its final result (long-poll, <=25s)
+  - media_list_jobs(status, client, user, flow, since, limit)  Durable job listing (recover lost job_ids)
   - media_fetch(host_path, subdirectory)          Download a pipeline result locally
   - media_trim(source, start, end|duration, ...)  Cut a clip to a time range (ffmpeg)
   - media_freeze(source, frame, duration, ...)    Image/frame -> static N-s clip (ffmpeg)
@@ -186,7 +187,18 @@ mcp = FastMCP(
         "20s (max 25) and returns the final result (same shape as the "
         "blocking tool) when the job is done, or status:'running' to poll "
         "again. Sync tools (media_info, media_list_voices, media_pull, ...) "
-        "are instant and need no polling."
+        "are instant and need no polling.\n"
+        "JOB RECOVERY (2026-11-04): every job tool accepts an optional "
+        "`client` tag (convention '<project>/<shot>', e.g. 'peanut-movie/S1') "
+        "stamped on the job in the pipeline's durable ledger. media_list_jobs "
+        "lists jobs newest-first (finished jobs survive pipeline restarts) — "
+        "use it to RECOVER lost job_ids (filters: status, client, user, flow, "
+        "since ISO-8601, limit 1..200). TIMEOUTS: the MCP gateway has a 60s "
+        "hard timeout — transient 'MCP request timed out' errors are expected "
+        "on long orchestrations; retry the call (the job is unaffected). "
+        "Submits return 503 + retry_after_seconds when the queue is full "
+        "(1 running + 5 queued) — stop submitting and poll. Wrap all calls "
+        "in retry logic (>=3 attempts)."
     ),
     host=MCPS_HOST,
 )
@@ -210,11 +222,49 @@ _NON_BLOCKING_NOTE = (
 
 _MAX_POLL_WAIT_S = 25.0  # keep each poll under the ~30s client tool-call timeout
 
+# 60 s MCP-gateway timeout guidance (2026-11-04, thor_media_mcp_handoff.md T3):
+# the litellm-proxy MCP gateway hard-times-out tool calls at 60 s.
+_TIMEOUT_NOTE = (
+    " TIMEOUT/RETRY: the MCP gateway has a 60s hard timeout — transient "
+    "'MCP request timed out' errors are expected on long orchestrations; "
+    "retry the call (the job is unaffected). Submits return 503 + "
+    "retry_after_seconds when the queue is full (1 running + 5 queued) — "
+    "stop submitting and poll. Wrap all calls in retry logic (>=3 attempts)."
+)
+# Per-job client tag (2026-11-04, thor_media_mcp_handoff.md T2): stamped on
+# the job in the pipeline's durable ledger; filterable via media_list_jobs.
+_CLIENT_NOTE = (
+    " `client`: optional calling-app tag stamped on the job (convention "
+    "'<project>/<shot>', e.g. 'peanut-movie/S1') — recorded in the pipeline "
+    "job ledger; use media_list_jobs(client=...) to find/recover your jobs."
+)
+
 
 def _non_blocking_result(res: dict) -> dict:
     """Wrap a non-blocking submit result ({job_id}) for the agent."""
     return {"job_id": res["job_id"], "status": "running",
             "note": _NON_BLOCKING_NOTE}
+
+
+def _job_logger(kind: str, client_tag: Optional[str]):
+    """T1 (2026-11-04): one container-log line per submit and per final
+    result, so `docker logs mcp_media` is a job-id recovery path.
+    Hook signature (see MediaPipelineClient.on_job): (job_id, status,
+    output) with status in {submitted, done, error, timeout}."""
+    def _log(job_id: str, status: str, output: Optional[dict]) -> None:
+        if status == "submitted":
+            logger.info("SUBMIT kind=%s tag=%s job_id=%s",
+                        kind, client_tag or "-", job_id)
+            return
+        path = None
+        if isinstance(output, dict):
+            for k in ("path", "video", "image", "audio", "storyboard"):
+                if output.get(k):
+                    path = output[k]
+                    break
+        logger.info("DONE job_id=%s status=%s path=%s",
+                    job_id, status, path or "-")
+    return _log
 
 
 def _is_host_path(path: str) -> bool:
@@ -372,7 +422,8 @@ def _transcribe_pipeline(source: str, instrument: str, tuning: str,
                          whisper_model: Optional[str],
                          transpose_semitones: int, target_key: Optional[str],
                          chord_style: str, capo: bool, shape_hints: bool,
-                         user: str, non_blocking: bool) -> dict:
+                         user: str, client: str, on_job=None,
+                         non_blocking: bool = False) -> dict:
     """Source resolution + POST /transcribe (sync; runs in a worker thread).
     `chord_style` must already be normalized to lowercase (see
     _validate_transcribe_opts)."""
@@ -382,7 +433,8 @@ def _transcribe_pipeline(source: str, instrument: str, tuning: str,
         stems=stems, full_notes=full_notes, whisper_model=whisper_model,
         transpose_semitones=transpose_semitones, target_key=target_key,
         chord_style=chord_style, capo=capo, shape_hints=shape_hints,
-        user=user, client=MEDIA_CLIENT, non_blocking=non_blocking)
+        user=user, client=client, on_job=on_job,
+        non_blocking=non_blocking)
 
 
 # ---------------------------------------------------------------------------
@@ -396,16 +448,20 @@ def _transcribe_pipeline(source: str, instrument: str, tuning: str,
         "Generate a cinematic shot list (JSON) for a commercial/video from a brief, "
         "via the GPU-host media pipeline. Returns {\"shots\": [{id, visual, vo}, ...]}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
+                           client: Optional[str] = None,
                            non_blocking: bool = False,
                            ctx: Context = None) -> dict:
     """LLM shot list from a brief (GPU-host VLLM)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(PIPELINE.storyboard, brief, n_shots, aspect,
-                                       user=user, client=MEDIA_CLIENT,
+                                       user=user, client=tag,
+                                       on_job=_job_logger("media_storyboard", tag),
                                        non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"brief": brief})
@@ -425,6 +481,7 @@ async def media_storyboard(brief: str, n_shots: int = 5, aspect: str = "16:9",
         "media_generate_shot/media_assemble (auto-fetched) or call media_fetch "
         "to download it locally."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_generate_image(
@@ -434,15 +491,19 @@ async def media_generate_image(
     seed: int = 42,
     steps: int = 25,
     model: Optional[str] = None,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Text -> keyframe image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.generate_image, prompt, width, height, seed, steps, model,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
+            user=user, client=tag,
+            on_job=_job_logger("media_generate_image", tag),
+            non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
@@ -464,22 +525,26 @@ async def media_generate_image(
         "`model`: 'qwen21' (default) | 'legacy' (old Qwen-Image-Edit-2511; "
         "steps=8). Returns {path, location='gpu_host'}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int = 25,
                            model: Optional[str] = None,
                            references: Optional[List[str]] = None,
+                           client: Optional[str] = None,
                            non_blocking: bool = False,
                            ctx: Context = None) -> dict:
     """Image + text -> edited image (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         local_image = await _ensure_local(image)
         if not os.path.isfile(local_image):
             return {"error": f"Image not found (local or on GPU host): {image}"}
         res = await asyncio.to_thread(
             PIPELINE.edit_image, local_image, prompt, seed, steps, model, references,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
+            client=tag,
+            user=user, on_job=_job_logger("media_edit_image", tag), non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"image": image, "prompt": prompt})
@@ -503,6 +568,7 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
         "Returns {path, location='gpu_host'}. non_blocking=true submits "
         "without waiting — returns {job_id} in ~1s; poll "
         "media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_generate_shot(
@@ -515,18 +581,21 @@ async def media_generate_shot(
     seed: int = 42,
     strength: float = 0.7,
     model: Optional[str] = None,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Keyframe -> I2V clip (GPU host). model: wan14b (quality) | ltxv2b (fast)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         local_kf = await _ensure_local(keyframe)
         if not os.path.isfile(local_kf):
             return {"error": f"Keyframe not found (local or on GPU host): {keyframe}"}
         res = await asyncio.to_thread(
             PIPELINE.generate_shot, local_kf, prompt, width, height, frames, fps,
-            seed, strength, model, user=user, client=MEDIA_CLIENT,
+            seed, strength, model, user=user, client=tag,
+            on_job=_job_logger("media_generate_shot", tag),
             non_blocking=non_blocking,
         )
     except Exception as exc:
@@ -549,16 +618,20 @@ async def media_generate_shot(
         "pipeline tools (inputs are auto-fetched) or call media_fetch to "
         "download it locally."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_text_to_speech(text: str, voice: str = "trailer",
+                               client: Optional[str] = None,
                                non_blocking: bool = False,
                                ctx: Context = None) -> dict:
     """Script -> voice-over wav (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(PIPELINE.text_to_speech, text, voice,
-                                       user=user, client=MEDIA_CLIENT,
+                                       client=tag,
+                                       user=user, on_job=_job_logger("media_text_to_speech", tag),
                                        non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"text": text[:80], "voice": voice})
@@ -597,18 +670,22 @@ async def media_list_voices(ctx: Context = None) -> dict:
         "name replaces it (protected names trailer/default -> 400). Returns "
         "{voice, ref, sample, ref_duration_s}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_add_voice(name: str, source: str, description: str = "",
                           gender: str = "", style: str = "",
+                          client: Optional[str] = None,
                           non_blocking: bool = False,
                           ctx: Context = None) -> dict:
     """Register a TTS voice from a reference wav (GPU host, job)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.add_voice, name, source, description, gender, style,
-            user=user, client=MEDIA_CLIENT,
+            client=tag,
+            user=user, on_job=_job_logger("media_add_voice", tag),
             non_blocking=non_blocking,
         )
     except Exception as exc:
@@ -640,16 +717,20 @@ async def media_delete_voice(name: str, ctx: Context = None) -> dict:
         "Generate music or a song (ACE-Step) via the GPU-host media pipeline. "
         "`lyrics` optional. Returns {path, location='gpu_host'}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30, seed: int = 42,
+                               client: Optional[str] = None,
                                non_blocking: bool = False,
                                ctx: Context = None) -> dict:
     """Prompt (+lyrics) -> song/instrumental wav (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(PIPELINE.generate_music, prompt, lyrics, duration, seed,
-                                       user=user, client=MEDIA_CLIENT,
+                                       client=tag,
+                                       user=user, on_job=_job_logger("media_generate_music", tag),
                                        non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"prompt": prompt})
@@ -691,6 +772,7 @@ async def media_generate_music(prompt: str, lyrics: str = "", duration: int = 30
         "(GPU-host paths — media_fetch / media_pull each one) + the original "
         "source. Expect minutes per song: non_blocking=true returns {job_id} "
         "in ~1s — poll media_job_result(job_id, wait_seconds=20) until done."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_transcribe_song(
@@ -706,6 +788,7 @@ async def media_transcribe_song(
     chord_style: str = "as_detected",
     capo: bool = False,
     shape_hints: bool = True,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
@@ -720,11 +803,13 @@ async def media_transcribe_song(
     if err:
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             _transcribe_pipeline, source, instrument, tuning, lyrics, stems,
             full_notes, whisper_model, transpose_semitones, target_key,
-            chord_style.strip().lower(), capo, shape_hints, user, non_blocking)
+            chord_style.strip().lower(), capo, shape_hints, user, tag,
+            _job_logger("media_transcribe_song", tag), non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
     if non_blocking:
@@ -813,19 +898,23 @@ async def media_render_tab_pdf(
         "pipeline. `video` may be a local path OR a GPU-host path (auto-fetched). "
         "Returns {path, location='gpu_host'}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_sfx(video: str, description: str = "", duration: float = 8.0,
+                    client: Optional[str] = None,
                     non_blocking: bool = False,
                     ctx: Context = None) -> dict:
     """Video -> synced SFX bed (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
         res = await asyncio.to_thread(PIPELINE.sfx, local_video, description, duration,
-                                       user=user, client=MEDIA_CLIENT,
+                                       client=tag,
+                                       user=user, on_job=_job_logger("media_sfx", tag),
                                        non_blocking=non_blocking)
     except Exception as exc:
         return _pipeline_error(exc, {"video": video})
@@ -842,6 +931,7 @@ async def media_sfx(video: str, description: str = "", duration: float = 8.0,
         "(quality, ~5 min), 'a2' = 4xUltrasharp (fast, ~1 min). Returns "
         "{path, location='gpu_host'}."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_upscale_video(
@@ -850,18 +940,21 @@ async def media_upscale_video(
     resolution: int = 1080,
     noise_scale: float = 0.0,
     seed: int = 42,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Video -> upscaled (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         local_video = await _ensure_local(video)
         if not os.path.isfile(local_video):
             return {"error": f"Video not found (local or on GPU host): {video}"}
         res = await asyncio.to_thread(
             PIPELINE.upscale, local_video, pipeline, resolution, noise_scale, seed,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking
+            client=tag,
+            user=user, on_job=_job_logger("media_upscale_video", tag), non_blocking=non_blocking
         )
     except Exception as exc:
         return _pipeline_error(exc, {"video": video, "pipeline": pipeline})
@@ -888,6 +981,7 @@ async def media_upscale_video(
         "EBU R128 to the final mix. Returns {path, location='gpu_host'}; call "
         "media_fetch to download the final mp4 or media_pull for a signed public URL."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_assemble(
@@ -909,11 +1003,13 @@ async def media_assemble(
     upscale_fps: int = 24,
     upscale_seed: int = 42,
     text_overlays: Optional[List[dict]] = None,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
     """Concat shots + mix audio -> final mp4 (GPU host)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
@@ -922,7 +1018,8 @@ async def media_assemble(
             upscale_resolution=upscale_resolution,
             upscale_noise_scale=upscale_noise_scale, upscale_fps=upscale_fps,
             upscale_seed=upscale_seed, text_overlays=text_overlays,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
+            client=tag,
+            user=user, on_job=_job_logger("media_assemble", tag), non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"shots": shots})
@@ -941,9 +1038,15 @@ async def media_assemble(
         "result — same shape as the blocking tool ({path, location} for media "
         "jobs, {shots} for storyboard, voice output for add_voice) — or "
         "{status: 'running'}: call media_job_result again to keep polling. "
-        "Job ids are valid while the job is in the pipeline's ephemeral "
-        "registry (poll promptly; finished files are retained 14d and can be "
-        "pulled via media_pull if you know the path)."
+        "Lost a job_id? Use media_list_jobs — durable ledger: finished jobs "
+        "survive pipeline restarts, live in-flight jobs are included. "
+        "Finished files are retained 14d and can be pulled via media_pull "
+        "if you know the path. "
+        "TIMEOUT/RETRY: the MCP gateway has a 60s hard timeout — transient "
+        "'MCP request timed out' errors are expected on long orchestrations; "
+        "retry the call (the job is unaffected). Submits return 503 + "
+        "retry_after_seconds when the queue is full (1 running + 5 queued) — "
+        "stop submitting and poll. Wrap all calls in retry logic (>=3 attempts)."
     ),
 )
 async def media_job_result(job_id: str, wait_seconds: float = 20.0,
@@ -961,6 +1064,7 @@ async def media_job_result(job_id: str, wait_seconds: float = 20.0,
                 "note": "Still running — call media_job_result again to keep "
                         "polling (the job continues on the GPU host)."}
     if r["status"] in ("error", "timeout"):
+        logger.info("DONE job_id=%s status=%s path=-", job_id, r["status"])
         return {"job_id": job_id, "flow": job.get("flow"),
                 "status": r["status"], "error": job.get("error")}
     try:
@@ -974,7 +1078,47 @@ async def media_job_result(job_id: str, wait_seconds: float = 20.0,
         out["result"] = payload
     if "path" in out:
         out["note"] = _HOST_PATH_NOTE
+    logger.info("DONE job_id=%s status=done path=%s",
+                job_id, out.get("path") or "-")
     return out
+
+
+@mcp.tool(
+    name="media_list_jobs",
+    description=(
+        "List media-pipeline jobs from the pipeline's durable ledger — "
+        "recovers job ids lost to session resets, timeouts, or crashed "
+        "clients. Filters: status (running|done|error|timeout — default "
+        "running), client (your tag, e.g. 'project/shot'), user, flow, "
+        "since (ISO timestamp or '2h'/'30m'), limit (default 50, max 200). "
+        "Returns {count, jobs: [{job_id, flow, status, client, user, "
+        "created, done, model, duration_s, cost_usd, error, output, "
+        "outputs}]} newest-first. Durable: finished jobs survive pipeline "
+        "restarts; live in-flight jobs are included. Fetch a finished "
+        "job's result with media_job_result(job_id), or "
+        "media_fetch(host_path) to pull its artifact. "
+        "TIMEOUT/RETRY: the MCP gateway has a 60s hard timeout — transient "
+        "'MCP request timed out' errors are expected on long orchestrations; "
+        "retry the call (the job is unaffected). Submits return 503 + "
+        "retry_after_seconds when the queue is full (1 running + 5 queued) — "
+        "stop submitting and poll. Wrap all calls in retry logic (>=3 "
+        "attempts)."
+    ),
+)
+async def media_list_jobs(status: str = "running", client: Optional[str] = None,
+                          user: Optional[str] = None, flow: Optional[str] = None,
+                          since: Optional[str] = None, limit: int = 50) -> dict:
+    """GET /jobs with filters (durable ledger + live in-flight jobs)."""
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.list_jobs, status=status, client=client, user=user,
+            flow=flow, since=since, limit=max(1, min(int(limit), 200)))
+        logger.info("LIST_JOBS status=%s client=%s user=%s flow=%s since=%s "
+                    "limit=%s -> count=%d",
+                    status, client, user, flow, since, limit, res.get("count", 0))
+        return res
+    except Exception as exc:
+        return _pipeline_error(exc, {"status": status, "client": client})
 
 
 @mcp.tool(
@@ -983,11 +1127,14 @@ async def media_job_result(job_id: str, wait_seconds: float = 20.0,
         "Download a media-pipeline result from the GPU host to the local media "
         "library (MEDIA_PIPELINE_FETCH_DIR, default "
         f"{PIPELINE_FETCH_DIR}) and return the local path. Use this to deliver the "
-        "final artifact (or any intermediate) to the user / other local tools."
+        "final artifact (or any intermediate) to the user / other local tools. "
+        "On a basename collision in the destination dir the file is saved "
+        "under a suffixed name (vo.wav -> vo_2.wav) — existing files are "
+        "NEVER overwritten."
     ),
 )
 async def media_fetch(host_path: str, subdirectory: str = "") -> dict:
-    """GPU-host path -> local file."""
+    """GPU-host path -> local file (basename collisions are suffixed)."""
     if not _is_host_path(host_path):
         return {
             "error": (
@@ -1001,11 +1148,23 @@ async def media_fetch(host_path: str, subdirectory: str = "") -> dict:
     )
     try:
         local = await asyncio.to_thread(PIPELINE.fetch, host_path, dest)
-        return {
+        expected = os.path.join(dest, os.path.basename(host_path))
+        renamed = os.path.abspath(local) != os.path.abspath(expected)
+        logger.info("FETCH host_path=%s local_path=%s%s",
+                    host_path, local,
+                    " (basename collision — suffixed, nothing overwritten)"
+                    if renamed else "")
+        out = {
             "local_path": local,
             "host_path": host_path,
             "size_bytes": os.path.getsize(local),
         }
+        if renamed:
+            out["renamed"] = True
+            out["note"] = ("basename collision in the fetch dir — the file "
+                           "was saved under a suffixed name (the existing "
+                           "file is untouched)")
+        return out
     except Exception as exc:
         return _pipeline_error(exc, {"host_path": host_path})
 
@@ -1019,6 +1178,7 @@ async def media_fetch(host_path: str, subdirectory: str = "") -> dict:
         "Exactly one of `end` or `duration`. Optional fps/width/height. Returns "
         "{path, location='gpu_host'}; verify with media_info."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_trim(
@@ -1029,6 +1189,7 @@ async def media_trim(
     fps: Optional[int] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
@@ -1037,10 +1198,12 @@ async def media_trim(
     if err:
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.trim, source, start, end, duration, fps, width, height,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
+            client=tag,
+            user=user, on_job=_job_logger("media_trim", tag), non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
@@ -1059,6 +1222,7 @@ async def media_trim(
         "frame INDEX (0-based) when source is a video. Returns {path, "
         "location='gpu_host'}; accepted by media_assemble."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_freeze(
@@ -1068,6 +1232,7 @@ async def media_freeze(
     width: int = 1280,
     height: int = 720,
     fps: int = 24,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
@@ -1076,10 +1241,12 @@ async def media_freeze(
     if err:
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.freeze, source, frame, duration, width, height, fps,
-            user=user, client=MEDIA_CLIENT, non_blocking=non_blocking,
+            client=tag,
+            user=user, on_job=_job_logger("media_freeze", tag), non_blocking=non_blocking,
         )
     except Exception as exc:
         return _pipeline_error(exc, {"source": source})
@@ -1097,6 +1264,7 @@ async def media_freeze(
         f"{MEDIA_STAGING_DIR} (auto-uploaded). `end` defaults to clip end. Returns "
         "{path, location='gpu_host'}; verify with media_info + a vision frame read."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
     ),
 )
 async def media_caption(
@@ -1109,6 +1277,7 @@ async def media_caption(
     font: str = "DejaVuSans-Bold.ttf",
     color: str = "white",
     outline: int = 3,
+    client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
@@ -1117,10 +1286,12 @@ async def media_caption(
     if err:
         return err
     user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
     try:
         res = await asyncio.to_thread(
             PIPELINE.caption, source, text, start, end, position, font_size,
-            font, color, outline, user=user, client=MEDIA_CLIENT,
+            font, color, outline, user=user, client=tag,
+            on_job=_job_logger("media_caption", tag),
             non_blocking=non_blocking,
         )
     except Exception as exc:

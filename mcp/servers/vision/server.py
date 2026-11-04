@@ -606,7 +606,12 @@ mcp = FastMCP(
         "(frames + report.md) land in a NON-public workspace dir "
         f"({VISION_OUTPUT_ROOT}/<slug>/) — clean up with vision_cleanup "
         "when done. focus=commercial = QA of mcp_media-generated media "
-        "(pass the generation brief in `prompt`)."
+        "(pass the generation brief in `prompt`). "
+        "If artifact saving fails with permission denied, the output dir "
+        "ownership regressed (fix on thor: chown -R 1000:1000 "
+        "/home/chuck/workspace/vision); workaround: call the LiteLLM proxy "
+        "directly — POST /v1/chat/completions, model=matrix-coder, "
+        "image_url content parts (base64 data URLs work)."
     ),
     host=MCPS_HOST,
 )
@@ -619,7 +624,12 @@ mcp = FastMCP(
         "local path (media/, workspace/, ai-kb/raw) or http(s) URL. "
         "Returns a structured markdown description incl. verbatim "
         "on-screen text. focus=commercial QA's mcp_media-generated "
-        "images (pass the generation brief in prompt)."
+        "images (pass the generation brief in prompt). If artifact "
+        "saving fails with a permission error (output dir not writable), "
+        "the fallback is to call the LiteLLM proxy directly: POST "
+        "https://llm.choukalos.com/v1/chat/completions with model "
+        "matrix-coder and image_url content parts (base64 data URLs "
+        "work)."
     ),
 )
 async def vision_analyze_image(
@@ -950,6 +960,31 @@ async def vision_probe(n: int = 6) -> dict:
         return {"status": "error", "error": str(exc)}
 
 
+def _probe_output_root_writable() -> None:
+    """Startup probe (2026-11-04, T5): verify the artifact dir is actually
+    writable by the container user (uid 1000). The 2026-11-02 incident was
+    /home/chuck/workspace/vision being root:root 755 while mcp_vision runs as
+    uid 1000 — artifacts failed with permission denied. Log a clear error so
+    an ownership regression is visible in `docker logs mcp_vision` at boot
+    instead of surfacing as a confusing tool error later."""
+    probe = VISION_OUTPUT_ROOT / ".writability_probe"
+    try:
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok")
+        probe.unlink()
+        logger.info("Output root %s is writable (uid %d)",
+                    VISION_OUTPUT_ROOT, os.getuid())
+    except OSError as exc:
+        logger.error(
+            "Output root %s is NOT writable by uid %d (%s) — vision tools "
+            "will fail to save artifacts. Fix on the host: "
+            "chown -R <uid>:<gid> <host-path-of-VISION_OUTPUT_ROOT> and "
+            "restart mcp_vision. Workaround: call the LiteLLM proxy "
+            "directly (POST /v1/chat/completions, model=matrix-coder, "
+            "image_url content parts).",
+            VISION_OUTPUT_ROOT, os.getuid(), exc)
+
+
 def main() -> None:
     """Run the MCP vision server over SSE transport."""
     logging.basicConfig(level=logging.INFO)
@@ -958,6 +993,7 @@ def main() -> None:
                 LITELLM_API_BASE, VISION_MODEL, VISION_MAX_IMAGES)
     logger.info("Output root: %s (allowed roots: %s)",
                 VISION_OUTPUT_ROOT, [str(r) for r in VISION_ALLOWED_ROOTS])
+    _probe_output_root_writable()
     if shutil.which("ffmpeg") is None:
         logger.error("ffmpeg not found in PATH — extraction will fail")
     #mcp.run(transport="sse")
