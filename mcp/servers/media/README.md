@@ -193,6 +193,19 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-11-06: `media_render_tab_pdf` **SOLO board readability** (the per-measure
+boards were too small to read at 1× inside the 7-measure rows):
+- SCORE bands now render **4 measures per row** (was 7) — `MEASURES_PER_ROW`
+  7 → 4 — giving each measure ~120pt of horizontal room.
+- Solo boards render at **2× scale** (`SOLO_BOARD_SCALE = 2.0`): the SVG keeps
+  the base viewBox geometry but is emitted at width×2 × height×2, so the dots,
+  duration tails, play-order badges, h/p/slide/vibrato connectors, and the 4/4
+  beat ruler all scale up uniformly — much easier to read. (The SOLO KEY
+  legend panel is unchanged — it's a compact reference, not a solo lane.)
+- Net effect: bigger, more legible solo boards; sections take more pages
+  (e.g. Sweet Child O' Mine 8 → 13 pages). `test_chord_shapes.py` 6/6
+  (unchanged); all 4 QA tabs re-rendered + republished (`overwrite=true`).
+
 2026-11-04: client-facing job recovery + reliability (thor handoff T1–T4,
 per `thor_media_mcp_handoff.md` — pipeline-side `/jobs` durable ledger +
 404 hints shipped on Matrix 2026-11-04):

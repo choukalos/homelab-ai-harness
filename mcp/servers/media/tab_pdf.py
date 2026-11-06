@@ -599,7 +599,10 @@ def esc(s):
 
 
 # ── Score (measure-aligned vocals · rhythm · solo) ─────────────────────
-MEASURES_PER_ROW = 7
+# 4 per row (2026-11-06): the solo boards need the horizontal room to be
+# legible — 7 crammed them to ~44pt in ~69pt cells. 4 per row gives each
+# measure ~120pt so the boards can render at SOLO_BOARD_SCALE.
+MEASURES_PER_ROW = 4
 
 # ── Solo boards (Phase 3) ─────────────────────────────────────────────
 class SoloStyle(str, Enum):
@@ -613,8 +616,12 @@ SOLO_STACK_LIMIT = 5         # >5 notes on one (string, fret) -> text fallback
 SOLO_BOARD_SPACES = 6        # fret spaces per board (7 lines)
 SOLO_SLIDE_GAP_BEATS = 0.25  # gap < 0.25*beat -> slide
 SOLO_JUMP_NO_MARK = 4        # |Δfret| > 4 -> no connector
-SOLO_BOARD_W = 44.0          # total width (pt) of a board group
-SOLO_BOARD_H = 54.0          # height (pt): board 46 + ruler          # keep one band within a Letter page width
+SOLO_BOARD_W = 44.0          # total width (pt) of a board group (viewBox geometry)
+SOLO_BOARD_H = 54.0          # height (pt): board 46 + ruler
+SOLO_BOARD_SCALE = 2.0       # render scale (2026-11-06): SVG is emitted at
+                             # width×SCALE × height×SCALE with the same viewBox,
+                             # so dots/tails/badges/connectors/ruler all scale up
+                             # uniformly — the boards were too small to read at 1×
 SOLO_CELL_CHARS = 12          # max fret digits per string per measure
 SOLO_REPEAT_CAP = 5           # max repeated fret digits per run
 STR_LABELS = {1: "e", 2: "B", 3: "G", 4: "D", 5: "A", 6: "E"}
@@ -823,9 +830,16 @@ def _solo_board_inner(notes, lo, beat, width, e):
 
 
 def _solo_board_svg(notes, lo, beat, width):
-    """Standalone per-measure solo board (B3). See _solo_board_inner."""
-    e = [f"<svg class='sb-svg' width='{float(width):g}' height='{SOLO_BOARD_H:g}' "
-         f"viewBox='0 0 {float(width):g} {SOLO_BOARD_H:g}' "
+    """Standalone per-measure solo board (B3). See _solo_board_inner.
+
+    The viewBox keeps the base geometry (width × SOLO_BOARD_H) but the SVG
+    is emitted at SOLO_BOARD_SCALE × that size, so the whole board — dots,
+    tails, badges, connectors, ruler — renders uniformly larger for
+    readability (2026-11-06)."""
+    w = float(width)
+    e = [f"<svg class='sb-svg' width='{w * SOLO_BOARD_SCALE:g}' "
+         f"height='{SOLO_BOARD_H * SOLO_BOARD_SCALE:g}' "
+         f"viewBox='0 0 {w:g} {SOLO_BOARD_H:g}' "
          "xmlns='http://www.w3.org/2000/svg'>"]
     _solo_board_inner(notes, lo, beat, width, e)
     e.append("</svg>")
