@@ -56,13 +56,19 @@ These systems are LAN-only now but could be exposed remotely with strong auth in
 
 | System | Current | Future Path (if approved) |
 |---|---|---|
-| Open WebUI | LAN `:3000` | Cloudflare Access / VPN / Tailscale |
+| Open WebUI | LAN `:3000` | Cloudflare Access / router OpenVPN |
 | Portal (if moved to Thor) | LAN | Cloudflare Access / VPN |
 | Grafana admin | LAN (Lego) | Cloudflare Access |
 | Plausible admin | LAN only (blocked) | Cloudflare Access (if needed) |
 | n8n | LAN (not running) | Cloudflare Access (if re-enabled) |
 
 **Current decision:** No tier-1 systems are exposed. When Chuck wants remote access to any of these, it goes through a manual gate.
+
+> **Remote access note (2026-11-06):** the Tailscale subnet-router plan
+> (former `tailscale/` directory) was dropped — remote access to the LAN
+> (incl. SSH to thor/matrix and the NASes) now goes through the **router's
+> OpenVPN server** instead. No host-side changes on thor; the OpenVPN
+> client lands on the LAN itself.
 
 ---
 

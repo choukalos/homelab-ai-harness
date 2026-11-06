@@ -255,6 +255,11 @@ deny does **not** break it.)
 
 - [ ] SSH baseline (F9): `sshd -T | grep -iE '^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication|pubkeyauthentication)'`
   - [ ] ensure `passwordauthentication no`, `permitrootlogin no`, `pubkeyauthentication yes` (edit `/etc/ssh/sshd_config.d/`, `systemctl reload ssh`)
+  - [ ] ⚠️ **LAN session only — do at home, not via the router OpenVPN.**
+        Remote access currently rides the router's OpenVPN (Tailscale plan
+        dropped 2026-11-06); a lockout mid-change would kill the only remote
+        path. Tracked as a manual task in `docs/thor_manual_tasks.md`
+        (Phase 16).
 - [ ] ufw (draft — **discuss before executing**, see §6 open questions):
   ```bash
   sudo ufw default deny incoming

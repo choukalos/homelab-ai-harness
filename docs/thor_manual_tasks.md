@@ -1,8 +1,8 @@
 # Thor Manual Tasks
 
 > Tasks that require Chuck's manual intervention.
-> Updated: 2026-08-28 (backup + skill-runner /metrics marked DONE; remaining
-> items still open)
+> Updated: 2026-11-06 (Phase 16 added — SSH hardening on thor, LAN session
+> only; Tailscale plan dropped in favor of router OpenVPN)
 
 ---
 
@@ -271,6 +271,46 @@ Validation:
 
 ---
 
+## Phase 16 - SSH Hardening on Thor (LAN session only — do when at home)
+
+> **WHEN:** Next time at home, from a **LAN session** (Wi-Fi/Ethernet on the
+> home network) — **not via the router OpenVPN**. Remote access currently
+> rides the router's OpenVPN, so a lockout mid-change would kill the only
+> remote path. Full context: `security_todo.md` Phase 5 (SSH baseline F9 +
+> ufw allow-list).
+
+```text
+MANUAL TASK FOR CHUCK:
+Reason:
+Harden sshd on thor (key-only, no root login). The Tailscale plan was
+dropped 2026-11-06 in favor of the router's OpenVPN, so host sshd is the
+main remote entry point and should be defense-in-depth'd. Do it from a LAN
+session so a misstep can't lock out the only remote access path.
+Command:
+1. Baseline: `sshd -T | grep -iE '^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication|pubkeyauthentication)'`
+2. Drop-in file in `/etc/ssh/sshd_config.d/` ensuring:
+   `passwordauthentication no`, `permitrootlogin no`,
+   `pubkeyauthentication yes` (check `sshd -t` BEFORE reload).
+3. Open a SECOND terminal and verify key auth works there before
+   closing the first session.
+4. (Same session, same LAN-only rule) optionally finish `security_todo.md`
+   Phase 5 ufw allow-list: default-deny + allow 192.168.4.0/24 and
+   192.168.5.0/24, then verify per that doc.
+Expected impact:
+Password ssh to thor stops working; key auth unchanged. Nothing changes
+for LAN sessions while working.
+Rollback:
+Remove/revert the sshd drop-in + `systemctl reload ssh` (and
+`sudo ufw disable` if ufw was enabled).
+Validation:
+- `sshd -T | grep -iE '^(passwordauthentication|permitrootlogin|pubkeyauthentication)'`
+  shows the hardened values
+- fresh LAN session logs in with key; password login refused
+- (if ufw enabled) `sudo ufw status verbose` + LAN client still reaches Thor
+```
+
+---
+
 ## Summary of Pending Manual Tasks
 
 | # | Phase | Task | Priority |
@@ -286,3 +326,4 @@ Validation:
 | 9 | 14 | Skill runner Caddy routing | High — LAN access |
 | 10 | 14 | Cloudflare tunnel (if needed) | Low — depends on remote needs |
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
+| 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | High — **LAN session only (at home), not via OpenVPN** |

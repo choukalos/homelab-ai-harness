@@ -281,7 +281,7 @@ Never public:
 
 #### Tier 1 - Remote Private
 
-Protected by Cloudflare Access, VPN, Tailscale, Authentik, or equivalent if exposed:
+Protected by Cloudflare Access, the router OpenVPN, Authentik, or equivalent if exposed:
 
 - Open WebUI
 - Portal, if ever exposed beyond LAN
