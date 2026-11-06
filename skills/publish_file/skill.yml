@@ -13,9 +13,9 @@ inputs:
   - name: subdirectory
     type: string
     required: false
-    enum: [ai, files, images, audio, video]
+    enum: [ai, images, audio, video, tabs]
     default: ai
-    description: "Drop-zone subdirectory to publish into."
+    description: "Drop-zone subdirectory to publish into. One of: ai, images, audio, video, tabs (guitar tabs + lyrics from media_transcribe_song; slug-prefix the names, e.g. riptide-tab.md). Never 'files' - the drop zone is already served at /files/, so it would produce /files/files/... URLs."
   - name: overwrite
     type: boolean
     required: false
