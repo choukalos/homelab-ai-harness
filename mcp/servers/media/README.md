@@ -28,7 +28,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
 | `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
-| `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). **Layout (2026-11-01 part 5): CHORDS — a grid of fixed-size chord fingering diagrams (name + shape + starting-fret annotation; power/barre shapes generated from the pipeline's `shape` hint, open chords from a standard-shape library); then SCORE — a measure-aligned score per section so you can sing & play at once (with a friend): VOCALS lane (word-timed lyrics with a mini chord diagram above the measure where each change lands, from ASR word timestamps + chord event times), RHYTHM lane (chord diagrams, instrumental sections), SOLO lane (compact 6-string tab of the lead notes, measure-aligned so you can see where the solo falls against the singing/rhythm).** Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id). Returns `{local_path, size_bytes, pages, title, artist, sections}`. Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
+| `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). **Layout (2026-11-01 part 5): CHORDS — a grid of fixed-size chord fingering diagrams (name + shape + starting-fret annotation; power/barre shapes generated from the pipeline's `shape` hint, open chords from a standard-shape library); then SCORE — a measure-aligned score per section so you can sing & play at once (with a friend): VOCALS lane (word-timed lyrics with a mini chord diagram above the measure where each change lands, from ASR word timestamps + chord event times), RHYTHM lane (chord diagrams, instrumental sections), SOLO lane (per-measure fretboard boards — same visual language as the CHORDS diagrams: dot size + duration tail = hold time, number = play order, h/p = hammer-on/pull-off, arrow = slide, wave = hold/vibrato; decoded by the SOLO KEY panel at the top of the SCORE part; over-dense measures fall back to the compact 6-line text tab; 2026-11-06 Phase 3).** Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id); `solo_style` = 'board' (default) or 'text' (legacy compact tab). Returns `{local_path, size_bytes, pages, title, artist, sections, missing_shapes, synthesized_shapes, solo_style, solo_fallbacks}` (shape-coverage warnings + solo-lane reporting, 2026-11-06). Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
 | `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
 | `media_list_jobs` | `GET /jobs` (sync) | List jobs from the durable ledger (filters: `status`/`client`/`user`/`flow`/`since`/`limit`; newest-first) — the recovery path for lost `job_id`s; finished jobs survive pipeline restarts (2026-11-04) |
 
@@ -242,6 +242,50 @@ stdlib mock with the durable `/jobs` ledger, live pipeline untouched) +
   both succeeded with artifacts written to `/workspace/vision/<slug>/`.
 - regression: old call signatures (no `client`) unchanged — live storyboard
   submit→poll→done with the default `pi` tag.
+
+2026-11-06: `media_render_tab_pdf` **chord-shape coverage + SOLO lane
+rework (Phase 1–3)** (per `enhance_tab_tool.md`, triggered by 4 tabs
+published 2026-11-05 that rendered several chords as "NO SHAPE / n/a"):
+- **Shape library** (`tab_pdf.py` `OPEN_CHORDS`): added the 6th/9th family
+  the QA tabs hit (B6/F6/G6) plus D6/E6/A9/D9/G9/Am9 — every entry
+  interval-verified. Also corrected 5 pre-existing entries the checker
+  caught: Csus4/Gsus4 carried wrong notes (x33020 had C# = b7; 332003 had
+  B = 6th), and F#m/F#m7/F#maj7 were non-standard voicings missing core
+  tones (now the standard 244222 / 242222 / 244362 E-shape barres @2).
+  Note: D6 is xx0202 (D A B F#) — xx0212 is the D7 voicing.
+- **Synthesized-barre fallback**: unknown symbols with an open-position
+  hint no longer render "n/a" — the generator synthesizes a movable barre
+  (root on the lower of the 6th/5th string; 7th chords add the 7th,
+  maj7 adds 7th+11th — the exact E7/A7/Emaj7/Amaj7 patterns), labeled
+  "barre @ N (synthesized)".
+- **Coverage reporting**: `render()` now returns `missing_shapes` (fell
+  through to n/a) and `synthesized_shapes` (fallback used), and the PDF
+  header gets a visible note line when any shape is missing — no more
+  silently shipped "n/a" pages.
+- **Unit test** (`test_chord_shapes.py`): deterministic interval check of
+  every library entry (root present + no tone outside the chord's tones
+  and documented extensions), the rejected-candidates regression list
+  (G9 353533 = G7sus4, E9 025100 = E6, Bm9 x23210 = b5, Emaj9 020100 =
+  Emaj7, D6 xx0212 = D7), and the synthesized fallback. 55 entries pass.
+- QA: all four 2026-11-05 tabs re-rendered in the `mcp_media` image —
+  zero "n/a"/"NO SHAPE" entries; B6/F6/G6 render as proper diagrams.
+- **Phase 3 — SOLO lane rework** (`tab_pdf.py`): the SOLO lane now renders
+  per-measure **fretboard boards** (inline SVG, same visual language as the
+  CHORDS diagrams) instead of the compact text tab: dot size + duration
+  tail ∝ note hold time (from the note events' `end_s`, previously unused),
+  time-order badges (1, 2, 3…), technique connectors inferred from
+  timing/fret patterns (h/p for overlapping hammer-ons/pull-offs, arrow
+  icon for slides < ¼ beat, wavy-line icon for same-fret overlap =
+  hold/vibrato), fret window per measure with a starting-fret label
+  (e.g. `4f`), wide spans split into side-by-side boards, a 4/4 beat
+  ruler, and a **SOLO KEY** panel (example board + mark table) at the top
+  of the SCORE part. Over-dense measures (>12 lead notes or >5 on one
+  (string, fret)) fall back to the legacy text tab for that measure only.
+  `render()` gained `solo_style` ('board' default | 'text') and reports
+  `solo_fallbacks` (dense-measure count); the MCP tool exposes `solo_style`
+  and both new result fields. Techniques are inferred — medium confidence,
+  verify against the recording (bends need pipeline-side pitch contours —
+  Phase 4, separate GPU-host work item).
 
 2026-11-01 (part 8): `media_render_tab_pdf` **word-timing sanitization** —
 fixed cramped/garbled lyrics when the ASR word timestamps in

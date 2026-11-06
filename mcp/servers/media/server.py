@@ -833,16 +833,29 @@ async def media_transcribe_song(
         "can sing & play at once (with a friend): VOCALS lane (word-timed "
         "lyrics with a mini chord diagram above the measure where each change "
         "lands, from ASR word timestamps + chord event times), RHYTHM lane "
-        "(chord diagrams, instrumental sections), SOLO lane (compact 6-string "
-        "tab of the lead notes, measure-aligned so you can see where the solo "
-        "falls against the singing/rhythm — a friend can play the SOLO lane "
-        "while you sing). Header: Playfair Display title, key/BPM/tuning/capo "
-        "chips. Use after "
+        "(chord diagrams, instrumental sections), SOLO lane (per-measure "
+        "fretboard boards — same visual language as the CHORDS diagrams: dot "
+        "size + duration tail = hold time, number = play order, h/p = "
+        "hammer-on/pull-off, arrow = slide, wave = hold/vibrato — decoded by "
+        "the SOLO KEY panel at the top of the SCORE part; over-dense measures "
+        "fall back to the compact 6-line text tab. Measure-aligned so you can "
+        "see where the solo falls against the singing/rhythm — a friend can "
+        "play the SOLO lane while you sing). Header: Playfair Display title, "
+        "key/BPM/tuning/capo chips. `solo_style` selects the SOLO lane "
+        "rendering: 'board' (default) or 'text' (legacy compact 6-line "
+        "tab). Use after "
         "media_transcribe_song: pass the job_id from the transcribe result "
         "(or media_job_result). `title`/`artist` override the LLM-guessed "
         "header — pass the real song identity whenever it's known. `slug` "
         "names the output subdirectory (default: job_id). Returns "
-        "{local_path, size_bytes, pages, title, artist, sections}. The PDF "
+        "{local_path, size_bytes, pages, title, artist, sections, "
+        "missing_shapes, synthesized_shapes} — missing_shapes = chord "
+        "symbols with no known shape (rendered name only; a note line is "
+        "added to the PDF), synthesized_shapes = symbols rendered by the "
+        "synthesized-barre fallback (triad/barre approximation), "
+        "solo_style = SOLO lane rendering used ('board' | 'text'), "
+        "solo_fallbacks = measures too dense for a board (rendered as the "
+        "compact text tab). The PDF "
         "lands on the media host — publish it with the publish_file skill "
         "(subdirectory 'tabs') for a public URL, or fetch the raw artifacts "
         "with media_fetch."
@@ -853,6 +866,7 @@ async def media_render_tab_pdf(
     title: Optional[str] = None,
     artist: Optional[str] = None,
     slug: Optional[str] = None,
+    solo_style: Optional[str] = None,
 ) -> dict:
     """Transcribe job_id -> styled PDF song sheet (returns the local path)."""
     if not re.fullmatch(r"[a-z0-9]{8,64}", job_id or ""):
@@ -876,7 +890,7 @@ async def media_render_tab_pdf(
                         {"job_id": job_id})
         res = await asyncio.to_thread(
             tab_pdf.render, work, os.path.join(out_dir, f"{slug}-tab.pdf"),
-            title, artist)
+            title, artist, solo_style)
         out = dict(res)
         out["job_id"] = job_id
         out["local_path"] = res["pdf"]

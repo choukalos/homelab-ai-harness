@@ -21,6 +21,7 @@ import html
 import json
 import math
 import re
+from enum import Enum
 from pathlib import Path
 
 # Chord name: tonic letter + optional accidental + optional quality + optional root.
@@ -224,9 +225,13 @@ def parse_analysis_sections(analysis):
                 f = int(tab.get("fret"))
             except (TypeError, ValueError):
                 continue
-            if 1 <= s <= 6 and f >= 0:
-                lead.append({"t": float(n.get("start_s", 0.0)),
-                             "string": s, "fret": f})
+            if 1 <= s <= 6 and 0 <= f <= 20:
+                t = float(n.get("start_s", 0.0))
+                end = float(n.get("end_s", 0.0) or 0.0)
+                lead.append({"t": t,
+                             "end": max(end, t + 0.05),
+                             "string": s, "fret": f,
+                             "amp": n.get("amplitude")})
         lead.sort(key=lambda x: x["t"])
         out.append({"label": str(sec.get("label", "section")),
                     "start_s": float(sec.get("start_s", 0.0)),
@@ -240,6 +245,48 @@ def is_minor(symbol):
     if s.endswith("maj"):
         return False
     return s.endswith("m")
+
+
+# Note math (standard tuning EADGBE) for the synthesized-barre fallback (A3.1)
+# and the shape-library unit test (test_chord_shapes.py).
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+NOTE_IDX = {n: i for i, n in enumerate(NOTE_NAMES)}
+for _flat, _sharp in (("Bb", "A#"), ("Db", "C#"), ("Eb", "D#"),
+                      ("Gb", "F#"), ("Ab", "G#")):
+    NOTE_IDX[_flat] = NOTE_IDX[_sharp]  # flat spellings
+OPEN_STRING_SEMIS = [4, 9, 14, 19, 23, 28]  # MIDI of open strings 6..1
+
+
+def _synth_barre_frets(symbol):
+    """Synthesize a movable barre shape for a symbol with no known open shape.
+
+    A3.1 (enhance_tab_tool.md): find the root fret on the 6th string
+    (E-shape) and 5th string (A-shape), take the lower one, and reuse
+    _barre_frets(). Quality handling: 7th chords add the 7th (E-shape: 4th
+    string, A-shape: 3rd string — the exact E7/A7 patterns), maj7 adds the
+    7th + 11th (the exact Emaj7/Amaj7 patterns); 9/6 render the triad(+7) and
+    the quality is left to the printed name. Returns
+    (frets, start_fret, note) or None when the root can't be parsed."""
+    m = re.match(r"^([A-G])([#b]?)", str(symbol).strip())
+    if not m:
+        return None
+    root = NOTE_IDX.get(m.group(1) + m.group(2))
+    if root is None:
+        return None
+    e_fret = (root - OPEN_STRING_SEMIS[0]) % 12  # root on 6th string (E-shape)
+    a_fret = (root - OPEN_STRING_SEMIS[1]) % 12  # root on 5th string (A-shape)
+    if a_fret <= e_fret:
+        base, fret = "A", a_fret
+    else:
+        base, fret = "E", e_fret
+    frets = _barre_frets(base, fret, is_minor(symbol))
+    q = str(symbol).strip()[len(m.group(0)):].lower()
+    if q.startswith("7") or q.startswith("9") or q.startswith("maj7"):
+        frets[2 if base == "E" else 3] = fret  # 7th (E7: 4th str, A7: 3rd str)
+    if q.startswith("maj7"):
+        frets[4] = fret + (4 if base == "E" else 2)  # 11th (Emaj7/Amaj7)
+    note = f"barre @ {fret} (synthesized)" if fret else "open (synthesized)"
+    return frets, max(1, fret), note
 
 
 def _ordinal(n):
@@ -283,32 +330,42 @@ def _barre_frets(base, fret, minor):
 
 
 # Standard open chord shapes (strings 6->1; 0 = open, None = muted).
+# 2026-11-06 (enhance_tab_tool.md A1+A2): added the 6th/9th family that the
+# 2026-11-05 QA tabs hit as "NO SHAPE" (B6/F6/G6) plus the same-class
+# additions; every entry interval-verified by test_chord_shapes.py. Also
+# corrected 5 pre-existing entries the checker caught (Csus4/Gsus4 carried
+# wrong notes; F#m/F#m7/F#maj7 were non-standard voicings missing core
+# tones). NOTE: D6 is xx0202 (D A B F#) — xx0212 is the D7 voicing.
 OPEN_CHORDS = {
     "C": [None, 3, 2, 0, 1, 0], "Cmaj7": [None, 3, 2, 0, 0, 0],
     "C7": [None, 3, 2, 3, 1, 0], "C6": [None, 3, 2, 2, 3, 3],
-    "C9": [None, 3, 2, 0, 3, 6], "Csus4": [None, 3, 3, 0, 2, 0],
+    "C9": [None, 3, 2, 0, 3, 6], "Csus4": [None, 3, 3, 0, 3, 0],
     "G": [3, 2, 0, 0, 0, 3], "G7": [3, 2, 0, 0, 0, 1],
-    "Gmaj7": [3, 2, 0, 0, 0, 2], "Gsus4": [3, 3, 2, 0, 0, 3],
+    "Gmaj7": [3, 2, 0, 0, 0, 2], "Gsus4": [3, 3, 0, 0, 3, 3],
+    "G6": [3, 2, 0, 0, 0, 0], "G9": [3, 5, 3, 2, 3, 3],  # 353433 is G7 (no 9th)
     "Gm": [3, 5, 5, 3, 3, 3], "Gm7": [3, 5, 3, 3, 3, 3],
     "D": [None, None, 0, 2, 3, 2], "D7": [None, None, 0, 2, 1, 2],
     "Dmaj7": [None, None, 0, 2, 2, 2], "Dm": [None, None, 0, 2, 3, 1],
     "Dm7": [None, None, 0, 2, 1, 1], "Dsus4": [None, None, 0, 2, 3, 3],
+    "D6": [None, None, 0, 2, 0, 2], "D9": [None, None, 0, 2, 3, 2],
     "A": [None, 0, 2, 2, 2, 0], "Am": [None, 0, 2, 2, 1, 0],
     "Am7": [None, 0, 2, 0, 1, 0], "Amaj7": [None, 0, 2, 1, 2, 0],
     "A7": [None, 0, 2, 0, 2, 0], "A6": [None, 0, 4, 2, 2, 0],
+    "A9": [None, 0, 2, 0, 2, 0], "Am9": [None, 0, 2, 0, 1, 2],
     "Asus4": [None, 0, 2, 2, 3, 0],
     "E": [0, 2, 2, 1, 0, 0], "Em": [0, 2, 2, 0, 0, 0],
     "Em7": [0, 2, 0, 0, 0, 0], "Emaj7": [0, 2, 2, 1, 4, 0],
-    "E7": [0, 2, 0, 1, 0, 0], "Esus4": [0, 2, 2, 2, 0, 0],
-    "F": [1, 3, 3, 2, 1, 1], "Fm": [1, 3, 3, 1, 1, 1],
-    "Fm7": [1, 3, 1, 1, 1, 1], "F7": [1, 3, 1, 2, 1, 1],
-    "Fmaj7": [1, 3, 2, 2, 1, 1], "F9": [1, 3, 7, 7, 4, 1],
+    "E6": [0, 2, 2, 1, 0, 0], "E7": [0, 2, 0, 1, 0, 0], "Esus4": [0, 2, 2, 2, 0, 0],
+    "F": [1, 3, 3, 2, 1, 1], "F6": [1, 3, 3, 2, 1, 1],  # F6 = F voicing, 6th implied
+    "Fm": [1, 3, 3, 1, 1, 1], "Fm7": [1, 3, 1, 1, 1, 1],
+    "F7": [1, 3, 1, 2, 1, 1], "Fmaj7": [1, 3, 2, 2, 1, 1],
+    "F9": [1, 3, 7, 7, 4, 1],
     "B7": [None, 2, 1, 2, 0, 2], "Bm": [None, 2, 4, 4, 3, 2],
-    "Bmaj7": [None, 2, 1, 3, 0, 2],
+    "Bmaj7": [None, 2, 1, 3, 0, 2], "B6": [None, 2, 6, 4, 4, 2],
     "Bb": [None, 1, 3, 3, 3, 1], "Bbmaj7": [None, 1, 3, 2, 3, 1],
     "Bbm7": [None, 1, 3, 1, 2, 1],
-    "F#m": [None, 2, 7, 4, 2, 2], "F#m7": [None, 2, 4, 2, 5, 2],
-    "F#maj7": [None, 2, 4, 3, 6, 2],
+    "F#m": [2, 4, 4, 2, 2, 2], "F#m7": [2, 4, 2, 2, 2, 2],
+    "F#maj7": [2, 4, 4, 3, 6, 2],
 }
 
 
@@ -316,7 +373,9 @@ def chord_frets(symbol, shape):
     """(frets[6..1], start_fret, note) for a chord symbol + pipeline shape hint.
 
     frets: per string (6->1) an int fret (0=open) or None (muted). Returns
-    frets=None when no shape is known (renderer shows the name only)."""
+    frets=None when no shape is known (renderer shows the name only).
+    Unknown symbols with an open/no hint fall back to a synthesized barre
+    (A3.1) instead of n/a."""
     shape = shape or {}
     t = shape.get("type")
     fret = int(shape.get("fret", 0) or 0)
@@ -327,7 +386,43 @@ def chord_frets(symbol, shape):
     f = OPEN_CHORDS.get(str(symbol).strip())
     if f:
         return f, 1, "open"
+    if t in ("open", None):
+        synth = _synth_barre_frets(symbol)
+        if synth:
+            return synth
     return None, 1, ""
+
+
+def chord_status(symbol, shape):
+    """'power' | 'barre' | 'open' | 'synthesized' | 'missing' — which path
+    chord_frets() takes (A3.2: lets render() report shape coverage)."""
+    shape = shape or {}
+    t = shape.get("type")
+    if t == "power":
+        return "power"
+    if t == "barre":
+        return "barre"
+    if str(symbol).strip() in OPEN_CHORDS:
+        return "open"
+    if t in ("open", None) and _synth_barre_frets(symbol):
+        return "synthesized"
+    return "missing"
+
+
+def shape_coverage(analysis):
+    """(missing, synthesized) chord symbols across the song (A3.2).
+
+    missing = symbols that fall through to "n/a"; synthesized = symbols
+    rendered by the synthesized-barre fallback. Lets the MCP tool warn
+    instead of silently shipping "n/a" pages."""
+    missing, synthesized = [], []
+    for sym, shp in unique_chords(analysis):
+        st = chord_status(sym, shp)
+        if st == "missing":
+            missing.append(sym)
+        elif st == "synthesized":
+            synthesized.append(sym)
+    return missing, synthesized
 
 
 def unique_chords(analysis):
@@ -474,6 +569,28 @@ tr.sc-ruler td { vertical-align: middle; padding: 0 3pt 1.5pt 3pt; }
 .chordtok.mini .ct-diag { left: 1.5pt; top: 7pt; width: 21pt; height: 24pt; }
 .chordtok.mini .ct-dot { width: 4.4pt; height: 4.4pt; }
 .chordtok.mini .ct-xo { top: -7pt; font-size: 6.5pt; }
+
+/* ── Solo boards (Phase 3: per-measure fretboard boards) ──────────────── */
+.solo-key {
+  margin: 0 0 8pt 0;
+  border: 0.5pt solid #d8d5cb;
+  border-radius: 3pt;
+  padding: 5pt 7pt 6pt 7pt;
+  background: #faf9f6;
+}
+.solo-key .sk-title {
+  font-size: 6.5pt; letter-spacing: 1.2pt; color: #98968c; font-weight: 700;
+  margin-bottom: 3pt;
+}
+.solo-key .sk-body { display: flex; gap: 10pt; align-items: flex-start; }
+.solo-key .sk-table { border-collapse: collapse; font-size: 6.8pt; color: #6d6c66; }
+.solo-key .sk-table td { padding: 0.9pt 8pt 0.9pt 0; vertical-align: middle; }
+.solo-key .sk-table .mk {
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-weight: 700; color: #23232e; white-space: nowrap;
+}
+.sb-boards { display: flex; gap: 1pt; align-items: flex-start; }
+.sb-svg text, .sk-svg text { font-family: 'Inter', 'DejaVu Sans', sans-serif; }
 """
 
 
@@ -482,7 +599,22 @@ def esc(s):
 
 
 # ── Score (measure-aligned vocals · rhythm · solo) ─────────────────────
-MEASURES_PER_ROW = 7          # keep one band within a Letter page width
+MEASURES_PER_ROW = 7
+
+# ── Solo boards (Phase 3) ─────────────────────────────────────────────
+class SoloStyle(str, Enum):
+    """SOLO lane rendering style (string enum: add members later without
+    breaking callers)."""
+    BOARD = "board"   # per-measure fretboard boards (default)
+    TEXT = "text"     # legacy compact 6-line text tab
+
+SOLO_DENSE_LIMIT = 12        # >12 lead notes/measure -> text fallback
+SOLO_STACK_LIMIT = 5         # >5 notes on one (string, fret) -> text fallback
+SOLO_BOARD_SPACES = 6        # fret spaces per board (7 lines)
+SOLO_SLIDE_GAP_BEATS = 0.25  # gap < 0.25*beat -> slide
+SOLO_JUMP_NO_MARK = 4        # |Δfret| > 4 -> no connector
+SOLO_BOARD_W = 44.0          # total width (pt) of a board group
+SOLO_BOARD_H = 54.0          # height (pt): board 46 + ruler          # keep one band within a Letter page width
 SOLO_CELL_CHARS = 12          # max fret digits per string per measure
 SOLO_REPEAT_CAP = 5           # max repeated fret digits per run
 STR_LABELS = {1: "e", 2: "B", 3: "G", 4: "D", 5: "A", 6: "E"}
@@ -530,6 +662,250 @@ def _solo_cell(lead, t0, t1):
     return "\n".join(out)
 
 
+# ── Solo boards (Phase 3: per-measure fretboard boards) ───────────────
+
+def _solo_dense(notes):
+    """True when a measure is too dense for a board (B3 fallback):
+    > SOLO_DENSE_LIMIT notes, or > SOLO_STACK_LIMIT on one (string, fret)."""
+    if len(notes) > SOLO_DENSE_LIMIT:
+        return True
+    pos = {}
+    for n in notes:
+        k = (n["string"], n["fret"])
+        pos[k] = pos.get(k, 0) + 1
+    return max(pos.values()) > SOLO_STACK_LIMIT
+
+
+def _solo_board_inner(notes, lo, beat, width, e):
+    """Append one mini fretboard board to SVG-element list `e` (B3).
+
+    `notes`: events {t, end, string (1=high e .. 6=low E), fret} whose frets
+    lie in [lo, lo+SOLO_BOARD_SPACES]. Dots are size-proportional to
+    duration, with a time-order badge and a duration tail; repeats on the
+    same (string, fret) are stacked with an ×n count. Connectors: h/p
+    (overlapping notes), slide arrow (gap < ¼ beat), vibrato wave (same
+    fret overlap). A 4-beat ruler sits below the board."""
+    W, H = float(width), float(SOLO_BOARD_H)
+    y0, y1 = 3.0, 44.0
+    sp = (y1 - y0) / SOLO_BOARD_SPACES
+    x0, x1 = 2.5, W - 2.5
+    sx = (x1 - x0) / 5
+    narrow = W < 40
+    order = sorted(range(len(notes)), key=lambda i: notes[i]["t"])
+    # technique kinds between consecutive notes in time order
+    kinds = {}
+    for a, b in zip(order, order[1:]):
+        a_, b_ = notes[a], notes[b]
+        gap = b_["t"] - a_["end"]
+        df = b_["fret"] - a_["fret"]
+        if gap <= 0:
+            if df == 0 and a_["string"] == b_["string"]:
+                kinds[(a, b)] = "vib"
+            elif 0 < abs(df) <= SOLO_JUMP_NO_MARK:
+                kinds[(a, b)] = "h" if df > 0 else "p"
+        elif gap < SOLO_SLIDE_GAP_BEATS * beat and abs(df) <= SOLO_JUMP_NO_MARK:
+            kinds[(a, b)] = "slide"
+    stacks = {}
+    for i in order:
+        k = (notes[i]["string"], notes[i]["fret"])
+        stacks[k] = stacks.get(k, 0) + 1
+    used = {notes[i]["string"] for i in range(len(notes))}
+    e.append("<g class='sb-board'>")
+    # strings: 6 vertical lines, string 6 (low E) left -> string 1 right
+    for s in range(6, 0, -1):
+        x = x0 + (6 - s) * sx
+        col = "#4a4a55" if s in used else "#d8d5cb"
+        e.append(f"<line x1='{x:.2f}' y1='{y0:g}' x2='{x:.2f}' y2='{y1:g}' "
+                 f"stroke='{col}' stroke-width='0.5'/>")
+    # fret lines (SOLO_BOARD_SPACES+1); top line is the nut when lo == 0
+    for j in range(SOLO_BOARD_SPACES + 1):
+        y = y0 + j * sp
+        nut = j == 0 and lo == 0
+        e.append(f"<line x1='{x0:g}' y1='{y:.2f}' x2='{x1:.2f}' y2='{y:.2f}' "
+                 f"stroke='{'#23232e' if nut else '#a5a29a'}' "
+                 f"stroke-width='{1.4 if nut else 0.45:g}'/>")
+    if lo > 0:
+        e.append(f"<text x='{x0:g}' y='{y0 - 1.2:g}' font-size='3' font-weight='700' "
+                 f"fill='#6d6c66'>{lo + 1}f</text>")
+
+    def pos(i):
+        nt = notes[i]
+        return x0 + (6 - nt["string"]) * sx, y0 + (nt["fret"] - lo + 0.5) * sp
+
+    # draw positions (stacked repeats offset vertically)
+    seen = {}
+    xy = {}
+    for i in order:
+        k = (notes[i]["string"], notes[i]["fret"])
+        j = seen.get(k, 0)
+        seen[k] = j + 1
+        x, y = pos(i)
+        xy[i] = (x, y + j * 1.4)
+    durs = {i: max(0.0, (notes[i]["end"] - notes[i]["t"]) / beat) if beat > 0 else 0.0
+            for i in range(len(notes))}
+
+    def radius(i):
+        rmin = 1.2 if narrow else 1.6
+        rmax = 2.3 if narrow else 3.8
+        r = min(max(rmin + (0.45 if narrow else 0.9) * durs[i], rmin), rmax)
+        if stacks[(notes[i]["string"], notes[i]["fret"])] > 1:
+            r = min(r, 1.5 if narrow else 1.9)
+        return r
+
+    # connectors (drawn under the dots)
+    for (a, b), kind in kinds.items():
+        if kind == "vib":
+            continue
+        x1_, y1_ = xy[a]
+        x2_, y2_ = xy[b]
+        dx, dy = x2_ - x1_, y2_ - y1_
+        L = math.hypot(dx, dy)
+        if L < 1.0:
+            continue
+        ux, uy = dx / L, dy / L
+        xa, ya = x1_ + ux * (radius(a) + 0.4), y1_ + uy * (radius(a) + 0.4)
+        xb, yb = x2_ - ux * (radius(b) + 0.4), y2_ - uy * (radius(b) + 0.4)
+        e.append(f"<line x1='{xa:.2f}' y1='{ya:.2f}' x2='{xb:.2f}' y2='{yb:.2f}' "
+                 "stroke='#6d6c66' stroke-width='0.55'/>")
+        mx, my = (xa + xb) / 2, (ya + yb) / 2
+        if kind in ("h", "p"):
+            e.append(f"<text x='{mx:.2f}' y='{my - 0.9:.2f}' font-size='2.8' "
+                     f"font-weight='700' fill='#b0512f' text-anchor='middle'>{kind}</text>")
+        else:  # slide: arrow along the connector, tip toward the later note
+            ah = 1.3
+            ang = math.atan2(uy, ux)
+            tx, ty = mx + ux * ah, my + uy * ah
+            e.append(f"<line x1='{mx - ux * ah:.2f}' y1='{my - uy * ah:.2f}' "
+                     f"x2='{tx:.2f}' y2='{ty:.2f}' stroke='#6d6c66' stroke-width='0.8'/>")
+            for sgn in (1, -1):
+                ba = ang + sgn * 2.6
+                e.append(f"<line x1='{tx:.2f}' y1='{ty:.2f}' "
+                         f"x2='{tx - ah * math.cos(ba):.2f}' "
+                         f"y2='{ty - ah * math.sin(ba):.2f}' stroke='#6d6c66' "
+                         "stroke-width='0.8'/>")
+    # dots + tails + badges (in time order)
+    for rank, i in enumerate(order):
+        nt = notes[i]
+        k = (nt["string"], nt["fret"])
+        x, y = xy[i]
+        r = radius(i)
+        if durs[i] >= 0.2:
+            tl = min(max((1.0 if narrow else 1.5) + (0.7 if narrow else 1.2) * durs[i],
+                         1.0), 4.5 if narrow else 7.0)
+            tl = min(tl, W - (x + r) - 0.5)  # never past the board edge
+            if tl >= 0.5:
+                e.append(f"<line x1='{x + r:.2f}' y1='{y:.2f}' "
+                         f"x2='{x + r + tl:.2f}' y2='{y:.2f}' stroke='#b0512f' "
+                         "stroke-width='0.5' opacity='0.5'/>")
+        e.append(f"<circle cx='{x:.2f}' cy='{y:.2f}' r='{r:.2f}' fill='#b0512f'/>")
+        fs = 2.2 if narrow else 2.6
+        e.append(f"<text x='{x + r + 0.7:.2f}' y='{y - r - 0.4:.2f}' font-size='{fs:g}' "
+                 f"font-weight='700' fill='#6d6c66'>{rank + 1}</text>")
+        if stacks[k] > 1:
+            e.append(f"<text x='{x + r + 0.7:.2f}' y='{y + r + 2.4:.2f}' font-size='2.3' "
+                     f"fill='#98968c'>×{stacks[k]}</text>")
+    # vibrato waves (drawn over the dots)
+    for (a, b), kind in kinds.items():
+        if kind != "vib":
+            continue
+        x, y = xy[b]
+        e.append(f"<path d='M {x + 1.2:.2f} {y - 1.4:.2f} q 0.7 -1.3 1.4 0 "
+                 f"q 0.7 1.3 1.4 0 q 0.7 -1.3 1.4 0' fill='none' stroke='#6d6c66' "
+                 "stroke-width='0.45'/>")
+    # 4-beat ruler
+    for i in range(4):
+        x = x0 + (i + 0.5) * (x1 - x0) / 4
+        e.append(f"<line x1='{x:.2f}' y1='46' x2='{x:.2f}' y2='48.5' stroke='#b8b5ab' "
+                 "stroke-width='0.5'/>")
+        e.append(f"<text x='{x:.2f}' y='52' font-size='2.6' fill='#b8b5ab' "
+                 f"text-anchor='middle'>{i + 1}</text>")
+    e.append("</g>")
+
+
+def _solo_board_svg(notes, lo, beat, width):
+    """Standalone per-measure solo board (B3). See _solo_board_inner."""
+    e = [f"<svg class='sb-svg' width='{float(width):g}' height='{SOLO_BOARD_H:g}' "
+         f"viewBox='0 0 {float(width):g} {SOLO_BOARD_H:g}' "
+         "xmlns='http://www.w3.org/2000/svg'>"]
+    _solo_board_inner(notes, lo, beat, width, e)
+    e.append("</svg>")
+    return "".join(e)
+
+
+def _solo_boards_html(notes, beat):
+    """Per-measure solo board group (B3): splits wide fret spans into
+    side-by-side boards (each ≤ SOLO_BOARD_SPACES spaces). Returns HTML."""
+    fmin = min(n["fret"] for n in notes)
+    fmax = max(n["fret"] for n in notes)
+    base = min(max(0, fmin - 1), 20 - SOLO_BOARD_SPACES)
+    wins = []
+    for k in range((fmax - base) // SOLO_BOARD_SPACES + 1):
+        lo = base + k * SOLO_BOARD_SPACES
+        g = [n for n in notes if lo <= n["fret"] <= lo + SOLO_BOARD_SPACES]
+        if g:
+            wins.append((lo, g))
+    W = SOLO_BOARD_W / len(wins)
+    e = ["<div class='sb-boards'>"]
+    for lo, g in wins:
+        e.append(_solo_board_svg(sorted(g, key=lambda n: n["t"]), lo, beat, W))
+    e.append("</div>")
+    return "".join(e)
+
+
+def _solo_key_panel():
+    """SOLO key panel (B3): one example board with leader-line labels plus
+    a mark table, rendered once at the top of the SCORE part."""
+    beat = 1.0
+    mock = [
+        {"t": 0.0, "end": 0.9, "string": 4, "fret": 1},    # dot + tail, badge 1
+        {"t": 0.8, "end": 1.4, "string": 4, "fret": 2},    # h (fret up, overlap)
+        {"t": 1.3, "end": 1.9, "string": 5, "fret": 1},    # p (fret down, overlap)
+        {"t": 2.05, "end": 2.65, "string": 3, "fret": 3},  # slide (gap 0.15 beat)
+        {"t": 3.0, "end": 3.9, "string": 5, "fret": 2},
+        {"t": 3.4, "end": 4.0, "string": 5, "fret": 2},    # vib (same fret, overlap)
+    ]
+    # leader anchors (ax, ay, label_y, label) — label order is monotone in
+    # anchor y so the leader lines never cross.
+    leaders = [
+        (21.5, 10.4, 7.0, "1, 2, 3… = play order"),
+        (24.0, 13.3, 13.5, "dot size + tail = hold time"),
+        (14.2, 16.7, 19.0, "p = pull-off"),
+        (18.1, 16.7, 24.0, "h = hammer-on"),
+        (12.5, 18.7, 29.0, "wave = hold / vibrato (inferred)"),
+        (18.1, 20.1, 34.0, "arrow = slide (direction = arrow)"),
+        (2.5, 30.0, 41.0, "dim string = unused here"),
+        (22.0, 47.0, 50.0, "1 2 3 4 = 4/4 beat ruler"),
+    ]
+    e = ["<div class='solo-key'>"]
+    e.append("<div class='sk-title'>SOLO KEY — HOW TO READ THE BOARDS</div>")
+    e.append("<div class='sk-body'>")
+    e.append("<svg class='sk-svg' width='130' height='56' viewBox='0 0 130 56' "
+             "xmlns='http://www.w3.org/2000/svg'>")
+    _solo_board_inner(mock, 0, beat, 44.0, e)
+    for ax, ay, ly, label in leaders:
+        e.append(f"<line x1='{ax:.2f}' y1='{ay:.2f}' x2='49.5' y2='{ly:.2f}' "
+                 "stroke='#b8b5ab' stroke-width='0.3'/>")
+        e.append(f"<text x='50.5' y='{ly + 1.2:.2f}' font-size='3.4' "
+                 f"fill='#6d6c66'>{esc(label)}</text>")
+    e.append("</svg>")
+    e.append("<table class='sk-table'>")
+    for mk, desc in [
+        ("●", "hold time — dot size + tail ∝ beats"),
+        ("1 2 3", "play order within the measure"),
+        ("h", "hammer-on (up into a higher fret)"),
+        ("p", "pull-off (down to a lower fret)"),
+        ("→", "slide (gap < ¼ beat; arrow = direction)"),
+        ("∿", "hold / vibrato (inferred — verify)"),
+        ("┆", "string unused in this measure"),
+        ("4f", "board starts at fret 4 (first-fret label)"),
+        ("1 2 3 4", "4/4 beat ruler"),
+    ]:
+        e.append(f"<tr><td class='mk'>{esc(mk)}</td><td>{esc(desc)}</td></tr>")
+    e.append("</table>")
+    e.append("</div></div>")
+    return e
+
+
 def _mini_chords(chords, shape_map):
     """Mini chord-diagram tokens (shape + name) for a list of symbols."""
     e = []
@@ -539,12 +915,14 @@ def _mini_chords(chords, shape_map):
 
 
 def _score_band_html(cs, m0, m1, bar, shape_map, words_by_meas, chords_by_meas,
-                     has_vocals, has_lead):
+                     has_vocals, has_lead, lead_by_meas, solo_style):
     """One band (<= MEASURES_PER_ROW measures) of the section's score table.
 
     Lanes: ruler (measure numbers), Vocals (words per measure, mini chord
     diagram above the change), Rhythm (chord diagrams, instrumental
-    sections), Solo (compact 6-string tab cell per measure)."""
+    sections), Solo (per-measure fretboard boards, or the legacy compact
+    6-line text tab when solo_style is SoloStyle.TEXT or the measure is
+    too dense for a board)."""
     start = cs["start_s"]
     e = ["<table class='score'>"]
     e.append("<tr class='sc-ruler'><th class='sc-lane'></th>")
@@ -566,18 +944,26 @@ def _score_band_html(cs, m0, m1, bar, shape_map, words_by_meas, chords_by_meas,
         e.append("</tr>")
     if has_lead:
         e.append("<tr class='sc-solo'><th class='sc-lane'>Solo</th>")
+        beat = bar / 4 if bar > 0 else 0.5
         for m in range(m0, m1):
             t0 = start + m * bar
-            e.append(f"<td><pre class='solo-cell'>{esc(_solo_cell(cs['lead'], t0, t0 + bar))}</pre></td>")
+            notes = lead_by_meas.get(m, [])
+            if notes and solo_style is SoloStyle.BOARD and not _solo_dense(notes):
+                e.append(f"<td>{_solo_boards_html(notes, beat)}</td>")
+            elif notes:
+                e.append(f"<td><pre class='solo-cell'>{esc(_solo_cell(cs['lead'], t0, t0 + bar))}</pre></td>")
+            else:
+                e.append("<td></td>")
         e.append("</tr>")
     e.append("</table>")
     return e
 
 
-def build_score_section_html(cs, bar, shape_map):
+def build_score_section_html(cs, bar, shape_map, solo_style):
     """One SCORE section: heading + measure-aligned bands of the score.
 
-    Sections with no lyrics, no chords and no lead notes render nothing."""
+    Sections with no lyrics, no chords and no lead notes render nothing.
+    `solo_style` (SoloStyle) selects the SOLO lane rendering."""
     start, end = cs["start_s"], cs["end_s"]
     has_vocals = bool(cs["lines"])
     has_lead = bool(cs["lead"])
@@ -592,6 +978,9 @@ def build_score_section_html(cs, bar, shape_map):
     chords_by_meas = {m: [] for m in range(nmeas)}
     for t, sym in cs["chords"]:
         chords_by_meas[_measure_of(t, start, bar, nmeas)].append(sym)
+    lead_by_meas = {m: [] for m in range(nmeas)}
+    for n in cs["lead"]:
+        lead_by_meas[_measure_of(n["t"], start, bar, nmeas)].append(n)
 
     e = ["<section>"]
     e.append(
@@ -603,12 +992,13 @@ def build_score_section_html(cs, bar, shape_map):
     for b in range(0, nmeas, size):
         m0, m1 = b, min(b + size, nmeas)
         e.extend(_score_band_html(cs, m0, m1, bar, shape_map, words_by_meas,
-                                  chords_by_meas, has_vocals, has_lead))
+                                  chords_by_meas, has_vocals, has_lead,
+                                  lead_by_meas, solo_style))
     e.append("</section>")
     return e
 
 
-def build_html(title, artist, meta, notes, chart_secs, analysis):
+def build_html(title, artist, meta, notes, chart_secs, analysis, solo_style):
     e = []
     e.append("<!DOCTYPE html><html><head><meta charset='utf-8'><style>" + CSS + "</style></head><body>")
 
@@ -636,28 +1026,50 @@ def build_html(title, artist, meta, notes, chart_secs, analysis):
 
     # ── Chords: fixed-size fingering grid (reference sheet) ─────────────
     chord_items = unique_chords(analysis)
+    missing_shapes = [sym for sym, shp in chord_items
+                      if chord_status(sym, shp) == "missing"]
     if chord_items:
         e.append("<div class='part-kicker'>CHORDS \u2014 FINGERINGS</div>")
         e.extend(chord_grid_html(chord_items))
+    if missing_shapes:
+        e.append(f"<div class='note'>Chords without a known shape (name only, verify "
+                 f"fingering): {esc(', '.join(missing_shapes))}</div>")
 
     # ── Score: measure-aligned vocals · rhythm · solo (sing & play) ─────
     bar = bar_length(analysis)
     shape_map = dict(chord_items)
     if any(cs["lines"] or cs["lead"] or cs["chords"] for cs in chart_secs):
         e.append("<div class='part-kicker'>SCORE \u2014 SING &amp; PLAY (VOCALS \u00b7 RHYTHM \u00b7 SOLO)</div>")
+        if solo_style is SoloStyle.BOARD and any(cs["lead"] for cs in chart_secs):
+            e.extend(_solo_key_panel())
         for cs in chart_secs:
-            e.extend(build_score_section_html(cs, bar, shape_map))
+            e.extend(build_score_section_html(cs, bar, shape_map, solo_style))
 
     e.append("</body></html>")
     return "\n".join(e)
 
-def render(song_dir, out_path, title=None, artist=None):
+def render(song_dir, out_path, title=None, artist=None, solo_style=None):
     """Render <song_dir>/tab.md (+ analysis.json/lyrics.txt) to a PDF.
 
     Layout: CHORDS (fixed-size fingering grid) then SCORE (measure-aligned
-    vocals + rhythm + solo — sing & play with a friend). Returns {pdf, pages,
-    title, artist, sections, chart_lines}. Importable by the mcp_media server
+    vocals + rhythm + solo — sing & play with a friend). `solo_style`
+    (SoloStyle / 'board' | 'text'; None = 'board') selects the SOLO lane
+    rendering: per-measure fretboard boards (default) or the legacy
+    compact text tab.
+    Returns {pdf, pages, title, artist, sections, chart_lines,
+    missing_shapes, synthesized_shapes, solo_style, solo_fallbacks}
+    (missing_shapes = symbols that fell through to "n/a";
+    synthesized_shapes = symbols rendered by the synthesized-barre
+    fallback; solo_fallbacks = measures rendered as text tab because they
+    were too dense for a board). Importable by the mcp_media server
     (media_render_tab_pdf tool)."""
+    if solo_style is None:
+        solo_style = "board"
+    try:
+        solo_style = SoloStyle(str(solo_style).strip().lower())
+    except ValueError:
+        raise ValueError(
+            f"invalid solo_style: {solo_style!r} (expected 'board' or 'text')")
     d = Path(song_dir)
     tab_path = d / "tab.md"
     if not tab_path.exists():
@@ -679,9 +1091,30 @@ def render(song_dir, out_path, title=None, artist=None):
                 cs["lines"] = [{"start": 0.0, "end": 0.0,
                                 "words": [(0.0, w) for w in l.split()]}
                                for l in ts["lyrics"]]
-    doc_html = build_html(title, artist, meta, notes, chart_secs, analysis)
+    doc_html = build_html(title, artist, meta, notes, chart_secs, analysis,
+                          solo_style)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    # A3.2: report shape coverage so the MCP tool can warn instead of
+    # silently shipping "n/a" pages.
+    missing, synthesized = shape_coverage(analysis)
+
+    # B3: count measures that fell back to the text tab (too dense for a
+    # board) so the MCP tool can report the degradation.
+    solo_fallbacks = 0
+    if solo_style is SoloStyle.BOARD:
+        bar = bar_length(analysis)
+        for cs in chart_secs:
+            if not cs["lead"]:
+                continue
+            start, end = cs["start_s"], cs["end_s"]
+            nmeas = max(1, math.ceil((end - start) / bar)) if bar > 0 else 1
+            by_meas = {m: [] for m in range(nmeas)}
+            for n in cs["lead"]:
+                by_meas[_measure_of(n["t"], start, bar, nmeas)].append(n)
+            solo_fallbacks += sum(1 for g in by_meas.values()
+                                  if g and _solo_dense(g))
 
     from weasyprint import HTML
 
@@ -690,7 +1123,11 @@ def render(song_dir, out_path, title=None, artist=None):
     return {"pdf": str(out), "pages": len(document.pages),
             "title": title, "artist": artist or None,
             "sections": len(sections),
-            "chart_lines": sum(len(cs["lines"]) for cs in chart_secs)}
+            "chart_lines": sum(len(cs["lines"]) for cs in chart_secs),
+            "missing_shapes": missing,
+            "synthesized_shapes": synthesized,
+            "solo_style": solo_style.value,
+            "solo_fallbacks": solo_fallbacks}
 
 
 def main():
@@ -699,11 +1136,15 @@ def main():
     ap.add_argument("-o", "--out", help="output PDF path (default: <song_dir>/<slug>-tab.pdf)")
     ap.add_argument("--title", help="override the LLM-guessed title")
     ap.add_argument("--artist", help="override the LLM-guessed artist")
+    ap.add_argument("--solo-style", choices=["board", "text"], default="board",
+                    help="SOLO lane rendering: per-measure fretboard boards "
+                         "(default) or the legacy compact text tab")
     args = ap.parse_args()
 
     d = Path(args.song_dir)
     out = args.out if args.out else str(d / f"{d.name}-tab.pdf")
-    print(json.dumps(render(d, out, title=args.title, artist=args.artist)))
+    print(json.dumps(render(d, out, title=args.title, artist=args.artist,
+                            solo_style=args.solo_style)))
 
 
 if __name__ == "__main__":
