@@ -204,7 +204,7 @@
    },
    "targets": [
     {
-     "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+     "expr": "# athena runs kernel 3.10 (no MemAvailable in /proc/meminfo); max()+unless() falls back to MemFree+SReclaimable+Cached\n(1 - (max by(instance, job) (node_memory_MemAvailable_bytes, node_memory_MemFree_bytes + node_memory_SReclaimable_bytes + node_memory_Cached_bytes unless node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes)) * 100",
      "legendFormat": "{{instance}}",
      "refId": "A"
     }
@@ -490,7 +490,7 @@
    },
    "targets": [
     {
-     "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+     "expr": "# athena runs kernel 3.10 (no MemAvailable in /proc/meminfo); max()+unless() falls back to MemFree+SReclaimable+Cached\n(1 - (max by(instance, job) (node_memory_MemAvailable_bytes, node_memory_MemFree_bytes + node_memory_SReclaimable_bytes + node_memory_Cached_bytes unless node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes)) * 100",
      "legendFormat": "{{instance}}",
      "refId": "A"
     }
