@@ -31,12 +31,15 @@ worth keeping across sessions and machines:
 
 Parameters:
 
-- `household=true` — family-shared facts (wife's medical status, kids, pets,
-  shared projects). Visible to all family users.
+- `household=true` — family-shared facts (kids, pets, shared projects).
+  Visible to all family users.
 - `importance='high'` — critical facts (medical conditions, allergies, key
   dates).
 - Facts are stored under the **caller's own identity** — never write on
   behalf of another user.
+- **Personal medical facts** (wife's condition, Chuck's own health, diagnoses,
+  symptoms, treatments, appointments) → `memory_remember` **PRIVATE**
+  (`household=false`), `importance='high'` — never in the family KB.
 
 ## Research-note convention
 
@@ -49,21 +52,39 @@ session. Call `memory_remember` with a structured note at
 Research on <topic> (<YYYY-MM-DD>): <2-4 key findings>. Sources: <...>.
 ```
 
-Family-relevant research (e.g. the wife's medical condition) → also
-`household=true`.
+Medical research on a family member (e.g. the wife's condition) defaults to
+**PRIVATE to the caller** (`household=false`); `household=true` only when the
+user explicitly says the family should know.
 
 ## Medical-reference convention (KB)
 
-Evolving reference-grade medical material belongs in the **`kb_medical`** KB
-domain, not memory — memory is add-only, the KB supports correction:
+The **`kb_medical`** KB is for **non-personal reference material only** —
+disease/drug info, research findings, general medical reference. The KB is
+family-shared with **no per-user scoping**, so personal or identifiable
+medical content (a specific person's condition, diagnosis, symptoms,
+treatment, appointments) must not go there. Evolving reference-grade material
+belongs in the KB, not memory — memory is add-only, the KB supports
+correction:
 
-- Diagnosis, symptoms, treatment, doctor/clinic, vet, next appointment →
+- Disease/drug info, research, general reference →
   `kb_add_fact(kb="medical", ...)` (the collection is created on the fly).
-- Status change (new appointment, updated diagnosis) →
+- Reference correction (updated guideline, corrected drug info) →
   `kb_correct(kb="medical", old_query=..., new_text=...)`.
-- Outdated or wrong → `kb_forget(kb="medical", ...)`.
-- Conversational medical facts ("the appointment moved to Tuesday") →
-  `memory_remember(household=true)` instead.
+- Outdated or wrong reference → `kb_forget(kb="medical", ...)`.
+- Personal medical facts (a family member's or your own condition,
+  diagnoses, symptoms, treatments, appointments) → `memory_remember`
+  PRIVATE (`household=false`), `importance='high'` instead.
+
+## Voice notes / personal transcriptions
+
+After transcribing a personal voice note (medical, family, personal):
+
+- Store **distilled durable facts** via `memory_remember` — private to the
+  caller, `importance='high'` for medical.
+- **Never store raw transcript text** in memory or the KB — distilled facts
+  only.
+- Offer `session-sync` (if installed) to ship the raw transcript to the
+  homelab — user-initiated, never automatic.
 
 ## Provenance
 
