@@ -193,6 +193,23 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 
 ## History
 
+2026-11-08: `media_render_tab_pdf` **Phase 4 — pitch-contour b/v marks** — the
+transcribe pipeline now ships a per-note `pitch_contour` (5 samples across the
+note's duration; pitch deviation from the note's nominal pitch in semitones,
+⅓-quantized). `tab_pdf.py` renders the marks in the SOLO lane: bend = arc
+through the dot (direction = pitch travel) + `b` badge (`_contour_mark`:
+≤1 reversal + onset→offset rise ≥ `SOLO_BEND_RISE` = 1.0 semitone), vibrato =
+wave glyph (≥2 reversals + total dev ≥ `SOLO_VIB_DEV` = 0.5). Text-tab
+fallback appends `b`/`v` to the fret digit; SOLO KEY panel gained a bend demo
++ legend rows; a PDF note line appears under the CHORDS grid when marks are
+present. `render()` result gains `bend_marks` / `vibrato_marks` (0 for jobs
+predating the contour-enabled pipeline — backward compatible). Conservative
+thresholds on purpose: on dense distorted mixes the contour is tracking
+noise. `test_solo_marks.py` (5 suites); `mcp_media` rebuilt + restarted;
+Back in Black re-rendered with 13 bends + 18 vibrato marks; all 4 published
+tabs re-rendered + republished 16:46 UTC, public sha256 verified
+(`docs/thor_validation_log.md` part 11; `enhance_tab_tool.md` §B4).
+
 2026-11-06: `media_render_tab_pdf` **SOLO board readability** (the per-measure
 boards were too small to read at 1× inside the 7-measure rows):
 - SCORE bands now render **4 measures per row** (was 7) — `MEASURES_PER_ROW`

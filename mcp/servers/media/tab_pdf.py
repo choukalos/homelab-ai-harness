@@ -231,7 +231,8 @@ def parse_analysis_sections(analysis):
                 lead.append({"t": t,
                              "end": max(end, t + 0.05),
                              "string": s, "fret": f,
-                             "amp": n.get("amplitude")})
+                             "amp": n.get("amplitude"),
+                             "mark": _contour_mark(n.get("pitch_contour"))})
         lead.sort(key=lambda x: x["t"])
         out.append({"label": str(sec.get("label", "section")),
                     "start_s": float(sec.get("start_s", 0.0)),
@@ -616,6 +617,11 @@ SOLO_STACK_LIMIT = 5         # >5 notes on one (string, fret) -> text fallback
 SOLO_BOARD_SPACES = 6        # fret spaces per board (7 lines)
 SOLO_SLIDE_GAP_BEATS = 0.25  # gap < 0.25*beat -> slide
 SOLO_JUMP_NO_MARK = 4        # |Δfret| > 4 -> no connector
+SOLO_BEND_RISE = 1.0         # Phase 4: |onset→offset rise| (semitones) for a
+                             # bend mark (pitch_contour deviation from the
+                             # note's nominal pitch; 5 samples per note)
+SOLO_BEND_DEV = 0.6          # Phase 4: min total contour deviation for a bend
+SOLO_VIB_DEV = 0.5           # Phase 4: min total contour deviation for vibrato
 SOLO_BOARD_W = 44.0          # total width (pt) of a board group (viewBox geometry)
 SOLO_BOARD_H = 54.0          # height (pt): board 46 + ruler
 SOLO_BOARD_SCALE = 2.0       # render scale (2026-11-06): SVG is emitted at
@@ -643,28 +649,72 @@ def _measure_of(t, start, bar, nmeas):
     return max(0, min(nmeas - 1, int((t - start) // bar)))
 
 
+def _contour_mark(pc):
+    """Phase 4: classify a note's `pitch_contour` as a bend or vibrato.
+
+    `pc` is the pipeline's per-note pitch contour: pitch deviation from the
+    note's nominal pitch in **semitones**, 5 samples across the note's
+    duration (onset → offset). Returns "b+" (bend up), "b-" (bend down),
+    "v" (vibrato), or None.
+
+    Heuristics (conservative — on dense distorted mixes the contour is
+    tracking noise, so only clear sustained patterns are marked; verify
+    against the recording):
+    - bend: near-monotonic (≤1 direction reversal) sustained ramp whose
+      onset→offset rise is ≥ SOLO_BEND_RISE semitone (total deviation
+      ≥ SOLO_BEND_DEV). A slide-in from below reads as a bend-up (the
+      pitch travels up through the note).
+    - vibrato: ≥2 direction reversals with total deviation ≥ SOLO_VIB_DEV.
+    """
+    if not pc or len(pc) < 3:
+        return None
+    try:
+        vals = [float(x) for x in pc]
+    except (TypeError, ValueError):
+        return None
+    dev = max(vals) - min(vals)
+    rise = vals[-1] - vals[0]
+    nz = [1 if b > a else (-1 if b < a else 0)
+          for a, b in zip(vals, vals[1:])]
+    nz = [x for x in nz if x != 0]
+    rev = sum(1 for a, b in zip(nz, nz[1:]) if a != b)
+    if rev <= 1 and abs(rise) >= SOLO_BEND_RISE and dev >= SOLO_BEND_DEV:
+        return "b+" if rise > 0 else "b-"
+    if rev >= 2 and dev >= SOLO_VIB_DEV:
+        return "v"
+    return None
+
+
+def _mark_char(mark):
+    """Phase 4: mark string -> single character for the text tab ('b'/'v')."""
+    if not mark:
+        return ""
+    return "b" if mark.startswith("b") else "v"
+
+
 def _solo_cell(lead, t0, t1):
     """Compact 6-string tab for the lead notes in [t0, t1).
 
     One row per string (e top -> E bottom, standard tab order); consecutive
     repeats of the same fret collapse (capped at SOLO_REPEAT_CAP), so a
     strummed '1111111' reads as '11111'. Fixed 12-char cells keep the
-    measure columns aligned."""
+    measure columns aligned. Phase 4: a note's pitch-contour mark (b = bend,
+    v = vibrato) is appended to its fret digit (e.g. '5b')."""
     rows = {s: [] for s in range(1, 7)}
     for n in lead:
         if t0 <= n["t"] < t1:
-            rows[n["string"]].append(n["fret"])
+            rows[n["string"]].append((n["fret"], _mark_char(n.get("mark"))))
     out = []
     for s in range(1, 7):
         txt, run_f, run_n = "", None, 0
-        for f in rows[s]:
+        for f, mk in rows[s]:
             if f == run_f:
                 run_n += 1
                 if run_n <= SOLO_REPEAT_CAP:
                     txt += str(f)
             else:
                 run_f, run_n = f, 1
-                txt += str(f)
+                txt += str(f) + mk
         out.append(f"{STR_LABELS[s]}|{txt[:SOLO_CELL_CHARS]:<{SOLO_CELL_CHARS}}")
     return "\n".join(out)
 
@@ -811,6 +861,28 @@ def _solo_board_inner(notes, lo, beat, width, e):
         if stacks[k] > 1:
             e.append(f"<text x='{x + r + 0.7:.2f}' y='{y + r + 2.4:.2f}' font-size='2.3' "
                      f"fill='#98968c'>×{stacks[k]}</text>")
+    # Phase 4: b/v marks from the pipeline's pitch contours (drawn over the
+    # dots). Bend = an arc through the dot, direction = pitch travel;
+    # vibrato = the same wave glyph as the inferred overlap-vibrato.
+    for i in order:
+        mk = notes[i].get("mark")
+        if not mk:
+            continue
+        x, y = xy[i]
+        r = radius(i)
+        if mk.startswith("b"):
+            up = mk == "b+"
+            sgn = -1.0 if up else 1.0
+            e.append(f"<path d='M {x - r - 1.3:.2f} {y - sgn * 0.9:.2f} "
+                     f"Q {x:.2f} {y + sgn * 2.2:.2f} {x + r + 1.3:.2f} "
+                     f"{y - sgn * 0.9:.2f}' fill='none' stroke='#6d6c66' "
+                     "stroke-width='0.5'/>")
+            e.append(f"<text x='{x + r + 1.9:.2f}' y='{y + sgn * 2.6:.2f}' "
+                     "font-size='2.3' font-weight='700' fill='#b0512f'>b</text>")
+        else:  # vibrato: wave centered over the dot
+            e.append(f"<path d='M {x - 1.6:.2f} {y - 1.5:.2f} q 0.8 -1.4 1.6 0 "
+                     f"q 0.8 1.4 1.6 0 q 0.8 -1.4 1.6 0' fill='none' "
+                     "stroke='#6d6c66' stroke-width='0.45'/>")
     # vibrato waves (drawn over the dots)
     for (a, b), kind in kinds.items():
         if kind != "vib":
@@ -877,6 +949,7 @@ def _solo_key_panel():
         {"t": 2.05, "end": 2.65, "string": 3, "fret": 3},  # slide (gap 0.15 beat)
         {"t": 3.0, "end": 3.9, "string": 5, "fret": 2},
         {"t": 3.4, "end": 4.0, "string": 5, "fret": 2},    # vib (same fret, overlap)
+        {"t": 4.35, "end": 5.0, "string": 2, "fret": 2, "mark": "b+"},  # bend (pitch contour)
     ]
     # leader anchors (ax, ay, label_y, label) — label order is monotone in
     # anchor y so the leader lines never cross.
@@ -887,6 +960,7 @@ def _solo_key_panel():
         (18.1, 16.7, 24.0, "h = hammer-on"),
         (12.5, 18.7, 29.0, "wave = hold / vibrato (inferred)"),
         (18.1, 20.1, 34.0, "arrow = slide (direction = arrow)"),
+        (33.7, 21.5, 38.5, "b = bend (pitch contour)"),
         (2.5, 30.0, 41.0, "dim string = unused here"),
         (22.0, 47.0, 50.0, "1 2 3 4 = 4/4 beat ruler"),
     ]
@@ -909,7 +983,8 @@ def _solo_key_panel():
         ("h", "hammer-on (up into a higher fret)"),
         ("p", "pull-off (down to a lower fret)"),
         ("→", "slide (gap < ¼ beat; arrow = direction)"),
-        ("∿", "hold / vibrato (inferred — verify)"),
+        ("b", "bend — pitch contour (onset→offset ≥ 1 semitone; verify)"),
+        ("∿", "hold / vibrato (inferred or pitch contour)"),
         ("┆", "string unused in this measure"),
         ("4f", "board starts at fret 4 (first-fret label)"),
         ("1 2 3 4", "4/4 beat ruler"),
@@ -1048,6 +1123,12 @@ def build_html(title, artist, meta, notes, chart_secs, analysis, solo_style):
     if missing_shapes:
         e.append(f"<div class='note'>Chords without a known shape (name only, verify "
                  f"fingering): {esc(', '.join(missing_shapes))}</div>")
+    # Phase 4: note line when pitch-contour b/v marks are present in the
+    # SOLO lane (only jobs from the contour-enabled pipeline have any).
+    if any(n.get("mark") for cs in chart_secs for n in cs["lead"]):
+        e.append("<div class='note'>Bends (b) and vibrato (v) in the SOLO lane "
+                 "are inferred from the pipeline's pitch contours — verify "
+                 "against the recording</div>")
 
     # ── Score: measure-aligned vocals · rhythm · solo (sing & play) ─────
     bar = bar_length(analysis)
@@ -1071,12 +1152,14 @@ def render(song_dir, out_path, title=None, artist=None, solo_style=None):
     rendering: per-measure fretboard boards (default) or the legacy
     compact text tab.
     Returns {pdf, pages, title, artist, sections, chart_lines,
-    missing_shapes, synthesized_shapes, solo_style, solo_fallbacks}
+    missing_shapes, synthesized_shapes, solo_style, solo_fallbacks,
+    bend_marks, vibrato_marks}
     (missing_shapes = symbols that fell through to "n/a";
     synthesized_shapes = symbols rendered by the synthesized-barre
     fallback; solo_fallbacks = measures rendered as text tab because they
-    were too dense for a board). Importable by the mcp_media server
-    (media_render_tab_pdf tool)."""
+    were too dense for a board; bend_marks / vibrato_marks = Phase 4
+    pitch-contour marks rendered in the SOLO lane). Importable by the
+    mcp_media server (media_render_tab_pdf tool)."""
     if solo_style is None:
         solo_style = "board"
     try:
@@ -1130,6 +1213,18 @@ def render(song_dir, out_path, title=None, artist=None, solo_style=None):
             solo_fallbacks += sum(1 for g in by_meas.values()
                                   if g and _solo_dense(g))
 
+    # Phase 4: count the pitch-contour b/v marks so the MCP tool can report
+    # them (0 when the job predates pipeline pitch contours).
+    bend_marks = vibrato_marks = 0
+    for cs in chart_secs:
+        for n in cs["lead"]:
+            mk = n.get("mark")
+            if mk:
+                if mk.startswith("b"):
+                    bend_marks += 1
+                else:
+                    vibrato_marks += 1
+
     from weasyprint import HTML
 
     document = HTML(string=doc_html).render()
@@ -1141,7 +1236,9 @@ def render(song_dir, out_path, title=None, artist=None, solo_style=None):
             "missing_shapes": missing,
             "synthesized_shapes": synthesized,
             "solo_style": solo_style.value,
-            "solo_fallbacks": solo_fallbacks}
+            "solo_fallbacks": solo_fallbacks,
+            "bend_marks": bend_marks,
+            "vibrato_marks": vibrato_marks}
 
 
 def main():

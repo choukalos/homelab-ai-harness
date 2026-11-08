@@ -9,10 +9,13 @@
 > because the open-shape library doesn't cover them, and the SOLO lane
 > doesn't show note durations or techniques (hammer-ons, slides, …).
 >
-> **Status (2026-11-06):** Phase 1 + Phase 2 + **Phase 3 implemented and
-> verified** (this session — see §D). Phase 4 stays a separate GPU-host
-> item. **Deployed + republished 2026-11-06 13:53 UTC** (see §C) — all 4
-> tabs re-rendered, republished (`overwrite=true`), public sha256 verified.
+> **Status (2026-11-08):** Phase 1 + Phase 2 + Phase 3 + **Phase 4 all
+> implemented and verified.** Phase 4 (b/v marks from the pipeline's
+> `pitch_contour`) shipped 2026-11-08 — pipeline side by Matrix, renderer
+> side in `tab_pdf.py` (see §B4), `mcp_media` rebuilt, all 4 published
+> tabs re-rendered + republished 16:46 UTC, public sha256 verified
+> (`docs/thor_validation_log.md` part 11). Phases 1–3 deployed
+> 2026-11-06 13:53 UTC (see §C).
 
 ---
 
@@ -349,6 +352,30 @@ pipeline-side change; `tab_pdf.py` just renders whatever it's given.
 Track as a separate work item (Phase 4) — don't scope it into the
 tab_pdf rework.
 
+**DONE 2026-11-08 (both sides).** The pipeline now ships a per-note
+`pitch_contour` (5 samples across the note's duration; pitch deviation
+from the note's nominal pitch — assumed **semitones**, ⅓-quantized,
+ranges seen: [-1.67, 2.33]; confirm against
+`docs/transcribe_pipeline_spec.md` on the GPU host). `tab_pdf.py`
+renders the marks:
+
+- `_contour_mark(pc)` → `"b+"` / `"b-"` / `"v"` / None. Bend: ≤1
+  direction reversal + |onset→offset rise| ≥ `SOLO_BEND_RISE` (1.0
+  semitone) + total deviation ≥ `SOLO_BEND_DEV` (0.6). Vibrato: ≥2
+  reversals + total deviation ≥ `SOLO_VIB_DEV` (0.5). Conservative on
+  purpose — on dense distorted mixes the contour is tracking noise;
+  only clear sustained patterns are marked.
+- SOLO lane: bend = arc through the dot (direction = pitch travel) +
+  `b` badge; contour vibrato = the existing wave glyph. Text-tab
+  fallback appends `b`/`v` to the fret digit. SOLO KEY panel gained a
+  bend demo note + legend rows. `render()` reports `bend_marks` /
+  `vibrato_marks`; a PDF note line appears when > 0.
+- Back in Black (first contour job): 13 bends + 18 vibrato over 328
+  lead notes; the other 3 published tabs predate the pipeline change
+  (0 marks — backward compatible). Tests: `test_solo_marks.py` (5
+  suites). Deployed + all 4 tabs republished 2026-11-08 16:46 UTC
+  (`docs/thor_validation_log.md` part 11).
+
 ### B5. Rendering notes
 
 - Board = positioned divs (consistent with the chord diagram) or inline
@@ -402,7 +429,7 @@ tab_pdf rework.
 | **1 — bugfix** | A1 (B6/F6/G6) + A2 safe set (D6/E6/A9/D9/G9/Am9) | ~30 min + 1 rebuild on thor | **DONE 2026-11-06** (code + tests + local render QA; deployed + republished 13:53 UTC) |
 | **2 — robustness** | A3 (synthesized fallback, `missing_shapes`/`synthesized_shapes` in result + PDF header note, `test_chord_shapes.py`, 5 pre-existing library fixes) | small | **DONE 2026-11-06** (same deploy) |
 | **3 — solo rework** | B3 (per-measure fretboard boards per B3b: duration-sized dots + duration tail (default on), time-order badges, technique connectors with vector slide/vibrato icons, solo key panel, fret window + starting-fret label, beat ruler, dense-measure fallback, `solo_style` enum `board`\|`text`) + visual QA on all 4 songs | the big one | **DONE 2026-11-06** (code + QA in §D; deployed + republished 13:53 UTC) |
-| **4 — pipeline-side (Matrix)** | B4: pitch-contour note events so bends/vibrato become detectable; `tab_pdf.py` renders `b`/`v` marks when present | separate work item, GPU-host DSP | not started |
+| **4 — pipeline-side (Matrix)** | B4: pitch-contour note events so bends/vibrato become detectable; `tab_pdf.py` renders `b`/`v` marks when present | separate work item, GPU-host DSP | **DONE 2026-11-08** (pipeline shipped `pitch_contour` — Matrix; renderer: `_contour_mark` + board arc/wave + text-tab `b`/`v` + key-panel legend + `bend_marks`/`vibrato_marks` reporting; `test_solo_marks.py` 5/5; container rebuilt; all 4 tabs republished 16:46 UTC — `docs/thor_validation_log.md` part 11) |
 
 ### Open questions
 

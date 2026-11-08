@@ -959,3 +959,80 @@ showed no durations or techniques.
 - Back in Black re-rip (part 8 open item): user chose option (a)
   2026-11-08 — awaiting a cleaner source file; `99d8f532c3dc` remains
   canonical until the re-rip job supersedes it.
+
+## Validation Entry — 2026-11-08 (part 11): Back in Black lyrics fix + Phase 4 b/v marks
+
+**Context:** part 8's open item — Back in Black's ASR lyrics came out as 3
+garbled/hallucinated lines. The user provided the official AC/DC video
+(`youtube.com/watch?v=pAgnJDJN4VA`) for a re-rip.
+
+**Re-rip (job `d924784193df`, 2026-11-08 15:51 UTC):**
+
+| Check | Result |
+|---|---|
+| New job `done` in 27.4 s (stems=true, `large-v3`) | ✅ |
+| Source webm vs old job `99d8f532c3dc` source | ⚠️ **byte-identical** (sha256 `efb435…2ac47`, 4,011,063 B) — yt-dlp picks the same format 251 for both URLs |
+| Decoded `audio.wav` vs old job | ⚠️ byte-identical (sha256 `81ed9c…ef6`) |
+| New ASR output | ⚠️ still 3 garbled lines (same failure mode) |
+
+**Decision:** re-rip cannot fix the ASR failure (identical input →
+identical output). Chose **manual lyrics injection**: canonical lyrics
+(Genius, verified against the recording), DSP note/chord data kept
+as-is (chords + solo accepted as fine in part 8).
+
+**Rebuilt `analysis.json` (job `d924784193df`):** 16 DSP sections
+(mislabeled — 8× "intro") replaced with 10 bar-grid sections at 94 BPM
+(intro 1–12, verse 13–20, chorus 21–26, verse 27–36, chorus 37–42,
+chorus 43–50, solo 51–61, bridge 62–66, chorus 67–72, outro 73–101);
+all 1117 notes + 22 chord events preserved (reassigned by time);
+canonical lyrics injected as line windows aligned to the bar grid
+(8 lines/verse, 8/chorus, 7/bridge, 1/outro) — the renderer
+interpolates words evenly across each line window, so each line lands
+in its own measure (sing & play). Title/artist set to `Back In Black` /
+`AC/DC`; caveats note the manually-verified lyrics + low-confidence
+chords.
+
+**QA (rendered in the real `ai-mcp-mcp_media` image):**
+
+| Check | Result |
+|---|---|
+| 8 pages; `missing_shapes: []`; no "n/a" / "NO SHAPE" | ✅ |
+| Verse 1 word→measure mapping: one line per measure, all 8 lines in the correct measure (parser-level check) | ✅ |
+| Floating-point edge: line windows exactly on bar boundaries pushed word 0 into the previous measure (`int()` truncation on float noise) — fixed by insetting each line window 0.05 s | ✅ |
+| SOLO lane: fretboard boards + pull-off badges intact | ✅ |
+
+**Phase 4 — pitch-contour b/v marks (Matrix shipped the pipeline side
+2026-11-08):** the transcribe pipeline now emits a per-note
+`pitch_contour`: pitch deviation from the note's nominal pitch in
+semitones, 5 samples across the note's duration (onset→offset).
+`tab_pdf.py` renderer side implemented:
+
+- `_contour_mark(pc)`: bend = near-monotonic (≤1 reversal) sustained
+  ramp with onset→offset rise ≥ 1.0 semitone (total dev ≥ 0.6) →
+  `b+`/`b-`; vibrato = ≥2 reversals with total dev ≥ 0.5 → `v`.
+  Conservative thresholds — on dense distorted mixes the contour is
+  tracking noise, so only clear sustained patterns are marked.
+- SOLO lane: bend = arc through the dot (direction = pitch travel) +
+  `b` badge; contour vibrato = wave glyph (same as inferred
+  overlap-vibrato). Text-tab fallback appends `b`/`v` to the fret
+  digit. SOLO KEY panel gained a bend demo note + legend rows; a note
+  line under the CHORDS grid when marks are present.
+- `render()` reports `bend_marks` / `vibrato_marks` (surfaced by
+  `media_render_tab_pdf`).
+
+| Check | Result |
+|---|---|
+| `test_solo_marks.py` (classification, text tab, board SVG, full render) | ✅ 5/5 (host + container) |
+| `test_chord_shapes.py` regression | ✅ 6/6 |
+| `mcp_media` container rebuilt + restarted (new image; container code verified) | ✅ |
+| Back in Black: 13 bends + 18 vibrato marks (matches calibration on the 328 lead notes); 15 `b` glyphs in the PDF = 13 marks + key-panel demo + footer note | ✅ |
+| Riptide / Old Porch / Submission (no contour data): 0 marks, content identical — only the SOLO KEY panel changed (bend demo + legend) | ✅ |
+| All 4 tabs re-rendered + republished (`publish_file`, `tabs`, `overwrite=true`) 16:46 UTC; public sha256 verified | ✅ |
+
+**Open items:**
+- Pitch-contour units/thresholds assumed from the data (semitones,
+  ⅓-quantized, 5 samples) — confirm against the pipeline spec
+  (`docs/transcribe_pipeline_spec.md` on the GPU host) and tune
+  `SOLO_BEND_RISE` / `SOLO_VIB_DEV` if the contract differs.
+- Back in Black: published tab now has verified lyrics; the ASR
+  stage itself still fails on this dense mix (pipeline-side item).
