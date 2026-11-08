@@ -11,7 +11,8 @@
 >
 > **Status (2026-11-06):** Phase 1 + Phase 2 + **Phase 3 implemented and
 > verified** (this session — see §D). Phase 4 stays a separate GPU-host
-> item. Deploy/republish pending (see §C).
+> item. **Deployed + republished 2026-11-06 13:53 UTC** (see §C) — all 4
+> tabs re-rendered, republished (`overwrite=true`), public sha256 verified.
 
 ---
 
@@ -398,9 +399,9 @@ tab_pdf rework.
 
 | Phase | Scope | Effort | Status |
 |---|---|---|---|
-| **1 — bugfix** | A1 (B6/F6/G6) + A2 safe set (D6/E6/A9/D9/G9/Am9) | ~30 min + 1 rebuild on thor | **DONE 2026-11-06** (code + tests + local render QA; deploy/republish pending) |
+| **1 — bugfix** | A1 (B6/F6/G6) + A2 safe set (D6/E6/A9/D9/G9/Am9) | ~30 min + 1 rebuild on thor | **DONE 2026-11-06** (code + tests + local render QA; deployed + republished 13:53 UTC) |
 | **2 — robustness** | A3 (synthesized fallback, `missing_shapes`/`synthesized_shapes` in result + PDF header note, `test_chord_shapes.py`, 5 pre-existing library fixes) | small | **DONE 2026-11-06** (same deploy) |
-| **3 — solo rework** | B3 (per-measure fretboard boards per B3b: duration-sized dots + duration tail (default on), time-order badges, technique connectors with vector slide/vibrato icons, solo key panel, fret window + starting-fret label, beat ruler, dense-measure fallback, `solo_style` enum `board`\|`text`) + visual QA on all 4 songs | the big one | **DONE 2026-11-06** (code + QA in §D; deploy/republish pending) |
+| **3 — solo rework** | B3 (per-measure fretboard boards per B3b: duration-sized dots + duration tail (default on), time-order badges, technique connectors with vector slide/vibrato icons, solo key panel, fret window + starting-fret label, beat ruler, dense-measure fallback, `solo_style` enum `board`\|`text`) + visual QA on all 4 songs | the big one | **DONE 2026-11-06** (code + QA in §D; deployed + republished 13:53 UTC) |
 | **4 — pipeline-side (Matrix)** | B4: pitch-contour note events so bends/vibrato become detectable; `tab_pdf.py` renders `b`/`v` marks when present | separate work item, GPU-host DSP | not started |
 
 ### Open questions
@@ -436,9 +437,14 @@ tab_pdf rework.
   with `Badd9` + `N.C.`: Badd9 → synthesized barre diagram labeled
   "(SYNTHESIZED)"; N.C. → honest n/a + visible header note; both
   reported in the result dict.
-- **Pending (deploy)**: push, rebuild `mcp_media` on thor, re-render the
-  4 tabs via `media_render_tab_pdf` (pass real title/artist), republish
-  with `publish_file` (`subdirectory=tabs`, `overwrite=true`).
+- **Deploy (DONE 2026-11-06 13:53 UTC)**: `mcp_media` rebuilt on thor from
+  repo HEAD (container `tab_pdf.py`/`server.py` byte-identical to repo);
+  all 4 tabs re-rendered via live `media_render_tab_pdf` (real
+  title/artist) and republished with `publish_file`
+  (`subdirectory=tabs`, `overwrite=true`) at 13:54 UTC; public URLs
+  verified live + sha256-identical to local files (all 4; SCOM 13 pages,
+  SOLO KEY panel present). Validation log: `docs/thor_validation_log.md`
+  part 10.
 
 ### D2. Phase 3 (solo boards) verification log (2026-11-06, this session)
 

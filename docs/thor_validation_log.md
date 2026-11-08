@@ -825,6 +825,137 @@ Order is preserved; words land inside the section; no measure gets a wall.
   source and re-transcribe, (b) manually add the real lyrics (the section
   boundaries don't align cleanly with the known verse/chorus structure, so
   that's a bigger data edit), (c) leave as-is (chords + solo are fine).
+  **Decision (2026-11-08): (a) re-rip** — a cleaner source file (CD rip /
+  FLAC / 320 kbps; the original was a ~128 kbps YouTube webm, staged as
+  `20261101T011825_song.webm`) is expected at the thor staging dir
+  `/home/chuck/workspace/media/` (or handed to the agent). On arrival:
+  `media_put` → `media_transcribe_song` (stems=true) → verify lyrics are
+  real (word count, no hallucination patterns, confidence) →
+  `media_render_tab_pdf` → `publish_file` (`subdirectory=tabs`,
+  `overwrite=true`) → public sha256 check. `99d8f532c3dc` remains the
+  canonical Back in Black job until the re-rip job supersedes it.
 - The re-run job `2c4ea2812fe8` (stems=false) is garbage (0 words) — do not
   use it; `99d8f532c3dc` remains the canonical Back in Black job.
 
+
+## Validation Entry — 2026-11-04 (part 9): job recovery + reliability (thor handoff T1–T5)
+
+**Goal:** after the 2026-11-02 incident (mcp_vision permission-denied +
+lost job context), make `mcp_media` jobs recoverable and the failure
+modes legible, per `thor_media_mcp_handoff.md` (T1–T5).
+
+**Changes (commit cfb9407):**
+
+- **T1 — job log lines.** Every job tool now emits `SUBMIT` and `DONE`
+  lines to the container log (`kind/tag/job_id/path`), so
+  `docker logs mcp_media` is a job-id recovery path even before the
+  ledger exists.
+- **T2 — `media_list_jobs` tool + `client` tag.** New tool wrapping the
+  pipeline's durable `GET /jobs` ledger (status/client/user/flow/since/
+  limit filters; finished jobs survive pipeline restarts, live in-flight
+  jobs included). All 14 job tools gained an optional `client` tag
+  parameter (default `MEDIA_CLIENT`). Unknown/evicted job ids now return
+  a 404 with a recovery hint pointing at `media_list_jobs`.
+- **T3 — 60 s gateway timeout guidance.** The MCP gateway cuts calls at
+  60 s; a retry note (transient timeout expected, job unaffected, retry;
+  503 + `retry_after_seconds` on a full queue = stop submitting, poll)
+  is in the server instructions, every job tool's description,
+  `media_job_result`, `media_list_jobs`, and the README.
+- **T4 — collision-safe `fetch()`.** Same-basename fetches now get
+  suffixed names (`mp_..._2.png`); existing files are never overwritten;
+  `FETCH` log line carries the local path.
+- **T5 — mcp_vision artifact ownership.** Artifact dir was `root:root
+  755` (the 2026-11-02 permission-denied root cause) → now `1000:1000`;
+  startup writability probe logs at boot; tool description carries a
+  workaround note.
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| Mock handoff suite (`test_handoff.py`, local stdlib mock with durable `/jobs` ledger) | ✅ 26/26 |
+| `test_transcribe.py` regression | ✅ 57/57 |
+| Live (2026-11-04, containers rebuilt + restarted): tools on the wire | ✅ 25 |
+| Live: `client` param on all 14 job tools; tag recorded + filterable via `media_list_jobs` | ✅ PASS |
+| Live: SUBMIT/DONE/FETCH log lines present in container log | ✅ PASS |
+| Live: duplicate-basename fetch → suffixed path (`mp_..._2.png`), no overwrite | ✅ PASS |
+| Live: `vision_analyze_image` on signed-URL + local-path sources; artifacts written to `/workspace/vision` | ✅ PASS |
+| Live: old call signatures (no `client`) unchanged | ✅ PASS |
+
+**Notes:**
+- Pipeline-side `/jobs` durable ledger + 404 hints shipped on Matrix
+  2026-11-04 (prerequisite for T2); the MCP layer exposes it.
+- Pre-2026-11-04 jobs (e.g. Back in Black `99d8f532c3dc`) are not in the
+  durable ledger — recover them via the job-dir artifacts
+  (`GET /files/<job>/...`) instead.
+
+## Validation Entry — 2026-11-06 (part 10): tab tool Phases 1–3 — chord-shape coverage + solo-lane boards
+
+**Goal:** kill the "NO SHAPE / n/a" chord class and make the SOLO lane
+playable (durations + techniques), per `enhance_tab_tool.md` Phases 1–3.
+Trigger: the 4 tabs published 2026-11-05 (Sweet Child O' Mine, Hurt,
+Californication, One) rendered B6/F6/G6 as "NO SHAPE" and the solo lane
+showed no durations or techniques.
+
+**Changes (commits 979238f, 990be8c):**
+
+- **Phase 1 — shape coverage.** `OPEN_CHORDS` gained B6/F6/G6 (confirmed
+  missing) + D6/E6/A9/D9/G9/Am9 (same bug class, pre-emptive); 5
+  pre-existing entries fixed (Csus4/Gsus4/F#m/F#m7/F#maj7 — all caught by
+  the interval checker). Library now 55 entries, every entry
+  interval-verified by `test_chord_shapes.py` (root present; no tone
+  outside the chord's theoretical tones + allowed extensions; rejected
+  candidates regression-guarded).
+- **Phase 2 — robustness.** `_synth_barre_frets()` fallback: unknown
+  open-position chords synthesize a movable barre diagram (7th/maj7
+  qualities handled; flat spellings via `NOTE_IDX`; unparseable symbols
+  like `N.C.` still render honest "n/a") — the "n/a" class is dead, not
+  just 3 entries patched. `render()` reports `missing_shapes` /
+  `synthesized_shapes` (surfaced by `media_render_tab_pdf`); missing
+  shapes also print a visible note line under the CHORDS grid.
+- **Phase 3 — SOLO lane rework.** Per-measure fretboard boards (inline
+  SVG, chord-diagram visual language): dot size + duration tail ∝ hold
+  time (`end_s`, previously unused), play-order badges, h/p/slide/
+  vibrato technique connectors (vector icons; thresholds named
+  constants), fret window + starting-fret label, 4/4 beat ruler, SOLO
+  KEY legend panel, dense-measure fallback (>12 notes or >5 on one
+  position → legacy text tab for that measure only). `solo_style`
+  parameter (`board` default | `text`); result dict gains `solo_style` +
+  `solo_fallbacks`.
+- **Readability pass.** `MEASURES_PER_ROW` 7 → 4 (~120pt/measure) and
+  `SOLO_BOARD_SCALE = 2.0` (SVG emitted at 2× size) — boards were
+  illegible at 1× inside 7-measure rows. Net: sections take more pages
+  (SCOM 8 → 13).
+
+**Validation:**
+
+| Check | Result |
+|---|---|
+| `test_chord_shapes.py` (55 entries + rejected candidates) | ✅ 6/6 suites pass |
+| All 4 QA songs re-rendered in the real `ai-mcp-mcp_media:latest` image | ✅ zero "NO SHAPE" / "n/a" |
+| B6/F6/G6 render as proper OPEN diagrams; `missing_shapes`/`synthesized_shapes` empty for all 4 | ✅ PASS |
+| Synthetic song (Badd9 + N.C.): Badd9 → "(SYNTHESIZED)" barre; N.C. → honest n/a + header note | ✅ PASS |
+| Board counts reconcile (lead measures + fret-window splits + 1 key panel: SCOM 153→231 · Hurt 87→120 · Cali 135→163 · One 108→150) | ✅ PASS |
+| Dense-measure fallback fires exactly once (Hurt's single >12-note measure) | ✅ PASS |
+| Technique badges where expected (SCOM intro h=6/p=14; One verse slides); no threshold tuning needed | ✅ PASS |
+| Geometry clean (every SVG coord in viewBox; solo rows ≤ 4 cells; board group ≤ 460pt) | ✅ 0 issues |
+| `text` style regression (legacy tab, no boards/key panel, `solo_fallbacks=0`; CLI `--solo-style text`) | ✅ PASS |
+
+**Deploy + republish (2026-11-06 13:53 UTC):**
+
+| Check | Result |
+|---|---|
+| `mcp_media` rebuilt from repo HEAD (container `tab_pdf.py`/`server.py` byte-identical to repo) | ✅ PASS |
+| All 4 tabs re-rendered via live `media_render_tab_pdf` + republished (`publish_file`, `subdirectory=tabs`, `overwrite=true`) | ✅ 13:54 UTC |
+| Public URLs live + sha256-identical to local files (all 4) | ✅ PASS |
+| Published SCOM = 13 pages (new layout), SOLO KEY panel present | ✅ PASS |
+
+**Notes / open items:**
+- Phase 4 (pipeline-side pitch-contour note events for bends/vibrato)
+  remains a separate GPU-host DSP work item — not started.
+- `enhance_tab_tool.md` §C status line was left stale ("deploy/
+  republish pending") — corrected 2026-11-08 to reflect the 13:53
+  deploy above.
+- Back in Black re-rip (part 8 open item): user chose option (a)
+  2026-11-08 — awaiting a cleaner source file; `99d8f532c3dc` remains
+  canonical until the re-rip job supersedes it.
