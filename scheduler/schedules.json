@@ -24,6 +24,18 @@
       "timezone": "America/Chicago"
     },
     {
+      "id": "weekly-harness-reflection",
+      "name": "Weekly Harness Reflection (chuck)",
+      "cron": "0 23 * * 0",
+      "skill": "harness_reflection",
+      "params": {
+        "user": "chuck",
+        "days": 7
+      },
+      "enabled": true,
+      "timezone": "UTC"
+    },
+    {
       "id": "weekday-morning-brief",
       "name": "Weekday Morning Brief",
       "cron": "0 9 * * 1-5",

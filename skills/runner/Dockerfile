@@ -9,6 +9,7 @@ WORKDIR /app
 COPY main.py .
 COPY scheduler.py .
 COPY sessions.py .
+COPY proposals.py .
 COPY pyproject.toml .
 COPY memory/ ./memory/
 
@@ -16,6 +17,10 @@ COPY memory/ ./memory/
 # mem0ai pinned to the version verified in Phase 1 (round-trip + restore).
 # fastembed intentionally NOT installed: BM25/hybrid keyword search disabled
 # (dense-only semantic search is the v1 design; see Phase 1 gotchas).
+# git: the harness_reflection skill (Phase 3) reads the homelab repo's git
+# log (read-only mount) as one of its five inputs.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir \
     "fastapi>=0.110.0" \
     "uvicorn[standard]>=0.27.0" \

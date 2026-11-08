@@ -86,6 +86,17 @@ PUBLIC_ROOT = Path(os.environ.get("MORNING_BRIEF_PUBLIC_ROOT", "/home/chuck/data
 SEEN_STORE_PATH = Path(
     os.environ.get("MORNING_BRIEF_SEEN_STORE", str(ARTIFACT_DIR / "morning_brief_seen.json"))
 )
+# Harness reflection digest pointer (Phase 3, experience_improvement_todo):
+# the weekly harness_reflection skill writes a one-line pointer so Chuck
+# sees the latest review digest without hunting. Minimal documented
+# context hook: the brief appends it to the LLM context while fresh.
+REFLECTION_POINTER_FILE = Path(
+    os.environ.get(
+        "HARNESS_REFLECTION_POINTER_FILE",
+        str(ARTIFACT_DIR / "harness_reflection" / "latest_pointer.txt"),
+    )
+)
+REFLECTION_POINTER_MAX_AGE_DAYS = 7  # weekly cadence + margin
 MAX_RUNTIME_SECS = int(os.environ.get("MORNING_BRIEF_MAX_RUNTIME", "300"))
 
 # Freshness / volume defaults
@@ -947,6 +958,36 @@ def _memory_block(job, interests: list[str]) -> str:
         return ""
 
 
+def _reflection_pointer_block() -> str:
+    """Surface the latest harness_reflection digest pointer (Phase 3).
+
+    Minimal documented context hook (experience_improvement_todo Phase 3):
+    the weekly harness_reflection skill writes a one-line pointer to
+    ``REFLECTION_POINTER_FILE``; while it is fresh (< 7 days old) the
+    brief appends it to the LLM context so the review digest is visible
+    in the next morning brief without Chuck hunting for it. Identity-
+    independent (works for scheduled service runs too). Non-fatal: any
+    error / missing / stale file degrades to "" so the brief is never
+    broken by it.
+    """
+    try:
+        if not REFLECTION_POINTER_FILE.is_file():
+            return ""
+        age_s = time.time() - REFLECTION_POINTER_FILE.stat().st_mtime
+        if age_s > REFLECTION_POINTER_MAX_AGE_DAYS * 86400:
+            return ""
+        text = REFLECTION_POINTER_FILE.read_text(encoding="utf-8", errors="replace").strip()
+        if not text:
+            return ""
+        return (
+            "<harness_reflection>\n"
+            f"{text[:500]}\n"
+            "</harness_reflection>"
+        )
+    except Exception:  # noqa: BLE001 — never break the brief
+        return ""
+
+
 def _strip_code_fence(text: str) -> str:
     """Strip a wrapping ```markdown ... ``` fence if the LLM added one."""
     text = text.strip()
@@ -980,6 +1021,16 @@ def _synthesize_digest(
         messages[0] = {
             "role": "system",
             "content": messages[0]["content"] + "\n\n" + mem_block,
+        }
+
+    # Phase 3 — harness_reflection digest pointer (minimal documented
+    # context hook): surface the latest weekly reflection digest pointer
+    # (fresh < 7d) so it lands in the next morning brief. Non-fatal.
+    refl_block = _reflection_pointer_block()
+    if refl_block:
+        messages[0] = {
+            "role": "system",
+            "content": messages[0]["content"] + "\n\n" + refl_block,
         }
 
     def _call_once() -> tuple[Optional[str], str]:

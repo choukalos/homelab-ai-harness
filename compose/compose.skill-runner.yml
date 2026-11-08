@@ -115,6 +115,13 @@ services:
       # always private to the caller). New volume — pre-create it chuck-owned
       # on the host (the container runs as uid 1000).
       - /home/chuck/data/skill-runner-sessions:/data/sessions
+      # Harness reflection (Phase 3): the homelab repo is mounted read-only
+      # (git log input) and the proposals/ subdir is mounted read-write as a
+      # nested mount — the reflection job can ONLY write proposals/ inside
+      # the repo (kernel-enforced "no file outside proposals/ modified").
+      # Mount order matters: the nested rw mount must come after the ro one.
+      - /home/chuck/homelab:/home/chuck/homelab:ro
+      - /home/chuck/homelab/proposals:/home/chuck/homelab/proposals
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
     # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
     # supported by Docker Compose.
