@@ -214,9 +214,20 @@ Row 7.)
 Edited in place (no generator). Cleanup pass 2026-09-16 via `ho_cleanup.py`
 (one-off transform, kept for reference):
 
+- **Servers row**: added per-host **Load Average (5m/15m)** (id 47, 2026-11-08)
+  — `instant` queries on `node_load5` / `node_load15`, legend `{{instance}} 5m` /
+  `{{instance}} 15m`, so each host shows two value tiles. Thresholds are
+  **per-host overrides scaled to core count** (same pattern as Disk Available):
+  green < cores, yellow < 2× cores, red ≥ 2× cores. Core counts as of 2026-11-08:
+  athena 4, lego 4, thor 8, matrix 20 → yellow/red: athena 4/8, lego 4/8,
+  thor 8/16, matrix 20/40. **If a host's core count changes**, recompute that
+  host's override (yellow = cores, red = 2× cores) via
+  `count by (instance) (node_cpu_seconds_total{mode="idle"})`. The base default
+  (yellow 2 / red 4) is a fallback for any new host.
 - **Servers row**: added per-host **Disk Usage %** (id 40) and **Disk
   Available** (id 41) stats, styled like the CPU/Memory stats (background
-  color + sparkline). Top row is now 5 stats (w=5,5,5,5,4). Disk queries use
+  color + sparkline). Top row is now 6 stats (w=4 each, 2026-11-08 reflow for
+  the Load Average panel; previously 5 stats w=5,5,5,5,4). Disk queries use
   `node_filesystem_{size,avail}_bytes` with
   `fstype!~"tmpfs|overlay|squashfs|cifs|rootfs|iso9660|vfat", device!~"loop.*"`
   to count only real local disks (avoids double-counting rootfs/tmpfs/cifs and
@@ -239,6 +250,12 @@ Edited in place (no generator). Cleanup pass 2026-09-16 via `ho_cleanup.py`
     that has no override yet). The **Disk Usage %** card (id 40) uses the
     standard thresholds (yellow 80% / red 90%).
   - **Disk Usage % thresholds**: yellow 80%, red 90% (on usage %).
+  - **Note (2026-11-08)**: athena's node_exporter was running **v1.0.1**
+    (2016-era image; its `latest` tag was pulled once and never re-pulled),
+    which predates `node_memory_MemAvailable_bytes` (added in v0.16.0) — so
+    athena is absent from the Memory Usage % panels. Fix: recreate the
+    athena container from `prom/node-exporter:v1.12.1` (matches thor/lego).
+    Manual step on athena (Synology Container Station); in progress 2026-11-08.
   - **Disk Available color is driven by usage, not free-bytes.** It uses
     per-host `fieldConfig.overrides` (byRegexp on the instance name) where each
     host's threshold = **20% of that host's total capacity** (the boundary
@@ -247,6 +264,25 @@ Edited in place (no generator). Cleanup pass 2026-09-16 via `ho_cleanup.py`
     thor 47848403763 B. **If a host's disk capacity changes, recompute that
     host's override as `0.2 × node_filesystem_size_bytes` total.** The base
     default is a single green step (safe fallback for any new host).
+- **Servers row (2026-11-08)**: added **Load Average (5m/15m)** stat (id 47,
+  `node_load5` + `node_load15`, `instant` queries, legend `{{instance}} 5m` /
+  `{{instance}} 15m`) and reflowed the row to 6 equal stats (w=4 each):
+  Server Status, CPU Usage %, Memory Usage %, Load Average, Disk Usage %, Disk
+  Available. Thresholds are **per-host `fieldConfig.overrides` scaled to core
+  count** (byRegexp on the series name prefix, e.g. `/^thor /`):
+  green < cores, yellow < 2× cores, red ≥ 2× cores. As of 2026-11-08:
+  athena 4c (yellow 4 / red 8), lego 4c (4/8), thor 8c (8/16), matrix 20c
+  (20/40). The base default (green → yellow 2 → red 4) is a fallback for new
+  hosts. **If a host's core count changes, recompute its override as
+  yellow = cores, red = 2×cores** (cores from
+  `count by (instance) (node_cpu_seconds_total{mode="idle"})`).
+- **Athena node exporter (2026-11-08)**: athena was running node_exporter
+  **v1.0.1** (2016 build) — it predates `node_memory_MemAvailable_bytes`
+  (added in v0.16.0), so it was missing from the Memory Usage % / Over Time
+  panels (and any other MemAvailable-based query) while CPU/disk panels still
+  worked. Fix = re-pull + recreate the container with a current image
+  (`prom/node-exporter:v1.12.1` to match thor/lego). Container Station
+  restart/"update" does NOT re-pull the image; the old tag had to be replaced.
 - **LLM Metrics row → "AI Usage"**: the detailed by-model panels (requests/
   tokens/latency by model, token breakdown, cached tokens per-user) were
   replaced with overview-level panels that mirror AI Work & Spend: **Total

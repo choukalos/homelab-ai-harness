@@ -10,7 +10,7 @@
  "timezone": "browser",
  "editable": true,
  "schemaVersion": 39,
- "version": 2,
+ "version": 3,
  "refresh": "10s",
  "time": {
   "from": "now-30d",
@@ -65,7 +65,7 @@
    "type": "stat",
    "gridPos": {
     "h": 5,
-    "w": 5,
+    "w": 4,
     "x": 0,
     "y": 1
    },
@@ -132,8 +132,8 @@
    "type": "stat",
    "gridPos": {
     "h": 5,
-    "w": 5,
-    "x": 5,
+    "w": 4,
+    "x": 4,
     "y": 1
    },
    "datasource": {
@@ -194,8 +194,8 @@
    "type": "stat",
    "gridPos": {
     "h": 5,
-    "w": 5,
-    "x": 10,
+    "w": 4,
+    "x": 8,
     "y": 1
    },
    "datasource": {
@@ -248,6 +248,189 @@
      "values": false
     },
     "textMode": "auto"
+   }
+  },
+  {
+   "id": 47,
+   "title": "Load Average (5m/15m)",
+   "type": "stat",
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 12,
+    "y": 1
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "targets": [
+    {
+     "expr": "node_load5",
+     "legendFormat": "{{instance}} 5m",
+     "refId": "A",
+     "instant": true
+    },
+    {
+     "expr": "node_load15",
+     "legendFormat": "{{instance}} 15m",
+     "refId": "B",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 2
+       },
+       {
+        "color": "red",
+        "value": 4
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^athena /"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "yellow",
+           "value": 4
+          },
+          {
+           "color": "red",
+           "value": 8
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^lego /"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "yellow",
+           "value": 4
+          },
+          {
+           "color": "red",
+           "value": 8
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^thor /"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "yellow",
+           "value": 8
+          },
+          {
+           "color": "red",
+           "value": 16
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^matrix /"
+      },
+      "properties": [
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "yellow",
+           "value": 20
+          },
+          {
+           "color": "red",
+           "value": 40
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
    }
   },
   {
@@ -1214,8 +1397,8 @@
    "type": "stat",
    "gridPos": {
     "h": 5,
-    "w": 5,
-    "x": 15,
+    "w": 4,
+    "x": 16,
     "y": 1
    },
    "datasource": {
