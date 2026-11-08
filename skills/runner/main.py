@@ -44,6 +44,7 @@ from memory.identity import (
 from memory import interface
 
 import sessions  # Phase 2: session transcript ingest (storage + index)
+import proposals  # Phase 3: harness change proposals (MySQL index + gauge)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1163,6 +1164,11 @@ async def lifespan(app: FastAPI):
     # MySQL is unreachable.
     sessions.init_db()
 
+    # Proposals index (Phase 3): CREATE TABLE IF NOT EXISTS proposals +
+    # seed the proposals_total{status} gauge. Non-fatal: the reflection
+    # skill degrades to file-only mode if MySQL is unreachable.
+    proposals.init_db()
+
     scheduler.dispatch_fn = _schedule_dispatch_fn
     num_loaded = scheduler.load_config()
     logger.info(
@@ -1474,7 +1480,7 @@ def memory_metrics() -> Response:
     """
     from memory import metrics
     return Response(
-        content=metrics.exposition() + sessions.exposition(),
+        content=metrics.exposition() + sessions.exposition() + proposals.exposition(),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
 
@@ -1612,6 +1618,82 @@ def sessions_list_ingests(
     except Exception as exc:  # noqa: BLE001 - surface the failure, don't leak internals
         raise HTTPException(status_code=502, detail=f"Session index query failed: {exc}")
     return {"user_id": user_id, "count": len(rows), "ingests": rows}
+
+
+# ---------------------------------------------------------------------------
+# Harness change proposals (Phase 3) — admin-key protected
+# ---------------------------------------------------------------------------
+# The weekly harness_reflection skill (Tier 1, PROPPOSE ONLY) creates
+# `open` rows + markdown files in proposals/. Humans drive the lifecycle
+# (open -> accepted | dismissed -> applied) via cli/proposals.sh / these
+# endpoints. Admin-key guarded like /api/memory/* and /api/sessions/*.
+
+@app.get("/api/proposals")
+def proposals_list(
+    status: Optional[str] = None,
+    limit: int = 50,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List harness change proposals, newest first (admin)."""
+    _require_admin(x_api_key)
+    if status is not None and status not in proposals.STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status {status!r} (one of {list(proposals.STATUSES)})",
+        )
+    try:
+        rows = proposals.list_proposals(status=status, limit=limit)
+    except proposals.ProposalsUnavailable:
+        raise HTTPException(status_code=503, detail="Proposals index unavailable (MySQL)")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Proposals query failed: {exc}")
+    return {"count": len(rows), "proposals": rows}
+
+
+@app.get("/api/proposals/{slug}")
+def proposals_show(slug: str, x_api_key: Optional[str] = Header(None)) -> dict:
+    """Show one proposal by slug (admin)."""
+    _require_admin(x_api_key)
+    try:
+        row = proposals.get(slug)
+    except proposals.ProposalsUnavailable:
+        raise HTTPException(status_code=503, detail="Proposals index unavailable (MySQL)")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Proposals query failed: {exc}")
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Proposal {slug!r} not found")
+    return row
+
+
+@app.post("/api/proposals/{slug}/{new_status}")
+def proposals_transition(
+    slug: str, new_status: str, x_api_key: Optional[str] = Header(None)
+) -> dict:
+    """Transition a proposal's status (admin, human-driven).
+
+    Allowed: open -> accepted | dismissed; accepted -> applied. Anything
+    else is a 409 (the reflection skill never calls this — Tier 2 apply
+    steps are a human decision).
+    """
+    _require_admin(x_api_key)
+    if new_status not in proposals.STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status {new_status!r} (one of {list(proposals.STATUSES)})",
+        )
+    try:
+        row = proposals.transition(slug, new_status)
+    except proposals.ProposalsUnavailable:
+        raise HTTPException(status_code=503, detail="Proposals index unavailable (MySQL)")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Proposals update failed: {exc}")
+    if row is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transition {slug!r} -> {new_status!r} not allowed "
+                   "(unknown slug or invalid transition)",
+        )
+    return row
 
 
 # ---------------------------------------------------------------------------
