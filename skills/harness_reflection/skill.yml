@@ -1,0 +1,33 @@
+name: harness_reflection
+version: "1.0"
+description: "Weekly closed-loop harness reflection — analyzes the last 7 days of memories, ingested sessions, skill jobs, and git activity; maintains memory (supersede statements, correction preferences, friction lessons), proposes harness changes (propose-only, <=5 evidenced proposals in proposals/ + the proposals table), and writes a <=1-page review digest with a pointer into the next morning brief."
+inputs:
+  - name: user
+    type: string
+    required: false
+    default: chuck
+    description: "Target user to reflect on and write memory maintenance for (default chuck). The job itself runs under the service identity (D10); memory writes land on this user via the in-process interface."
+  - name: days
+    type: integer
+    required: false
+    default: 7
+    description: "Lookback window in days."
+config:
+  # Inputs (all best-effort; the run works with any subset present).
+  git_repo: /home/chuck/homelab        # read-only mount in the container
+  proposals_dir: /home/chuck/homelab/proposals  # rw (nested mount); the ONLY repo dir the job writes
+  sessions_root: /data/sessions        # Phase 2 transcript volume
+  # Guardrails (enforced in code, not just the prompt).
+  max_proposals: 5                     # <=5 proposals per run
+  stale_days: 14                       # proposals open >14d flagged in the digest (never auto-deleted)
+  max_memories: 60
+  max_jobs: 50
+  max_git_commits: 40
+  max_sessions: 4
+  max_session_chars: 12000
+tools: []
+model_alias: matrix-coder
+artifact_path: /home/chuck/data/media/homelab_reports/harness_reflection/
+approval_gates: []
+channels: [cli, pi, n8n, scheduler]
+max_runtime: 600  # seconds (5 inputs + one LLM analysis call + writes)
