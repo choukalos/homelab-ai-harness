@@ -8,6 +8,7 @@ WORKDIR /app
 # Copy application code
 COPY main.py .
 COPY scheduler.py .
+COPY sessions.py .
 COPY pyproject.toml .
 COPY memory/ ./memory/
 

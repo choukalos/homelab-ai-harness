@@ -110,6 +110,11 @@ services:
       # update/recreate doesn't lose it. The actual memories live in Qdrant
       # (data/qdrant); this is mem0's auxiliary local state.
       - /home/chuck/data/mem0:/tmp/.mem0
+      # Session transcript ingest (Phase 2): POST /api/sessions/ingest stores
+      # transcripts under /data/sessions/{user_id}/{YYYY-MM-DD}/ (mode 0600,
+      # always private to the caller). New volume — pre-create it chuck-owned
+      # on the host (the container runs as uid 1000).
+      - /home/chuck/data/skill-runner-sessions:/data/sessions
     # Note: depends_on litellm is handled by homelab.sh run_ai_stack ordering
     # (AI_CORE starts before SKILL_RUNNER). Cross-project depends_on is not
     # supported by Docker Compose.

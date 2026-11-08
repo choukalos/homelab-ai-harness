@@ -43,6 +43,8 @@ from memory.identity import (
 )
 from memory import interface
 
+import sessions  # Phase 2: session transcript ingest (storage + index)
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -1156,6 +1158,11 @@ async def lifespan(app: FastAPI):
     _init_jobs_db()
     _hydrate_jobs()
 
+    # Session ingest index (Phase 2): CREATE TABLE IF NOT EXISTS
+    # session_ingests. Non-fatal: ingest degrades to file-only storage if
+    # MySQL is unreachable.
+    sessions.init_db()
+
     scheduler.dispatch_fn = _schedule_dispatch_fn
     num_loaded = scheduler.load_config()
     logger.info(
@@ -1467,9 +1474,144 @@ def memory_metrics() -> Response:
     """
     from memory import metrics
     return Response(
-        content=metrics.exposition(),
+        content=metrics.exposition() + sessions.exposition(),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
+
+
+# ---------------------------------------------------------------------------
+# Session ingest (Phase 2) — user-key auth, private to the caller
+# ---------------------------------------------------------------------------
+# pi session transcripts (esp. from the Mac) are shipped here by the
+# session-sync skill so the reflection pipeline sees them. The caller's
+# LiteLLM key resolves to a user_id (same IdentityResolver as the
+# /api/memory/* user routes); the transcript is stored on the sessions
+# volume under {user_id}/ and indexed in the session_ingests table. Always
+# private to the caller — there is no household flag for transcripts.
+
+class SessionIngestRequest(BaseModel):
+    host: str
+    session_id: str
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    transcript: str
+    tags: Optional[list[str]] = None  # accepted for forward-compat; not indexed in v1
+
+
+def _resolve_ingest_user(x_api_key: Optional[str]) -> str:
+    """Caller auth for /api/sessions/ingest (Phase 2).
+
+    Same IdentityResolver as the /api/memory/* user routes (caller's
+    LiteLLM key -> user_id). The admin key is NOT accepted — this is a
+    user-scoped capture path. Unknown/missing keys -> 401 (per the
+    session-ingest contract; the memory retrieval routes use 403).
+    """
+    if x_api_key:
+        admin_keys = [k.strip() for k in MEMORY_ADMIN_API_KEY.split(",") if k.strip()]
+        if x_api_key in admin_keys:
+            raise HTTPException(
+                status_code=401,
+                detail="Admin key not accepted — use your own LiteLLM key",
+            )
+    user_id = resolve_user_id(x_api_key)
+    if user_id == USER_UNKNOWN:
+        raise HTTPException(status_code=401, detail="Unknown or missing API key")
+    return user_id
+
+
+@app.post("/api/sessions/ingest")
+def sessions_ingest(
+    body: SessionIngestRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Store a pi session transcript, private to the CALLER (Phase 2).
+
+    Auth: caller's LiteLLM key -> user_id (same IdentityResolver as the
+    /api/memory/* user routes); unknown key -> 401; the admin key is NOT
+    accepted (user-scoped capture path). The transcript is written to the
+    sessions volume under {user_id}/{YYYY-MM-DD}/{session_id}.jsonl (0600)
+    and indexed in the session_ingests table. Re-syncing the same
+    user_id + session_id + sha256 is idempotent -> {status: "duplicate"}.
+    """
+    user_id = _resolve_ingest_user(x_api_key)
+    host = (body.host or "").strip()
+    if not host or len(host) > 128:
+        raise HTTPException(status_code=400, detail="host is required (max 128 chars)")
+    session_id = (body.session_id or "").strip()
+    if not sessions.validate_session_id(session_id):
+        raise HTTPException(
+            status_code=400,
+            detail="session_id must match [A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+        )
+    transcript = body.transcript or ""
+    if not transcript.strip():
+        raise HTTPException(status_code=400, detail="transcript is required")
+    data = transcript.encode("utf-8")
+    if len(data) > sessions.SESSION_TRANSCRIPT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"transcript too large (max {sessions.SESSION_TRANSCRIPT_MAX_BYTES} bytes)",
+        )
+    sha = sessions.sha256_hex(data)
+    if sessions.ingest_exists(user_id, session_id, sha):
+        sessions.record_ingest(user_id, "duplicate")
+        return {
+            "status": "duplicate",
+            "user_id": user_id,
+            "session_id": session_id,
+            "sha256": sha,
+        }
+    dest, written = sessions.write_transcript(user_id, session_id, transcript)
+    ingested_at = datetime.now(timezone.utc).isoformat()
+    sessions.insert_ingest(
+        user_id,
+        host,
+        session_id,
+        (body.started_at or "").strip()[:64] or None,
+        (body.ended_at or "").strip()[:64] or None,
+        sha,
+        written,
+        ingested_at,
+    )
+    sessions.record_ingest(user_id, "stored")
+    logger.info(
+        "Session ingested: user_id=%s session_id=%s host=%s bytes=%d sha256=%s",
+        user_id,
+        session_id,
+        host,
+        written,
+        sha,
+    )
+    return {
+        "status": "stored",
+        "user_id": user_id,
+        "session_id": session_id,
+        "sha256": sha,
+        "bytes": written,
+        "ingested_at": ingested_at,
+    }
+
+
+@app.get("/api/sessions/{user_id}/ingests")
+def sessions_list_ingests(
+    user_id: str,
+    since: Optional[str] = None,
+    limit: int = 100,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List a user's ingested sessions (admin; metadata only — no transcript
+    bodies). Admin-key guarded like /api/memory/*. ``since`` filters on
+    ``ingested_at >= since`` (ISO-8601 UTC). Used by the reflection job +
+    debugging.
+    """
+    _require_admin(x_api_key)
+    try:
+        rows = sessions.list_ingests(user_id, since=since, limit=limit)
+    except sessions.SessionIndexUnavailable:
+        raise HTTPException(status_code=503, detail="Session index unavailable (MySQL)")
+    except Exception as exc:  # noqa: BLE001 - surface the failure, don't leak internals
+        raise HTTPException(status_code=502, detail=f"Session index query failed: {exc}")
+    return {"user_id": user_id, "count": len(rows), "ingests": rows}
 
 
 # ---------------------------------------------------------------------------
