@@ -110,7 +110,7 @@ the Phase 3 skill).
 cd /home/chuck/workspace
 git clone https://github.com/choukalos/homelab-ai-harness.git harness-repo-recovery
 cd harness-repo-recovery
-git log --oneline -1               # must be cc02fa7 (Phase 3 hardening)
+git log --oneline -1               # must be e85a68a (recovery redesign docs)
 
 mkdir -p skills/harness_reflection
 cp -a /home/chuck/workspace/harness-recovery-2026-11-10/skills/harness_reflection/. \
