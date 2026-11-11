@@ -68,33 +68,90 @@ CREATE TABLE IF NOT EXISTS proposals (
 
 ## 2. Recovery (get Phase 3 code into git) — needs thor access
 
-The Mac has no SSH key to thor and the MCP filesystem is scoped to
-`/home/chuck/workspace` + `/home/chuck/data/media`, so recovery must run **on thor**
-(or be sent to the homelab pi). One prompt / one command block:
+**Constraint (Chuck, 2026-11-10): NO `git pull` on thor, no changes to the live
+repo.** The live container mounts `../skills` ro from the working tree, and the
+live tree is 8 commits behind origin — pulling would rewrite the running
+harness's files. So the recovery is **read-only against the live repo**:
+copy the uncommitted files *out*, commit them in a **fresh clone** in
+`/home/chuck/workspace`, push from there. The live tree, the live repo's git
+state, and the running container are all untouched.
+
+### Step 1 — inspect + stage (read-only against the live repo)
 
 ```bash
+# Inspect (read-only git commands — safe)
 cd /home/chuck/homelab
-git status --short                      # review what's uncommitted
-# Expected: skills/harness_reflection/*, cli/proposals.sh (if it exists),
-#           scheduler/schedules.json (modified), maybe a proposals migration file
-git add skills/harness_reflection/ cli/proposals.sh scheduler/schedules.json
-git commit -m "Phase 3: harness_reflection skill + proposals table + CLI + weekly schedule
+git status --short                 # review what's uncommitted
+git rev-parse HEAD                 # record live tree's HEAD for provenance
 
-experience_improvement_todo.md Phase 3. Deployed + verified on thor 2026-11-08
-(9 completed jobs, 8 open proposals, weekly 0 23 * * 0 UTC). Recovery commit —
-code was built in the working tree but never checked in."
-git push
+# Stage: copy the uncommitted Phase 3 artifacts OUT of the live tree
+mkdir -p /home/chuck/workspace/harness-recovery-2026-11-10
+cp -a /home/chuck/homelab/skills/harness_reflection \
+      /home/chuck/workspace/harness-recovery-2026-11-10/
+# Proposal .md artifacts, if the skill writes them outside the skill dir:
+[ -d /home/chuck/homelab/proposals ] && cp -a /home/chuck/homelab/proposals \
+      /home/chuck/workspace/harness-recovery-2026-11-10/ || true
+# If a thor-local proposals CLI exists, stage it for comparison (the repo
+# version is canonical — do NOT commit this one):
+[ -f /home/chuck/homelab/cli/proposals.sh ] && cp -a /home/chuck/homelab/cli/proposals.sh \
+      /home/chuck/workspace/harness-recovery-2026-11-10/thor-local-proposals.sh || true
+find /home/chuck/workspace/harness-recovery-2026-11-10 -type f | sort   # verify completeness
 ```
 
-**Verify after:** `git log --oneline -3` on the Mac shows the commit;
-`skills/harness_reflection/` + `cli/proposals.sh` exist in the repo;
-`scheduler/schedules.json` contains `weekly-harness-reflection`.
+Expected uncommitted: `skills/harness_reflection/*` (the only required
+artifact). `scheduler/schedules.json` and `cli/proposals.sh` are **already in
+the repo** (commit `cc02fa7`) — no need to copy them; if `git status` shows
+other modified files, list them and decide separately (guardrail: commit ONLY
+the Phase 3 skill).
 
-If `cli/proposals.sh` does not exist on thor (the plan's CLI may never have been
-built), that's fix F3 below — build it in the repo instead.
+### Step 2 — commit in a fresh clone + push (isolated from the live repo)
 
-**Guardrail:** commit ONLY the Phase 3 artifacts. If `git status` shows unrelated
-uncommitted work on thor, do not sweep it in — list it and decide separately.
+```bash
+cd /home/chuck/workspace
+git clone https://github.com/choukalos/homelab-ai-harness.git harness-repo-recovery
+cd harness-repo-recovery
+git log --oneline -1               # must be cc02fa7 (Phase 3 hardening)
+
+mkdir -p skills/harness_reflection
+cp -a /home/chuck/workspace/harness-recovery-2026-11-10/skills/harness_reflection/. \
+      skills/harness_reflection/
+[ -d /home/chuck/workspace/harness-recovery-2026-11-10/proposals ] && \
+  cp -a /home/chuck/workspace/harness-recovery-2026-11-10/proposals/. proposals/ || true
+
+git add skills/harness_reflection
+[ -d proposals ] && git add proposals
+git status --short                 # review exactly what will be committed
+git -c user.name=choukalos -c user.email=choukalos@yahoo.com commit \
+  -m "Phase 3: recover harness_reflection skill from thor (uncommitted since 2026-11-08)
+
+experience_improvement_todo.md Phase 3. Built + deployed + verified on thor
+2026-11-08 (9 completed jobs, 8 open proposals, weekly 0 23 * * 0 UTC) but
+never checked in — the skill lived only in the live working tree. Recovered
+read-only: files copied out of the live tree (no pull, no live-tree changes);
+committed in a fresh clone. Runner-side hardening (window guard, proposals
+API, CLI, schedule) already landed in cc02fa7."
+git push origin main
+```
+
+### Fallback if the push fails (no GitHub credentials on thor)
+
+Nothing is lost: the staged files sit in
+`/home/chuck/workspace/harness-recovery-2026-11-10/` (MCP-readable from the
+Mac). Say so and the Mac picks them up via the workspace MCP and pushes from
+here.
+
+### Verify after (from the Mac)
+
+`git log --oneline -3` shows the recovery commit; `skills/harness_reflection/`
+exists in the repo with `skill.py` + `skill.yml` + `test_skill.py`; the live
+container on thor is untouched (no restart, no file changes).
+
+**Cleanup (after the Mac verifies):** `rm -rf
+/home/chuck/workspace/harness-repo-recovery /home/chuck/workspace/harness-recovery-2026-11-10`
+
+**Note:** the recovery commit changes NOTHING on the running system. The live
+tree stays 8 commits behind until a deliberate sync + Tier 3 rebuild (separate
+decision — see §3 sequencing).
 
 ---
 
