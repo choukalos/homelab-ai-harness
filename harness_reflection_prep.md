@@ -1,0 +1,135 @@
+# Harness Reflection (Phase 3) — State, Recovery & Build-Prep
+
+**Date:** 2026-11-10
+**Companion to:** `experience_improvement_todo.md` (the plan)
+**Why this doc exists:** Phase 3 was built and deployed on thor (2026-11-08) but the
+code was **never committed to the repo**. This doc records the verified state, the
+recovery steps, and the fix list so Phase 3 can be brought into git and stabilized.
+
+---
+
+## 1. Verified state (2026-11-10, from the live system)
+
+Phase 3 is **built, deployed, scheduled, and working** — it just isn't in git.
+
+| Thing | State | Evidence |
+|---|---|---|
+| `harness_reflection` skill | Deployed on skill-runner (one of 22 registered skills; channels cli/pi/n8n/scheduler; max_runtime 600s) | `GET /skills` on 192.168.4.54:8091 |
+| Scheduled run | `weekly-harness-reflection` — cron `0 23 * * 0` UTC, user=chuck, days=7, enabled. Last run 2026-11-08 23:00 UTC, next 2026-11-15 23:00 UTC | `GET /api/schedule` |
+| Jobs | 9 completed runs 2026-11-08 19:25–23:03 UTC (8 deploy-test runs + 1 scheduled) | `skill_jobs` (homelab DB) |
+| Proposals | 8 open rows in `proposals` table (created 2026-11-08 19:27–20:17 UTC), all with evidence refs | `proposals` table |
+| Memory maintenance | Lessons + supersede statements written with `source`/`agent` = `harness_reflection` (e.g. 4 friction lessons) | `memory_search` |
+| Digest artifact | `harness_reflection_20261108_2303.md` under `/home/chuck/data/media/homelab_reports/harness_reflection/` | `GET /skills/jobs/6739464b03b2/artifact` |
+| Dedup guardrail | Working in the last run: "0 new this run, 8 open before run" | job summary |
+| **Code in repo** | ❌ **NOT committed** — no `skills/harness_reflection/`, no `cli/proposals.sh`, no `proposals` migration, no `schedules.json` entry in git | repo tree @ `2ead2be` |
+
+**Where the code lives:** `compose/compose.skill-runner.yml` mounts
+`../skills:/app/skills:ro` — i.e. the skill code is in thor's repo working tree at
+`/home/chuck/homelab/skills/harness_reflection/` (uncommitted). The scheduler entry
+lives in thor's `/home/chuck/homelab/scheduler/schedules.json` (also uncommitted —
+the git-tracked copy has 8 schedules, the live one has 9).
+
+### Live `proposals` schema (for the committed migration)
+
+```sql
+CREATE TABLE IF NOT EXISTS proposals (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  slug         VARCHAR(192)  NOT NULL UNIQUE,
+  title        VARCHAR(512)  NOT NULL,
+  evidence     JSON          NULL,
+  target_files JSON          NULL,
+  status       VARCHAR(32)   NOT NULL DEFAULT 'open',   -- open|accepted|dismissed|applied
+  created_at   VARCHAR(64)   NOT NULL,
+  reviewed_at  VARCHAR(64)   NULL,
+  KEY idx_status (status)
+) ENGINE=InnoDB;
+```
+
+### Open proposals (8, as of 2026-11-10)
+
+| id | slug | title | note |
+|---|---|---|---|
+| 8 | harness-reflection-window-guard | Prevent duplicate harness_reflection jobs in the same window | dup of #5 — fix together |
+| 7 | publish-file-dedup | Deduplicate repeated publish_file requests | supersedes #6 (broader evidence) |
+| 6 | publish-file-idempotency-dedupe | Deduplicate repeated publish_file jobs | dup of #7 |
+| 5 | harness-reflection-idempotency | Make harness_reflection idempotent | dup of #8 |
+| 4 | recent-activity-bounded-scan-cache | Bound and cache recent_activity aggregation | dup of #3 |
+| 3 | recent-activity-slow-run-optimization | Reduce recent_activity run duration with bounded scan and caching | — |
+| 2 | publish-file-subdirectory-enum-test | Add regression test for publish_file subdirectory enum | — |
+| 1 | add-inflight-job-checkpoint | Record resumable checkpoints for long-running jobs | — |
+
+---
+
+## 2. Recovery (get Phase 3 code into git) — needs thor access
+
+The Mac has no SSH key to thor and the MCP filesystem is scoped to
+`/home/chuck/workspace` + `/home/chuck/data/media`, so recovery must run **on thor**
+(or be sent to the homelab pi). One prompt / one command block:
+
+```bash
+cd /home/chuck/homelab
+git status --short                      # review what's uncommitted
+# Expected: skills/harness_reflection/*, cli/proposals.sh (if it exists),
+#           scheduler/schedules.json (modified), maybe a proposals migration file
+git add skills/harness_reflection/ cli/proposals.sh scheduler/schedules.json
+git commit -m "Phase 3: harness_reflection skill + proposals table + CLI + weekly schedule
+
+experience_improvement_todo.md Phase 3. Deployed + verified on thor 2026-11-08
+(9 completed jobs, 8 open proposals, weekly 0 23 * * 0 UTC). Recovery commit —
+code was built in the working tree but never checked in."
+git push
+```
+
+**Verify after:** `git log --oneline -3` on the Mac shows the commit;
+`skills/harness_reflection/` + `cli/proposals.sh` exist in the repo;
+`scheduler/schedules.json` contains `weekly-harness-reflection`.
+
+If `cli/proposals.sh` does not exist on thor (the plan's CLI may never have been
+built), that's fix F3 below — build it in the repo instead.
+
+**Guardrail:** commit ONLY the Phase 3 artifacts. If `git status` shows unrelated
+uncommitted work on thor, do not sweep it in — list it and decide separately.
+
+---
+
+## 3. Fix list (post-recovery, in priority order)
+
+| # | Fix | Target | Notes |
+|---|---|---|---|
+| F1 | **Idempotency / window guard** — prevent duplicate `harness_reflection` jobs in the same window (proposals #5 + #8) | `skills/runner/jobs.py` and/or the skill | 9 jobs ran in one evening during deploy. Guard: skip (or queue) if a completed/running job exists for same skill+user+window. This is the job's own top proposal. |
+| F2 | **Dedupe open proposals** — dismiss #6 (dup of #7), #4 (dup of #3), #5 (dup of #8) | `proposals` table via `cli/proposals.sh dismiss` | 8 open → 5 distinct. The dedup guardrail works now (last run: 0 new) — these are deploy-window stragglers. |
+| F3 | **`cli/proposals.sh`** if missing — `list / show / accept / dismiss / mark-applied` (status transitions + `reviewed_at`) | `cli/proposals.sh` | Plan deliverable; admin-key or local-DB access; no Tier 2/3 actions. |
+| F4 | **Committed `proposals` migration** (idempotent `CREATE TABLE IF NOT EXISTS`, schema in §1) | `skills/runner/` init or a migration script | The live table was created ad-hoc on thor; new deploys must get it from git. |
+| F5 | **`schedules.json` entry** (landed with recovery §2) | `scheduler/schedules.json` | `weekly-harness-reflection`, cron `0 23 * * 0` UTC, user=chuck, days=7. |
+| F6 | **Phase 4 dashboard** (`grafana/dashboards/harness-learning.json`) | Grafana provisioning | Separate work item — see plan §5. Needs `proposals_total{status}` gauge on skill-runner `/metrics`. |
+
+**Sequencing:** F1+F2+F3+F4+F5 in one commit ("Phase 3 hardening"), rebuild
+skill-runner (MANUAL STEP — Tier 3, explicit ask), then F6.
+
+---
+
+## 4. Guardrails (from the plan — unchanged)
+
+- **Tier 1 only:** the reflection job proposes; it never applies. Proposals are
+  reviewed + applied by Chuck.
+- **Tier 3:** image rebuilds / container recreates are MANUAL STEPS, applied only
+  on explicit ask; `scripts/key-sync-check.sh` after any key/container change.
+- **Privacy:** transcripts stay private per-user; memory writes are distilled facts
+  only; private-default is invariant.
+- **≤5 proposals per run**, every proposal needs ≥1 evidence ref (verified working
+  in the 2026-11-08 runs).
+
+---
+
+## 5. Mac-side status (done 2026-11-10)
+
+- ✅ Local clone synced to `origin/main` (`2ead2be`); stale local tailscale commit
+  preserved on branch `backup/stale-tailscale-plan` (superseded by `714a7be` on
+  remote).
+- ✅ `session-memory` + `session-sync` installed into `/Users/chuck/Code/skills/`
+  (pi skill dir per `settings.json`); `memory-conventions` synced to the Phase 1
+  privacy update.
+- ✅ MCP verified on Mac: `mcp_memory` (search/list/remember) + `mcp_knowledge`
+  reachable via the litellm gateway; `memory_list` returns `user_id=chuck`.
+- ⏳ First Mac session-sync upload: user-initiated, whenever a session is worth
+  syncing (the `session-sync` skill).

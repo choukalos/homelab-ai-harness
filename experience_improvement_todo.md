@@ -1,6 +1,16 @@
 # Experience Improvement Loop — TODO (Tier 0 + Tier 1)
 
 **Date:** 2026-11-08
+
+> **STATUS (verified 2026-11-10, from Mac):** Phase 1 ✅ committed + installed on Mac.
+> Phase 2 ✅ committed + deployed (ingest endpoint live; 0 ingests so far).
+> **Phase 3 is BUILT + DEPLOYED + SCHEDULED on thor** (`harness_reflection` skill
+> registered, 9 completed jobs 2026-11-08, 8 open proposals in the `proposals`
+> table, weekly schedule `0 23 * * 0` UTC — next run 2026-11-15) **but its code was
+> NEVER COMMITTED to this repo** (skill lives only in thor's working tree,
+> mounted ro into the container). Recovery + fix list:
+> **`harness_reflection_prep.md`** (repo root).
+> Phase 4 ❌ not started (dashboard).
 **Origin:** Conversation about auto-improving the harness + memory. The voice-note
 gap (wife's medical transcriptions done on the Mac never reached any store) exposed
 the capture holes. This plan builds the capture + reflect/propose layers only.
