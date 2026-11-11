@@ -111,26 +111,53 @@ def available() -> bool:
     return _DB_AVAILABLE
 
 
+def _json_decode(val: Any) -> Any:
+    """Decode a JSON column (str/bytes -> object; dict/list pass through)."""
+    if isinstance(val, (bytes, bytearray)):
+        try:
+            val = val.decode("utf-8")
+        except UnicodeDecodeError:
+            return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (ValueError, TypeError):
+            return val  # leave as-is; malformed JSON is surfaced to the caller
+    return val
+
+
 def _row_to_dict(row: tuple) -> Dict[str, Any]:
-    """Map a SELECT row to an API dict (JSON columns decoded to objects)."""
-    out: Dict[str, Any] = {
-        "id": row[0],
+    """Map a SELECT row to an API dict (JSON columns decoded to objects).
+
+    Handles both row shapes:
+      8-tuple: (id, slug, title, evidence, target_files, status,
+                created_at, reviewed_at) — the admin API SELECT
+      7-tuple: (slug, title, evidence, target_files, status, created_at,
+                reviewed_at) — the live row shape (the skill's dedup path
+                + the live-shape regression test in
+                skills/harness_reflection/test_skill.py)
+    """
+    if len(row) == 7:
+        return {
+            "id": None,
+            "slug": row[0],
+            "title": row[1],
+            "evidence": _json_decode(row[2]),
+            "target_files": _json_decode(row[3]),
+            "status": row[4],
+            "created_at": row[5],
+            "reviewed_at": row[6],
+        }
+    return {
+        "id": int(row[0]),
         "slug": row[1],
         "title": row[2],
-        "evidence": row[3],
-        "target_files": row[4],
+        "evidence": _json_decode(row[3]),
+        "target_files": _json_decode(row[4]),
         "status": row[5],
         "created_at": row[6],
         "reviewed_at": row[7],
     }
-    for col in ("evidence", "target_files"):
-        val = out[col]
-        if isinstance(val, str):
-            try:
-                out[col] = json.loads(val)
-            except (ValueError, TypeError):
-                pass  # leave as-is; malformed JSON is surfaced to the caller
-    return out
 
 
 def list_proposals(status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
@@ -173,6 +200,53 @@ def get_proposal(proposal_id: int) -> Dict[str, Any]:
     if row is None:
         raise ProposalError(f"Proposal {proposal_id} not found")
     return _row_to_dict(row)
+
+
+def insert(
+    slug: str,
+    title: str,
+    evidence: Any,
+    target_files: Any,
+    status: str = "open",
+    created_at: Optional[str] = None,
+) -> bool:
+    """Insert a proposal (idempotent on slug). Called by the
+    ``harness_reflection`` job (Tier 1 — propose only).
+
+    Idempotency: re-running with the same slug refreshes title/evidence/
+    target_files but never changes ``status`` — a dismissed or applied
+    proposal is never resurrected by a later run.
+    """
+    if not _DB_AVAILABLE:
+        raise ProposalError("Proposals index unavailable (MySQL down)")
+    if status not in STATUSES:
+        raise ProposalError(f"Unknown status '{status}' (valid: {', '.join(STATUSES)})")
+    slug = str(slug or "").strip()
+    if not slug:
+        raise ProposalError("slug is required")
+    created = str(created_at or datetime.now(timezone.utc).isoformat())
+    ev = json.dumps(evidence, ensure_ascii=False) if isinstance(evidence, (list, dict)) else evidence
+    tf = json.dumps(target_files, ensure_ascii=False) if isinstance(target_files, (list, dict)) else target_files
+    with _DB_LOCK:
+        conn = _db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {_TABLE}
+                        (slug, title, evidence, target_files, status, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        title = VALUES(title),
+                        evidence = VALUES(evidence),
+                        target_files = VALUES(target_files)
+                    """,
+                    (slug[:192], str(title)[:512], ev, tf, status, created),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    return True
 
 
 def transition(proposal_id: int, new_status: str) -> Dict[str, Any]:
