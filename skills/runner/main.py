@@ -23,7 +23,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
@@ -43,6 +43,7 @@ from memory.identity import (
 )
 from memory import interface
 
+import proposals  # Phase 3: harness-change proposal store (index + metrics)
 import sessions  # Phase 2: session transcript ingest (storage + index)
 
 # ---------------------------------------------------------------------------
@@ -1163,6 +1164,10 @@ async def lifespan(app: FastAPI):
     # MySQL is unreachable.
     sessions.init_db()
 
+    # Proposals index (Phase 3): CREATE TABLE IF NOT EXISTS proposals.
+    # Non-fatal: the admin API returns 503 when the index is down.
+    proposals.init_db()
+
     scheduler.dispatch_fn = _schedule_dispatch_fn
     num_loaded = scheduler.load_config()
     logger.info(
@@ -1474,7 +1479,7 @@ def memory_metrics() -> Response:
     """
     from memory import metrics
     return Response(
-        content=metrics.exposition() + sessions.exposition(),
+        content=metrics.exposition() + sessions.exposition() + proposals.exposition(),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
 
@@ -1612,6 +1617,76 @@ def sessions_list_ingests(
     except Exception as exc:  # noqa: BLE001 - surface the failure, don't leak internals
         raise HTTPException(status_code=502, detail=f"Session index query failed: {exc}")
     return {"user_id": user_id, "count": len(rows), "ingests": rows}
+
+
+# ---------------------------------------------------------------------------
+# Harness-change proposals (Phase 3) — admin-key guarded, like /api/memory/*
+# ---------------------------------------------------------------------------
+# The reflection job (Tier 1) inserts open proposals; these routes are how
+# Chuck reviews them (cli/proposals.sh wraps them). Applying a proposal
+# (Tier 2) is always manual — transitions only move the status.
+
+class ProposalTransitionRequest(BaseModel):
+    status: str  # open|accepted|dismissed|applied
+
+
+def _proposal_http_error(exc: "proposals.ProposalError") -> HTTPException:
+    """Map ProposalError to the right HTTP status (404/400/503)."""
+    msg = str(exc)
+    if "not found" in msg:
+        return HTTPException(status_code=404, detail=msg)
+    if "Invalid transition" in msg or "Unknown status" in msg:
+        return HTTPException(status_code=400, detail=msg)
+    return HTTPException(status_code=503, detail=msg)
+
+
+@app.get("/api/proposals")
+def proposals_list(
+    status: Optional[str] = None,
+    limit: int = 50,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List harness-change proposals, newest first (admin).
+
+    ``status`` filters (open/accepted/dismissed/applied); ``limit`` caps the
+    results (max 200).
+    """
+    _require_admin(x_api_key)
+    try:
+        rows = proposals.list_proposals(status=status, limit=limit)
+    except proposals.ProposalError as exc:
+        raise _proposal_http_error(exc)
+    return {"count": len(rows), "proposals": rows}
+
+
+@app.get("/api/proposals/{proposal_id}")
+def proposals_get(
+    proposal_id: int,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Fetch one proposal by id (admin)."""
+    _require_admin(x_api_key)
+    try:
+        return proposals.get_proposal(proposal_id)
+    except proposals.ProposalError as exc:
+        raise _proposal_http_error(exc)
+
+
+@app.post("/api/proposals/{proposal_id}/transition")
+def proposals_transition(
+    proposal_id: int,
+    body: ProposalTransitionRequest,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Transition a proposal (admin): open -> accepted|dismissed,
+    accepted -> applied. dismissed/applied are terminal. Every transition
+    stamps reviewed_at.
+    """
+    _require_admin(x_api_key)
+    try:
+        return proposals.transition(proposal_id, body.status)
+    except proposals.ProposalError as exc:
+        raise _proposal_http_error(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -2683,6 +2758,79 @@ async def list_skills(x_api_key: Optional[str] = Header(None)) -> SkillListRespo
     return SkillListResponse(skills=skills, count=len(skills))
 
 
+# ---------------------------------------------------------------------------
+# Duplicate-window guard (experience_improvement_todo.md F1; proposals #5/#8)
+# ---------------------------------------------------------------------------
+# The 2026-11-08 deploy ran harness_reflection 9 times in one evening (8
+# run-now test jobs + the scheduled run). For the skills listed below, a
+# launch with identical params while a non-failed job from within the window
+# is on record returns the EXISTING job instead of starting a duplicate.
+# Failed/cancelled/interrupted jobs never block a retry.
+_JOB_WINDOW_GUARDS: dict[str, float] = {
+    "harness_reflection": 24.0,  # hours
+}
+
+_GUARD_BLOCKING_STATUSES = {
+    JobStatus.pending,
+    JobStatus.running,
+    JobStatus.completed,
+    JobStatus.awaiting_approval,
+}
+
+
+def _find_duplicate_job(skill: str, params: dict[str, Any]) -> Optional[Job]:
+    """Return the most recent in-window, non-failed job for (skill, params).
+
+    Checks the in-memory store, then the durable index (covers jobs created
+    while this process was down). Best-effort: any DB error yields the
+    in-memory result — the guard must never block job creation.
+    """
+    window_hours = _JOB_WINDOW_GUARDS.get(skill)
+    if window_hours is None:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+    best: Optional[Job] = None
+    for job in jobs.values():
+        if (
+            job.skill == skill
+            and job.params == params
+            and job.created_at >= cutoff
+            and job.status in _GUARD_BLOCKING_STATUSES
+        ):
+            if best is None or job.created_at > best.created_at:
+                best = job
+    if not _JOBS_DB_AVAILABLE:
+        return best
+    try:
+        with _JOBS_DB_LOCK:
+            conn = _jobs_db_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"SELECT data FROM {_JOBS_TABLE} "
+                        "WHERE skill = %s AND created_at >= %s "
+                        "ORDER BY created_at DESC LIMIT 20",
+                        (skill, cutoff),
+                    )
+                    rows = cur.fetchall()
+            finally:
+                conn.close()
+        for (data,) in rows:
+            try:
+                cand = Job.model_validate_json(data)
+            except Exception:  # noqa: BLE001 - skip corrupt rows
+                continue
+            if (
+                cand.params == params
+                and cand.status in _GUARD_BLOCKING_STATUSES
+                and (best is None or cand.created_at > best.created_at)
+            ):
+                best = cand
+    except Exception as exc:  # noqa: BLE001 - guard must never break launches
+        logger.warning("Window-guard DB check failed (%s); allowing launch.", exc)
+    return best
+
+
 @app.post("/skills/{skill_name}")
 async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobResponse:
     """
@@ -2691,6 +2839,20 @@ async def launch_skill(skill_name: str, body: SkillLaunchRequest) -> SkillJobRes
     - **skill_name**: The skill to execute (e.g. `deep_research`, `siri_ask`).
     - **body**: JSON with `params`, `requester`, `channel`, `dry_run`, `tool_bundle`, `model_alias`.
     """
+    # Duplicate-window guard: return the existing job instead of a duplicate.
+    _dup = _find_duplicate_job(skill_name, body.params)
+    if _dup is not None:
+        _dup.add_log(
+            f"Duplicate launch suppressed by window guard; returning job {_dup.job_id}"
+        )
+        _persist_job(_dup)
+        logger.info(
+            "Job launch for skill '%s' suppressed by window guard (existing job %s).",
+            skill_name,
+            _dup.job_id,
+        )
+        return _job_to_response(_dup)
+
     # Memory identity (Phase 3): inherit the request context, else service.
     _ctx = get_current_context()
     job = Job(
@@ -2838,6 +3000,19 @@ async def cancel_job(job_id: str) -> SkillJobResponse:
 def _schedule_dispatch_fn(skill: str, params: dict[str, Any], meta: dict[str, Any]) -> None:
     """Callback used by SimpleScheduler to dispatch a scheduled job."""
     schedule_id = meta.get("schedule_id", "unknown")
+    # Duplicate-window guard (same as launch_skill).
+    _dup = _find_duplicate_job(skill, params)
+    if _dup is not None:
+        _dup.add_log(f"Scheduled dispatch suppressed by window guard; job {_dup.job_id} exists")
+        _persist_job(_dup)
+        logger.info(
+            "Scheduled dispatch for skill '%s' (schedule %s) suppressed by window "
+            "guard (existing job %s).",
+            skill,
+            schedule_id,
+            _dup.job_id,
+        )
+        return
     job = Job(
         skill=skill,
         params=params,
@@ -2928,6 +3103,20 @@ def run_schedule_now(schedule_id: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=400, detail=f"Schedule '{schedule_id}' is disabled"
         )
+
+    # Duplicate-window guard (same as launch_skill).
+    _dup = _find_duplicate_job(sched.skill, sched.params)
+    if _dup is not None:
+        _dup.add_log(
+            f"Run-now suppressed by window guard; returning job {_dup.job_id}"
+        )
+        _persist_job(_dup)
+        logger.info(
+            "Run-now for schedule '%s' suppressed by window guard (existing job %s).",
+            schedule_id,
+            _dup.job_id,
+        )
+        return {"job_id": _dup.job_id, "schedule_id": schedule_id, "duplicate": True}
 
     # Memory identity (Phase 3): run-now is a scheduler-style trigger —
     # the safe "service" principal (D10), not the calling user's.

@@ -1,6 +1,12 @@
 # Harness Reflection (Phase 3) — State, Recovery & Build-Prep
 
 **Date:** 2026-11-10
+**Status (2026-11-10, evening):** F1/F3/F4/F5 implemented in the repo —
+`skills/runner/proposals.py` (durable index + admin API + `proposals_total`
+gauge), the duplicate-window guard in `main.py`, `cli/proposals.sh`, and the
+`weekly-harness-reflection` entry in `schedules.json`. Tests: 37 unit + 25
+endpoint checks (all green). Remaining: F2 (dismiss the 3 duplicate open
+proposals — one command each once the API is live) and F6 (Phase 4 dashboard).
 **Companion to:** `experience_improvement_todo.md` (the plan)
 **Why this doc exists:** Phase 3 was built and deployed on thor (2026-11-08) but the
 code was **never committed to the repo**. This doc records the verified state, the
@@ -96,15 +102,18 @@ uncommitted work on thor, do not sweep it in — list it and decide separately.
 
 | # | Fix | Target | Notes |
 |---|---|---|---|
-| F1 | **Idempotency / window guard** — prevent duplicate `harness_reflection` jobs in the same window (proposals #5 + #8) | `skills/runner/jobs.py` and/or the skill | 9 jobs ran in one evening during deploy. Guard: skip (or queue) if a completed/running job exists for same skill+user+window. This is the job's own top proposal. |
+| F1 | **Idempotency / window guard** — prevent duplicate `harness_reflection` jobs in the same window (proposals #5 + #8) | `skills/runner/jobs.py` and/or the skill | ✅ **Done in repo** — `_JOB_WINDOW_GUARDS` in `skills/runner/main.py` (24h window, same skill+params, blocking statuses pending/running/completed/awaiting_approval; failed jobs don't block; best-effort, never breaks job creation). Covered by endpoint tests. |
 | F2 | **Dedupe open proposals** — dismiss #6 (dup of #7), #4 (dup of #3), #5 (dup of #8) | `proposals` table via `cli/proposals.sh dismiss` | 8 open → 5 distinct. The dedup guardrail works now (last run: 0 new) — these are deploy-window stragglers. |
-| F3 | **`cli/proposals.sh`** if missing — `list / show / accept / dismiss / mark-applied` (status transitions + `reviewed_at`) | `cli/proposals.sh` | Plan deliverable; admin-key or local-DB access; no Tier 2/3 actions. |
-| F4 | **Committed `proposals` migration** (idempotent `CREATE TABLE IF NOT EXISTS`, schema in §1) | `skills/runner/` init or a migration script | The live table was created ad-hoc on thor; new deploys must get it from git. |
-| F5 | **`schedules.json` entry** (landed with recovery §2) | `scheduler/schedules.json` | `weekly-harness-reflection`, cron `0 23 * * 0` UTC, user=chuck, days=7. |
+| F3 | **`cli/proposals.sh`** if missing — `list / show / accept / dismiss / mark-applied` (status transitions + `reviewed_at`) | `cli/proposals.sh` | ✅ **Done in repo** — `cli/proposals.sh` (list/show/accept/dismiss/mark-applied), wraps the new `/api/proposals*` admin endpoints (admin-key guarded, same pattern as `memory-admin.sh`). |
+| F4 | **Committed `proposals` migration** (idempotent `CREATE TABLE IF NOT EXISTS`, schema in §1) | `skills/runner/` init or a migration script | ✅ **Done in repo** — `skills/runner/proposals.py::init_db()` runs the exact live DDL at startup (idempotent, non-fatal — same pattern as the sessions index). |
+| F5 | **`schedules.json` entry** (landed with recovery §2) | `scheduler/schedules.json` | ✅ **Done in repo** — `weekly-harness-reflection`, cron `0 23 * * 0` UTC, user=chuck, days=7 (matches the live entry). |
 | F6 | **Phase 4 dashboard** (`grafana/dashboards/harness-learning.json`) | Grafana provisioning | Separate work item — see plan §5. Needs `proposals_total{status}` gauge on skill-runner `/metrics`. |
 
-**Sequencing:** F1+F2+F3+F4+F5 in one commit ("Phase 3 hardening"), rebuild
-skill-runner (MANUAL STEP — Tier 3, explicit ask), then F6.
+**Sequencing (updated):** F1/F3/F4/F5 landed in the repo (this commit). On thor:
+recover `skills/harness_reflection/` (only uncommitted piece), then rebuild
+skill-runner (MANUAL STEP — Tier 3, explicit ask) — the new image picks up the
+window guard, proposals API + migration, and the committed schedule. Then F2
+(dismiss the 3 duplicate open proposals via `cli/proposals.sh`), then F6.
 
 ---
 
