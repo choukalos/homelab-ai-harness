@@ -101,21 +101,32 @@ Then:
 - Code (`proposals.py`, `main.py`, `Dockerfile`, `cli/proposals.sh`,
   `skill.py`, `skill.yml`, `test_skill.py`, `schedules.json`): **thor/ours**
   (deployed + tested; 9 completed jobs, 8 open proposals in MySQL).
-- Docs (`harness_reflection_prep.md`, `docs/thor_ai_harness_rebuild.md`,
-  `proposals/.gitkeep`): **Mac/theirs** (local never touched them post-base,
-  so they merge clean anyway).
+- Docs (`harness_reflection_prep.md` — the Mac's recovery-redesign commits
+  e85a68a/be27622/8af3c51 all landed here, NOT in
+  `docs/thor_ai_harness_rebuild.md`): **Mac/theirs** (local never touched
+  them post-base, so they merge clean anyway).
 - `experience_improvement_todo.md`: Mac's note merges clean (local untouched
   post-base) → then correct the two wrong claims (below).
-- Expected conflicts (all auto-resolved by `-X ours`): `main.py`,
-  `proposals.py`, `Dockerfile`, `cli/proposals.sh`.
+- **LESSON (what actually happened):** `-X ours` only resolves *conflicting*
+  hunks — the Mac's non-conflicting Phase 3 hunks in `main.py` were applied
+  too (+117 lines). Fix applied: `git checkout 1aff065 -- skills/runner/main.py`
+  + `git rm` the two Mac test files + `git commit --amend` (merge commit was
+  local-only, nothing pushed). Verify with
+  `git diff 1aff065 HEAD --stat` → only the 2 Mac doc files.
+  If redoing from scratch: `git merge --abort`, then `git merge -s ours`
+  (full-tree ours) + `git checkout origin/main -- harness_reflection_prep.md
+  experience_improvement_todo.md` + commit.
+- Expected conflicts (auto-resolved by `-X ours`): `main.py`,
+  `proposals.py`, `Dockerfile`, `cli/proposals.sh`. **But `main.py` still
+  needs the manual restore above.**
 
 ## Post-merge verification (before step 4)
 
 ```
 # merge commit brought in ONLY the Mac docs (no code changes):
-git diff HEAD^1 HEAD --stat   # → only harness_reflection_prep.md, docs/thor_ai_harness_rebuild.md, experience_improvement_todo.md
+git diff HEAD^1 HEAD --stat   # → only harness_reflection_prep.md + experience_improvement_todo.md
 # code tree identical to pre-merge thor main (Phase 4 commit + d63d650 state):
-git diff $(git rev-parse main~2) HEAD -- skills/ cli/ scheduler/   # → empty
+git diff 1aff065 HEAD -- skills/ cli/ scheduler/   # → empty
 # Mac docs present:
 git show HEAD:harness_reflection_prep.md >/dev/null && echo prep-doc OK
 # Mac tests NOT in main:
