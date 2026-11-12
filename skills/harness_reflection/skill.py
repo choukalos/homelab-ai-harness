@@ -1159,6 +1159,23 @@ def run(params: dict, job: Any, client: Any) -> dict:
     maintenance = _apply_maintenance(target, analysis, inputs, job)
     proposals_result = _apply_proposals(analysis, inputs, date_str, job, target)
 
+    # Learning metrics (Phase 4): count this run + the maintenance items
+    # stored (source of the "correction rate / week" north star on the
+    # harness-learning dashboard). Best-effort; never fails the run.
+    try:
+        import learning_metrics  # lazy: runner module
+
+        learning_metrics.record_run()
+        learning_metrics.record_maintenance(
+            "supersede", len(maintenance["supersedes"])
+        )
+        learning_metrics.record_maintenance(
+            "correction", len(maintenance["corrections"])
+        )
+        learning_metrics.record_maintenance("lesson", len(maintenance["lessons"]))
+    except Exception:  # noqa: BLE001 - metrics must never fail a run
+        pass
+
     # --- digest + pointer ---
     digest = _build_digest(target, days, inputs, maintenance, proposals_result)
     maintained = (

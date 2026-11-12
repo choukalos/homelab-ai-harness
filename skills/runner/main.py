@@ -45,6 +45,8 @@ from memory import interface
 
 import sessions  # Phase 2: session transcript ingest (storage + index)
 import proposals  # Phase 3: harness change proposals (MySQL index + gauge)
+import jobs_metrics  # Phase 4: skill job metrics (dashboard backing)
+import learning_metrics  # Phase 4: harness_reflection learning metrics
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -320,6 +322,10 @@ def _init_jobs_db() -> None:
 
 def _persist_job(job: Job) -> None:
     """Write-through a job record to the durable index (no-op if unavailable)."""
+    # Job metrics (Phase 4): record terminal transitions exactly once
+    # (independent of DB availability; idempotent per job_id).
+    if job.status in _TERMINAL_JOB_STATUSES:
+        jobs_metrics.record_terminal(job)
     if not _JOBS_DB_AVAILABLE:
         return
     try:
@@ -944,6 +950,12 @@ def _execute_skill(job: Job) -> None:
     """
     job.status = JobStatus.running
     job.add_log(f"Executing skill '{job.skill}'")
+    # Job metrics (Phase 4): count a re-run when a previous job with the
+    # same skill + intent already exists (user-driven retry / scheduled
+    # re-run pattern). The current job is not in the store yet at this
+    # point on most dispatch paths; record_start only counts strictly
+    # earlier jobs either way.
+    jobs_metrics.record_start(job, jobs)
     # Memory identity (Phase 3): log the principal + request correlation.
     # user_id only — raw API key values are never logged.
     job.add_log(f"Identity: user_id={job.user_id} run_id={job.run_id}")
@@ -1158,6 +1170,11 @@ async def lifespan(app: FastAPI):
     # Non-fatal: if the DB is unavailable the runner degrades to in-memory-only.
     _init_jobs_db()
     _hydrate_jobs()
+
+    # Job metrics (Phase 4): seed from the hydrated job history (full
+    # terminal history). In-process terminal transitions are recorded
+    # exactly once in _persist_job, so no job is double-counted.
+    jobs_metrics.seed_from_jobs(jobs)
 
     # Session ingest index (Phase 2): CREATE TABLE IF NOT EXISTS
     # session_ingests. Non-fatal: ingest degrades to file-only storage if
@@ -1480,7 +1497,11 @@ def memory_metrics() -> Response:
     """
     from memory import metrics
     return Response(
-        content=metrics.exposition() + sessions.exposition() + proposals.exposition(),
+        content=metrics.exposition()
+        + sessions.exposition()
+        + proposals.exposition()
+        + jobs_metrics.exposition()
+        + learning_metrics.exposition(),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
 

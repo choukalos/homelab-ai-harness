@@ -10,6 +10,8 @@ COPY main.py .
 COPY scheduler.py .
 COPY sessions.py .
 COPY proposals.py .
+COPY jobs_metrics.py .
+COPY learning_metrics.py .
 COPY pyproject.toml .
 COPY memory/ ./memory/
 
