@@ -179,12 +179,16 @@ header). The deployed runner-side code in main is thor's version:
 `skills/runner/proposals.py` (durable `proposals` index — idempotent DDL at
 startup, admin API `GET /api/proposals[?status=]`, `GET /api/proposals/{slug}`,
 `POST /api/proposals/{slug}/{new_status}` (slug-based),
-`proposals_total{status}` gauge on `/metrics`), duplicate-window guard in
-`main.py` (`_JOB_WINDOW_GUARDS`, 24h for `harness_reflection`),
+`proposals_total{status}` gauge on `/metrics`),
 `cli/proposals.sh` (list/show/accept/dismiss/mark-applied by slug), and the
 `weekly-harness-reflection` entry in `scheduler/schedules.json`.
-(The Mac's parallel id-based variant + its `tests/test_proposals*.py` live on
-branch `mac-phase3-parallel`, not in main.)
+NOTE (2026-11-12 reconcile): the duplicate-window guard (`_JOB_WINDOW_GUARDS`,
+24h for `harness_reflection`) was Mac-only work and was DROPPED from main.py by
+merge e7b4797 ("keep thor (deployed) code") — it is NOT in main; re-landing it
+is part of F1. (Earlier note claimed it was in main — corrected.)
+The Mac's parallel id-based variant lives on branch `mac-phase3-parallel`;
+its `tests/test_proposals*.py` were ported to main's slug-based API on
+2026-11-13 (skills/runner/tests/test_proposals*.py).
 Remaining: rebuild (Tier 3, manual), F2 dedupe via `cli/proposals.sh dismiss`.
 
 **Goal:** weekly closed-loop reflection: memories + ingested sessions + jobs ledger
