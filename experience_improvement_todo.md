@@ -2,18 +2,22 @@
 
 **Date:** 2026-11-08
 
-> **STATUS (verified 2026-11-10, from Mac):** Phase 1 ✅ committed + installed on Mac.
+> **STATUS (verified 2026-11-10, from Mac; corrected 2026-11-12 on thor):**
+> Phase 1 ✅ committed + installed on Mac.
 > Phase 2 ✅ committed + deployed (ingest endpoint live; 0 ingests so far).
 > **Phase 3 is BUILT + DEPLOYED + SCHEDULED on thor** (`harness_reflection` skill
 > registered, 9 completed jobs 2026-11-08, 8 open proposals in the `proposals`
-> table, weekly schedule `0 23 * * 0` UTC — next run 2026-11-15) **but its code was
-> NEVER COMMITTED to this repo** (skill lives only in thor's working tree,
-> mounted ro into the container). The runner-side hardening (F1 window guard,
-> F3 `cli/proposals.sh`, F4 committed `proposals` migration, F5 schedule entry)
-> is now **in the repo** — only `skills/harness_reflection/` itself remains to
-> be recovered from thor. Recovery + fix list:
-> **`harness_reflection_prep.md`** (repo root).
-> Phase 4 ❌ not started (dashboard).
+> table, weekly schedule `0 23 * * 0` UTC — next run 2026-11-15) **and its code
+> was committed on thor all along** (`d3cbcd9`…`d63d650`, 2026-11-08) — it was
+> simply never pushed, so the Mac's stale clone (at `2ead2be`) couldn't see it.
+> The runner-side hardening (F1 window guard, F3 `cli/proposals.sh`, F4
+> `proposals` table, F5 schedule entry) is in the repo, and
+> `skills/harness_reflection/` is in the repo too (re-verified by the Mac's
+> read-only recovery, `harness_reflection_prep.md`).
+> Phase 4 ✅ committed + live (job/learning metrics on :8091 +
+> `harness-learning.json` dashboard; committed 2026-11-12).
+> Note: the Mac also built a parallel Phase 3 from its stale clone — preserved
+> on branch `mac-phase3-parallel`, NOT in main (main runs the thor version).
 **Origin:** Conversation about auto-improving the harness + memory. The voice-note
 gap (wife's medical transcriptions done on the Mac never reached any store) exposed
 the capture holes. This plan builds the capture + reflect/propose layers only.
@@ -170,16 +174,18 @@ reflection job (Phase 3) sees Mac activity. Closes hole 1.
 
 ## 4. Phase 3 — `harness_reflection` skill (QW3, Tier 1)
 
-**Status (2026-11-10):** skill live on thor (see header); runner-side hardening
-landed in the repo: `skills/runner/proposals.py` (durable `proposals` index —
-idempotent DDL at startup, admin API `GET /api/proposals[/{id}]`,
-`POST /api/proposals/{id}/transition`, `proposals_total{status}` gauge on
-`/metrics`), duplicate-window guard in `main.py` (`_JOB_WINDOW_GUARDS`, 24h for
-`harness_reflection`), `cli/proposals.sh` (list/show/accept/dismiss/mark-applied),
-and the `weekly-harness-reflection` entry in `scheduler/schedules.json`.
-Tests: `tests/test_proposals.py` (37) + `tests/test_proposals_endpoint.py` (25).
-Remaining: recover `skills/harness_reflection/` from thor (prep doc §2),
-rebuild (Tier 3, manual), F2 dedupe via `cli/proposals.sh dismiss`.
+**Status (2026-11-10, Mac; corrected 2026-11-12):** skill live on thor (see
+header). The deployed runner-side code in main is thor's version:
+`skills/runner/proposals.py` (durable `proposals` index — idempotent DDL at
+startup, admin API `GET /api/proposals[?status=]`, `GET /api/proposals/{slug}`,
+`POST /api/proposals/{slug}/{new_status}` (slug-based),
+`proposals_total{status}` gauge on `/metrics`), duplicate-window guard in
+`main.py` (`_JOB_WINDOW_GUARDS`, 24h for `harness_reflection`),
+`cli/proposals.sh` (list/show/accept/dismiss/mark-applied by slug), and the
+`weekly-harness-reflection` entry in `scheduler/schedules.json`.
+(The Mac's parallel id-based variant + its `tests/test_proposals*.py` live on
+branch `mac-phase3-parallel`, not in main.)
+Remaining: rebuild (Tier 3, manual), F2 dedupe via `cli/proposals.sh dismiss`.
 
 **Goal:** weekly closed-loop reflection: memories + ingested sessions + jobs ledger
 → memory maintenance, lessons, and **harness change proposals** (propose only).
