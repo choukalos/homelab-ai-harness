@@ -42,36 +42,25 @@ recovery-doc changes, `experience_improvement_todo.md` status note.
 
 ## Steps
 
-- [x] **0. This doc committed** (commit: `RECONCILE-2026-11-12.md`)
-- [ ] **1. Commit Phase 4 on thor** — the only copy of this work.
+- [x] **0. This doc committed** (commit: `aa2d80c`)
+- [x] **1. Commit Phase 4 on thor** (commit: `1aff065`, 6 files, worktree clean)
       Files (exactly these 6, add explicitly, NOT `git add -A`):
       `skills/runner/jobs_metrics.py`, `skills/runner/learning_metrics.py`,
       `grafana/dashboards/harness-learning.json` (new),
       `skills/harness_reflection/skill.py`, `skills/runner/Dockerfile`,
       `skills/runner/main.py` (modified).
       Message: `Phase 4: job + learning metrics (Prometheus) + harness-learning Grafana dashboard`
-- [ ] **2. Preserve Mac work** (idempotent — safe to re-run):
-      `git branch -f mac-phase3-parallel a34c32a`
-      `git push origin mac-phase3-parallel`
-- [ ] **3. Merge origin/main into main, keep thor code, take Mac docs:**
-      `git fetch origin`
-      `git merge -X ours origin/main -m "Merge origin/main: keep thor (deployed) code, take Mac recovery docs"`
-      `-X ours` auto-resolves all conflicts to thor's side. Then:
-      a. **Remove the Mac's parallel-implementation tests** (they test the
-         Mac's id-based API, which is NOT the deployed code — they would fail;
-         preserved on `mac-phase3-parallel`):
-         `git rm skills/runner/tests/test_proposals.py skills/runner/tests/test_proposals_endpoint.py`
-         commit: `Drop Mac's parallel-implementation proposal tests (preserved on mac-phase3-parallel)`
-      b. **Fix the Mac's status note** in `experience_improvement_todo.md`
-         (see "Note corrections" below), commit:
-         `Docs: correct Phase 3/4 status note (code was committed on thor, unpushed)`
-- [ ] **4. Push** (only after 1–3 done and verification below passes):
-      `git push origin main`
-      Verify: `git rev-parse main origin/main` → identical.
-- [ ] **5. Cleanup** (only after step 4 verified):
-      `mv /home/chuck/workspace/harness-recovery-2026-11-10 /home/chuck/workspace/.staging-archived-2026-11-12`
-      (renamed, not deleted — everything in it is verified to be in git;
-      delete the archive only after Chuck confirms.)
+- [x] **2. Preserve Mac work** (branch `mac-phase3-parallel` @ `a34c32a`, pushed to origin)
+- [x] **3. Merge** (merge commit: `e7b4797`, amended per the LESSON above;
+      note fix: `be0ed43`). Steps (a) `git rm` of the two Mac test files and
+      (b) the `experience_improvement_todo.md` correction were done as
+      described.
+- [x] **4. Pushed** `9c932a9`; `git rev-parse main origin/main` identical.
+- [x] **5. Staging dir archived** (renamed, not deleted):
+      `/home/chuck/workspace/harness-recovery-2026-11-10` →
+      `/home/chuck/workspace/.staging-archived-2026-11-12`
+      (everything in it verified to be in git; delete the archive only after
+      Chuck confirms.)
 
 ## Where am I? (crash recovery)
 
@@ -165,3 +154,13 @@ Edit the note minimally to reflect this (keep the Mac's verified facts:
 - Porting the Mac's `test_proposals*.py` to thor's slug-based API (follow-up).
 - Reviewing/applying the 8 open proposals (human task via `cli/proposals.sh`).
 - Deleting the archived staging dir (needs Chuck's OK).
+
+## Final state (2026-11-12, all steps done ✅)
+
+- `main` == `origin/main` == `9c932a9` (thor's code, Phases 1–4, Mac docs merged in).
+- `mac-phase3-parallel` == `a34c32a` on origin (all Mac work preserved).
+- Working tree clean; live runner on :8091 exposes Phase 4 metrics.
+- Staging dir at `/home/chuck/workspace/.staging-archived-2026-11-12`
+  (delete after Chuck confirms).
+- This doc lives at repo root (`RECONCILE-2026-11-12.md`); after the final
+  commit, `git show main:RECONCILE-2026-11-12.md` has the checked-off version.
