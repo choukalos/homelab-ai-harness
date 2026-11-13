@@ -2,7 +2,10 @@
 
 - slug: harness-reflection-idempotency
 - date: 2026-11-08
-- status: open
+- status: dismissed
+- reviewed: 2026-11-13 — dismissed: superseded by harness-reflection-window-guard
+  (the runner-level window guard prevents duplicate job creation at the
+  source; a skill-side skip guard would be redundant).
 - target user: chuck
 
 ## What

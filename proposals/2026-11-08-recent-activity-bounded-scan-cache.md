@@ -2,7 +2,10 @@
 
 - slug: recent-activity-bounded-scan-cache
 - date: 2026-11-08
-- status: open
+- status: dismissed
+- reviewed: 2026-11-13 — dismissed: duplicate of
+  recent-activity-slow-run-optimization (same change; that proposal
+  carries the concrete spec — 24h scan cap, 300s cache, log durations).
 - target user: chuck
 
 ## What

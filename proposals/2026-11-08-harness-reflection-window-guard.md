@@ -2,7 +2,12 @@
 
 - slug: harness-reflection-window-guard
 - date: 2026-11-08
-- status: open
+- status: applied
+- reviewed: 2026-11-13 — accepted + applied. Landed as `_JOB_WINDOW_GUARDS`
+  (24h, same skill+params, blocking statuses pending/running/completed/
+  awaiting_approval) at all three launch sites in skills/runner/main.py;
+  deployed 2026-11-13. (Mechanism differs from the proposal — runner-level
+  guard instead of an idempotency key — but achieves its goal.)
 - target user: chuck
 
 ## What

@@ -2,7 +2,10 @@
 
 - slug: publish-file-idempotency-dedupe
 - date: 2026-11-08
-- status: open
+- status: dismissed
+- reviewed: 2026-11-13 — dismissed: duplicate of publish-file-dedup
+  (same change, same evidence; that proposal carries the specific
+  mechanism — content/intent key, return the existing completed job).
 - target user: chuck
 
 ## What
