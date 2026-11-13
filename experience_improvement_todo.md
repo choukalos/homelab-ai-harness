@@ -201,7 +201,11 @@ its `tests/test_proposals*.py` were ported to main's slug-based API on
 2026-11-13 (skills/runner/tests/test_proposals*.py).
 Remaining: F2 dedupe done 2026-11-13 (`cli/proposals.sh` — window-guard
 applied; 3 duplicates dismissed: harness-reflection-idempotency,
-publish-file-idempotency-dedupe, recent-activity-bounded-scan-cache). (Rebuild done
+publish-file-idempotency-dedupe, recent-activity-bounded-scan-cache).
+add-inflight-job-checkpoint applied 2026-11-13 (job checkpoint field +
+POST /skills/jobs/{id}/checkpoint + GET /api/jobs list; ops doc
+`docs/operations/job-checkpoints.md`). Remaining open: publish-file-dedup,
+recent-activity-slow-run-optimization, publish-file-subdirectory-enum-test. (Rebuild done
 2026-11-13: `./homelab.sh rebuild skill-only` — image
 `f995a229…` with the re-landed guard live; verified /metrics gauge,
 admin API, scheduler state intact, next run 2026-11-15 23:00 UTC.)

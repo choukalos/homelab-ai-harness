@@ -2,7 +2,14 @@
 
 - slug: add-inflight-job-checkpoint
 - date: 2026-11-08
-- status: open
+- status: applied
+- reviewed: 2026-11-13 — accepted + applied. `checkpoint` / `checkpoint_at`
+  fields on the job record + `POST /skills/jobs/{job_id}/checkpoint`
+  (write-through to the durable index) + `GET /api/jobs` list endpoint
+  (status filter) in skills/runner/main.py; ops doc at
+  docs/operations/job-checkpoints.md; 69-check test suite
+  (skills/runner/tests/test_jobs_endpoint.py). A rebooted job hydrates as
+  `interrupted` with its checkpoint intact — resume from next_step.
 - target user: chuck
 
 ## What

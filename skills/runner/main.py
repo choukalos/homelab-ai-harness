@@ -239,6 +239,14 @@ class Job(BaseModel):
     model_alias: Optional[str] = None
     error: Optional[str] = None
     logs: list[str] = Field(default_factory=list)
+    # Resumable checkpoint (proposal: add-inflight-job-checkpoint): where a
+    # long-running job (media/tab pipeline) left off, so work can be resumed
+    # after a host reboot instead of redone. Written by the job's driver via
+    # POST /skills/jobs/{job_id}/checkpoint; shape: {task_id, stage,
+    # next_step, data, updated_at}. Survives restarts via the durable index
+    # (the whole job record is stored as JSON in skill_jobs.data).
+    checkpoint: Optional[dict[str, Any]] = None
+    checkpoint_at: Optional[str] = None
 
     def add_log(self, message: str) -> None:
         self.logs.append(f"[{datetime.now(timezone.utc).isoformat()}] {message}")
@@ -565,6 +573,28 @@ class SkillJobResponse(BaseModel):
     tool_bundle: Optional[str] = None
     model_alias: Optional[str] = None
     error: Optional[str] = None
+    checkpoint: Optional[dict[str, Any]] = None
+    checkpoint_at: Optional[str] = None
+
+
+class JobCheckpointRequest(BaseModel):
+    """POST /skills/jobs/{job_id}/checkpoint request body.
+
+    All fields optional; at least one is expected. `data` carries any
+    skill-specific resume context (file lists, offsets, partial outputs).
+    """
+
+    task_id: Optional[str] = None
+    stage: Optional[str] = None
+    next_step: Optional[str] = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class JobListResponse(BaseModel):
+    """GET /api/jobs response (durable index, newest first)."""
+
+    count: int
+    jobs: list[SkillJobResponse]
 
 
 class SkillInfo(BaseModel):
@@ -3020,6 +3050,95 @@ async def cancel_job(job_id: str) -> SkillJobResponse:
     return _job_to_response(job)
 
 
+@app.post("/skills/jobs/{job_id}/checkpoint")
+@app.post("/api/jobs/{job_id}/checkpoint")
+async def record_job_checkpoint(
+    job_id: str, body: JobCheckpointRequest
+) -> SkillJobResponse:
+    """Record a resumable checkpoint on a job (add-inflight-job-checkpoint).
+
+    Long-running jobs (media/tab pipeline) write {task_id, stage, next_step,
+    data} at each stage boundary. The checkpoint is stored on the job record
+    and persisted to the durable index, so after a host reboot the job
+    hydrates as `interrupted` with its checkpoint intact and the driver can
+    resume from `checkpoint.next_step` instead of redoing the work.
+    """
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    set_job_checkpoint(job, body.model_dump(), source="api")
+    logger.info(
+        "Job %s checkpoint recorded (stage=%s next_step=%s).",
+        job_id,
+        body.stage,
+        body.next_step,
+    )
+    return _job_to_response(job)
+
+
+@app.get("/api/jobs", response_model=JobListResponse)
+async def list_jobs(
+    status: Optional[str] = None, limit: int = 50
+) -> JobListResponse:
+    """List jobs from the durable index, newest first (in-memory fallback).
+
+    The recovery path after a host reboot:
+    `GET /api/jobs?status=interrupted` → each job carries its last
+    `checkpoint` (task_id / stage / next_step) → resume from next_step.
+
+    - `status`: optional filter (pending|running|completed|failed|
+      awaiting_approval|cancelled|interrupted); 400 on an invalid value.
+    - `limit`: clamped to 1..200 (default 50).
+    """
+    if status is not None and status not in JobStatus:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status filter: {status!r} (valid: {', '.join(JobStatus)})",
+        )
+    limit = max(1, min(int(limit), 200))
+
+    # Durable index first (survives restarts); in-memory fallback keeps the
+    # endpoint useful in dev / degraded mode (best-effort, never 500).
+    if _JOBS_DB_AVAILABLE:
+        try:
+            with _JOBS_DB_LOCK:
+                conn = _jobs_db_conn()
+                try:
+                    with conn.cursor() as cur:
+                        if status is not None:
+                            cur.execute(
+                                f"SELECT data FROM {_JOBS_TABLE} "
+                                f"WHERE status = %s ORDER BY updated_at DESC LIMIT %s;",
+                                (status, limit),
+                            )
+                        else:
+                            cur.execute(
+                                f"SELECT data FROM {_JOBS_TABLE} "
+                                f"ORDER BY updated_at DESC LIMIT %s;",
+                                (limit,),
+                            )
+                        rows = cur.fetchall()
+                finally:
+                    conn.close()
+            out: list[SkillJobResponse] = []
+            for (data,) in rows:
+                try:
+                    out.append(_job_to_response(Job.model_validate_json(data)))
+                except Exception:  # noqa: BLE001 - skip a corrupt row
+                    continue
+            return JobListResponse(count=len(out), jobs=out)
+        except Exception as exc:  # noqa: BLE001 - degrade to in-memory
+            logger.warning("Job list from MySQL failed, using in-memory: %s", exc)
+
+    all_jobs = list(jobs.values())
+    if status is not None:
+        all_jobs = [j for j in all_jobs if j.status.value == status]
+    all_jobs.sort(key=lambda j: j.created_at, reverse=True)
+    return JobListResponse(
+        count=len(all_jobs[:limit]), jobs=[_job_to_response(j) for j in all_jobs[:limit]]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Schedule dispatch helper
 # ---------------------------------------------------------------------------
@@ -3186,7 +3305,40 @@ def _job_to_response(job: Job) -> SkillJobResponse:
         tool_bundle=job.tool_bundle,
         model_alias=job.model_alias,
         error=job.error,
+        checkpoint=job.checkpoint,
+        checkpoint_at=job.checkpoint_at,
     )
+
+
+def set_job_checkpoint(
+    job: Job, checkpoint: dict[str, Any], source: str = "api"
+) -> Job:
+    """Record a resumable checkpoint on a job and persist it write-through.
+
+    The checkpoint is the job's "where I left off" marker (task ID, current
+    stage, next resumable step, plus free-form `data`). It is stored on the
+    job record itself, so it survives a host reboot via the durable index —
+    on restart the job is hydrated as `interrupted` with its checkpoint
+    intact, and the driver resumes from `checkpoint.next_step`.
+
+    Lenient by design: allowed on any job status (a late checkpoint is
+    harmless; the meaningful case is pending/running).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    job.checkpoint = {
+        "task_id": checkpoint.get("task_id"),
+        "stage": checkpoint.get("stage"),
+        "next_step": checkpoint.get("next_step"),
+        "data": checkpoint.get("data") or {},
+        "updated_at": now,
+    }
+    job.checkpoint_at = now
+    job.add_log(
+        f"Checkpoint ({source}): task_id={checkpoint.get('task_id')} "
+        f"stage={checkpoint.get('stage')} next_step={checkpoint.get('next_step')}"
+    )
+    _persist_job(job)
+    return job
 
 
 # ---------------------------------------------------------------------------
