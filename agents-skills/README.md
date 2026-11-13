@@ -83,9 +83,15 @@ digest per type stored in the KB via `kb_digest_store` (`attention_transformer`,
 ### Other pi-native skills
 - `business-analyst`, `content-writer`, `deep-research`, `demo-browse`,
   `demo-workflow`, `homelab-report`, `investment-brief`, `marketing-strategy`,
-  `memory-conventions`, `morning-brief`, `presentation-build`,
+  `memory-conventions`, `media-film`, `morning-brief`, `presentation-build`,
   `presentation-update`, `publish-file`, `research-brief`, `siri-ask`,
   `siri-chat`.
+- **`media-film`** — multi-shot film orchestration through `mcp_media`
+  (keyframes → I2V → audio → assemble → QC → publish), crash-proof via
+  on-disk state file + retried MCP calls + timeboxed codemode chunks +
+  resume protocol on the durable job ledger (`media_list_jobs`). Spec:
+  `~/Code/media_film_skill_spec.md`; dry run + kill test verified 2026-11-04
+  (report: `~/Code/media-film/mf-test-3shot/TEST_REPORT.md`).
 - **`memory-conventions`** — pure instruction skill (no runner job): when to
   `memory_search`/`memory_remember`, the research-note convention, and the
   medical-reference split (reference-grade → `kb_medical` KB, conversational
