@@ -198,7 +198,10 @@ sites; its endpoint tests re-added alongside the ported suites).
 The Mac's parallel id-based variant lives on branch `mac-phase3-parallel`;
 its `tests/test_proposals*.py` were ported to main's slug-based API on
 2026-11-13 (skills/runner/tests/test_proposals*.py).
-Remaining: rebuild (Tier 3, manual), F2 dedupe via `cli/proposals.sh dismiss`.
+Remaining: F2 dedupe via `cli/proposals.sh dismiss`. (Rebuild done
+2026-11-13: `./homelab.sh rebuild skill-only` — image
+`f995a229…` with the re-landed guard live; verified /metrics gauge,
+admin API, scheduler state intact, next run 2026-11-15 23:00 UTC.)
 
 **Goal:** weekly closed-loop reflection: memories + ingested sessions + jobs ledger
 → memory maintenance, lessons, and **harness change proposals** (propose only).
