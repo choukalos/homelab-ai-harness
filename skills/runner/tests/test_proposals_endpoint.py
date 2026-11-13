@@ -1,40 +1,48 @@
 #!/usr/bin/env python3
-"""Endpoint tests for the proposals admin API + duplicate-window guard (Phase 3).
+"""Endpoint tests for the proposals admin API (Phase 3, slug-based).
+
+Ported from branch mac-phase3-parallel (id-based API:
+``GET /api/proposals/{id}``, ``POST /api/proposals/{id}/transition``) to
+main's slug-based routes (thor's deployed version):
+
+  GET  /api/proposals[?status=&limit=]
+  GET  /api/proposals/{slug}
+  POST /api/proposals/{slug}/{new_status}
 
 Runs in a throwaway container built from skills/runner/Dockerfile (needs
 fastapi + httpx; NO live MySQL — the proposals index degrades to DB-down,
-which the auth/503 paths exercise; the window guard exercises its
-in-memory path, which is the hot path anyway). Uses FastAPI's TestClient
-WITHOUT the lifespan (scheduler / DB init / memory warmup are not under
-test), same pattern as test_sessions_endpoint.py.
+which the auth/503 paths exercise; the happy path stubs the module
+functions in-process). Uses FastAPI's TestClient WITHOUT the lifespan
+(scheduler / DB init / memory warmup are not under test), same pattern as
+test_sessions_endpoint.py.
 
 Covers:
-  - proposals admin API: no key -> 403, wrong key -> 403, admin key + DB
-    down -> 503 (list) / 404 (get) / 409 (transition) — see note below
-  - duplicate-window guard (experience_improvement_todo.md F1):
-    * completed harness_reflection job in-window + same params -> launch
-      returns the EXISTING job (no new job created)
-    * failed job in-window -> guard does NOT block (retry allowed)
-    * different params -> guard does NOT block
-    * job older than the window -> guard does NOT block
-    * non-guarded skill -> two launches, two jobs (unchanged behaviour)
-  - /metrics exposes the proposals gauge (zero counts when DB down)
+  - auth: no key -> 403, user key -> 403 (list/show/transition)
+  - validation: bad status filter -> 400 (list), bad new_status -> 400
+    (transition)
+  - DB down: list -> 503; show -> 404; transition -> 409. Pinned
+    deliberately: main's module degrades get/transition to None (only
+    list_proposals raises ProposalsUnavailable), so a future change that
+    surfaces 503 for all three is a deliberate, test-updating change.
+  - happy path (module stubbed with an in-memory store): list payload
+    {count, proposals} newest-first, status filter, show 200/404,
+    transition 200 + invalid-transition 409
+  - duplicate-window guard (F1, re-landed 2026-11-13): completed job
+    in-window + same params -> existing job returned; failed job /
+    different params / older-than-window / non-guarded skill -> no block
+  - /metrics exposes the proposals_total{status} gauge (zero lines when
+    DB down; main always renders the gauge — the branch's
+    "proposals_total unavailable" marker no longer exists)
 
-DB-DOWN DEGRADATION — PINNED, NOT FIXED (2026-11-12):
-  ``proposals.get()`` / ``proposals.transition()`` degrade to ``None`` when
-  the index is unavailable, so ``GET /api/proposals/{slug}`` returns 404
-  ("not found") and ``POST /api/proposals/{slug}/{new_status}`` returns 409
-  ("not allowed") instead of 503 — "index unavailable" masquerades as
-  "not found / not allowed". Only ``list_proposals`` raises
-  ``ProposalsUnavailable`` -> 503. The checks below pin this behaviour on
-  purpose: a future fix (e.g. get/transition raising ProposalsUnavailable
-  -> 503) is a conscious, test-updating API change, not a silent one.
-  (Separately, a MySQL outage AFTER startup raises pymysql errors from
-  get/transition -> 502; that path needs a live DB to exercise and is not
-  covered here.)
+NOTE: the branch version also covered the duplicate-window guard
+(``main._JOB_WINDOW_GUARDS``) in the job dispatch path. That feature was
+dropped from main by the 2026-11-12 reconcile merge (e7b4797, "keep thor
+(deployed) code"). The guard was re-landed 2026-11-13 (F1), and the
+guard cases below were re-added with it.
 
 Run inside the container:
     python3 tests/test_proposals_endpoint.py
+(or on a host with a venv: pip install fastapi httpx)
 """
 from __future__ import annotations
 
@@ -82,11 +90,163 @@ def check(name: str, cond: bool, detail: str = ""):
 ADMIN = {"X-API-Key": "sk-test-admin-key"}
 USER = {"X-API-Key": "sk-test-chuck-key"}
 
+SLUG_A = "add-inflight-job-checkpoint"
+SLUG_B = "publish-file-subdirectory-enum-test"
+
 # Ensure DB-down state (no lifespan ran; assert the degradation is real).
-check("proposals index DB-down (no live MySQL in test)", proposals.available() is False)
+check("proposals index DB-down (no live MySQL in test)",
+      proposals._DB_AVAILABLE is False)
+
+# ---------------------------------------------------------------------------
+# Auth (DB-down state — 403 must fire before any DB access)
+# ---------------------------------------------------------------------------
+
+print("== proposals admin API: auth ==")
+for headers, label in [(None, "no key"), (USER, "user key")]:
+    r = client.get("/api/proposals", headers=headers)
+    check(f"list {label} -> 403", r.status_code == 403, f"got {r.status_code}")
+    r = client.get(f"/api/proposals/{SLUG_A}", headers=headers)
+    check(f"show {label} -> 403", r.status_code == 403, f"got {r.status_code}")
+    r = client.post(f"/api/proposals/{SLUG_A}/accepted", headers=headers)
+    check(f"transition {label} -> 403", r.status_code == 403, f"got {r.status_code}")
+
+# ---------------------------------------------------------------------------
+# Validation (DB down — 400 must fire before any DB access)
+# ---------------------------------------------------------------------------
+
+print("== proposals admin API: validation ==")
+r = client.get("/api/proposals?status=bogus", headers=ADMIN)
+check("list bad status -> 400", r.status_code == 400, f"got {r.status_code}")
+r = client.post(f"/api/proposals/{SLUG_A}/bogus", headers=ADMIN)
+check("transition bad status -> 400", r.status_code == 400, f"got {r.status_code}")
+
+# ---------------------------------------------------------------------------
+# DB down degradation
+# ---------------------------------------------------------------------------
+
+print("== proposals admin API: DB down ==")
+r = client.get("/api/proposals", headers=ADMIN)
+check("list admin + DB down -> 503", r.status_code == 503, f"got {r.status_code}")
+r = client.get(f"/api/proposals/{SLUG_A}", headers=ADMIN)
+check("show admin + DB down -> 404", r.status_code == 404, f"got {r.status_code}")
+r = client.post(f"/api/proposals/{SLUG_A}/accepted", headers=ADMIN)
+check("transition admin + DB down -> 409", r.status_code == 409, f"got {r.status_code}")
+
+r = client.get("/metrics")
+check("/metrics 200 (DB down)", r.status_code == 200, f"got {r.status_code}")
+check("gauge zero lines when DB down",
+      'proposals_total{status="open"} 0' in r.text
+      and 'proposals_total{status="applied"} 0' in r.text)
+
+# ---------------------------------------------------------------------------
+# Happy path — stub the module functions with an in-memory store.
+# (The endpoints call proposals.* through the module at request time, so
+# attribute monkeypatching is enough; the SQL layer is covered by
+# test_proposals.py.)
+# ---------------------------------------------------------------------------
+
+STORE = {
+    SLUG_A: {
+        "slug": SLUG_A,
+        "title": "Record resumable checkpoints for long-running jobs",
+        "evidence": ["memory:b243b2e2"],
+        "target_files": ["docs/operations/job-checkpoints.md"],
+        "status": "open",
+        "created_at": "2026-11-08T19:27:20.315366+00:00",
+        "reviewed_at": None,
+    },
+    SLUG_B: {
+        "slug": SLUG_B,
+        "title": "Add regression test for publish_file subdirectory enum",
+        "evidence": ["git:bd2d2f32d502"],
+        "target_files": ["skills/publish_file/SKILL.md"],
+        "status": "accepted",
+        "created_at": "2026-11-08T19:33:53.740885+00:00",
+        "reviewed_at": "2026-11-10T12:00:00+00:00",
+    },
+}
+_ALLOWED = {"open": ("accepted", "dismissed"), "accepted": ("applied",)}
+
+
+def _stub_list(status=None, limit=50):
+    rows = [dict(r) for r in STORE.values()]
+    if status:
+        rows = [r for r in rows if r["status"] == status]
+    rows.sort(key=lambda r: r["created_at"], reverse=True)
+    return rows[:max(1, min(int(limit), 200))]
+
+
+def _stub_get(slug):
+    row = STORE.get(slug)
+    return dict(row) if row else None
+
+
+def _stub_transition(slug, new_status):
+    row = STORE.get(slug)
+    if row is None or new_status not in _ALLOWED.get(row["status"], ()):
+        return None
+    updated = dict(row)
+    updated["status"] = new_status
+    updated["reviewed_at"] = "2026-11-12T00:00:00+00:00"
+    STORE[slug] = updated
+    return dict(updated)
+
+
+proposals.list_proposals = _stub_list
+proposals.get = _stub_get
+proposals.transition = _stub_transition
+proposals._DB_AVAILABLE = True
+
+print("== proposals admin API: happy path (stubbed module) ==")
+r = client.get("/api/proposals", headers=ADMIN)
+check("list 200", r.status_code == 200, f"got {r.status_code}")
+body = r.json()
+check("list payload shape",
+      body.get("count") == 2 and len(body.get("proposals", [])) == 2)
+check("list newest first", body["proposals"][0]["slug"] == SLUG_B)
+check("list rows carry slug payload",
+      body["proposals"][1]["slug"] == SLUG_A
+      and body["proposals"][1]["title"]
+      == "Record resumable checkpoints for long-running jobs"
+      and body["proposals"][1]["status"] == "open")
+
+r = client.get("/api/proposals?status=accepted", headers=ADMIN)
+check("list status filter",
+      r.status_code == 200 and r.json()["count"] == 1
+      and r.json()["proposals"][0]["slug"] == SLUG_B)
+
+r = client.get(f"/api/proposals/{SLUG_A}", headers=ADMIN)
+check("show 200",
+      r.status_code == 200 and r.json()["slug"] == SLUG_A
+      and r.json()["status"] == "open")
+
+r = client.get("/api/proposals/does-not-exist", headers=ADMIN)
+check("show missing -> 404", r.status_code == 404, f"got {r.status_code}")
+
+r = client.post(f"/api/proposals/{SLUG_A}/accepted", headers=ADMIN)
+check("transition open->accepted 200",
+      r.status_code == 200 and r.json()["status"] == "accepted"
+      and r.json()["reviewed_at"] is not None)
+
+r = client.post(f"/api/proposals/{SLUG_A}/applied", headers=ADMIN)
+check("transition accepted->applied 200",
+      r.status_code == 200 and r.json()["status"] == "applied")
+
+r = client.post(f"/api/proposals/{SLUG_B}/dismissed", headers=ADMIN)
+check("transition accepted->dismissed -> 409",
+      r.status_code == 409, f"got {r.status_code}")
+
+r = client.post(f"/api/proposals/does-not-exist/accepted", headers=ADMIN)
+check("transition unknown slug -> 409", r.status_code == 409, f"got {r.status_code}")
+
+# ---------------------------------------------------------------------------
+# Duplicate-window guard (in-memory path) — F1, re-landed 2026-11-13.
+# The guard's hot path is the in-memory job store; no live DB needed.
+# ---------------------------------------------------------------------------
+
+print("== duplicate-window guard ==")
 
 REFLECT_PARAMS = {"user": "chuck", "days": 7}
-SLUG = "test-slug"
 
 
 def seed_job(skill: str, params: dict, status: str, age_hours: float = 0.0) -> main.Job:
@@ -100,38 +260,6 @@ def seed_job(skill: str, params: dict, status: str, age_hours: float = 0.0) -> m
     main.jobs[job.job_id] = job
     return job
 
-
-# ---------------------------------------------------------------------------
-# Proposals admin API — auth + degradation
-# ---------------------------------------------------------------------------
-
-print("== proposals admin API: auth ==")
-for headers, label in [(None, "no key"), (USER, "user key")]:
-    r = client.get("/api/proposals", headers=headers)
-    check(f"list {label} -> 403", r.status_code == 403, f"got {r.status_code}")
-    r = client.get(f"/api/proposals/{SLUG}", headers=headers)
-    check(f"get {label} -> 403", r.status_code == 403, f"got {r.status_code}")
-    r = client.post(f"/api/proposals/{SLUG}/accepted", headers=headers)
-    check(f"transition {label} -> 403", r.status_code == 403, f"got {r.status_code}")
-
-print("== proposals admin API: DB down (pinned degradation codes) ==")
-r = client.get("/api/proposals", headers=ADMIN)
-check("list admin + DB down -> 503", r.status_code == 503, f"got {r.status_code}")
-# PINNED (not fixed): get() degrades to None -> 404 masquerades "index
-# unavailable" as "not found". A future fix to 503 must update this check.
-r = client.get(f"/api/proposals/{SLUG}", headers=ADMIN)
-check("get admin + DB down -> 404 (pinned)", r.status_code == 404, f"got {r.status_code}")
-# PINNED (not fixed): transition() degrades to None -> 409 masquerades
-# "index unavailable" as "not allowed". A future fix to 503 must update it.
-r = client.post(f"/api/proposals/{SLUG}/accepted", headers=ADMIN)
-check("transition admin + DB down -> 409 (pinned)", r.status_code == 409,
-      f"got {r.status_code}")
-
-# ---------------------------------------------------------------------------
-# Duplicate-window guard (in-memory path)
-# ---------------------------------------------------------------------------
-
-print("== duplicate-window guard ==")
 
 # 1. Completed job in-window, same params -> launch returns the existing job.
 seeded = seed_job("harness_reflection", REFLECT_PARAMS, main.JobStatus.completed)
@@ -200,17 +328,19 @@ check("guard config: harness_reflection 24h",
 check("guard config: siri_ask not guarded", "siri_ask" not in main._JOB_WINDOW_GUARDS)
 
 # ---------------------------------------------------------------------------
-# /metrics — proposals gauge (zero counts when DB down)
+# /metrics — gauge series with a seeded (non-zero) value
 # ---------------------------------------------------------------------------
 
 print("== /metrics ==")
+# Seed the real in-process gauge (the stubbed module does not touch it).
+proposals._set_gauge({"open": 1, "accepted": 1, "dismissed": 0, "applied": 1})
 r = client.get("/metrics")
 check("/metrics 200", r.status_code == 200)
-check("proposals gauge present (all 4 status labels)",
-      all(f'proposals_total{{status="{s}"}}' in r.text
-          for s in ("open", "accepted", "dismissed", "applied")))
-check("proposals gauge zero when DB down",
-      'proposals_total{status="open"} 0' in r.text)
+check("proposals gauge series present",
+      'proposals_total{status="open"} 1' in r.text
+      and 'proposals_total{status="accepted"} 1' in r.text
+      and 'proposals_total{status="dismissed"} 0' in r.text
+      and 'proposals_total{status="applied"} 1' in r.text)
 
 # ---------------------------------------------------------------------------
 

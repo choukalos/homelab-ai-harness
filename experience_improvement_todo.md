@@ -18,8 +18,8 @@
 > took the Mac docs) dropped the Mac hardening commit's CODE — F1 window
 > guard + `tests/test_proposals*.py` — while the docs above survived, which
 > is why this note looked stale. F1 was re-landed on main 2026-11-13: guard
-> at all three launch sites + `tests/test_proposals.py` (51) / `test_proposals_endpoint.py`
-> (26) rewritten for the slug-based API. The DB-down 404 (get) / 409
+> at all three launch sites + the Mac's ported test suites (60 unit /
+> 40 endpoint, guard cases re-added) all green. The DB-down 404 (get) / 409
 > (transition) degradation codes are pinned by test, not fixed — a future
 > 503 fix is a conscious, test-updating change.
 > Phase 4 ✅ committed + live (job/learning metrics on :8091 +
@@ -187,12 +187,17 @@ header). The deployed runner-side code in main is thor's version:
 `skills/runner/proposals.py` (durable `proposals` index — idempotent DDL at
 startup, admin API `GET /api/proposals[?status=]`, `GET /api/proposals/{slug}`,
 `POST /api/proposals/{slug}/{new_status}` (slug-based),
-`proposals_total{status}` gauge on `/metrics`), duplicate-window guard in
-`main.py` (`_JOB_WINDOW_GUARDS`, 24h for `harness_reflection`),
+`proposals_total{status}` gauge on `/metrics`),
 `cli/proposals.sh` (list/show/accept/dismiss/mark-applied by slug), and the
 `weekly-harness-reflection` entry in `scheduler/schedules.json`.
-(The Mac's parallel id-based variant + its `tests/test_proposals*.py` live on
-branch `mac-phase3-parallel`, not in main.)
+NOTE (2026-11-12 reconcile): the duplicate-window guard (`_JOB_WINDOW_GUARDS`,
+24h for `harness_reflection`) was Mac-only work and was DROPPED from main.py by
+merge e7b4797 ("keep thor (deployed) code"). (Earlier note claimed it was in
+main — corrected.) Re-landed on main 2026-11-13 (guard at all three launch
+sites; its endpoint tests re-added alongside the ported suites).
+The Mac's parallel id-based variant lives on branch `mac-phase3-parallel`;
+its `tests/test_proposals*.py` were ported to main's slug-based API on
+2026-11-13 (skills/runner/tests/test_proposals*.py).
 Remaining: rebuild (Tier 3, manual), F2 dedupe via `cli/proposals.sh dismiss`.
 
 **Goal:** weekly closed-loop reflection: memories + ingested sessions + jobs ledger
