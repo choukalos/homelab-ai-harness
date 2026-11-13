@@ -7,6 +7,10 @@ gauge), the duplicate-window guard in `main.py`, `cli/proposals.sh`, and the
 `weekly-harness-reflection` entry in `schedules.json`. Tests: 37 unit + 25
 endpoint checks (all green). Remaining: F2 (dismiss the 3 duplicate open
 proposals — one command each once the API is live) and F6 (Phase 4 dashboard).
+**Update (2026-11-13):** the 2026-11-12 reconcile merge dropped this commit's
+code from main (docs survived; `_JOB_WINDOW_GUARDS` + both test files were
+gone). F1 re-landed 2026-11-13 with the tests rewritten for the slug-based
+API (51 unit + 26 endpoint, all green; DB-down 404/409 codes pinned by test).
 **Companion to:** `experience_improvement_todo.md` (the plan)
 **Why this doc exists:** Phase 3 was built and deployed on thor (2026-11-08) but the
 code was **never committed to the repo**. This doc records the verified state, the

@@ -71,6 +71,11 @@ class ProposalsUnavailable(RuntimeError):
     """The proposals MySQL index is unavailable (degraded mode)."""
 
 
+def available() -> bool:
+    """True when the MySQL index was reachable at init (degraded mode otherwise)."""
+    return _DB_AVAILABLE
+
+
 def _db_conn():
     """Open a short-lived MySQL connection for the proposals index."""
     import pymysql  # lazy: main.py imports on the host without pymysql

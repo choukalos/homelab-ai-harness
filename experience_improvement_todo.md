@@ -14,6 +14,14 @@
 > `proposals` table, F5 schedule entry) is in the repo, and
 > `skills/harness_reflection/` is in the repo too (re-verified by the Mac's
 > read-only recovery, `harness_reflection_prep.md`).
+> Note (2026-11-12): the thor↔GitHub reconcile merge (kept thor's `main.py`,
+> took the Mac docs) dropped the Mac hardening commit's CODE — F1 window
+> guard + `tests/test_proposals*.py` — while the docs above survived, which
+> is why this note looked stale. F1 was re-landed on main 2026-11-13: guard
+> at all three launch sites + `tests/test_proposals.py` (51) / `test_proposals_endpoint.py`
+> (26) rewritten for the slug-based API. The DB-down 404 (get) / 409
+> (transition) degradation codes are pinned by test, not fixed — a future
+> 503 fix is a conscious, test-updating change.
 > Phase 4 ✅ committed + live (job/learning metrics on :8091 +
 > `harness-learning.json` dashboard; committed 2026-11-12).
 > Note: the Mac also built a parallel Phase 3 from its stale clone — preserved
