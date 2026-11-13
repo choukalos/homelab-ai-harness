@@ -25,9 +25,15 @@ Security (blog-todo.md B5 / §2.3):
     sha256 while copying, then os.replace. No partial files ever visible.
   - No network access, no LLM, no other side effects.
 
+Idempotency (publish-file-dedup, 2026-11-13):
+  Republishing identical content to an existing destination is a no-op
+  SUCCESS (report.duplicate=true) — not a collision. Different content
+  still fails unless overwrite=true. overwrite=true always replaces
+  (the force flag), so a changed render is never silently suppressed.
+
 Result:
   {summary, artifact_path, report: {path, url, size_bytes, sha256,
-   destination_name, subdirectory}}
+   destination_name, subdirectory[, duplicate]}}
 """
 
 from __future__ import annotations
@@ -133,6 +139,20 @@ def _validate_destination(subdirectory: str, destination_name: str) -> Path:
     return dest
 
 
+def _hash_file(path: Path) -> tuple[int, str]:
+    """Stream-hash a file. Returns (size_bytes, sha256_hex)."""
+    sha = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(_CHUNK)
+            if not chunk:
+                break
+            size += len(chunk)
+            sha.update(chunk)
+    return size, sha.hexdigest()
+
+
 def _human(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -194,10 +214,40 @@ def run(params: dict[str, Any], job: Any) -> dict[str, Any]:
         dest = _validate_destination(subdirectory, name)
 
         if dest.exists() and not overwrite:
+            # Idempotent republish (publish-file-dedup, 2026-11-13): the
+            # 2026-11-08 job ledger showed repeated same-file publishes
+            # failing with "destination already exists". Identical content
+            # is a no-op success; different content still fails.
+            src_size, src_digest = _hash_file(src)
+            dest_size, dest_digest = _hash_file(dest)
+            if src_digest == dest_digest:
+                rel = f"{subdirectory}/{dest.name}"
+                url = f"{PUBLIC_BASE}/{rel}"
+                job.add_log(
+                    f"publish_file: duplicate — {dest.name} already published "
+                    f"with identical content (sha256={src_digest[:12]}…); no-op"
+                )
+                return {
+                    "summary": (
+                        f"already published (identical content) — no-op: "
+                        f"{dest.name} → {url}"
+                    ),
+                    "artifact_path": str(dest),
+                    "report": {
+                        "path": str(dest),
+                        "url": url,
+                        "size_bytes": dest_size,
+                        "sha256": dest_digest,
+                        "destination_name": dest.name,
+                        "subdirectory": subdirectory,
+                        "duplicate": True,
+                    },
+                }
             return {
                 "error": (
-                    f"destination already exists: {dest} "
-                    "(pass overwrite=true to replace it)"
+                    f"destination already exists with different content: {dest} "
+                    f"(published sha256={dest_digest[:12]}… ≠ source "
+                    f"sha256={src_digest[:12]}…; pass overwrite=true to replace it)"
                 )
             }
 

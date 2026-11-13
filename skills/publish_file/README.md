@@ -14,7 +14,7 @@ validated file operations.
 | `source_path` | yes | — | absolute path under `/home/chuck/data/media/` or `/home/chuck/workspace/` |
 | `destination_name` | no | source basename | filename only (no path) |
 | `subdirectory` | no | `ai` | one of `ai, images, audio, video, tabs` (`files` is rejected) |
-| `overwrite` | no | `false` | `false` → collision-safe (fail if name exists) |
+| `overwrite` | no | `false` | `false` → collision-safe; republishing **identical content** is a no-op success, different content fails. `true` → always replace (force flag) |
 
 ## Returns
 
@@ -30,6 +30,20 @@ validated file operations.
   "subdirectory": "ai"
 }
 ```
+
+## Idempotency / dedup
+
+Republishing is idempotent on content (2026-11-13, `publish-file-dedup`
+proposal — the 2026-11-08 job ledger showed same-file re-publishes failing
+with "destination already exists"):
+
+- Destination exists, `overwrite=false`, **identical content** (sha256 match)
+  → **no-op success**: no copy, `report.duplicate=true`, summary
+  `already published (identical content) — no-op: …`.
+- Destination exists, `overwrite=false`, **different content** → error with
+  both sha256 prefixes (published vs source).
+- `overwrite=true` → always replaces, even identical content (the force
+  flag — a changed render is never silently suppressed).
 
 ## Security
 

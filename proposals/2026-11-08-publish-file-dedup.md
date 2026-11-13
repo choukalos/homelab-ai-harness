@@ -2,7 +2,21 @@
 
 - slug: publish-file-dedup
 - date: 2026-11-08
-- status: open
+- status: applied
+- reviewed: 2026-11-13 — accepted + applied. Landed as skill-level
+  content-hash idempotency in skills/publish_file/skill.py (mechanism
+  differs from the proposal — no runner-level "return the existing
+  completed job"; the content check is strictly safer: a changed render
+  with the same filename can never be silently suppressed). Republish
+  with an existing destination + overwrite=false now hashes both files:
+  identical sha256 → no-op SUCCESS (report.duplicate=true, job completes,
+  no copy); different content → error naming both sha256 prefixes + the
+  overwrite hint. overwrite=true always replaces (the force flag). The
+  2026-10-31/11-01 failure pattern (10 same-file re-publishes failing
+  "destination already exists") is fixed. Verified live 2026-11-13:
+  duplicate publish → completed no-op; changed content → failed without
+  overwrite, replaced with overwrite=true. Tests: skills/publish_file/
+  test_skill.py (41 checks green).
 - target user: chuck
 
 ## What

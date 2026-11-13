@@ -2,7 +2,17 @@
 
 - slug: publish-file-subdirectory-enum-test
 - date: 2026-11-08
-- status: open
+- status: applied
+- reviewed: 2026-11-13 — accepted + applied. Landed as
+  skills/publish_file/test_skill.py (repo test convention — alongside the
+  publish-file-dedup tests; 41 checks, all green): SUBDIRS ==
+  (ai, images, audio, video, tabs); 'files' rejected with the
+  /files/files/... explanation; 'tabs' + every valid subdirectory accepted;
+  invalid subdirectories rejected with the valid set listed; skill.yml's
+  documented enum asserted equal to the code enum (guards the 2026-11-06
+  bd2d2f3 drift). Test path differs from the proposal (tests/
+  test_subdirectory_enum.py → test_skill.py) to match the memory_review /
+  harness_reflection convention.
 - target user: chuck
 
 ## What

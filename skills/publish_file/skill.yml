@@ -1,6 +1,6 @@
 name: publish_file
 version: "1.0"
-description: "Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped."
+description: "Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped. Idempotent: republishing identical content is a no-op success (report.duplicate=true); different content fails unless overwrite=true."
 inputs:
   - name: source_path
     type: string
@@ -20,7 +20,7 @@ inputs:
     type: boolean
     required: false
     default: false
-    description: "Replace an existing file with the same name (default: fail on collision)."
+    description: "Replace an existing file with the same name (the force flag — always bypasses idempotency). With overwrite=false, republishing identical content is a no-op success (idempotent); different content fails with a sha256 mismatch error."
 tools: []
 model_alias:
 artifact_path: /home/chuck/data/media/public/
