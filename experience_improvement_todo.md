@@ -209,6 +209,11 @@ recent-activity-slow-run-optimization, publish-file-subdirectory-enum-test. (Reb
 2026-11-13: `./homelab.sh rebuild skill-only` — image
 `f995a229…` with the re-landed guard live; verified /metrics gauge,
 admin API, scheduler state intact, next run 2026-11-15 23:00 UTC.)
+(Second rebuild 2026-11-13: image `ae193a22…` — checkpoint feature
+live: GET /api/jobs list + POST /skills/jobs/{id}/checkpoint verified
+end-to-end against MySQL; scheduler state intact, next harness
+reflection 2026-11-15 23:00 UTC; proposals gauge open=3 / dismissed=3 /
+applied=2.)
 
 **Goal:** weekly closed-loop reflection: memories + ingested sessions + jobs ledger
 → memory maintenance, lessons, and **harness change proposals** (propose only).
