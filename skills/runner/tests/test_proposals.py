@@ -27,7 +27,7 @@ Covers:
     JSON column decoding (str -> object, dict/list passthrough,
     malformed left as-is)
   - get: row mapping, None on missing slug, None on unsafe slug (no SQL),
-    None when DB down
+    raises ProposalsUnavailable when DB down
   - transition: valid lifecycle (open->accepted|dismissed,
     accepted->applied), reviewed_at stamped, invalid transitions
     (open->applied, terminal states, backwards) -> None with no UPDATE,
@@ -35,8 +35,9 @@ Covers:
     (rowcount 0) -> None
   - refresh_counts + counts + exposition (proposals_total{status} gauge,
     all 4 statuses present even at zero)
-  - DB down: list_proposals raises ProposalsUnavailable; get/transition
-    return None; insert returns False; refresh_counts returns zeros;
+  - DB down: list_proposals / get / transition raise ProposalsUnavailable
+    (the admin endpoints surface 503 — a DB-down must not masquerade as
+    404/409); insert returns False; refresh_counts returns zeros;
     exposition still renders the gauge (no "unavailable" marker)
   - reset_for_tests
 
@@ -388,9 +389,13 @@ print("== DB down ==")
 proposals.reset_for_tests()
 check("list raises ProposalsUnavailable",
       _raises(proposals.list_proposals, proposals.ProposalsUnavailable))
-check("get returns None", proposals.get("add-inflight-job-checkpoint") is None)
-check("transition returns None",
-      proposals.transition("add-inflight-job-checkpoint", "accepted") is None)
+check("get raises ProposalsUnavailable",
+      _raises(lambda: proposals.get("add-inflight-job-checkpoint"),
+              proposals.ProposalsUnavailable))
+check("transition raises ProposalsUnavailable",
+      _raises(lambda: proposals.transition("add-inflight-job-checkpoint",
+                                           "accepted"),
+              proposals.ProposalsUnavailable))
 check("insert returns False", proposals.insert("some-slug", "t", [], []) is False)
 check("refresh_counts zeros",
       proposals.refresh_counts() == {s: 0 for s in proposals.STATUSES})

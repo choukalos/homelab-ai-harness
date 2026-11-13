@@ -10,7 +10,10 @@ proposals — one command each once the API is live) and F6 (Phase 4 dashboard).
 **Update (2026-11-13):** the 2026-11-12 reconcile merge dropped this commit's
 code from main (docs survived; `_JOB_WINDOW_GUARDS` + both test files were
 gone). F1 re-landed 2026-11-13 with the tests rewritten for the slug-based
-API (51 unit + 26 endpoint, all green; DB-down 404/409 codes pinned by test).
+API (60 unit + 40 endpoint after the guard re-land, all green). The DB-down
+404/409 codes were pinned by test, then fixed 2026-11-13: get/transition
+raise ProposalsUnavailable -> 503 (missing slug still 404, invalid
+transition still 409).
 **Companion to:** `experience_improvement_todo.md` (the plan)
 **Why this doc exists:** Phase 3 was built and deployed on thor (2026-11-08) but the
 code was **never committed to the repo**. This doc records the verified state, the

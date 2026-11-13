@@ -20,8 +20,9 @@
 > is why this note looked stale. F1 was re-landed on main 2026-11-13: guard
 > at all three launch sites + the Mac's ported test suites (60 unit /
 > 40 endpoint, guard cases re-added) all green. The DB-down 404 (get) / 409
-> (transition) degradation codes are pinned by test, not fixed — a future
-> 503 fix is a conscious, test-updating change.
+> (transition) degradation codes were pinned by test, then fixed 2026-11-13:
+> get/transition now raise ProposalsUnavailable -> 503 (a truly-missing slug
+> still 404s; an invalid transition still 409s).
 > Phase 4 ✅ committed + live (job/learning metrics on :8091 +
 > `harness-learning.json` dashboard; committed 2026-11-12).
 > Note: the Mac also built a parallel Phase 3 from its stale clone — preserved

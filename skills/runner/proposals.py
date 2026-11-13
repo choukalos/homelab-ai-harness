@@ -257,9 +257,15 @@ def list_proposals(status: Optional[str] = None, limit: int = 50) -> List[Dict[s
 
 
 def get(slug: str) -> Optional[Dict[str, Any]]:
-    """Fetch one proposal by slug (None when missing or MySQL is down)."""
+    """Fetch one proposal by slug.
+
+    Returns the row, or None when the slug is missing / unsafe.
+    Raises ProposalsUnavailable when the index is unavailable (the admin
+    endpoint surfaces 503 — "index unavailable" must not masquerade as
+    "not found").
+    """
     if not _DB_AVAILABLE:
-        return None
+        raise ProposalsUnavailable("proposals index unavailable (MySQL)")
     if not SLUG_RE.match(slug or ""):
         return None
     with _DB_LOCK:
@@ -284,12 +290,16 @@ def transition(slug: str, new_status: str) -> Optional[Dict[str, Any]]:
     """Apply a status transition (human-driven, via CLI / admin endpoint).
 
     Allowed: open -> accepted | dismissed; accepted -> applied.
-    Returns the updated row, or None when the slug is unknown, the
-    transition is invalid (terminal / backwards), or MySQL is down.
-    Sets ``reviewed_at`` on the transition.
+    Returns the updated row, or None when the slug is unknown or the
+    transition is invalid (terminal / backwards). Raises
+    ProposalsUnavailable when the index is unavailable (the admin endpoint
+    surfaces 503 — a DB-down must not masquerade as "not allowed"). Sets
+    ``reviewed_at`` on the transition.
     """
     if new_status not in STATUSES:
         return None
+    if not _DB_AVAILABLE:
+        raise ProposalsUnavailable("proposals index unavailable (MySQL)")
     row = get(slug)
     if row is None:
         return None

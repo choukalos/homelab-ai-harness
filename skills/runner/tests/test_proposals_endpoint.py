@@ -20,10 +20,11 @@ Covers:
   - auth: no key -> 403, user key -> 403 (list/show/transition)
   - validation: bad status filter -> 400 (list), bad new_status -> 400
     (transition)
-  - DB down: list -> 503; show -> 404; transition -> 409. Pinned
-    deliberately: main's module degrades get/transition to None (only
-    list_proposals raises ProposalsUnavailable), so a future change that
-    surfaces 503 for all three is a deliberate, test-updating change.
+  - DB down: list -> 503, show -> 503, transition -> 503 (fixed
+    2026-11-13: get/transition now raise ProposalsUnavailable when the
+    index is unavailable; they previously degraded to None and returned
+    404/409 — that behaviour was pinned by these tests until the fix).
+    A truly-missing slug still 404s (happy-path section below).
   - happy path (module stubbed with an in-memory store): list payload
     {count, proposals} newest-first, status filter, show 200/404,
     transition 200 + invalid-transition 409
@@ -128,9 +129,9 @@ print("== proposals admin API: DB down ==")
 r = client.get("/api/proposals", headers=ADMIN)
 check("list admin + DB down -> 503", r.status_code == 503, f"got {r.status_code}")
 r = client.get(f"/api/proposals/{SLUG_A}", headers=ADMIN)
-check("show admin + DB down -> 404", r.status_code == 404, f"got {r.status_code}")
+check("show admin + DB down -> 503", r.status_code == 503, f"got {r.status_code}")
 r = client.post(f"/api/proposals/{SLUG_A}/accepted", headers=ADMIN)
-check("transition admin + DB down -> 409", r.status_code == 409, f"got {r.status_code}")
+check("transition admin + DB down -> 503", r.status_code == 503, f"got {r.status_code}")
 
 r = client.get("/metrics")
 check("/metrics 200 (DB down)", r.status_code == 200, f"got {r.status_code}")
