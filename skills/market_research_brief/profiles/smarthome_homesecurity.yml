@@ -72,7 +72,7 @@ publish:
 # Annual reference data (competitor comparison + market context).
 # Rebuilt on the January run or via: python3 reference.py --market <market>
 # Output: references/<market>.json (git-tracked, human-editable).
-# See market_research_todo.md for the full plan.
+# See README.md ("Annual reference") for the plan and schema.
 # ---------------------------------------------------------------------------
 reference:
   stale_after_days: 365

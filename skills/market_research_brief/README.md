@@ -22,6 +22,13 @@ citations with exact URLs, "no significant news" stated explicitly when a
 competitor has none, and paywalled analyst figures flagged (never
 fabricated).
 
+> **Status (2026-11-14):** plan closed — all 8 items of the 2026-10-13
+> `market_research_todo.md` are done (the todo file was removed with this
+> note). Markets live: `smarthome_homesecurity` (11 competitors) +
+> `ecommerce_platforms` (16 competitors). Annual reference rebuilds run Jan 1
+> via the `market_research_reference` jobs (07:00/08:00 CT, verified live);
+> monthly briefs embed the compact reference.
+
 ## Annual reference (competitor comparison + market context)
 
 Profiles may carry a `reference:` block (per-market aspect set, sources,
@@ -78,40 +85,6 @@ Integration:
   `yearly_month` (default 1), the last `yearly_min_briefs` (default 12)
   distinct monthly briefs are synthesized into a yearly summary
   (`.md` + `.html` artifacts, published when `publish: true`).
-
-## Annual reference (competitor comparison)
-
-Profiles may carry a `reference:` block (per-market aspect set, source
-list, share-indicator sources, market-size queries). For those markets an
-**annual reference dataset** lives at `references/<market>.json` —
-competitor comparison facts (each with source URL + as-of date), LLM
-rubric ratings (1–5 per aspect), review-site scores, market-size
-estimates (2–4 independent free sources, shown as a range), and
-share indicators (revenue for public companies; labeled proxies for
-private ones). The JSON is git-tracked, human-editable, and diffable —
-the yearly diff is a plain JSON diff.
-
-- **Build**: `python3 reference.py --market <market>` (crawl vendor /
-  comparison / review pages via LiteLLM `mcp_crawl`, LLM extraction per
-  competitor, market-size consolidation). ~15–30 min, so it runs as its
-  own scheduled job (`market_research_reference` skill) in January,
-  before the monthly brief. CLI ops: `--force`, `--retry <names>`,
-  `--retry-market`, `--populate-cache`, `--render-only`.
-- **Monthly brief**: embeds a **compact** deterministic section
-  (market-size range, share bar chart, top-aspects table, rubric scores)
-  rendered from the JSON — no LLM, no drift. If the JSON is missing the
-  section is omitted; if older than `stale_after_days` (default 365) a
-  one-line "last updated" note is shown.
-- **Yearly summary**: embeds the **full** reference + a year-over-year
-  diff (price/share changes, feature adds/drops, rating deltas) computed
-  deterministically from the current + prior-year JSON.
-- **`build_reference: true`** input: builds/refreshes the reference first
-  (January runs; only refreshes when stale, and a full build may exceed
-  the 600 s brief budget — the standalone `market_research_reference`
-  job is the primary path).
-- **Publishing**: standalone page
-  `<public>/briefs/market_research/<market>_reference.html` (kept fresh by
-  every published run; overwritten each build).
 
 ## Publishing (`publish: true`)
 
@@ -194,6 +167,39 @@ publish:
 - **Free sources only** — paywalled analyst data is flagged, never
   fabricated.
 - **Artifacts**: `/home/chuck/data/media/market_research_briefs/`.
+
+## Operational notes (from the 2026-10-13/14 build + validation)
+
+- **Standalone runs**: `.env` vars are not exported —
+  `export LITELLM_API_KEY=$(grep '^LITELLM_API_KEY=' .env | cut -d= -f2)`
+  (skill-runner runs get the env from the compose file).
+- **matrix-coder is a reasoning model** — extraction calls need
+  `max_tokens=16000` (it burns the budget on internal reasoning); extraction
+  is parallelized (3 workers); reference default max runtime 1800 s
+  (`MARKET_RESEARCH_REFERENCE_MAX_RUNTIME`). `_synthesize` retries once at
+  2× max_tokens (cap 32768, the litellm proxy cap) on
+  `finish_reason=length`.
+- **Vendor pages are often nav/cookie-heavy or JS-gated** — per-brand
+  review-site pages are the reliable fallback (profile `sources:` carries
+  both vendor + review pages per brand). Quote-based pricing (ADT/Brinks)
+  and JS-gated prices render as `~`-flagged `estimated: true` values —
+  never fabricated. W3Techs usage tables are JS-gated (crawl returns no
+  rows) — **Store Leads** (`storeleads.app/reports`, free) is the working
+  install-base source for the ecommerce market.
+- **Search results are non-deterministic** — `share_indicators` merge by
+  (competitor, type) prefers the newest non-null entry; `pinned: true`
+  entries (verified SEC EDGAR revenue, eMarketer context figure) survive
+  rebuilds; `market_size` is replaced each run. `--retry-market` re-runs
+  just the market phase.
+- **Engine load via importlib** — wrapper skills + the skill-runner load
+  the engine with `importlib.util.spec_from_file_location`, so the engine
+  dir is NOT on `sys.path`; `reference.py` is resolved via `_ref_module()`
+  (bare `import reference`, falling back to spec-from-`Path(__file__).parent`)
+  at all three import sites.
+- **`choukalos.com/files/` directory listings are edge-cached ~4 h** by a
+  Cloudflare zone rule that overrides origin `Cache-Control` — direct file
+  URLs work immediately; new files appear in folder listings within ~4 h.
+  Permanent fix needs a CF API token (zone scope: cache rule or purge).
 
 ## CLI (standalone)
 

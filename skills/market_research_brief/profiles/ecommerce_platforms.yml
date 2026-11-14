@@ -108,7 +108,7 @@ publish:
 # Annual reference data (comparison + market context).
 # Rebuilt on the January run (or via reference.py CLI).
 # Aspect set is per-market — this one differs from smarthome_homesecurity.
-# See market_research_todo.md §6.2.
+# See README.md ("Annual reference") for the plan and schema.
 # ---------------------------------------------------------------------------
 reference:
   stale_after_days: 365

@@ -27,9 +27,10 @@ Purpose:
 Constraints:
   - All LLM/MCP traffic via LiteLLM (never direct MCP access).
   - Free sources only; paywalled figures flagged, never fabricated.
-  - Max runtime: MARKET_RESEARCH_REFERENCE_MAX_RUNTIME (default 900 s).
+  - Max runtime: MARKET_RESEARCH_REFERENCE_MAX_RUNTIME (default 1800 s).
 
-See market_research_todo.md for the full plan and schema.
+See README.md ("Annual reference" + "Operational notes") for the plan,
+schema, and operational lessons.
 """
 
 import json
