@@ -112,7 +112,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_media` | Media ops: **GPU media-pipeline (18 tools: 10 generation + 8 post-gen edit/file movement, live 2026-08-28 / 2026-09-07)** | GPU host `:8189` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
 | `mcp_skills` | Cross-client skill gateway: list/run/get skill jobs (3 tools, live 2026-08-29) | skill-runner `:8091` |
-| `mcp_memory` | Long-term memory search/list (mem0 + Qdrant `mem0_memories`), live 2026-09-02 | skill-runner memory API `:8091` |
+| `mcp_memory` | Long-term memory search/list/remember (mem0 + Qdrant `mem0_memories`), live 2026-09-02 (`memory_remember` added 2026-10-21; hybrid BM25+dense search since 2026-11-14) | skill-runner memory API `:8091` |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 

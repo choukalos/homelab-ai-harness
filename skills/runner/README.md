@@ -50,6 +50,23 @@ list under result/results/data/items/matches.
 | `GET` | `/media/files/{filepath:path}` | Serve any file under `ARTIFACT_ROOT` |
 | `GET` | `/skills/jobs/{job_id}` | Poll async job status (alternative to `/api/jobs/`) |
 
+### Long-Term Memory (`/api/memory/*`)
+
+mem0/Qdrant in-process (see `docs/memory/IMPLEMENTATION_STATE.md`). Admin
+endpoints take `MEMORY_ADMIN_API_KEY`; user endpoints take the caller's own
+key (`SKILL_RUNNER_API_KEY`) and only ever touch the caller's own memories.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/memory/health` | Memory health + counters (admin key) |
+| `GET` | `/api/memory/users/{user_id}` | List/search a user's memories (admin key) |
+| `PATCH` | `/api/memory/{memory_id}` | Update a memory's text (admin key) |
+| `DELETE` | `/api/memory/{memory_id}` | Delete a memory (admin key) |
+| `DELETE` | `/api/memory/users/{user_id}` | Delete all of a user's memories, `?export=true` exports first (admin key) |
+| `POST` | `/api/memory/search` | Hybrid (BM25 + dense) search of the caller's own memories (user key) |
+| `POST` | `/api/memory/list` | List the caller's own memories (user key) |
+| `POST` | `/api/memory/remember` | Store a durable fact for the caller (user key) |
+
 ### Static File Serving
 
 `/media/files/{filepath:path}` serves any file from the artifact root

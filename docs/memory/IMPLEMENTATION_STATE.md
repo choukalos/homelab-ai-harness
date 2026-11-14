@@ -126,8 +126,9 @@
   doc-only, dry-run verified). (5) Feature-flag review:
   `MEMORY_ENABLED=false` disables the entire path end-to-end (live
   global-off check in the regression suite).
-- Last updated: 2026-08-29 (Phase 9 COMPLETE; KB v2 rebuild closed D6 —
-  see 2026-08-29 phase-log entry; D9 Qdrant exposure left open per owner).
+- Last updated: 2026-11-14 (hybrid BM25 search live + Phase 13 eval
+  complete — see the 2026-11-14 entry below; D9 Qdrant exposure left open
+  per owner).
 - **2026-09-20 (post-Phase 9):** all MCP servers migrated from
   streamable-http to the SSE transport (`GET /sse`; LiteLLM `transport: sse`).
   The skill runner's direct streamable-http MCP client was retired the same
@@ -171,6 +172,36 @@
   unit + 39 identity + 14 skill + 7 yaml. Details: phase log 2026-10-21
   entries (2nd–9th). The former root `memory_todo.md` (2026-10-21 plan
   ledger) was folded into this doc and deleted 2026-10-21.
+- **2026-11-14 (current state):** (1) **Hybrid (BM25) search live** — the
+  Phase 13 eval found retrieval was dense-only (mem0 logged "fastembed not
+  installed"); `skills/runner/Dockerfile` now installs `fastembed==0.9.1`
+  (the `mem0ai[extras]` requirement), sets
+  `FASTEMBED_CACHE_PATH=/tmp/fastembed_cache`, and pre-bakes the Qdrant/bm25
+  model (~128 KB) into the image (chowned to runtime user 1000 — no runtime
+  HF-Hub dependency). The `mem0_memories` collection already had the `bm25`
+  sparse slot — no migration. Pre-existing points score dense-only (no
+  regression, no threshold re-tune); new memories get both legs and mem0's
+  `score_and_rank` fusion adds a normalized BM25 boost. Encoder failure
+  degrades gracefully to dense-only. Rebuild applied 2026-11-14 23:00 UTC
+  (image `31af0bdf…`); verified: "BM25 encoder loaded" in logs, smoke test
+  green with the keyword boost active (standing-rule fact 0.762 → 0.798),
+  scheduler/metrics/jobs/key-sync intact. (2) **Phase 13 week-later eval
+  complete** (~2.5 months post-launch, run against live data): 50/7/3/3
+  memories (chuck/dylan/service/household); extraction clean (zero
+  secrets/paths/IPs across all 50 chuck facts); retrieval 7/7 queries
+  appropriate (0.5 threshold well-calibrated); latency avg ~69 ms, 0 errors;
+  household scope working (3 explicit shares); privacy re-verified (dylan
+  sees only his own facts; garbage key 403). Full results: `skills/runner/
+  memory_todo.md` (file closed 2026-11-14). (3) **Dylan onboarding:** key
+  issued (`dylan-v2`), unused as of 2026-11-14 (that's fine per Chuck); his
+  7 memories are all from the `recent_activity` scheduled job — the designed
+  path for users without direct client traffic. (4) **Capture layer live**
+  (experience-improvement work, `experience_improvement_todo.md`
+  2026-11-08→13): `session-memory` + `session-sync` pi skills, `POST
+  /api/sessions/ingest` (private per-user transcripts, 2 MB cap, sha256
+  dedup), weekly `harness_reflection` (memory maintenance + lessons +
+  propose-only harness proposals), harness-learning dashboard. Memory now
+  receives lesson writes from `harness_reflection` (24 of chuck's 50 facts).
 
 ## Open items / future work (post-completion, 2026-08-29)
 
@@ -183,7 +214,8 @@
   (SSE), per-user identity via forwarded Authorization (falls back to
   `MEMORY_USER_KEY` = chuck when absent), LAN-published. Search responses
   carry the degraded/cold-start flag (see 2026-10-21 9th phase-log entry).
-- **Dylan onboarding (only remaining memory-system work — pending his key)**
+- **Dylan onboarding (key issued; unused as of 2026-11-14 — that's fine per
+  Chuck; steps below remain available for when he uses it)**
   (2026-10-21 plan items 2a/2c; 2b done):
   - **2a. His pi/MCP config.** `mcp_memory` is LAN-published on
     `thor:8005` (SSE). His pi config must connect with HIS key:

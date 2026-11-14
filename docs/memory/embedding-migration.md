@@ -101,13 +101,16 @@ Use the **admin key** (a scoped JWT cannot create collections — see
 
 ```bash
 V2_DIM=<from step 1>
+# Hybrid BM25 search has been enabled since 2026-11-14: the live
+# `mem0_memories` collection carries a `bm25` named sparse-vector slot
+# (SparseVectorParams(modifier=IDF), populated by fastembed's Qdrant/bm25
+# encoder at insert time). Mirror it on the v2 collection so the keyword
+# leg of hybrid search works after cutover (same shape as the live
+# collection, verified 2026-11-14):
 curl -s -X PUT http://localhost:6333/collections/mem0_memories_v2 \
   -H "api-key: $QDRANT_ADMIN_API_KEY" -H 'Content-Type: application/json' \
-  -d "{\"vectors\":{\"size\":${V2_DIM},\"distance\":\"Cosine\"}}"
+  -d '{"vectors":{"size":'$V2_DIM',"distance":"Cosine"},"sparse_vectors":{"bm25":{"modifier":"IDF"}}}'
 ```
-
-(If the memory stack later enables BM25/hybrid, mirror the sparse-vector config
-from `mem0_memories` — see the Phase 1 notes. v1 is dense-only.)
 
 ---
 

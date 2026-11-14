@@ -466,7 +466,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_media` | Media generation via GPU-host media-pipeline + post-gen edit/file movement (trim, freeze, caption, info, upload, download, put, pull) + song transcription (YouTube URL → guitar tab + timestamped lyrics) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_vision` | Image/video analysis via matrix-coder vision (ffmpeg + yt-dlp) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_skills` | Skill-runner gateway (list/run/get skill jobs) | ✅ Implemented | ✅ Container on `ai-net` |
-| `mcp_memory` | Long-term memory (mem0/Qdrant) — memory_search, memory_list | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_memory` | Long-term memory (mem0/Qdrant, hybrid BM25+dense search since 2026-11-14) — memory_search, memory_list, memory_remember | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
