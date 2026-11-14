@@ -14,6 +14,15 @@
 > registration → Mac pi gets `memory_search`/`memory_list` with zero Mac-side changes) ✅**,
 > Phase 12 (`recent_activity` skill + daily 17:00 CDT schedule + scheduler tz/persistence
 > fixes) ✅. Remaining: Phase 13 week-later evaluation (~2026-09-06).
+>
+> **STATUS 2026-11-14 (CLOSED):** Phase 13 evaluation ✅ run against live production data
+> (50/7/3/3 memories across chuck/dylan/service/household) — all checklist items pass
+> (results in §3). Open question 6 resolved: Dylan has a key but hasn't used it — that's
+> fine (his 7 memories were written by the `recent_activity` scheduled job, not his own
+> usage). Phase 5.2 closed as won't-do; Phase 6 dead flag deferred to the next skill-runner
+> recreation. One new follow-up from the eval: **fastembed missing in the skill-runner
+> image → BM25 hybrid search disabled** (log warning; fix = add `mem0ai[extras]` to the
+> image, Tier 3 rebuild — proposed, not applied). **No open items remain in this file.**
 
 ---
 
@@ -51,8 +60,8 @@
 | 3 | Identity: key → user_id map | ✅ done, **shadowing bug fixed in Phase 3.1 (2026-09-02)** |
 | 3.1 | P0 identity shadowing fix + conflict warning + regression tests | ✅ **done 2026-09-02** (see §3) |
 | 4 | Per-request memory switch (`memory.enabled=false`) | ✅ done |
-| 5 | Extraction instructions; explicit `remember`/`forget` intents; writeback policy | ✅ mostly done; instructions empty (defaults); **5.2 CLI `--user` flag not implemented** |
-| 6 | Memory MCP server (`MEMORY_MCP_ENABLED`) | ❌ dead flag — **superseded by Phase 11** (scoped endpoints + external `mcp_memory` container); flag can be removed later |
+| 5 | Extraction instructions; explicit `remember`/`forget` intents; writeback policy | ✅ mostly done; instructions empty (defaults); 5.2 CLI `--user` flag **closed as won't-do 2026-11-14** (identity is key-based via `MEMORY_USER_KEYS`; unmapped keys already 403 on the scoped endpoints; no observed need for an explicit override) |
+| 6 | Memory MCP server (`MEMORY_MCP_ENABLED`) | ❌ dead flag — **superseded by Phase 11** (scoped endpoints + external `mcp_memory` container); inert — remove from `.env` + compose at the next skill-runner recreation (noted 2026-11-14; no restart needed, it's a no-op either way) |
 | 7 | Multi-agent (`agent_id`) | reserved |
 | 8 | Admin API (`/api/memory/*`, distinct admin key) | ✅ verified: health / users / PATCH / DELETE all key-gated |
 | 9 | Least-privilege Qdrant JWT (rw, `mem0_memories` only) | ✅ valid; **no expiry**; re-issue via `scripts/qdrant-jwt.py` (signed with `QDRANT_ADMIN_API_KEY`) |
@@ -177,15 +186,56 @@ GitHub identity** (chuck = `choukalos` via `GITHUB_ACCESS_TOKEN`; dylan has none
 4. Dylan: automatic — the job iterates every user in `MEMORY_USER_KEYS`; Dylan gets a summary
    once he has activity (his GitHub is skipped until an identity is configured).
 
-### Phase 13 — Week-later evaluation (due ~2026-09-06)
-Memory went live 2026-08-30/31; one-week checkpoint. Checklist:
-- [ ] **Extraction quality:** spot-check stored facts. Known suspect: the single X5 fact (ownership misattribution — wife's car). Any secrets/ephemera stored? (policy should block)
-- [ ] **Retrieval relevance:** with threshold 0.5 / top_k 6 — false positives injected into unrelated chats? false negatives on personal questions?
-- [ ] **Latency:** 1.5 s retrieval budget — timeouts observed 08-30/08-31 (2×). Acceptable? (tune `MEMORY_TIMEOUT_MS` or warmup)
-- [ ] **Household scope:** zero `household`-user points so far — is that expected (no one used "share with household") or a gap?
-- [ ] **Privacy:** after Phase 3.1 — cross-user test (search as dylan must not return chuck's facts and vice versa); verify unmapped keys get nothing. ✅ **pre-verified 2026-09-02** (scoped endpoints + mcp_memory: dylan sees 0 of chuck's facts; unmapped/garbage keys → 403)
-- [ ] **Operational:** enable `MEMORY_DEBUG_LOGGING=true` during the eval window; check counters (`/api/memory/health`) — note counters are in-memory and reset on restart (consider persisting to the MySQL job store later).
-- [ ] **Volume caveat:** only 1 memory exists so far — evaluation is thin until real traffic (Dylan via Siri path, pi wiring) lands.
+### Phase 13 — Week-later evaluation (due ~2026-09-06) — ✅ DONE 2026-11-14
+Memory went live 2026-08-30/31; one-week checkpoint. Run 2026-11-14 against live
+production data (~2.5 months in, so the volume caveat below is moot). Checklist:
+- [x] **Extraction quality:** spot-check stored facts. Known suspect: the single X5 fact (ownership misattribution — wife's car). Any secrets/ephemera stored? (policy should block)
+- [x] **Retrieval relevance:** with threshold 0.5 / top_k 6 — false positives injected into unrelated chats? false negatives on personal questions?
+- [x] **Latency:** 1.5 s retrieval budget — timeouts observed 08-30/08-31 (2×). Acceptable? (tune `MEMORY_TIMEOUT_MS` or warmup)
+- [x] **Household scope:** zero `household`-user points so far — is that expected (no one used "share with household") or a gap?
+- [x] **Privacy:** after Phase 3.1 — cross-user test (search as dylan must not return chuck's facts and vice versa); verify unmapped keys get nothing. ✅ **pre-verified 2026-09-02** (scoped endpoints + mcp_memory: dylan sees 0 of chuck's facts; unmapped/garbage keys → 403)
+- [x] **Operational:** enable `MEMORY_DEBUG_LOGGING=true` during the eval window; check counters (`/api/memory/health`) — note counters are in-memory and reset on restart (consider persisting to the MySQL job store later).
+- [x] **Volume caveat:** only 1 memory exists so far — evaluation is thin until real traffic (Dylan via Siri path, pi wiring) lands.
+
+**Results (2026-11-14, live system, `192.168.4.54:8091`):**
+
+1. **Extraction quality — PASS.** 50 chuck memories (24 `harness_reflection` lessons,
+   11 `pi_chat`, 15 `scheduled`), 7 dylan, 3 service, 3 household. Full-text scan of all
+   50 chuck memories: **zero** API keys / Bearer tokens / passwords, zero IPs/ports,
+   zero file paths, no ephemera. The X5 misattribution was deleted in Phase 3.1 and never
+   recurred. Content is distilled facts + lessons, as designed.
+2. **Retrieval relevance — PASS (with one follow-up).** 7/7 semantic queries returned
+   appropriate hits (1–3 each; e.g. "litellm-proxy restart" → the 2026-10-21 standing-rule
+   fact at score 0.76; "solar battery" → 1 hit). One transient 0-hit on the first search of
+   the session (the documented cold-start `degraded` path) — identical query immediately
+   after returned 3 hits with `degraded=false`; not reproducible. Threshold 0.5 is
+   well-calibrated. ⚠️ **Follow-up (new):** container log warns `fastembed not installed —
+   BM25 keyword search disabled` → retrieval is pure-vector only. Fix: add `mem0ai[extras]`
+   (fastembed) to the skill-runner image to enable hybrid search. Tier 3 (image rebuild) —
+   **proposed, not applied** (standing rules).
+3. **Latency — PASS.** 5 searches since the last restart: all `status="ok"`, 0.344 s total
+   (avg ~69 ms, max <0.25 s) — far inside the 1.5 s budget. Zero timeout/error lines in
+   the last 21 h of logs; the 08-30/08-31 1.5 s timeouts have not recurred. No
+   `MEMORY_TIMEOUT_MS` tuning needed.
+4. **Household scope — PASS (working as intended).** 3 `household` points exist (the
+   Peanut-movie facts, `written_by=chuck`, explicit household share from pi_chat
+   2026-11-02). Household writes work and are used sparingly — consistent with the
+   privacy invariant (household only on explicit request).
+5. **Privacy — PASS (re-verified 2026-11-14).** Dylan's key searching "peanut movie
+   pipeline" → 3 hits, all his own `scheduled` facts; searching Chuck-specific queries →
+   0 hits (no cross-user leakage). Garbage key → 403; unmapped key → 403. Matches the
+   2026-09-02 pre-verification.
+6. **Operational — PASS.** `/api/memory/health` healthy (enabled/retrieval/writeback/
+   household all true). Confirmed the known caveat: health counters are in-memory and
+   reset on restart (empty after the 21 h-old restart). The Prometheus `memory_*` series
+   (`memory_search_total{status}`, `memory_search_hits_total`=113,
+   `memory_errors_total`=0, latency histograms) covers durable observability — persisting
+   counters to the MySQL job store is **not worth it**; dropped.
+7. **Volume — PASS.** 50/7/3/3 across users, written by three independent paths
+   (pi_chat, scheduled jobs, harness_reflection) — real traffic, eval no longer thin.
+
+**Verdict:** memory system is healthy in production. No config changes required.
+One follow-up (fastembed/hybrid search) parked as a Tier 3 proposal.
 
 ---
 
@@ -196,7 +246,7 @@ Memory went live 2026-08-30/31; one-week checkpoint. Checklist:
 3. ✅ **pi wiring:** `mcp_memory` container built + verified; **Mac pi access via LiteLLM gateway registration (Phase 11.5)** — no Mac-side config needed (pi has no built-in MCP; the Mac pi reaches `kb_search` through the LiteLLM MCP gateway, so `mcp_memory` registered there surfaces identically).
 4. ✅ **Recent-activity job:** conversation-first, all users, GitHub only for known identities (chuck=`choukalos`); daily 17:00 CDT — **built, tested, scheduled**.
 5. ✅ **File location:** `skills/runner/memory_todo.md` (this file).
-6. **Evaluation:** want Dylan to generate real memory traffic (chat via Siri path) before the 09-06 checkpoint so the eval isn't based on 1 fact? (Still open.)
+6. ✅ **Evaluation / Dylan traffic:** resolved 2026-11-14 — Dylan has a key but hasn't used it, and that's fine (chuck). The Phase 13 eval ran without his interactive traffic; his 7 memories were written by the `recent_activity` scheduled job (`source=scheduled`), which is the designed path for users with no direct client traffic.
 
 **Remaining Mac-side action:** none required. If the Mac pi session caches its tool list, restart the pi session (or re-run tools/list) so `memory_search`/`memory_list` appear, then test in pi: "what do you know about me?" / "what have I been doing recently?" — should pull from `memory_search` + `kb_search`.
 
