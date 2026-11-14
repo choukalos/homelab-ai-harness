@@ -1,0 +1,30 @@
+# Homelab boot: idempotent `homelab.sh up all` (everything except n8n).
+#
+# Docker's restart:unless-stopped policy only revives containers that still
+# exist. If a stack's containers were ever removed (compose down, prune,
+# failed CI redeploy), nothing recreates them. `up all` is a no-op for
+# anything already running and recreates whatever is missing.
+#
+# n8n is intentionally excluded (matches the `all` stack).
+#
+# Install:
+#   sudo cp /home/chuck/homelab/scripts/systemd/homelab-boot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now homelab-boot.service
+#
+# Supersedes homelab-data-hub.service (data-hub/report-hub are part of `all`).
+
+[Unit]
+Description=Homelab boot - idempotent up of all stacks (except n8n)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=chuck
+TimeoutStartSec=300
+ExecStart=/home/chuck/homelab/homelab.sh up all
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

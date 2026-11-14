@@ -20,6 +20,7 @@ N8N="${COMPOSE_DIR}/compose.n8n.yml"
 MONITORING="${COMPOSE_DIR}/compose.monitoring.yml"
 MCP="${COMPOSE_DIR}/compose.mcp.yml"
 SKILL_RUNNER="${COMPOSE_DIR}/compose.skill-runner.yml"
+DATA_HUB="${COMPOSE_DIR}/compose.data-hub.yml"
 
 cd "${BASE_DIR}"
 
@@ -60,6 +61,7 @@ Stacks:
   public      Caddy + Cloudflare Tunnel + Hugo Portal + Invest Hub
   n8n         Caddy + n8n
   monitoring  Monitoring (node-exporter, cadvisor, prometheus, grafana)
+  data        Data Hub (data-hub ETL :8100 + report-hub UI :8101)
   all         Everything except n8n
   all-n8n     Everything including n8n
 
@@ -72,6 +74,7 @@ Stacks:
   invest-only    Invest only (Caddy + cloudflared kept running)
   n8n-only
   monitoring-only
+  data-only      Data Hub only (data-hub + report-hub)
 
 Notes:
   The ai stack comprises three separate Docker Compose projects sharing
@@ -93,6 +96,11 @@ Notes:
 
   monitoring is a standalone stack. Prometheus scrapes local services,
   matrix (node-exporter + dcgm), and athena (node-exporter + cadvisor).
+
+  The data stack (data-hub ETL + report-hub UI) joins the ai-net network,
+  so the ai stack must be up first. Its images are built by CI on the
+  self-hosted runners; `rebuild` force-recreates the containers but does
+  NOT rebuild the images (same as invest).
 EOF
 }
 
@@ -111,6 +119,7 @@ compose_files() {
     n8n)            echo "-f ${CORE} -f ${N8N}" ;;
     n8n-only)       echo "-f ${N8N}" ;;
     monitoring|monitoring-only) echo "-f ${MONITORING}" ;;
+    data|data-only)       echo "-f ${DATA_HUB}" ;;
     *)
       echo "Unknown stack: ${stack}" >&2
       usage
@@ -351,6 +360,30 @@ do_dispatch() {
           ;;
       esac
       ;;
+    data|data-only)
+      case "${cmd}" in
+        up)
+          run_compose_single up "-f ${DATA_HUB}" -d "$@"
+          ;;
+        down|restart|rebuild)
+          run_compose_single down "-f ${DATA_HUB}" "$@"
+          if [[ "${cmd}" == "restart" || "${cmd}" == "rebuild" ]]; then
+            run_compose_single up "-f ${DATA_HUB}" -d --force-recreate --remove-orphans "$@"
+          fi
+          ;;
+        pull)
+          run_compose_single pull "-f ${DATA_HUB}" "$@"
+          ;;
+        logs|ps|config)
+          run_compose_single "${cmd}" "-f ${DATA_HUB}" "$@"
+          ;;
+        *)
+          echo "Unknown command: ${cmd}" >&2
+          usage
+          exit 1
+          ;;
+      esac
+      ;;
     mcp-only)
       case "${cmd}" in
         up)
@@ -410,6 +443,7 @@ do_dispatch() {
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${MCP}" -d "$@"
           run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
+          run_compose_single up "-f ${DATA_HUB}" -d "$@"
           run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
         down|restart|rebuild)
@@ -417,6 +451,7 @@ do_dispatch() {
           run_compose_single down "-f ${SKILL_RUNNER}" "$@"
           run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
+          run_compose_single down "-f ${DATA_HUB}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
           run_compose_single down "-f ${BLOG}" "$@"
           run_compose_single down "-f ${EDGE}" "$@"
@@ -426,6 +461,7 @@ do_dispatch() {
             run_compose_single up "-f ${BLOG}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
             run_compose_single up "-f ${SKILL_RUNNER}" -d
+            run_compose_single up "-f ${DATA_HUB}" -d
             run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
             run_compose_single up "-f ${CORE}" -d --force-recreate --remove-orphans "$@"
@@ -434,18 +470,19 @@ do_dispatch() {
             run_compose_single up "-f ${INVEST}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${AI_CORE}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${DATA_HUB}" -d --force-recreate --remove-orphans "$@"
             build_skill_runner_image
             run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${DATA_HUB}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge blog invest ai-core mcp skill-runner monitoring; do
+          for f in core edge blog invest ai-core mcp skill-runner data-hub monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"
@@ -463,6 +500,7 @@ do_dispatch() {
           run_compose_single up "-f ${AI_CORE}" -d "$@"
           run_compose_single up "-f ${MCP}" -d "$@"
           run_compose_single up "-f ${SKILL_RUNNER}" -d "$@"
+          run_compose_single up "-f ${DATA_HUB}" -d "$@"
           run_compose_single up "-f ${N8N}" -d "$@"
           run_compose_single up "-f ${MONITORING}" -d "$@"
           ;;
@@ -472,6 +510,7 @@ do_dispatch() {
           run_compose_single down "-f ${SKILL_RUNNER}" "$@"
           run_compose_single down "-f ${MCP}" "$@"
           run_compose_single down "-f ${AI_CORE}" "$@"
+          run_compose_single down "-f ${DATA_HUB}" "$@"
           run_compose_single down "-f ${INVEST}" "$@"
           run_compose_single down "-f ${BLOG}" "$@"
           run_compose_single down "-f ${EDGE}" "$@"
@@ -481,6 +520,7 @@ do_dispatch() {
             run_compose_single up "-f ${BLOG}" -d; run_compose_single up "-f ${INVEST}" -d
             run_compose_single up "-f ${AI_CORE}" -d; run_compose_single up "-f ${MCP}" -d
             run_compose_single up "-f ${SKILL_RUNNER}" -d
+            run_compose_single up "-f ${DATA_HUB}" -d
             run_compose_single up "-f ${N8N}" -d
             run_compose_single up "-f ${MONITORING}" -d
           elif [[ "${cmd}" == "rebuild" ]]; then
@@ -492,17 +532,18 @@ do_dispatch() {
             run_compose_single up "-f ${MCP}" -d --build --force-recreate --remove-orphans "$@"
             build_skill_runner_image
             run_compose_single up "-f ${SKILL_RUNNER}" -d --force-recreate --remove-orphans "$@"
+            run_compose_single up "-f ${DATA_HUB}" -d --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${N8N}" -d --build --force-recreate --remove-orphans "$@"
             run_compose_single up "-f ${MONITORING}" -d --force-recreate --remove-orphans "$@"
           fi
           ;;
         pull)
-          for f in "${MONITORING}" "${N8N}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
+          for f in "${MONITORING}" "${DATA_HUB}" "${N8N}" "${SKILL_RUNNER}" "${MCP}" "${AI_CORE}" "${INVEST}" "${BLOG}" "${EDGE}" "${CORE}"; do
             run_compose_single pull "-f $f" "$@"
           done
           ;;
         logs|ps|config)
-          for f in core edge blog invest ai-core mcp skill-runner n8n monitoring; do
+          for f in core edge blog invest ai-core mcp skill-runner data-hub n8n monitoring; do
             echo "=== $f ==="
             var_name=$(echo "$f" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
             run_compose_single "${cmd}" "-f ${!var_name}" "$@"

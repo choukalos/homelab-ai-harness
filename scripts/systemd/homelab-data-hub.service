@@ -1,0 +1,25 @@
+# Homelab data stack: data-hub (ETL, :8100) + report-hub (UI, :8101)
+#
+# Idempotent boot-time up. Docker's restart:unless-stopped policy only
+# revives containers that still exist; if the data-hub project was ever
+# removed (compose down, prune, CI redeploy race), nothing recreates it.
+# `homelab.sh up data` is a no-op when the containers are already running.
+#
+# Install:
+#   sudo cp /home/chuck/homelab/scripts/systemd/homelab-data-hub.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now homelab-data-hub.service
+
+[Unit]
+Description=Homelab data stack (data-hub ETL + report-hub UI) - idempotent boot up
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=chuck
+ExecStart=/home/chuck/homelab/homelab.sh up data
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
