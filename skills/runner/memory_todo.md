@@ -23,8 +23,10 @@
 > recreation. One follow-up from the eval: **fastembed missing in the skill-runner
 > image → BM25 hybrid search disabled** (log warning). Fix **prepared + committed
 > 2026-11-14** (Dockerfile: `fastembed==0.9.1` + pre-baked Qdrant/bm25 model;
-> pyproject synced) — the Tier 3 rebuild is a **manual step: §6**. After §6 is
-> verified, this file is fully closed.
+> pyproject synced) — the Tier 3 rebuild was **applied + verified 2026-11-14
+> (23:00 UTC, image `sha256:31af0bdf…`; §6 DONE)**: `BM25 encoder loaded`
+> in the logs, search smoke test green with the keyword boost active, all
+> state intact. **This file is fully closed.**
 
 ---
 
@@ -362,3 +364,23 @@ git log --oneline -1        # confirm the fastembed commit is present
 
 **After verification:** mark this section DONE (date + image ID) — the file is
 then fully closed.
+
+**DONE 2026-11-14** (applied by Chuck, `./homelab.sh rebuild skill-only`):
+- Image `sha256:31af0bdf…` (container created 2026-11-14T22:59Z), model baked
+  in (128 KB, 18 blobs), fastembed 0.9.1 + onnxruntime 1.32.0 installed.
+- Log: `BM25 encoder loaded (fastembed Qdrant/bm25)`; the "fastembed not
+  installed" warning is gone. Search smoke test returned the standing-rule
+  fact at score 0.798 (0.762 pre-rebuild — the BM25 keyword boost is active).
+- Scheduler (9 schedules, next runs correct), metrics (`memory_*`,
+  `proposals_total` open=1/dismissed=3/applied=4), `skill_jobs` (348 rows)
+  all intact; `scripts/key-sync-check.sh` → ALL IN SYNC.
+- Note: the 2026-11-14 17:00 CDT `daily-recent-activity` run was skipped
+  (rebuild landed at 23:00 UTC) — harmless: 7-day lookback window, next run
+  2026-11-15 17:00 CDT.
+- Cosmetic fix: the pre-baked tree-cache files were root-owned → huggingface_hub
+  logged a "Permission denied" on the tree-cache update (harmless; model loads
+  from blobs). Fixed in the running container via `docker exec -u 0 chown -R
+  1000:1000 /tmp/fastembed_cache` and in the Dockerfile (chown in the
+  pre-download step) so future rebuilds bake in the correct ownership.
+
+**This file is fully closed.**

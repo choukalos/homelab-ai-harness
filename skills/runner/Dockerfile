@@ -44,7 +44,11 @@ ENV FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
 # so the first search after any rebuild is offline-deterministic. If the
 # encoder ever fails to load at runtime, mem0 degrades gracefully to
 # dense-only (try/except in mem0.vector_stores.qdrant).
-RUN python -c "from fastembed import SparseTextEmbedding; list(SparseTextEmbedding(model_name='Qdrant/bm25').embed(['warmup']))"
+# chown: the build runs as root but the container runs as user 1000 (chuck);
+# without this, huggingface_hub's tree-cache update fails with
+# "Permission denied" (harmless but noisy on every start).
+RUN python -c "from fastembed import SparseTextEmbedding; list(SparseTextEmbedding(model_name='Qdrant/bm25').embed(['warmup']))" \
+    && chown -R 1000:1000 /tmp/fastembed_cache
 
 # Runtime config
 ENV SKILL_RUNNER_PORT=8091
