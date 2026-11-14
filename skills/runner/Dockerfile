@@ -17,8 +17,11 @@ COPY memory/ ./memory/
 
 # Install runtime dependencies directly (single-file app, no package distribution needed)
 # mem0ai pinned to the version verified in Phase 1 (round-trip + restore).
-# fastembed intentionally NOT installed: BM25/hybrid keyword search disabled
-# (dense-only semantic search is the v1 design; see Phase 1 gotchas).
+# fastembed (the mem0ai[extras] requirement): enables mem0's hybrid BM25
+# keyword + dense-vector search in the Qdrant store. Added 2026-11-14 after the
+# Phase 13 eval (memory_todo.md) found retrieval was dense-only (mem0 logs
+# "fastembed not installed - BM25 keyword search disabled"). The Qdrant/bm25
+# model (~128 KB) is pre-baked below so runtime searches never need HF Hub.
 # git: the harness_reflection skill (Phase 3) reads the homelab repo's git
 # log (read-only mount) as one of its five inputs.
 RUN apt-get update && apt-get install -y --no-install-recommends git \
@@ -30,7 +33,18 @@ RUN pip install --no-cache-dir \
     "httpx>=0.27.0" \
     "pyyaml>=6.0" \
     "pymysql>=1.1.0" \
-    "mem0ai==2.0.19"
+    "mem0ai==2.0.19" \
+    "fastembed==0.9.1"
+
+# fastembed model cache: explicit path so a future fastembed default change
+# can't orphan the pre-baked model (see next step).
+ENV FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
+
+# Pre-download the Qdrant/bm25 sparse-encoder model into the image (~128 KB)
+# so the first search after any rebuild is offline-deterministic. If the
+# encoder ever fails to load at runtime, mem0 degrades gracefully to
+# dense-only (try/except in mem0.vector_stores.qdrant).
+RUN python -c "from fastembed import SparseTextEmbedding; list(SparseTextEmbedding(model_name='Qdrant/bm25').embed(['warmup']))"
 
 # Runtime config
 ENV SKILL_RUNNER_PORT=8091

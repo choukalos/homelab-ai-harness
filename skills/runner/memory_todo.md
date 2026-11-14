@@ -20,9 +20,11 @@
 > (results in §3). Open question 6 resolved: Dylan has a key but hasn't used it — that's
 > fine (his 7 memories were written by the `recent_activity` scheduled job, not his own
 > usage). Phase 5.2 closed as won't-do; Phase 6 dead flag deferred to the next skill-runner
-> recreation. One new follow-up from the eval: **fastembed missing in the skill-runner
-> image → BM25 hybrid search disabled** (log warning; fix = add `mem0ai[extras]` to the
-> image, Tier 3 rebuild — proposed, not applied). **No open items remain in this file.**
+> recreation. One follow-up from the eval: **fastembed missing in the skill-runner
+> image → BM25 hybrid search disabled** (log warning). Fix **prepared + committed
+> 2026-11-14** (Dockerfile: `fastembed==0.9.1` + pre-baked Qdrant/bm25 model;
+> pyproject synced) — the Tier 3 rebuild is a **manual step: §6**. After §6 is
+> verified, this file is fully closed.
 
 ---
 
@@ -210,9 +212,10 @@ production data (~2.5 months in, so the volume caveat below is moot). Checklist:
    the session (the documented cold-start `degraded` path) — identical query immediately
    after returned 3 hits with `degraded=false`; not reproducible. Threshold 0.5 is
    well-calibrated. ⚠️ **Follow-up (new):** container log warns `fastembed not installed —
-   BM25 keyword search disabled` → retrieval is pure-vector only. Fix: add `mem0ai[extras]`
-   (fastembed) to the skill-runner image to enable hybrid search. Tier 3 (image rebuild) —
-   **proposed, not applied** (standing rules).
+   BM25 keyword search disabled` → retrieval is pure-vector only. Fix **prepared +
+   committed 2026-11-14**: the Dockerfile installs `fastembed==0.9.1` (the
+   `mem0ai[extras]` requirement) and pre-bakes the Qdrant/bm25 model into the image;
+   the Tier 3 rebuild is a manual step — see §6.
 3. **Latency — PASS.** 5 searches since the last restart: all `status="ok"`, 0.344 s total
    (avg ~69 ms, max <0.25 s) — far inside the 1.5 s budget. Zero timeout/error lines in
    the last 21 h of logs; the 08-30/08-31 1.5 s timeouts have not recurred. No
@@ -234,8 +237,9 @@ production data (~2.5 months in, so the volume caveat below is moot). Checklist:
 7. **Volume — PASS.** 50/7/3/3 across users, written by three independent paths
    (pi_chat, scheduled jobs, harness_reflection) — real traffic, eval no longer thin.
 
-**Verdict:** memory system is healthy in production. No config changes required.
-One follow-up (fastembed/hybrid search) parked as a Tier 3 proposal.
+**Verdict:** memory system is healthy in production. One follow-up
+(fastembed/hybrid search) prepared and committed 2026-11-14; the rebuild is a
+manual Tier 3 step (§6).
 
 ---
 
@@ -288,3 +292,73 @@ One follow-up (fastembed/hybrid search) parked as a Tier 3 proposal.
 - Gateway `tools/call` as **Dylan** → **403 access_denied**.
 - `delegate_auth_to_upstream` probed: does NOT forward caller key (Dylan's call resolved to chuck via fallback before the access group existed) → documented as design note; safe because only Chuck's key reaches the gateway server.
 - Cleanup: unused team `chuck-mcp` (`ec690cf6…`) deleted.
+---
+
+## 6. Fastembed / hybrid-search rebuild — MANUAL STEP (Tier 3, Chuck)
+
+**Prepared + committed 2026-11-14 (not applied).** The change:
+`skills/runner/Dockerfile` now installs `fastembed==0.9.1` (the
+`mem0ai[extras]` requirement), sets `FASTEMBED_CACHE_PATH=/tmp/fastembed_cache`,
+and pre-downloads the Qdrant/bm25 model (~128 KB) into the image at build time,
+so runtime searches never depend on HF Hub. `pyproject.toml` synced. Image grows
+~85 MB (onnxruntime + tokenizers + huggingface-hub).
+
+**Why it's safe (verified 2026-11-14 against mem0ai 2.0.19 source + live system):**
+- The live `mem0_memories` collection already has the `bm25` sparse-vector slot
+  (created by the same mem0 version) — no collection migration.
+- Existing points were inserted without sparse vectors → they keep scoring
+  dense-only: no regression, no score-scale change, no threshold re-tune.
+  New memories get both legs; mem0's `score_and_rank` fusion only adds a
+  normalized BM25 boost on top of the semantic score.
+- If the encoder ever fails to load at runtime, mem0 degrades gracefully to
+  dense-only (the current production behavior) — the load is try/except'd.
+
+**Apply (on thor):**
+```bash
+cd /home/chuck/homelab
+git log --oneline -1        # confirm the fastembed commit is present
+./homelab.sh rebuild skill-only
+```
+
+**Verify after rebuild (all from thor):**
+1. Search smoke test — should still return the 2026-10-21 standing-rule fact
+   (this also triggers the lazy BM25 encoder load):
+   ```bash
+   curl -s -X POST -H "X-API-Key: $LITELLM_KEY_CHUCK" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"litellm-proxy restart","top_k":3}' \
+     http://192.168.4.54:8091/api/memory/search | \
+     python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'], [m['text'][:60] for m in d['memories']])"
+   ```
+2. Encoder loaded, old warning gone:
+   `docker logs skill-runner 2>&1 | grep -iE "bm25|fastembed"`
+   → expect `BM25 encoder loaded (fastembed Qdrant/bm25)` and **no**
+   "fastembed not installed" line.
+3. Scheduler state intact (open endpoint):
+   `curl -s http://192.168.4.54:8091/api/schedule | python3 -m json.tool | grep -B1 -A6 weekly-harness-reflection`
+   → next run still 2026-11-15 23:00 UTC.
+4. Metrics intact:
+   `curl -s http://192.168.4.54:8091/metrics | grep -cE '^(memory_|proposals_)'`
+   (non-zero; same series as before).
+5. Standing rule after any container change: `./scripts/key-sync-check.sh`
+6. Optional — prove the BM25 leg end-to-end: write a distinctive keyword fact,
+   then search it by exact keyword (the new memory has a sparse vector, so an
+   exact keyword hits even with semantically odd phrasing):
+   ```bash
+   curl -s -X POST -H "X-API-Key: $LITELLM_KEY_CHUCK" \
+     -H "Content-Type: application/json" \
+     -d '{"text":"The house cat is named Bananafish","source":"hybrid-search-test"}' \
+     http://192.168.4.54:8091/api/memory/remember
+   curl -s -X POST -H "X-API-Key: $LITELLM_KEY_CHUCK" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"Bananafish","top_k":3}' \
+     http://192.168.4.54:8091/api/memory/search
+   ```
+   Then delete the test fact via the admin endpoint
+   (`DELETE /api/memory/{id}` with `MEMORY_ADMIN_API_KEY`).
+
+**Rollback:** `git revert <fastembed commit>` + `./homelab.sh rebuild skill-only`
+→ back to the dense-only image (current production behavior).
+
+**After verification:** mark this section DONE (date + image ID) — the file is
+then fully closed.

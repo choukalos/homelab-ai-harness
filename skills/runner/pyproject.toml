@@ -15,6 +15,9 @@ dependencies = [
     # Long-term memory (memory_todo.md Phase 2). Pinned to the version
     # verified in Phase 1 (round-trip + restore). See memory/ package.
     "mem0ai==2.0.19",
+    # Hybrid BM25 keyword search for mem0's Qdrant store (the mem0ai[extras]
+    # requirement). Phase 13 follow-up, memory_todo.md (2026-11-14).
+    "fastembed==0.9.1",
 ]
 
 [project.optional-dependencies]
