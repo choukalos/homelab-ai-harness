@@ -140,6 +140,12 @@ Typical commercial flow: `media_storyboard` → per shot
 `media_generate_music` → `media_upscale_video(pipeline="b")` →
 `media_assemble` → `media_fetch` the final mp4.
 
+**Multi-shot film orchestration:** for crash-proof multi-shot runs
+(keyframes → I2V → audio → assembly → QC → publish) use the `media-film`
+pi skill (`agents-skills/media-film/SKILL.md`) — on-disk state file written
+after every submit, retried MCP calls, timeboxed chunks, and a resume
+protocol built on `media_list_jobs`.
+
 ## Config
 
 | Env | Default | Meaning |
@@ -192,6 +198,30 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-14: closed out `improve_mediapipeline_todo.md` (2026-11-02, after
+the "A Peanut Risky Business" run — 4 orchestration-script deaths, 10 lost
+job IDs, ~1 h of log archaeology) — every item shipped:
+- **P0** — `media-film` orchestration skill (`agents-skills/media-film/`,
+  9d2b145): on-disk state file after every submit, retry wrapper on every
+  MCP call, timeboxed chunks, resume protocol, queue management, QC gates,
+  assemble + publish checklist.
+- **P1-1/P1-2/P1-3 + P2** — job recovery (T1–T4, cfb9407, 2026-11-04):
+  `media_list_jobs` over the durable `jobs.jsonl` ledger (finished jobs
+  survive pipeline restarts), `client` tag on all 14 job tools,
+  SUBMIT/DONE/FETCH container-log lines, 60 s timeout + retry guidance
+  (see the 2026-11-04 entry).
+- **P4-1** — collision-safe `media_fetch` (T4). **P4-2** —
+  `media_job_result` 404 recovery hint pointing at `media_list_jobs`.
+  **P4-3** — mcp_vision workspace ownership (T5: root:root 755 →
+  1000:1000; the 2026-11-02 permission-denied root cause).
+- **P4-4** — `media_assemble` description now states that `sfx[].at` /
+  `text_overlays` `start`/`end` / `vo_start` are absolute timeline seconds
+  in the final cut (compute from per-shot durations via `media_info`).
+- **P3** (pi-level codemode hardening: per-call `store()` persistence,
+  `sleep(ms)`, documented failed-script summary) — deferred, optional; the
+  `media-film` skill's on-disk state file is the working mitigation.
+The todo file was removed with this entry.
 
 2026-11-08: `media_render_tab_pdf` **Phase 4 — pitch-contour b/v marks** — the
 transcribe pipeline now ships a per-note `pitch_contour` (5 samples across the
