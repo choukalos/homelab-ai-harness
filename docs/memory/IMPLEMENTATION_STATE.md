@@ -209,15 +209,19 @@
 - **D9 — Qdrant exposure**: `0.0.0.0:6333` without TLS. Owner decision
   2026-08-29 (revisited after the KB work): **leave as-is** — other
   services/tooling use the port. Revisit if the LAN trust model changes.
+  Re-verified 2026-11-15: unchanged (`qdrant/qdrant:v1.18.1`, 0.0.0.0:6333);
+  1.19.2 available if a bump is ever wanted (security_todo §9.3-V1 —
+  optional, no critical CVE).
 - **Phase 6 — MCP memory tools**: ✅ COMPLETE (2026-09-02 scoped search
   endpoint + pi wiring; 2026-10-21 `mcp_memory` server) — `mcp_memory`
   serves `memory_search`/`memory_list`/`memory_remember` on `thor:8005`
   (SSE), per-user identity via forwarded Authorization (falls back to
   `MEMORY_USER_KEY` = chuck when absent), LAN-published. Search responses
   carry the degraded/cold-start flag (see 2026-10-21 9th phase-log entry).
-- **Dylan onboarding (key issued; unused as of 2026-11-14 — that's fine per
-  Chuck; steps below remain available for when he uses it)**
-  (2026-10-21 plan items 2a/2c; 2b done):
+- **Dylan onboarding (key issued; still unused as of 2026-11-15 — that's
+  fine per Chuck; steps below remain available for when he uses it)**
+  (2026-10-21 plan items 2a/2c; 2b done; re-verified 2026-11-15: 7 memories,
+  all 2026-11-04 `recent_activity` writes; 0 session ingests):
   - **2a. His pi/MCP config.** `mcp_memory` is LAN-published on
     `thor:8005` (SSE). His pi config must connect with HIS key:
     `Authorization: Bearer <LITELLM_KEY_DYLAN>` (from `.env`, don't
