@@ -1,11 +1,14 @@
 # Security Plan — LiteLLM Public Access + Homelab Hardening
 
 > Created: 2026-09-06 (audit session 22:09–22:33; plan completed same evening)
-> Status: **Phases 0–3 DONE (2026-11-15)** — Caddy key gate live on
+> Status: **Phases 0–4 host-side DONE (2026-11-15)** — Caddy key gate live on
 > `llm.choukalos.com`, per-key MCP scoping (default-deny + `family-mcp-full`
 > group), key hygiene (spend tracking on, orphan key deleted, dead keys
-> removed). Phases 4–8 not started. Open WebUI removed 2026-11-15 (9.3-O1
-> resolved by removal).
+> removed), LAN exposure shrunk (all rebinds/mapping removals applied +
+> verified; `ss -tlnp` matches expected survivors). Phase 4 only owes
+> device-side confirmations (Mac Studio LAN + phone cellular). Phases 5–8
+> not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
+> (9.3-O1 resolved by removal).
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -291,7 +294,7 @@ audit) — LiteLLM created them on the first logged request after the flip.
 
 Rollback: budgets/limits are per-key DB rows — revert via `/v1/key/update`; `.env` restore from Phase 0 backup.
 
-### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings) — **IN PROGRESS 2026-11-15**
+### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings) — **HOST-SIDE DONE 2026-11-15** (only device-side confirmations left)
 
 Principle: containers talk over the docker network (`ai-net`); host port
 publishing is only for things a human needs from another machine.
@@ -320,14 +323,17 @@ publishing is only for things a human needs from another machine.
 
 **Applied 2026-11-15 (safe stacks):** qdrant + searxng + crawl4ai (ai-core), monitoring stack (5 services + 9091), mcp_memory (mcp) recreated. Verified: `ss -tlnp` shows the new binds; qdrant reachable at 192.168.4.54:6333 (localhost now refused); MCP 89 tools / 12 servers (all connected via docker DNS); live `mcp_search.search_web` tool call OK; Grafana 200 at 192.168.4.54:3001.
 
-**Pending (Chuck):**
-1. litellm recreate (rebind 4000): `cd /home/chuck/homelab && docker compose -f compose/compose.ai-core.yml --env-file .env up -d litellm`
-2. MySQL rebind (host service, sudo): `sudo sed -i 's/^bind-address\s*=\s*0.0.0.0/bind-address\t= 192.168.4.54/' /etc/mysql/mysql.conf.d/mysqld.cnf && sudo systemctl restart mysql` (mysqlx already 127.0.0.1)
+**Applied + verified 2026-11-15 (both remaining items):**
+1. litellm recreate (rebind 4000) — done; `192.168.4.54:4000` live (`/health/liveliness` → "I'm alive!"), public route + MCP 12 servers / 89 tools on chuck key (re-verified post-mysql-rebind).
+2. MySQL rebind (host service, sudo) — done: `bind-address = 192.168.4.54` in `/etc/mysql/mysql.conf.d/mysqld.cnf` (mysqlx stays `127.0.0.1:33060`); `systemctl restart mysql` clean.
 
-Verify after: (1) litellm at 192.168.4.54:4000 + `./homelab.sh key list` + public route + MCP 12 servers; (2) mysql at 192.168.4.54:3306 + data-hub/report-hub/mcp_mysql/skill-runner healthy.
+Verify after — **verified 2026-11-15**:
+- (1) litellm at 192.168.4.54:4000 ✅ + public route 200 + MCP 12 servers / 89 tools (chuck key) ✅
+- (2) mysql at 192.168.4.54:3306 ✅ — direct `mysql -h 192.168.4.54` OK for both `ai` (homelab, 10 tables) and `investor` (investorhub, 26 tables) users; data-hub `/api/health` ok (9811 transactions); report-hub 200; skill-runner `/health` 200 (note: endpoint is `/health`, not `/api/health`); mcp_mysql connected + processing MCP requests (log `1054 Unknown column` lines are LLM-SQL schema mismatches, not connectivity); invest-hub-server mysql2 connect with app DSN → `investorhub` ok; public `api.choukalos.com` 401 on protected route (auth working) + `invest.choukalos.com` client 200.
 
 - [x] For each row: grep the consumer, change the compose `ports:` entry, `docker compose up -d <stack>` (recreate, no data loss — verify after).
-- [ ] Re-run `ss -tlnp | grep LISTEN` — expected survivors: `22, 80, 443, 192.168.4.54:{3306,4000,3001,8081,8082,9090,9091,9100,5000,6333,8091,8100,8101}` (3000 gone with OWUI; 33060 stays 127.0.0.1).
+- [x] Re-run `ss -tlnp | grep LISTEN` — expected survivors: `22, 80, 443, 192.168.4.54:{3306,4000,3001,8081,8082,9090,9091,9100,5000,6333,8091,8100,8101}` (3000 gone with OWUI; 33060 stays 127.0.0.1).
+      — re-ran 2026-11-15: exact match (only extras: systemd-resolved `127.0.0.53/54:53`, host-internal, harmless).
 - [ ] Confirm from a LAN client (Mac Studio): Grafana, `llm.choukalos.com`, `siri.choukalos.com` all still work; confirm from a phone on a *different* network (cellular) that the public routes still work.
 
 Rollback: restore the `ports:` lines from git + recreate.
