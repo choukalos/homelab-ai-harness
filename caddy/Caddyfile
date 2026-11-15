@@ -135,6 +135,15 @@
 
 	@llm host llm.choukalos.com
 	handle @llm {
+		# Key gate (security_todo Phase 1, 2026-11-15): only Chuck's or Dylan's
+		# LiteLLM key (X-Api-Key header, or Authorization: Bearer <key> for
+		# OpenAI-SDK clients). Everything else 401 — even if LiteLLM auth is
+		# misconfigured, the public route only carries the two family keys.
+		# Same expression shape as the siri gate (De Morgan of OR-of-keys),
+		# extended with the Bearer form. Key rotation: update .env AND reload
+		# caddy, or the public route breaks (see security_todo Phase 7).
+		@llmNoAuth expression {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}' && {http.request.header.Authorization} != "Bearer {$LITELLM_KEY_CHUCK}" && {http.request.header.Authorization} != "Bearer {$LITELLM_KEY_DYLAN}"
+		respond @llmNoAuth "Unauthorized" 401
 		reverse_proxy http://litellm-proxy:4000 {
 		  # Force Caddy to stream large MCP tool payloads immediately
 		  flush_interval -1

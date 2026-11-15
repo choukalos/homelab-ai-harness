@@ -127,12 +127,12 @@ Phase 8 (internal-service key) is independent — any time.
       confirmed: 3306/6333/4000/8088/3000/monitoring/8005/11235 on 0.0.0.0;
       skill-runner on 192.168.4.54:8091)
 
-### Phase 1 — Caddy key gate on `llm.choukalos.com` (public = chuck/dylan only)
+### Phase 1 — Caddy key gate on `llm.choukalos.com` (public = chuck/dylan only) — **DONE 2026-11-15**
 
 Makes Caddy the first line of defense: even if LiteLLM auth is misconfigured,
 only the two family keys can reach the proxy over the public route.
 
-- [ ] Replace the `@llm` block in `caddy/Caddyfile`:
+- [x] Replace the `@llm` block in `caddy/Caddyfile`:
 
 ```caddy
 @llm host llm.choukalos.com
@@ -146,16 +146,21 @@ handle @llm {
 }
 ```
 
-- [ ] `docker exec caddy caddy reload --config /etc/caddy/Caddyfile` (or restart the caddy container)
-- [ ] Verify (from outside the LAN, e.g. Mac Studio):
-  - [ ] `curl -s https://llm.choukalos.com/v1/models -H "X-Api-Key: $LITELLM_KEY_CHUCK"` → 200
-  - [ ] same with Dylan's key → 200
-  - [ ] same with a wrong key → **401**
-  - [ ] no key → **401**
-  - [ ] `Authorization: Bearer <chuck key>` → 200
-- [ ] Verify `siri.choukalos.com` still works (unchanged): `/siri/*` + `/api/*` with both keys → 200; wrong key → 401.
-- [ ] **Note for the future:** the siri route only accepts `X-Api-Key` (not `Bearer`). iOS Shortcuts use `X-Api-Key` — fine today; if a client needs `Bearer` there, mirror the expression above.
-- [ ] **Key-rotation procedure (document in Phase 7):** when rotating `LITELLM_KEY_CHUCK`/`LITELLM_KEY_DYLAN`, update `.env` **and** reload Caddy, or the public routes break.
+- [x] `docker exec caddy caddy reload --config /etc/caddy/Caddyfile` (or restart the caddy container)
+      — `caddy validate` green, reloaded 2026-11-15; gate merged with the
+      existing reverse_proxy options (flush_interval -1 + header_up kept)
+- [x] Verify (from outside the LAN, e.g. Mac Studio) — verified 2026-11-15
+      via the public URL (thor → CF edge → tunnel → caddy, the full public
+      path):
+  - [x] `curl -s https://llm.choukalos.com/v1/models -H "X-Api-Key: $LITELLM_KEY_CHUCK"` → 200
+  - [x] same with Dylan's key → 200
+  - [x] same with a wrong key → **401**
+  - [x] no key → **401**
+  - [x] `Authorization: Bearer <chuck key>` → 200 (and dylan Bearer → 200)
+- [x] Verify `siri.choukalos.com` still works (unchanged): `/siri/*` + `/api/*` with both keys → 200; wrong key → 401.
+      — 2026-11-15: `/siri/api/schedule` chuck 200 / dylan 200 / wrong 401; `/health` 200; 401 body = "Unauthorized"
+- [x] **Note for the future:** the siri route only accepts `X-Api-Key` (not `Bearer`). iOS Shortcuts use `X-Api-Key` — fine today; if a client needs `Bearer` there, mirror the expression above. (Documented in the Caddyfile comment.)
+- [x] **Key-rotation procedure (document in Phase 7):** when rotating `LITELLM_KEY_CHUCK`/`LITELLM_KEY_DYLAN`, update `.env` **and** reload Caddy, or the public routes break. (Note added to the Caddyfile comment 2026-11-15; formal doc in Phase 7.)
 
 Rollback: restore previous Caddyfile block + reload.
 
