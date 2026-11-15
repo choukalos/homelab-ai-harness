@@ -49,7 +49,8 @@
   rw, no expiry); `mcp_knowledge` uses the global-`m` key above (prefix
   gate is its boundary). The admin key (`QDRANT_ADMIN_API_KEY`) is
   OPS-only (backups, ops scripts) and is NOT held by any runtime service.
-  Qdrant is pinned `qdrant/qdrant:v1.18.1`.
+  Qdrant is pinned `qdrant/qdrant:v1.19.2` (bumped from v1.18.1 on
+  2026-11-15).
 - `mcp_media` now runs the **GPU-host media-pipeline** (192.168.4.55:8189) —
   18 `media_*` tools: 10 generation (storyboard, image gen/edit, I2V shots,
   TTS, music, SFX, upscale, assemble, fetch) live 2026-08-28 + 8 post-gen edit

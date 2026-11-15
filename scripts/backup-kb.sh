@@ -19,7 +19,7 @@
 # restore notes):
 #   docker run -d --name qdrant-kb-restore-test -p 16334:6333 \
 #     -v /home/chuck/data/backups/kb/kb_<slug>-<stamp>.snapshot:/qdrant/snapshots/restore.snapshot:ro \
-#     qdrant/qdrant:v1.18.1   # match production (pinned, Phase 9)
+#     qdrant/qdrant:v1.19.2   # match production (pinned, Phase 9)
 #   curl -s -X PUT http://localhost:16334/collections/kb_<slug>/snapshots/recover \
 #     -H 'Content-Type: application/json' \
 #     -d '{"location":"file:///qdrant/snapshots/restore.snapshot","priority":"snapshot"}'

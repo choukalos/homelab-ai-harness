@@ -18,7 +18,8 @@
   with 3 tools; 2026-09-02: `mcp_memory` added with 2 tools; 2026-09-20:
   transport migrated streamable-http → SSE, `mcp_knowledge` gained 5 digest
   tools).
-- Images pinned: `litellm:v1.92.0`, `qdrant:v1.18.1` (2026-08-28, Phase 9).
+- Images pinned: `litellm:v1.92.0`, `qdrant:v1.19.2` (2026-08-28, Phase 9;
+  Qdrant bumped v1.18.1 → v1.19.2 on 2026-11-15).
 - Qdrant JWT RBAC on; `mcp_knowledge` v2 on a global-`m` key (sub=
   mcp-knowledge) — the `kb_` prefix code-gate is the security boundary
   (per-collection scoping cannot cover on-the-fly collection creation).

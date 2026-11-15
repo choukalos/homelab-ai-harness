@@ -209,34 +209,26 @@
 - **D9 — Qdrant exposure**: `0.0.0.0:6333` without TLS. Owner decision
   2026-08-29 (revisited after the KB work): **leave as-is** — other
   services/tooling use the port. Revisit if the LAN trust model changes.
-  Re-verified 2026-11-15: unchanged (`qdrant/qdrant:v1.18.1`, 0.0.0.0:6333);
-  1.19.2 available if a bump is ever wanted (security_todo §9.3-V1 —
-  optional, no critical CVE).
+  Version bumped `v1.18.1` → `v1.19.2` on 2026-11-15 (security_todo
+  §9.3-V1): pre-bump backup taken, all 16 collections + 83 points intact,
+  `bm25` sparse slot survived (config moved to `config.params` in 1.19),
+  memory counts 50/7/3/3, search green (one transient cold-start degraded
+  call, retry clean), key-sync clean.
 - **Phase 6 — MCP memory tools**: ✅ COMPLETE (2026-09-02 scoped search
   endpoint + pi wiring; 2026-10-21 `mcp_memory` server) — `mcp_memory`
   serves `memory_search`/`memory_list`/`memory_remember` on `thor:8005`
   (SSE), per-user identity via forwarded Authorization (falls back to
   `MEMORY_USER_KEY` = chuck when absent), LAN-published. Search responses
   carry the degraded/cold-start flag (see 2026-10-21 9th phase-log entry).
-- **Dylan onboarding (key issued; still unused as of 2026-11-15 — that's
-  fine per Chuck; steps below remain available for when he uses it)**
-  (2026-10-21 plan items 2a/2c; 2b done; re-verified 2026-11-15: 7 memories,
-  all 2026-11-04 `recent_activity` writes; 0 session ingests):
-  - **2a. His pi/MCP config.** `mcp_memory` is LAN-published on
-    `thor:8005` (SSE). His pi config must connect with HIS key:
-    `Authorization: Bearer <LITELLM_KEY_DYLAN>` (from `.env`, don't
-    commit). Without a forwarded Authorization, the server falls back to
-    `MEMORY_USER_KEY` (chuck's key) — so the header matters. Same key
-    works for the Siri chat surface (`/api/chat`) — his identity is
-    already mapped (`MEMORY_USER_KEYS=dylan=LITELLM_KEY_DYLAN`).
-  - **2c. First-use ritual.** First thing he says: "remember this: ..." —
-    his memory starts accumulating immediately (private scope; household
-    facts from chuck are already visible to him). His pi client also gets
-    the `agents-skills/` memory skills via the same repo clone.
-  - **2b (DONE 2026-10-21).** Sweep GitHub identity wired: `GITHUB_USERS`
-    in `skills/recent_activity/skill.py` maps `"dylan" →
-    GITHUB_USER_DYLAN` (empty in `.env` until his login is set; the sweep
-    skips empty logins).
+- **Dylan onboarding — CLOSED 2026-11-15** (per Chuck: he's got a key; no
+  onboarding work needed). Identity is already wired end-to-end:
+  `MEMORY_USER_KEYS=dylan=LITELLM_KEY_DYLAN`, `mcp_memory` on `thor:8005`
+  (his pi config should use HIS key in `Authorization` — without it the
+  server falls back to chuck), GitHub sweep mapped (`GITHUB_USER_DYLAN`,
+  empty until set — sweep skips). His 7 memories are `recent_activity`
+  writes; if he ever uses it directly, the first "remember this: ..." starts
+  accumulation (private scope; chuck's household facts already visible to
+  him).
 - **Memory-system ops notes** (from the 2026-10-21 plan's housekeeping):
   - `.env` is gitignored — never commit it.
   - `memory/` is BAKED into `skill-runner:local` (`COPY memory/`):

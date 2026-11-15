@@ -15,7 +15,8 @@
   (MkDocs) container removed; `family_kb_ingest` skill retired.
   Backups: `scripts/backup-kb.sh` → `/home/chuck/data/backups/kb/`.
 - **Images pinned:** `litellm-proxy` `ghcr.io/berriai/litellm:v1.92.0` (was
-  `main-latest`), `qdrant` `qdrant/qdrant:v1.18.1` (was `latest`) — memory
+  `main-latest`), `qdrant` `qdrant/qdrant:v1.19.2` (was `latest`; v1.18.1
+  until 2026-11-15) — memory
   project Phase 9, verified live.
 - **Qdrant auth enabled:** `JWT_RBAC=true`. Three scoped credentials:
   `QDRANT_ADMIN_API_KEY` (OPS-only — backups/ops scripts),

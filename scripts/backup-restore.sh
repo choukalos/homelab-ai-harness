@@ -284,7 +284,7 @@ do_qdrant() {
     local cname="bktest-qdrant-$$" port=16335 ok=0
     docker rm -f "$cname" >/dev/null 2>&1 || true
     if docker run -d --name "$cname" -p "${port}:6333" \
-        -v "$src:/qdrant/snapshots/restore.snapshot:ro" qdrant/qdrant:v1.18.1 >/dev/null; then
+        -v "$src:/qdrant/snapshots/restore.snapshot:ro" qdrant/qdrant:v1.19.2 >/dev/null; then
       for _ in $(seq 1 30); do
         if curl -sf "http://localhost:${port}/collections" >/dev/null 2>&1; then ok=1; break; fi
         sleep 1
