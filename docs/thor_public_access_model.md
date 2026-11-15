@@ -2,14 +2,15 @@
 
 > Phase 3 — Make the public exposure strategy explicit.
 > Date: 2026-07-03 (design baseline)
-> Status: **Implemented** — `siri.choukalos.com` (skill-runner chat) and
-> `llm.choukalos.com` (LiteLLM public key) are live via Caddy + Cloudflare
-> Tunnel; no admin endpoints public. July text kept as historical context.
+> Status: **Implemented + hardened** — `siri.choukalos.com` (skill-runner chat)
+> and `llm.choukalos.com` (LiteLLM) are live via Caddy + Cloudflare Tunnel;
+> no admin endpoints public. July text kept as historical context.
 > **Security plan (2026-09-06 audit):** [`../security_todo.md`](../security_todo.md)
-> — public-access audit + hardening phases (Caddy key gate on `llm.choukalos.com`,
-> per-key MCP scoping, key hygiene, port rebinds, ufw). DRAFT — not yet applied;
-> several claims in this doc (e.g. the `$LITELLM_PUBLIC_API_KEY` gate) are stale
-> pending that plan's Phase 7 doc sync.
+> — Phases 0–2 applied 2026-11-15: Caddy key gate on `llm.choukalos.com`
+> (family LiteLLM keys only), per-key MCP scoping (default-deny +
+> `family-mcp-full` access group), key hygiene (spend tracking on, orphan key
+> blocked, dead `LITELLM_PUBLIC_API_KEY` removed). This doc re-synced
+> 2026-11-15 (was stale per finding F10).
 
 ---
 
@@ -80,14 +81,19 @@ Narrow public endpoints protected by API keys at the Caddy layer + backend auth.
 
 | Route | Auth | Backend | Purpose |
 |---|---|---|---|
-| `GET /health` | None | `ai-harness:8090` | Health check |
-| `POST /siri/*` | `X-API-Key: $SIRI_API_KEY` | `ai-harness:8090` | Ask, skill launch |
-| `GET /media/files/*` | None | `ai-harness:8090` | Artifact retrieval |
+| `GET /health` | None | `skill-runner:8091` | Health check |
+| `POST /siri/*` | `X-Api-Key: $LITELLM_KEY_CHUCK` or `$LITELLM_KEY_DYLAN` | `skill-runner:8091` | Ask, skill launch |
+| `GET /media/files/*` | None | `skill-runner:8091` | Artifact retrieval |
+| `GET/POST /media/pipeline/*` | per Tier 3 table below | matrix `:8189` | Signed-URL media retrieval |
 | *everything else* | — | `404` | Blocked |
 
 **Rules:**
-- Only these three path patterns are proxied. Everything else returns 404.
-- `/siri/*` requires a valid `X-API-Key` header matching `$SIRI_API_KEY`.
+- Only these path patterns are proxied. Everything else returns 404.
+- `/siri/*` requires `X-Api-Key` matching Chuck's or Dylan's LiteLLM key
+  (Caddy expression gate, verified 2026-11-15). `$SIRI_API_KEY` is **not** a
+  Caddy-layer key — it's an app-level credential used by `cli/run-skill.sh`
+  (legacy mode) and `cli/verify_attribution.sh` (T7) when calling
+  skill-runner directly.
 - `/media/files/*` is public because artifacts may need to be retrieved by iOS Shortcuts without auth headers. This is acceptable because artifact filenames are opaque IDs.
 - Does **not** expose: raw LiteLLM, raw MCP servers, admin tools, broad research without skill controls, code tools, raw filesystem.
 
@@ -95,16 +101,21 @@ Narrow public endpoints protected by API keys at the Caddy layer + backend auth.
 
 | Route | Auth | Backend | Purpose |
 |---|---|---|---|
-| `/*` | `X-API-Key: $LITELLM_PUBLIC_API_KEY` | `litellm-proxy:4000` | OpenAI-compatible API |
-| *no key* | — | `401` | Rejected |
+| `/*` | `X-Api-Key: $LITELLM_KEY_CHUCK` or `$LITELLM_KEY_DYLAN`, **or** `Authorization: Bearer <either key>` | `litellm-proxy:4000` | OpenAI-compatible API + MCP |
+| *other/missing key* | — | `401` (Caddy) | Rejected |
 
-**Rules:**
-- **Every request** requires `X-API-Key` matching `$LITELLM_PUBLIC_API_KEY`. No exception.
-- Behind that, LiteLLM enforces per-user model alias allowlists.
+**Rules (key gate applied 2026-11-15, security_todo Phase 1):**
+- **Every request** must carry Chuck's or Dylan's LiteLLM key (Caddy
+  `@llmNoAuth` expression → 401 before the request reaches LiteLLM). Even if
+  LiteLLM auth were misconfigured, the public route only ever carries the two
+  family keys.
+- Behind that, LiteLLM enforces per-key model scope + MCP access groups
+  (both family keys: all models + all 12 MCP servers via the
+  `family-mcp-full` access group — security_todo Phase 2).
 - **No additional Cloudflare Access layer** — scoped LiteLLM keys provide sufficient control.
-- **No LiteLLM admin routes** — only OpenAI-compatible inference endpoints.
+- **No LiteLLM admin routes** — only OpenAI-compatible inference + MCP endpoints.
 - Prefer LAN endpoint (`192.168.4.54:4000`) when at home.
-- Monitor usage. Rate-limit where practical. Rotate keys if leaked.
+- Monitor usage. Rate-limit where practical. Rotate keys if leaked (see Key Strategy).
 
 ---
 
@@ -176,8 +187,8 @@ Verified against `caddy/Caddyfile`:
 | `www.choukalos.com` | Redirect to `choukalos.com` | — | — |
 | `invest.choukalos.com` | `/api/*` + rest | App-level (downstream) | `invest-hub-server:4000` / `invest-hub-client:80` |
 | `api.choukalos.com` | All | App-level (downstream) | `invest-hub-server:4000` |
-| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*`, `/media/pipeline/*` | `X-API-Key` on `/siri/*` and `/media/pipeline/upload`; `/media/pipeline/dl/<token>` public (token is the credential) | `skill-runner:8091` (`/media/pipeline/*` → matrix `192.168.4.55:8189`) |
-| `llm.choukalos.com` | All paths | `X-API-Key` (all requests) | `litellm-proxy:4000` |
+| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*`, `/media/pipeline/*` | `X-Api-Key` (chuck/dylan LiteLLM key) on `/siri/*` and `/media/pipeline/upload`; `/media/pipeline/dl/<token>` public (token is the credential) | `skill-runner:8091` (`/media/pipeline/*` → matrix `192.168.4.55:8189`) |
+| `llm.choukalos.com` | All paths | `X-Api-Key` or `Bearer` (chuck/dylan LiteLLM key; Caddy 401s everything else — gate live 2026-11-15) | `litellm-proxy:4000` |
 | `plausible.choukalos.com` | `/js/*`, `/api/event` only | None | `plausible:8000` |
 
 All other host/path combinations return `404`.
@@ -186,31 +197,49 @@ All other host/path combinations return `404`.
 
 ## Key Strategy
 
-### LiteLLM Keys
+### LiteLLM Keys (live inventory, 2026-11-15)
 
-| Key | Used By | Model Scope | Auth Layer |
-|---|---|---|---|
-| `chuck` | CLI, Open WebUI admin, llm.choukalos.com | All aliases | Caddy API key + LiteLLM per-key allowlist |
-| `son` | Open WebUI, llm.choukalos.com | Allowed aliases only | Caddy API key + LiteLLM per-key allowlist |
-| `openwebui` | Open WebUI backend | Chat + embeddings | Internal (LAN only, no public route) |
-| `siri` | Siri skill facade via `$SIRI_API_KEY` | Scoped chat models | Caddy API key (`$SIRI_API_KEY`) |
-| `automation` | n8n (when re-enabled) | Scoped per workflow | Internal (LAN only) |
-| `experiment` | Testing / development | Any (dev use) | Internal |
+| Key | User | Model Scope | MCP Scope | Used By |
+|---|---|---|---|---|
+| `chuck` | chuck | all models | all 12 servers (`family-mcp-full` group) | public (llm + siri routes), CLI, Open WebUI admin |
+| `dylan` | dylan | all models | all 12 servers (`family-mcp-full` group) | public (llm + siri routes), Dylan's devices |
+| *(no alias, `memory-service`)* | — | `matrix-coder`, `homelab-embedding-v1` only | **none** (default-deny) | skill-runner mem0 embed/extract (`MEMORY_LITELLM_KEY`) |
+| master (`sk-cb1678…`) | proxy admin | everything | everything (`admin_view_unscoped` — admin keys without explicit `object_permission` resolve the whole MCP registry) | **internal only** — open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner (`LITELLM_MASTER_KEY == LITELLM_API_KEY`, finding F6) |
+| *(no alias, `sk-...sOsg`)* | default_user_id | all models | none | **BLOCKED 2026-11-15** — orphaned dashboard test key (F5); already expired 2026-10-05; delete after observation window |
 
-Each key has:
-- Its own model alias allowlist (defined in Phase 4)
-- Optional budget/cost tracking
-- Per-key logging for audit
-- Revocation path (delete key from LiteLLM config)
+**MCP scoping (security_todo Phase 2, 2026-11-15):** `allow_all_keys` is off on
+all 12 MCP servers (default-deny). The `family-mcp-full` access group
+(`07c1acf8-ffb6-4dbc-918d-9c7199f76fa1`) grants both public keys all 12
+servers (Chuck's decision: Dylan and Chuck get all MCP tools incl. skill
+runner). The memory-service key has no MCP grant. The master key still sees
+all servers via the admin path — intentional, it never crosses the public
+path (Caddy gate) and, after Phases 4/5, the LAN edge.
 
-### Caddy API Keys
+**Master-key note (F6):** `LITELLM_MASTER_KEY == LITELLM_API_KEY` is
+internal-only by design (docker network + LAN; LAN-only after Phases 4/5).
+A dedicated `internal-service` key for the 6 internal consumers is Phase 8
+(decided 2026-09-06).
+
+### App-Level (Non-Caddy) Keys
 
 | Env Var | Used By | Rotation Policy |
 |---|---|---|
-| `$SIRI_API_KEY` | `siri.choukalos.com` `/siri/*` | Rotate annually or if compromised |
-| `$LITELLM_PUBLIC_API_KEY` | `llm.choukalos.com` (all paths) | Rotate annually or if compromised |
+| `$SIRI_API_KEY` | `cli/run-skill.sh` (legacy mode), `cli/verify_attribution.sh` (T7) — app-level calls to skill-runner, **not** a Caddy gate | Rotate annually or if compromised |
+| `$HARNESS_API_KEY` | open-webui → skill-runner harness (`HARNESS_URL=http://skill-runner:8091`) | Rotate annually or if compromised |
 
-These are Caddy-level keys — they gate the reverse proxy. Behind them, the backends may enforce their own additional auth (e.g., LiteLLM per-user keys).
+### Caddy Gate Keys
+
+| Env Var | Gates | Rotation Policy |
+|---|---|---|
+| `$LITELLM_KEY_CHUCK` | `llm.choukalos.com` (all paths; X-Api-Key or Bearer) + `siri.choukalos.com` `/siri/*` (X-Api-Key) | Rotate with the LiteLLM key: re-mint in LiteLLM, update `.env`, **reload Caddy** (`docker exec caddy caddy reload --config /etc/caddy/Caddyfile`) — Caddy reads the env at load time, so a stale Caddy env 401s the new key |
+| `$LITELLM_KEY_DYLAN` | same as above | same as above |
+
+`$LITELLM_PUBLIC_API_KEY` was **removed 2026-11-15** (security_todo Phase 3,
+finding F11) — it was dead: assigned to an unused variable in
+`lib/litellm-keys.sh`, passed to the litellm-proxy env but never consumed,
+and never used by Caddy. The July-era description of a
+`$LITELLM_PUBLIC_API_KEY` Caddy gate in this doc never matched the live
+Caddyfile (finding F10).
 
 ---
 

@@ -4,7 +4,7 @@ set -euo pipefail
 BASE_DIR="/home/chuck/homelab"
 COMPOSE_DIR="${BASE_DIR}/compose"
 
-# Source .env for key management helpers (LITELLM_MASTER_KEY, LITELLM_PUBLIC_API_KEY)
+# Source .env for key management helpers (LITELLM_MASTER_KEY)
 if [[ -f "${BASE_DIR}/.env" ]]; then
   set -a
   source "${BASE_DIR}/.env"

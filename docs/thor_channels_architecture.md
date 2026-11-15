@@ -113,7 +113,7 @@ Channels are thin adapters on top. They connect users to capabilities but do not
 
 **Users:** Chuck, son
 
-**Access path:** `llm.choukalos.com` → Cloudflare Tunnel → Caddy (`X-API-Key: $LITELLM_PUBLIC_API_KEY`) → `litellm-proxy:4000`
+**Access path:** `llm.choukalos.com` → Cloudflare Tunnel → Caddy (`X-Api-Key`/`Bearer` with Chuck's or Dylan's LiteLLM key — key gate live 2026-11-15, security_todo Phase 1) → `litellm-proxy:4000`
 
 **Public/LAN:** Public, API key auth at Caddy layer. Prefer LAN when home.
 

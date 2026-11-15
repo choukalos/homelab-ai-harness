@@ -28,7 +28,6 @@ services:
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - LITELLM_PUBLIC_API_KEY=${LITELLM_PUBLIC_API_KEY}
       - LITELLM_API_KEY=${LITELLM_MASTER_KEY}
       - HF_TOKEN=${HF_TOKEN}
       - DATABASE_URL=${LITELLM_DATABASE_URL}

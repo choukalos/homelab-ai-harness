@@ -9,7 +9,6 @@ LITELLM_PROXY="${LITELLM_PROXY:-http://127.0.0.1:4000}"
 LITELLM_MASTER="${LITELLM_MASTER_KEY:-${LITELLM_MASTER:-}}"
 LAN_BASE="http://192.168.4.54:4000/v1"
 EXT_BASE="https://llm.choukalos.com/v1"
-LITELLM_PUBLIC="${LITELLM_PUBLIC_API_KEY:-}"
 
 _litellm() {
   local subcmd="${1:-help}"

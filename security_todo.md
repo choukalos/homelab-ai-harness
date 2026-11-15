@@ -36,6 +36,16 @@
 | *(no alias)* | default_user_id | none | $0.25 | none | created 2026-08-30 via dashboard UI — **orphaned test key** (investigated, F5) |
 | master (`sk-cb1678…`) | — | admin, everything | — | — | internal services only (F6) |
 
+### Key inventory (live, 2026-11-15 — after Phases 2–3)
+
+| key_alias | user_id | scope | budget | rpm/tpm | notes |
+|---|---|---|---|---|---|
+| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b open) | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
+| `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
+| *(no alias)* | — | models: matrix-coder, homelab-embedding-v1 | none | none | internal (skill-runner mem0, `MEMORY_LITELLM_KEY`); MCP: **none** (default-deny, Phase 2) |
+| *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **BLOCKED 2026-11-15** — F5 orphan; already expired 2026-10-05; delete after observation window. (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |
+| master (`sk-cb1678…`) | — | admin, everything | — | — | internal only (F6); MCP: all 12 via `admin_view_unscoped` (verified in v1.104.0 source) |
+
 ---
 
 ## 2. Travel question (from the audit session)
@@ -228,28 +238,35 @@ from the v1.92 the original plan was researched on):
 
 Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the access group: `DELETE /v1/access_group/{id}`).
 
-### Phase 3 — Key hygiene (guardrails, retire orphans + dead key)
+### Phase 3 — Key hygiene (guardrails, retire orphans + dead key) — **IN PROGRESS 2026-11-15**
 
-- [ ] **Enable spend tracking** (prerequisite for budgets): in `litellm/config.yml` set `disable_spend_logs: false`, `disable_spend_updates: false`; restart litellm-proxy.
-- [ ] **Set limits on the two public keys** — family decision (2026-09-06): **no budget cap** (power users). Rate guardrails pending D2b:
-  ```bash
-  # via /v1/key/update with master key, for each of chuck-remote + dylan-v2:
-  #   max_budget: (none — unlimited, family decision)
-  #   rpm_limit: TBD (D2b)              # proposal: 120 or none
-  #   tpm_limit: TBD (D2b)              # proposal: 400000 or none
-  #   max_parallel_requests: TBD (D2b)  # proposal: 8 or none
-  ```
-- [ ] **Retire the 3 orphaned `default_user_id` keys** (investigation complete 2026-09-06 — see F5: dashboard-created test keys, zero repo references, zero spend):
-  - [ ] confirm with Dylan that none of the 3 was pasted into a client (Mac Studio, his device) — plaintext isn't stored on Thor, so this is the only remaining blind spot
-  - [ ] **block** (soft, reversible): `./homelab.sh key block <key>` for each
+- [x] **Enable spend tracking** (prerequisite for budgets): in `litellm/config.yml` set `disable_spend_logs: false`, `disable_spend_updates: false`; restart litellm-proxy.
+      — config edited 2026-11-15; takes effect on the Phase 3 recreate (below)
+- [x] **Set limits on the two public keys** — family decision (2026-09-06): **no budget cap** (power users). Rate guardrails pending D2b:
+      — no change 2026-11-15: no budget cap (family decision), rpm/tpm/
+      max_parallel_requests left unset pending D2b (still open)
+- [x] **Retire the orphaned `default_user_id` keys** (investigation complete 2026-09-06 — see F5: dashboard-created test keys, zero repo references, zero spend):
+      — only **1 of the 3** remained in the DB on 2026-11-15 (`sk-...sOsg`,
+      `3409157c…d8a9`); the other two (created 07-15 / 08-15) were already deleted.
+      It was also already **expired 2026-10-05** (doubly dead).
+  - [x] confirm with Dylan that none of the 3 was pasted into a client — Chuck approved proceeding 2026-11-15; zero spend + F5 consumer ruling-out + the other 2 already deleted make this low-risk; block (not delete) keeps it reversible
+  - [x] **block** (soft, reversible) — done 2026-11-15 via `POST /key/block` with the
+        key hash (note: `./homelab.sh key block default_user_id` fails — `/key/list`
+        excludes this key so the CLI hash lookup can't find it; the API takes the
+        hash directly). DB: `blocked = t`
   - [ ] observe a few days — any breakage means someone was using one → unblock + investigate
-  - [ ] **delete**: `./homelab.sh key delete <key>`
-- [ ] **Retire the dead `.env` key** (consumer check done 2026-09-06):
-  - [ ] remove `LITELLM_PUBLIC_API_KEY` from `.env` + `compose/compose.ai-core.yml:34` (env passed to litellm-proxy, unused) + the unused variable at `lib/litellm-keys.sh:12` + the mention in the `homelab.sh` header comment
-  - [ ] **keep** `SIRI_API_KEY` (in use: `cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` (in use: open-webui → skill-runner harness) — document their consumers in `docs/thor_public_access_model.md` (Phase 7)
-- [ ] **Document master-key usage** (F6): add a note in `docs/thor_public_access_model.md` that `LITELLM_MASTER_KEY == LITELLM_API_KEY` is internal-only by design (docker network + LAN only after Phases 4/5).
-- [ ] **Dedicated `internal-service` key** — decided 2026-09-06 (was optional): see **Phase 8**.
-- [ ] Re-run the key inventory snapshot (Phase 0 command) and paste the new table into §1 for the record.
+  - [ ] **delete**: `POST /key/delete` with the same hash (after observation)
+- [x] **Retire the dead `.env` key** (consumer check done 2026-09-06):
+  - [x] remove `LITELLM_PUBLIC_API_KEY` from `.env` + `compose/compose.ai-core.yml` (litellm service env) + the unused variable at `lib/litellm-keys.sh` + the mention in the `homelab.sh` header comment
+        — done 2026-11-15 (all 4 sites); leaves the running container's env on the Phase 3 recreate
+  - [x] **keep** `SIRI_API_KEY` (in use: `cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` (in use: open-webui → skill-runner harness) — consumers documented in `docs/thor_public_access_model.md` (pulled forward from Phase 7, done 2026-11-15)
+- [x] **Document master-key usage** (F6): note added to `docs/thor_public_access_model.md` — `LITELLM_MASTER_KEY == LITELLM_API_KEY` is internal-only by design (docker network + LAN only after Phases 4/5); full doc re-synced 2026-11-15 (F10: stale `$LITELLM_PUBLIC_API_KEY` gate description replaced with the live Caddy key gate + current key table + MCP groups + rotation procedure).
+- [x] **Dedicated `internal-service` key** — decided 2026-09-06 (was optional): see **Phase 8** (not started).
+- [x] Re-run the key inventory snapshot (Phase 0 command) and paste the new table into §1 for the record — done 2026-11-15 (see §1, "Key inventory (live, 2026-11-15)").
+
+**Phase 3 apply step (Chuck):** `up -d litellm` — this time it **recreates** (the compose env changed: `LITELLM_PUBLIC_API_KEY` line removed), which loads the spend-tracking config AND drops the dead key from the container env:
+`cd /home/chuck/homelab && docker compose -f compose/compose.ai-core.yml --env-file .env up -d litellm`
+Verify after: (1) container env has no `LITELLM_PUBLIC_API_KEY`, (2) spend tracking live (new requests log spend; `key list` spend column moves), (3) sanity: chuck key 200 on `/v1/models` via public URL, MCP visibility unchanged (chuck 12 / memory-service 0).
 
 Rollback: budgets/limits are per-key DB rows — revert via `/v1/key/update`; `.env` restore from Phase 0 backup.
 

@@ -404,7 +404,7 @@ migration readiness) or Phase 6 (optional MCP).
 - `siri.choukalos.com` → Caddy → `skill-runner:8091` with `X-API-Key` —
   Caddy OR-gate accepts chuck / dylan / legacy keys; `MEMORY_USER_KEYS` maps
   each to a `user_id` (per-user attribution live since 2026-09-06).
-- `llm.choukalos.com` → `litellm-proxy:4000` (`LITELLM_PUBLIC_API_KEY`).
+- `llm.choukalos.com` → Caddy key gate (chuck/dylan LiteLLM key, `X-Api-Key` or `Bearer`; live 2026-11-15) → `litellm-proxy:4000`.
 - Scheduler jobs: `dispatch_job()` hardcodes `requester="siri"` (D10 → `service`).
 
 ## Key files

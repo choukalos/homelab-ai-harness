@@ -72,8 +72,8 @@ general_settings:
   debug_level: "WARNING"
   store_model_in_db: true
   mcp_client_timeout: 30
-  disable_spend_logs: true
-  disable_spend_updates: true
+  disable_spend_logs: false
+  disable_spend_updates: false
 
 litellm_settings:
   callbacks:
