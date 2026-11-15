@@ -2817,7 +2817,7 @@ async def list_skills(x_api_key: Optional[str] = Header(None)) -> SkillListRespo
 
 
 # ---------------------------------------------------------------------------
-# Duplicate-window guard (experience_improvement_todo.md F1; proposals #5/#8)
+# Duplicate-window guard (F1; see skills/harness_reflection/README.md)
 # ---------------------------------------------------------------------------
 # The 2026-11-08 deploy ran harness_reflection 9 times in one evening (8
 # run-now test jobs + the scheduled run). For the skills listed below, a

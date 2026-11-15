@@ -86,7 +86,7 @@ PUBLIC_ROOT = Path(os.environ.get("MORNING_BRIEF_PUBLIC_ROOT", "/home/chuck/data
 SEEN_STORE_PATH = Path(
     os.environ.get("MORNING_BRIEF_SEEN_STORE", str(ARTIFACT_DIR / "morning_brief_seen.json"))
 )
-# Harness reflection digest pointer (Phase 3, experience_improvement_todo):
+# Harness reflection digest pointer (Phase 3, skills/harness_reflection/README.md):
 # the weekly harness_reflection skill writes a one-line pointer so Chuck
 # sees the latest review digest without hunting. Minimal documented
 # context hook: the brief appends it to the LLM context while fresh.
@@ -961,7 +961,7 @@ def _memory_block(job, interests: list[str]) -> str:
 def _reflection_pointer_block() -> str:
     """Surface the latest harness_reflection digest pointer (Phase 3).
 
-    Minimal documented context hook (experience_improvement_todo Phase 3):
+    Minimal documented context hook (harness_reflection Phase 3):
     the weekly harness_reflection skill writes a one-line pointer to
     ``REFLECTION_POINTER_FILE``; while it is fresh (< 7 days old) the
     brief appends it to the LLM context so the review digest is visible

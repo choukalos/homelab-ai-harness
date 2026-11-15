@@ -1,5 +1,5 @@
 """Skill job metrics (Phase 4) — job health for the harness-learning
-dashboard (experience_improvement_todo.md, Phase 4).
+dashboard (skills/harness_reflection/README.md, Phase 4).
 
 Emitted on skill-runner ``/metrics`` (appended in ``main.py``), in the
 same dependency-free Prometheus text format as ``memory/metrics.py``,

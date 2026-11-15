@@ -196,8 +196,9 @@
   issued (`dylan-v2`), unused as of 2026-11-14 (that's fine per Chuck); his
   7 memories are all from the `recent_activity` scheduled job — the designed
   path for users without direct client traffic. (4) **Capture layer live**
-  (experience-improvement work, `experience_improvement_todo.md`
-  2026-11-08→13): `session-memory` + `session-sync` pi skills, `POST
+  (experience-improvement work, 2026-11-08→14 — see
+  `skills/harness_reflection/README.md`): `session-memory` +
+  `session-sync` pi skills, `POST
   /api/sessions/ingest` (private per-user transcripts, 2 MB cap, sha256
   dedup), weekly `harness_reflection` (memory maintenance + lessons +
   propose-only harness proposals), harness-learning dashboard. Memory now

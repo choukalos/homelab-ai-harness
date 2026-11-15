@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================
 # proposals.sh — CLI for harness change proposals (Phase 3,
-# experience_improvement_todo.md).
+# skills/harness_reflection/README.md).
 #
 # The weekly harness_reflection skill (Tier 1, PROPPOSE ONLY) creates
 # `open` proposals (markdown in proposals/ + a row in the `proposals`
