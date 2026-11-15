@@ -48,11 +48,11 @@ Gemma 26B is the sole alternative — for family chat, copywriting, translations
 
 | alias | category | backend_model | quantization | vllm_profile | max_context | system_prompt_ref | tool_bundle | allowed_channels | intended_users | public_access | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `local/qwen-coder` | coding | Lorbus/Qwen3.6-27b-int4-AutoRound | q4 | qwen36 | 128k | coding-default | `{ chat, file-read, code-gen }` | `{ cli, pi, ide, openwebui }` | `{ chuck, son }` | `false` | `draft` |
-| `local/qwen-long` | general | Lorbus/Qwen3.6-27b-int4-AutoRound | q4 | qwen36-long (same profile, more context)_ | 200k | general-default | `{ chat, web-search, kb-read, deep-research }` | `{ cli, openwebui, llm.ch, pi }` | `{ chuck, son }` | `true` | `draft` |
-| `local/gemma-family` | family | gemma4:26b | q4 | gemma4moe | 80k | family-default | `{ chat }` | `{ openwebui, siri, portal }` | `{ chuck, wife, daughter }` | `false` | `draft` |
+| `local/qwen-coder` | coding | Lorbus/Qwen3.6-27b-int4-AutoRound | q4 | qwen36 | 128k | coding-default | `{ chat, file-read, code-gen }` | `{ cli, pi, ide }` | `{ chuck, son }` | `false` | `draft` |
+| `local/qwen-long` | general | Lorbus/Qwen3.6-27b-int4-AutoRound | q4 | qwen36-long (same profile, more context)_ | 200k | general-default | `{ chat, web-search, kb-read, deep-research }` | `{ cli, llm.ch, pi }` | `{ chuck, son }` | `true` | `draft` |
+| `local/gemma-family` | family | gemma4:26b | q4 | gemma4moe | 80k | family-default | `{ chat }` | `{ siri, portal }` | `{ chuck, wife, daughter }` | `false` | `draft` |
 | `local/experiment` | experiment | Qwen3-72B (see recommendation below) | q4 | experiment | 80k | none | `{ chat }` | `{ cli }` | `{ chuck }` | `false` | `draft` |
-| `local/embed` | embed | nomic-embed-text:latest | q4 | _TBD_ | _TBD_ | none | `{ embeddings }` | `{ openwebui, cli, automation }` | `{ system }` | `false` | `draft` |
+| `local/embed` | embed | nomic-embed-text:latest | q4 | _TBD_ | _TBD_ | none | `{ embeddings }` | `{ cli, automation }` | `{ system }` | `false` | `draft` |
 
 ---
 
@@ -62,7 +62,6 @@ Gemma 26B is the sole alternative — for family chat, copywriting, translations
 |---|---|
 | `chuck` | All aliases |
 | `son` | `local/qwen-coder`, `local/qwen-long`, `local/experiment` |
-| `openwebui` | `local/qwen-coder`, `local/qwen-long`, `local/gemma-family`, `local/embed` |
 | `siri` | `local/qwen-coder`, `local/gemma-family` |
 | `automation` | `local/qwen-coder`, `local/qwen-long` |
 | `experiment` | `local/experiment` |

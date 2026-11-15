@@ -3,8 +3,8 @@
 > Phase 2 — Document all user-facing channels. None of them owns the platform.
 > Date: 2026-07-03 (design baseline)
 > Status: **Mostly current** — Siri via `siri.choukalos.com` (Caddy) and n8n/
-> CLI are live; Open WebUI removal is **on hold** (owner decision 2026-08-29,
-> not scheduled).
+> CLI are live; Open WebUI was **removed 2026-11-15** (owner decision — unused;
+> supersedes the 2026-08-29 "on hold" decision).
 
 ---
 
@@ -27,7 +27,7 @@ Channels are thin adapters on top. They connect users to capabilities but do not
 | # | Channel | Users | Access Path | Status |
 |---|---|---|---|---|
 | 1 | Homepage / Family Portal | Chuck, wife, daughter, son | LAN or `choukalos.com` | LAN preferred; blog is public |
-| 2 | Open WebUI | Chuck, wife, daughter, son | LAN `:3000` | LAN only |
+| 2 | ~~Open WebUI~~ | — | LAN `:3000` | **REMOVED 2026-11-15** (unused) |
 | 3 | Siri / iOS Shortcuts | Chuck | `siri.choukalos.com` | Public, API key |
 | 4 | `llm.choukalos.com` | Chuck, son | `llm.choukalos.com` | Public, API key |
 | 5 | PI.dev | Chuck | LAN / local | LAN only |
@@ -62,25 +62,15 @@ Channels are thin adapters on top. They connect users to capabilities but do not
 
 ---
 
-## 2. Open WebUI
+## 2. Open WebUI — **REMOVED 2026-11-15**
 
-**Purpose:** Primary human-facing chat interface. Multi-model conversations, file upload, image generation, family KB assistant, web search.
-
-**Users:** Chuck, wife, daughter, son
-
-**Access path:** LAN `192.168.4.54:3000` → `open-webui:8080` → `litellm-proxy:4000` + `ai-harness:8090`
-
-**Public/LAN:** LAN only. Not exposed in Caddy.
-
-| Allowed | Disallowed |
-|---|---|
-| Chat (all LiteLLM models) | Raw LiteLLM admin |
-| Image generation (via ComfyUI) | Skill launch (future: yes) |
-| File upload | MCP server config |
-| Family KB read (via Harness) | Raw filesystem outside workspace |
-| Web search (via SearXNG) | Model key management |
-
-**Tool bundle:** `{ chat-all, image-gen, file-upload, kb-read, web-search }`
+Was the primary human-facing chat interface (multi-model chat, file upload,
+image generation, family KB assistant, web search on LAN `:3000`). Owner
+decision 2026-11-15: unused by the family (pi / Siri / CLI cover it) —
+container, compose service, and data directory removed. Data tarball kept at
+`/home/chuck/data/backups/open-webui-data-20261115.tar.gz`. Also resolved
+security_todo 9.3-O1 (placeholder `WEBUI_SECRET_KEY`, stale image) by
+removal. `HARNESS_API_KEY` (its only consumer) removed from `.env`.
 
 ---
 
@@ -304,7 +294,6 @@ Which channels can access which platform capabilities:
 
 ```
 LAN users (Chuck at home):
-  → Open WebUI :3000 (LAN)
   → Caddy :80 (internal proxy to all services)
   → LiteLLM :4000 (LAN)
   → AI Harness :8090 (LAN, bound to THOR_IP)

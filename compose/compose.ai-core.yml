@@ -57,31 +57,6 @@ services:
       retries: 5
       start_period: 15s
 
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:latest
-    container_name: open-webui
-    restart: unless-stopped
-    networks:
-      - ai-net
-    ports:
-      - "3000:8080"
-    environment:
-      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
-      - ENABLE_OPENAI_API=True
-      - OPENAI_API_BASE_URL=http://litellm-proxy:4000/v1
-      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
-      - ENABLE_OLLAMA_API=False
-      - ENABLE_PERSISTENT_CONFIG=False
-      - ENABLE_IMAGE_GENERATION=true
-      - IMAGE_GENERATION_API_URL=http://${MATRIX_IP}:8188
-      - HARNESS_URL=http://skill-runner:8091
-      - HARNESS_API_KEY=${HARNESS_API_KEY}
-      - HARNESS_DISPLAY_URL=http://${THOR_IP:-192.168.4.54}:8091
-    volumes:
-      - /home/chuck/data/open-webui:/app/backend/data
-    depends_on:
-      - litellm
-
   qdrant:
     # Phase 9 hardening: pinned off latest. v1.19.2 (bumped from v1.18.1 on
     # 2026-11-15, security_todo 9.3-V1 — LAN-only, no critical CVE; data on

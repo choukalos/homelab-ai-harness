@@ -57,7 +57,7 @@ These systems are LAN-only now but could be exposed remotely with strong auth in
 
 | System | Current | Future Path (if approved) |
 |---|---|---|
-| Open WebUI | LAN `:3000` | Cloudflare Access / router OpenVPN |
+| ~~Open WebUI~~ | **REMOVED 2026-11-15** (unused; container + data gone) | — |
 | Portal (if moved to Thor) | LAN | Cloudflare Access / VPN |
 | Grafana admin | LAN (Lego) | Cloudflare Access |
 | Plausible admin | LAN only (blocked) | Cloudflare Access (if needed) |
@@ -201,10 +201,10 @@ All other host/path combinations return `404`.
 
 | Key | User | Model Scope | MCP Scope | Used By |
 |---|---|---|---|---|
-| `chuck` | chuck | all models | all 12 servers (`family-mcp-full` group) | public (llm + siri routes), CLI, Open WebUI admin |
+| `chuck` | chuck | all models | all 12 servers (`family-mcp-full` group) | public (llm + siri routes), CLI, pi sessions |
 | `dylan` | dylan | all models | all 12 servers (`family-mcp-full` group) | public (llm + siri routes), Dylan's devices |
 | *(no alias, `memory-service`)* | — | `matrix-coder`, `homelab-embedding-v1` only | **none** (default-deny) | skill-runner mem0 embed/extract (`MEMORY_LITELLM_KEY`) |
-| master (`sk-cb1678…`) | proxy admin | everything | everything (`admin_view_unscoped` — admin keys without explicit `object_permission` resolve the whole MCP registry) | **internal only** — open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner (`LITELLM_MASTER_KEY == LITELLM_API_KEY`, finding F6) |
+| master (`sk-cb1678…`) | proxy admin | everything | everything (`admin_view_unscoped` — admin keys without explicit `object_permission` resolve the whole MCP registry) | **internal only** — presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner (`LITELLM_MASTER_KEY == LITELLM_API_KEY`, finding F6; 5 consumers after open-webui removal 2026-11-15) |
 | *(no alias, `sk-...sOsg`)* | default_user_id | all models | none | **BLOCKED 2026-11-15** — orphaned dashboard test key (F5); already expired 2026-10-05; delete after observation window |
 
 **MCP scoping (security_todo Phase 2, 2026-11-15):** `allow_all_keys` is off on
@@ -225,7 +225,9 @@ A dedicated `internal-service` key for the 6 internal consumers is Phase 8
 | Env Var | Used By | Rotation Policy |
 |---|---|---|
 | `$SIRI_API_KEY` | `cli/run-skill.sh` (legacy mode), `cli/verify_attribution.sh` (T7) — app-level calls to skill-runner, **not** a Caddy gate | Rotate annually or if compromised |
-| `$HARNESS_API_KEY` | open-webui → skill-runner harness (`HARNESS_URL=http://skill-runner:8091`) | Rotate annually or if compromised |
+
+(`$HARNESS_API_KEY` — formerly open-webui → skill-runner harness — was removed
+from `.env` 2026-11-15 with the open-webui service; its only consumer was gone.)
 
 ### Caddy Gate Keys
 

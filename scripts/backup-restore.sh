@@ -581,7 +581,7 @@ if [[ "$ACTION" == "full" ]]; then
         staged=$((staged+1))
         printf '%s\t%s\t%s\n' "$name" "$type" "$(basename "$src")" >> "$TARGET_DIR/.staged.tsv"
       elif [[ -d "$src" ]]; then
-        # rsync directory items (presenton, open-webui, mem0, n8n)
+        # rsync directory items (presenton, mem0, n8n)
         dest="$TARGET_DIR/artifacts/$name"
         mkdir -p "$dest"
         cp -a "$src/." "$dest/"

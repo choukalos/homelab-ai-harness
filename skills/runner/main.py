@@ -2129,28 +2129,6 @@ async def _handle_media_generate(text: str) -> ChatResponse:
         await client.close()
 
 
-def _scan_demos(query: str) -> ChatResponse:
-    """Scan the demos page for matching demos."""
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "-m", "5", "http://open-webui:8080/demos"],
-            capture_output=True, text=True,
-        )
-        content = result.stdout[:2000]
-        display = f"Demos page content:\n{content}"
-        return ChatResponse(
-            speak="I checked the demos page. Here's what I found.",
-            display=display,
-            data={"query": query},
-        )
-    except Exception as e:
-        return ChatResponse(
-            speak="I couldn't reach the demos page.",
-            display=f"Error: {e}",
-        )
-
-
 def _scan_presentations(query: str) -> ChatResponse:
     """
     List presentations via the Presenton API.

@@ -3,8 +3,9 @@
 > Created: 2026-09-06 (audit session 22:09–22:33; plan completed same evening)
 > Status: **Phases 0–3 DONE (2026-11-15)** — Caddy key gate live on
 > `llm.choukalos.com`, per-key MCP scoping (default-deny + `family-mcp-full`
-> group), key hygiene (spend tracking on, orphan blocked, dead key removed).
-> Phases 4–8 not started. Orphan-key delete pending observation window.
+> group), key hygiene (spend tracking on, orphan key deleted, dead keys
+> removed). Phases 4–8 not started. Open WebUI removed 2026-11-15 (9.3-O1
+> resolved by removal).
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -20,12 +21,12 @@
 | F3 | MED | `chuck-remote` + `dylan-v2` keys: **no model scope, no budget, no RPM/TPM limits, no expiry**. | LiteLLM DB `LiteLLM_VerificationToken` | Phase 3 |
 | F4 | MED | Spend tracking disabled (`disable_spend_logs: true`, `disable_spend_updates: true`) → budgets **cannot be enforced** even if set. | `litellm/config.yml` `general_settings` | Phase 3 |
 | F5 | MED | **3 orphaned `default_user_id` keys** (no alias, $0.25 budget each; created 07-15 / 08-15 / 08-30 via the **LiteLLM dashboard UI**). Investigated 2026-09-06: zero references anywhere in the repo (compose/scripts/code/docs), zero spend, empty AuditLog, no request-log tables; all plausible consumers ruled out (open-webui → master key, pi → Chuck's key, skill-runner/mcp_* → master, CLI → SIRI_API_KEY). Conclusion: **manual test keys, safe to retire** (block → observe → delete). | LiteLLM DB | Phase 3 |
-| F6 | MED | `LITELLM_MASTER_KEY == LITELLM_API_KEY` (same `sk-cb1678…` token) injected into 6 internal consumers (open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner). Master key = proxy admin = all models + all MCP servers. Acceptable *while it stays internal* — which is exactly what Phases 1/4/5 guarantee. | `.env`, `compose/*.yml` | Phase 3 (document) + Phase 8 (internal-service key — decided) |
+| F6 | MED | `LITELLM_MASTER_KEY == LITELLM_API_KEY` (same `sk-cb1678…` token) injected into 6 internal consumers (open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner). Master key = proxy admin = all models + all MCP servers. Acceptable *while it stays internal* — which is exactly what Phases 1/4/5 guarantee. **2026-11-15: now 5 consumers** (open-webui removed). | `.env`, `compose/*.yml` | Phase 3 (document) + Phase 8 (internal-service key — decided) |
 | F7 | MED | Wide `0.0.0.0` host bindings: MySQL `3306/33060`, Qdrant `6333`, LiteLLM `4000`, SearXNG `8088`, Open WebUI `3000`, monitoring stack `3001/8081/8082/9090/9091/9100`, `mcp_memory 8005`, crawl4ai `11235`. **ufw not running.** | `compose/*.yml`, host | Phase 4/5 |
 | F8 | MED | `mcp_memory` (host `:8005`) has **no auth of its own** and falls back to `MEMORY_USER_KEY` (Chuck's key) when the caller sends none → any LAN client can search **Chuck's private memories** unauthenticated. | `compose/compose.mcp.yml`, `mcp/servers/memory/server.py` | Phase 4 |
 | F9 | LOW | sshd config not fully verified (password auth / root login status unknown). | host | Phase 5 |
 | F10 | LOW | Stale docs: `thor_public_access_model.md` describes a `$LITELLM_PUBLIC_API_KEY` gate and key table that don't match reality. | `docs/` | Phase 7 |
-| F11 | INFO | `.env` key consumers confirmed (2026-09-06): `LITELLM_PUBLIC_API_KEY` is **dead** (assigned to an unused variable in `lib/litellm-keys.sh:12`, passed to the litellm-proxy container env but unused; Caddy never used it) → remove. `SIRI_API_KEY` **in use** (`cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` **in use** (open-webui → skill-runner harness) → keep. | `.env`, `lib/litellm-keys.sh`, `cli/*.sh` | Phase 3 |
+| F11 | INFO | `.env` key consumers confirmed (2026-09-06): `LITELLM_PUBLIC_API_KEY` is **dead** (assigned to an unused variable in `lib/litellm-keys.sh:12`, passed to the litellm-proxy container env but unused; Caddy never used it) → remove. `SIRI_API_KEY` **in use** (`cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` **in use** (open-webui → skill-runner harness) → keep. **2026-11-15: `LITELLM_PUBLIC_API_KEY` removed (Phase 3); `HARNESS_API_KEY` also removed** (its only consumer, open-webui, was removed the same day). | `.env`, `lib/litellm-keys.sh`, `cli/*.sh` | Phase 3 |
 
 ### Key inventory (live, 2026-09-06)
 
@@ -46,7 +47,7 @@
 | `chuck` | chuck | all models | none (family decision: no cap) | none (D2b open) | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
 | `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
 | *(no alias)* | — | models: matrix-coder, homelab-embedding-v1 | none | none | internal (skill-runner mem0, `MEMORY_LITELLM_KEY`); MCP: **none** (default-deny, Phase 2) |
-| *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **BLOCKED 2026-11-15** — F5 orphan; already expired 2026-10-05; delete after observation window. (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |
+| *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **DELETED 2026-11-15** — F5 orphan; blocked same day, then deleted (observation window waived — already expired 2026-10-05, zero spend). (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |
 | master (`sk-cb1678…`) | — | admin, everything | — | — | internal only (F6); MCP: all 12 via `admin_view_unscoped` (verified in v1.104.0 source) |
 
 ---
@@ -94,7 +95,7 @@ done at home with a LAN client nearby.
 
 After Session A, verify:
 - [x] Public routes accept only the two family keys (negative-tested with a wrong key) — 2026-11-15 (Phase 1: wrong/no key → 401 on `llm.choukalos.com`; ungrouped key → 0 MCP servers)
-- [ ] MCP tooling verified working from outside the LAN (Mac Studio on cellular) — confirms the trip story end-to-end (manual step for Chuck; the public path itself was verified 2026-11-15 via CF edge → tunnel → caddy with live tool calls)
+- [x] MCP tooling verified working from outside the LAN (Mac Studio on cellular) — confirms the trip story end-to-end — **verified 2026-11-15**: Chuck used the chuck key remotely from Houston ~3 weeks (M–Thu) covering the travel story, and the new gated path was verified the same day via CF edge → tunnel → caddy with live `mcp_search` tool calls on both family keys.
 - [x] Commit + push (config changes are git-tracked) — 2026-11-15 (`191572b`, `eb0542b`, `67ef257`, `fec6483`)
 
 ### Session B — LAN + host (when home, LAN client nearby, ~1 h)
@@ -241,7 +242,7 @@ from the v1.92 the original plan was researched on):
 
 Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the access group: `DELETE /v1/access_group/{id}`).
 
-### Phase 3 — Key hygiene (guardrails, retire orphans + dead key) — **DONE 2026-11-15** (orphan delete pending observation window)
+### Phase 3 — Key hygiene (guardrails, retire orphans + dead key) — **DONE 2026-11-15**
 
 - [x] **Enable spend tracking** (prerequisite for budgets): in `litellm/config.yml` set `disable_spend_logs: false`, `disable_spend_updates: false`; restart litellm-proxy.
       — config edited 2026-11-15; takes effect on the Phase 3 recreate (below)
@@ -257,12 +258,19 @@ Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the a
         key hash (note: `./homelab.sh key block default_user_id` fails — `/key/list`
         excludes this key so the CLI hash lookup can't find it; the API takes the
         hash directly). DB: `blocked = t`
-  - [ ] observe a few days — any breakage means someone was using one → unblock + investigate
-  - [ ] **delete**: `POST /key/delete` with the same hash (after observation)
+  - [x] observe a few days — any breakage means someone was using one → unblock + investigate
+        — observation window waived 2026-11-15 (Chuck): key was blocked AND
+        already expired 2026-10-05, zero spend, F5 ruled out all consumers
+  - [x] **delete**: `POST /key/delete` with the same hash (after observation)
+        — **deleted 2026-11-15** (`deleted_keys` confirmed; DB now holds
+        exactly chuck, dylan, memory-service)
 - [x] **Retire the dead `.env` key** (consumer check done 2026-09-06):
   - [x] remove `LITELLM_PUBLIC_API_KEY` from `.env` + `compose/compose.ai-core.yml` (litellm service env) + the unused variable at `lib/litellm-keys.sh` + the mention in the `homelab.sh` header comment
         — done 2026-11-15 (all 4 sites); leaves the running container's env on the Phase 3 recreate
   - [x] **keep** `SIRI_API_KEY` (in use: `cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` (in use: open-webui → skill-runner harness) — consumers documented in `docs/thor_public_access_model.md` (pulled forward from Phase 7, done 2026-11-15)
+        — postscript 2026-11-15: open-webui was removed the same day (owner
+turns out it was unused), so `HARNESS_API_KEY` (its only consumer) was also
+removed from `.env`; `SIRI_API_KEY` stays.
 - [x] **Document master-key usage** (F6): note added to `docs/thor_public_access_model.md` — `LITELLM_MASTER_KEY == LITELLM_API_KEY` is internal-only by design (docker network + LAN only after Phases 4/5); full doc re-synced 2026-11-15 (F10: stale `$LITELLM_PUBLIC_API_KEY` gate description replaced with the live Caddy key gate + current key table + MCP groups + rotation procedure).
 - [x] **Dedicated `internal-service` key** — decided 2026-09-06 (was optional): see **Phase 8** (not started).
 - [x] Re-run the key inventory snapshot (Phase 0 command) and paste the new table into §1 for the record — done 2026-11-15 (see §1, "Key inventory (live, 2026-11-15)").
@@ -291,9 +299,9 @@ publishing is only for things a human needs from another machine.
 |---|---|---|---|
 | `3306/33060` (mysql) | 0.0.0.0 | bind `192.168.4.54:3306:3306` | skill-runner uses `MYSQL_DB_HOST=thor.local` → THOR_IP binding keeps it working |
 | `6333` (qdrant) | 0.0.0.0 | **remove host mapping** (or THOR_IP) | `MEMORY_QDRANT_URL=http://qdrant:6333` = docker DNS; check `compose.mcp.yml` QDRANT_URL too |
-| `4000` (litellm-proxy) | 0.0.0.0 | bind `192.168.4.54:4000:4000` | Open WebUI + LAN clients; check open-webui's LITELLM base URL (if it uses `litellm-proxy:4000` via docker net, mapping can be removed) |
+| `4000` (litellm-proxy) | 0.0.0.0 | bind `192.168.4.54:4000:4000` | LAN clients (open-webui, the former main consumer, was removed 2026-11-15 — check remaining LAN consumers before rebinding) |
 | `8088` (searxng) | 0.0.0.0 | **remove host mapping** | mcp_search calls `http://searxng:8080` (docker DNS) — confirm |
-| `3000` (open-webui) | 0.0.0.0 | bind `192.168.4.54:3000:8080` | family LAN use |
+| ~~`3000` (open-webui)~~ | — | **REMOVED 2026-11-15** (service gone; no rebind needed) | — |
 | `3001` (grafana), `8081` (cadvisor), `8082` (plausible), `9090/9091` (victoria-metrics), `9100` (node-exporter) | 0.0.0.0 | bind to `192.168.4.54:` | monitoring is LAN-admin only |
 | `8005` (mcp_memory) | 0.0.0.0, **unauthenticated, falls back to Chuck's key (F8)** | **remove host mapping** | consumers reach it via `mcp_memory:8000` on ai-net (LiteLLM config) — confirm no direct LAN client |
 | `11235` (crawl4ai) | 0.0.0.0 | **remove host mapping** | mcp_crawl uses docker DNS — confirm |
@@ -365,10 +373,10 @@ Rollback: `sudo ufw disable`.
 Goal: internal containers stop using the master key; the master key becomes
 admin-only (key management via `./homelab.sh key ...`, dashboard).
 
-Master-key consumers found 2026-09-06 (6 services):
+Master-key consumers found 2026-09-06 (6 services; **5 as of 2026-11-15** — open-webui removed):
 | Service | Env var | Location |
 |---|---|---|
-| open-webui | `OPENAI_API_KEY=${LITELLM_MASTER_KEY}` | `compose/compose.ai-core.yml:76` |
+| ~~open-webui~~ | ~~`OPENAI_API_KEY=${LITELLM_MASTER_KEY}`~~ | **removed 2026-11-15** (service gone) |
 | presenton | `CUSTOM_LLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.ai-core.yml:179` |
 | mcp_knowledge | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.mcp.yml:22` (embeddings + vision fallback) |
 | mcp_mysql | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.mcp.yml:84` (matrix-coder nl→sql) |
@@ -378,7 +386,7 @@ Master-key consumers found 2026-09-06 (6 services):
 - [ ] Mint key: `./homelab.sh key add internal-service --alias internal-service` (all models, **no MCP group**, no budget — internal trust; per-service model scoping is a later nicety)
 - [ ] Add `LITELLM_KEY_INTERNAL=${sk-...}` to `.env` (Phase 0 backup first)
 - [ ] Point each consumer env var above at `${LITELLM_KEY_INTERNAL}` — the litellm-proxy container keeps its own `LITELLM_MASTER_KEY`/`LITELLM_API_KEY` (the proxy needs its master key)
-- [ ] Recreate affected containers one stack at a time; verify each (open-webui chat, presenton render, MCP tool calls, skill run)
+- [ ] Recreate affected containers one stack at a time; verify each (presenton render, MCP tool calls, skill run)
 - [ ] Confirm the master key is now used only by: the litellm-proxy container itself + `./homelab.sh key ...` admin ops
 - [ ] Update docs (Phase 7) + key inventory (§1)
 
@@ -395,7 +403,7 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 | D1 | Dylan's MCP scope | **Full** — family trust = Chuck's level (all 10 MCP servers) |
 | D2 | Budget for chuck/dylan | **Unlimited** — family power users, no `max_budget` |
 | D3 | The 3 `default_user_id` keys | Investigated: **orphaned dashboard test keys** (F5) → confirm with Dylan → block → observe → delete |
-| D5 | Dead `.env` keys | `LITELLM_PUBLIC_API_KEY` = dead → remove. `SIRI_API_KEY` + `HARNESS_API_KEY` = **in use** (CLI, open-webui) → keep |
+| D5 | Dead `.env` keys | `LITELLM_PUBLIC_API_KEY` = dead → remove. `SIRI_API_KEY` + `HARNESS_API_KEY` = **in use** (CLI, open-webui) → keep. **2026-11-15:** `LITELLM_PUBLIC_API_KEY` removed (Phase 3); `HARNESS_API_KEY` removed same day (open-webui gone); `SIRI_API_KEY` stays |
 | D6 | `internal-service` key | **Yes** — formalized as Phase 8 |
 
 ### Open
@@ -468,7 +476,7 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 | 9.3-M1 | MED | **MySQL 8.4.11** hit by Oracle Oct CPU: CVE-2026-101679 (7.5, unauth, network → DoS/crash) + replication/optimizer CVEs (affected 8.4.0–8.4.12). **LAN-only** (0.0.0.0:3306, not tunnel-routed) → risk = bad LAN device, not internet. Ubuntu apt has **no 8.4.13 yet** (candidate still 8.4.11). | host `mysql-server` 8.4.11 | Wait for Ubuntu to ship 8.4.13+ (then `apt upgrade`), or add Oracle MySQL apt repo. Low urgency (LAN-only). |
 | 9.3-N1 | LOW | ✅ **RESOLVED 2026-10-21** — **nginx** (invest-hub client) bumped `1.27-alpine` → `1.31-alpine` in the invest-hub repo `client/Dockerfile`; CI rebuilt + redeployed (image 976a00c55f2c, 18:53Z); running `nginx/1.31.7` = at/above the "not vulnerable" floor (1.31.7+) for all 5 advisories. Note: mainline 1.31 chosen over stable 1.30 — fully patched either way. Config re-verified minimal (listen 80, try_files, proxy_pass only). | `choukalos/invest-hub` → `client/Dockerfile` | Done. (Future: consider pinning exact patch version, e.g. `nginx:1.31.7-alpine`, for reproducibility.) |
 | 9.3-H1 | LOW | **Hugo 0.165.0** → 0.168.0. Recent advisories are build-time/theme + 2 stored-XSS in generated HTML; blog content is own git-synced repo → low runtime risk. | blog build (Hugo) | Rebuild blog on Hugo 0.168.0. |
-| 9.3-O1 | MED | **Open WebUI 0.11.4** behind a 2026-10-18 advisory (fixed 0.12.2; latest 0.12.3) **and** running with placeholder `WEBUI_SECRET_KEY=replace-with-a-long-random-string` (`.env:37`). **LAN-only** (0.0.0.0:3000, no public route). | `compose/compose.ai-core.yml`, `.env:37` | Set a real random `WEBUI_SECRET_KEY`; bump image to `:0.12.3`. (Open question: still needed?) |
+| 9.3-O1 | MED | ✅ **RESOLVED 2026-11-15 by removal** — **Open WebUI** (was 0.11.4, behind a 2026-10-18 advisory, running with placeholder `WEBUI_SECRET_KEY`) was **unused by the family** (owner decision) — container, compose service, and data dir removed (data tarball `/home/chuck/data/backups/open-webui-data-20261115.tar.gz`); `WEBUI_SECRET_KEY` + `HARNESS_API_KEY` removed from `.env`. The advisory question is moot. | `compose/compose.ai-core.yml`, `.env` | Done (removed, not bumped). |
 | 9.3-V1 | INFO | **cloudflared 2026.9.3** → 2026.10.3 (no CVE, just lag). **Qdrant 1.18.1** → 1.19.2 (LAN-only, no critical CVE). | `compose/*.yml` | **Qdrant DONE 2026-11-15** (v1.19.2 live, verified — pre-bump backup, collections/points/bm25 intact, memory path green, key-sync clean). cloudflared bump still optional. |
 
 ### 9.4 Overlap with existing plan

@@ -66,7 +66,7 @@
 | Capability | Current Location | Current Form | Future Form | Risk | Notes |
 |---|---|---|---|---|---|
 | **LiteLLM** | `compose/compose.ai-core.yml`, `litellm/config.yml` | Standalone proxy on ai-net:4000, 4 model defs, postgres backend, prometheus callback | **As-is (foundation)** — stays as the single model gateway; future: add model aliases, per-key restrictions, MCP tool routes | Low | Production core. Zero-touch. New config drafted separately, never edited in-place. |
-| **Open WebUI** | `compose/compose.ai-core.yml` | LAN-only UI on :3000, connects to LiteLLM as OpenAI backend | **As-is** — primary human chat interface; no structural changes needed | Low | LAN-only by design. No public route in Caddy. |
+| **Open WebUI** | ~~`compose/compose.ai-core.yml`~~ | LAN-only UI on :3000, connects to LiteLLM as OpenAI backend | **✅ REMOVED 2026-11-15** — owner decision (unused; family uses pi/Siri/CLI instead). Container + data removed (data tarball in `/home/chuck/data/backups/open-webui-data-20261115.tar.gz`); also resolves security_todo 9.3-O1 (placeholder `WEBUI_SECRET_KEY` + stale image). | Done | Removed 2026-11-15. |
 | **AI Harness** | ~~`compose/compose.ai-harness.yml` + `ai-harness/`~~ | FastAPI uvicorn on LAN :8090, 2 celery workers, beat scheduler, kb-watcher | **✅ Replaced by Skill Runner** — channels call skills via skill runner, not apps directly. Harness code archived. | **Done** | Refactored 2026-07-06. Source archived to `ai-harness-decommissioned/`. |
 | **AI Harness — Channels** | `ai-harness-decommissioned/channels/` (openwebui/, siri/) | Channel-specific routers (Siri API, Open WebUI callbacks) | **MCP + Skill Gateway** — each channel gets a thin adapter; shared capabilities go through skill runner | **High** | Siri already has X-API-Key auth in Caddy. Open WebUI uses harness for image gen + actions. |
 | **AI Harness — Research** | `ai-harness-decommissioned/research/` (deep_research/, market_research/, web_search/) | Deep research pipeline, market research, web search via Crawl4AI/SearXNG | **MCP servers** — web_search, deep_research, market_research as discrete MCP tools | Medium | Well-structured. Good MCP candidates. Uses Crawl4AI + SearXNG internally. |
@@ -102,7 +102,6 @@ These stay exactly as they are. New work drafts alongside, never edits in-place.
 | Capability | Reason |
 |---|---|
 | LiteLLM | Single model gateway. Foundation of the platform. |
-| Open WebUI | Primary human chat interface. |
 | Qdrant | Vector DB. RAG backend. |
 | Redis | Celery broker. |
 | SearXNG Valkey | SearXNG cache. |
