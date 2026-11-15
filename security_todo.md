@@ -164,11 +164,15 @@ handle @llm {
 
 Rollback: restore previous Caddyfile block + reload.
 
-### Phase 2 — Per-key MCP scoping (kill `allow_all_keys`)
+### Phase 2 — Per-key MCP scoping (kill `allow_all_keys`) — **DONE 2026-11-15**
 
 With Phase 1 done, the public path only carries chuck/dylan keys — but those
-keys currently unlock **all 10 MCP servers**. Scope them explicitly
+keys currently unlock **all 12 MCP servers** (12, not 10 — `mcp_datahub` and
+`mcp_memory` were added after the 2026-09-06 audit). Scope them explicitly
 (default-deny; grant what each key needs).
+
+**Decision (Chuck, 2026-11-15): both family keys get ALL MCP tools incl.
+skill runner** → one group `family-mcp-full` with all 12 servers + both keys.
 
 **Decision matrix (default = both family keys get everything; tighten Dylan's if desired — see §6):**
 
@@ -180,35 +184,49 @@ keys currently unlock **all 10 MCP servers**. Scope them explicitly
 | mcp_filesystem (**write** to workspace) | ✅ | ✅ *(decision point)* | ❌ | ❌ |
 | mcp_skills (runs family skills) | ✅ | ✅ | ❌ | ❌ |
 
-Mechanism (LiteLLM v1.92, verified against installed source):
+Mechanism (verified against installed source, litellm **v1.104.0** — bumped
+from the v1.92 the original plan was researched on):
 
-- [ ] Remove `allow_all_keys: true` from **all 10** entries in `litellm/config.yml` (keep `url`, `timeout`, `extra_headers` as-is). Default is `false` = deny.
-- [ ] Restart `litellm-proxy` (config reload).
-- [ ] Grant via **access group** (single place to manage; API verified present in v1.92):
-  1. Get key IDs (hashed `key` field): `curl -s http://localhost:4000/v1/key/info -H "Authorization: Bearer $LITELLM_KEY_CHUCK"` (and Dylan's).
-  2. Create group with master key:
-     ```bash
-     curl -s -X POST http://localhost:4000/v1/access_group \
-       -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H "Content-Type: application/json" \
-       -d '{
-             "access_group_name": "family-mcp-full",
-             "description": "Full MCP access for Chuck + Dylan (public keys)",
-             "access_mcp_server_ids": ["mcp_search","mcp_knowledge","mcp_crawl","mcp_filesystem_readonly","mcp_mysql","mcp_homelab_status","mcp_filesystem","mcp_media","mcp_vision","mcp_skills"],
-             "assigned_key_ids": ["<chuck key hash>","<dylan key hash>"]
-           }'
-     ```
-  3. (If Dylan gets a narrower set: second group `dylan-mcp-scoped` with his subset + his key only; a key in two groups gets the union — so use exactly one group per key.)
-- [ ] `memory-service` key: leave with **no** MCP grant (models only) — default-deny covers it.
-- [ ] `default_user_id` keys: after Phase 3 identifies them, grant only what each actually needs (likely none — they call chat models, not MCP).
-- [ ] **Master key behavior (expected, document it):** proxy-admin keys without an explicit `object_permission` still see all MCP servers (v1.92 code path). That's intentional — internal containers (skill-runner, mcp_*) authenticate with it on the docker network. It never crosses the public path (Phase 1) or the LAN edge (Phases 4/5).
-- [ ] Verify per key (each from the public URL, after Phase 1):
-  - [ ] `GET /v1/mcp/servers` (or a real tool call) with chuck key → 10 servers visible
-  - [ ] with dylan key → matches his grant
-  - [ ] with memory-service key (LAN) → **0** MCP servers
-  - [ ] negative: a key not in any group → 0 servers / 403 on tool call
-- [ ] Smoke-test one tool end-to-end per family (e.g. `mcp_search.search_web` via `llm.choukalos.com` with each key).
+- [x] Remove `allow_all_keys: true` from **all 12** entries in `litellm/config.yml` (keep `url`, `timeout`, `extra_headers` as-is). Default is `false` = deny.
+      — done 2026-11-15 (12/12 removed, YAML validated; config bind-mounted
+      at `/app/config.yaml:ro`, takes effect on restart)
+- [x] Restart `litellm-proxy` (config reload) — **Chuck's step** (standing
+      rule: he runs litellm restarts; a recreate drops in-flight sessions).
+      `cd /home/chuck/homelab && docker compose -f compose/compose.ai-core.yml --env-file .env restart litellm`
+      — restarted 2026-11-15 (note: `up -d` is a no-op here — the compose
+      definition is unchanged, only the bind-mounted config changed; a plain
+      `restart` re-reads it).
+- [x] Grant via **access group** (single place to manage; API verified present in v1.104.0):
+  - [x] Get key IDs (hashed `token` field): `GET /key/info` (NOT `/v1/key/info` — 404 in v1.104) with each key
+        — chuck `96f581ff…aea407`, dylan `41f50f3e…669ea` (full hashes in git history / this section's create call)
+  - [x] Create group with master key: `POST /v1/access_group`
+        — created 2026-11-15: `family-mcp-full`
+        (`07c1acf8-ffb6-4dbc-918d-9c7199f76fa1`), 12 server IDs, both family keys.
+        `assigned_key_ids` = hashed tokens (verified in source:
+        `_sync_add_access_group_to_keys` matches `LiteLLM_VerificationToken.token`).
+        DB check: both key rows carry `access_group_ids = {07c1acf8-…}`.
+  - [ ] (If Dylan gets a narrower set later: second group `dylan-mcp-scoped` with his subset + his key only; a key in two groups gets the union — so use exactly one group per key.)
+- [x] `memory-service` key: leave with **no** MCP grant (models only) — default-deny covers it.
+- [x] `default_user_id` key: no grant (blocked in Phase 3 anyway).
+- [x] **Master key behavior (verified in v1.104.0 source, not just the old v1.92 note):** `mcp_server_manager.get_allowed_mcp_servers` → `admin_view_unscoped(user_api_key_auth)` = admin view + no explicit `object_permission.mcp_servers` → **whole registry**. Master key (proxy admin, no object_permission) still sees all 12 after the change → internal containers (skill-runner, mcp_*) that authenticate with it are unaffected. Documented in thor_public_access_model.md (Phase 7).
+- [x] Verify per key (each from the public URL, after Phase 1) — endpoint is
+      `GET /v1/mcp/tools` (per-key tool listing incl. access groups; tool names
+      are `mcp_<server>-<tool>`). Baseline pre-restart: chuck sees 89 tools / all 12 servers.
+      — verified 2026-11-15 post-restart:
+  - [x] chuck key → 12 servers (89 tools, via `family-mcp-full`)
+  - [x] dylan key → 12 servers (89 tools, via `family-mcp-full`)
+  - [x] memory-service key (LAN) → **0** MCP servers (89 → 0: default-deny proven live)
+  - [x] negative: a key not in any group → 0 servers / 403 on tool call
+        (temp key `phase2-negative-test` generated → 0 tools / 0 servers → deleted)
+  - [x] master key (LAN) → 12 servers (admin_view_unscoped — expected, documented)
+- [x] Smoke-test one tool end-to-end per family (e.g. `mcp_search.search_web` via `llm.choukalos.com` with each key).
+      — verified 2026-11-15: `mcp_search-search_web` via MCP streamable-HTTP on
+      `https://llm.choukalos.com/mcp` returned live results with **both** chuck's
+      and dylan's keys (full public path: CF → tunnel → caddy gate → litellm → mcp_search).
+      Internal consumers unaffected: skill-runner memory health `healthy: true`,
+      live search 6 hits / `degraded: false`, zero auth errors in 30 min of logs.
 
-Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the access group).
+Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the access group: `DELETE /v1/access_group/{id}`).
 
 ### Phase 3 — Key hygiene (guardrails, retire orphans + dead key)
 

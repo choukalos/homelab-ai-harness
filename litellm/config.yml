@@ -88,73 +88,61 @@ mcp_servers:
   mcp_search:
     transport: sse
     url: http://mcp_search:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_knowledge:
     transport: sse
     url: http://mcp_knowledge:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_crawl:
     transport: sse
     url: http://mcp_crawl:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_filesystem_readonly:
     transport: sse
     url: http://mcp_filesystem_readonly:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_mysql:
     transport: sse
     url: http://mcp_mysql:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_datahub:
     transport: sse
     url: http://mcp_datahub:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_homelab_status:
     transport: sse
     url: http://mcp_homelab_status:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_filesystem:
     transport: sse
     url: http://mcp_filesystem:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_media:
     transport: sse
     url: http://mcp_media:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_vision:
     transport: sse
     url: http://mcp_vision:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_memory:
     transport: sse
     url: http://mcp_memory:8000/sse
-    allow_all_keys: true
     timeout: 7200
 
   mcp_skills:
     transport: sse
     url: http://mcp_skills:8000/sse
-    allow_all_keys: true
     extra_headers:
       - Authorization
     timeout: 7200
