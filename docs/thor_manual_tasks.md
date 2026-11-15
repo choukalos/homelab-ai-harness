@@ -1,7 +1,9 @@
 # Thor Manual Tasks
 
 > Tasks that require Chuck's manual intervention.
-> Updated: 2026-11-06 (Phase 16 added — SSH hardening on thor, LAN session
+> Updated: 2026-11-15 (cleanup pass — items 2/3/4/5/8/9/10 verified done or
+> superseded against the live system; only #12 SSH hardening remains open)
+> Prior: 2026-11-06 (Phase 16 added — SSH hardening on thor, LAN session
 > only; Tailscale plan dropped in favor of router OpenVPN)
 
 ---
@@ -32,6 +34,11 @@ production data (18 curated docs, re-ingestable).
 
 ## Phase 3 - Public Access Changes
 
+> **DONE (verified 2026-11-15)** — public access changes were implemented and
+> reviewed across the Sept–Nov 2026 security work; the living doc is
+> `docs/thor_public_access_model.md` (Caddy key gate live + verified 2026-11-15,
+> key table current, 6 tunnel domains inventoried). Original task text below.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
@@ -50,6 +57,10 @@ Confirm the blog portal, Invest Hub, Siri, and LiteLLM still work and no admin e
 
 ## Phase 10 - LiteLLM MCP Config
 
+> **DONE (verified 2026-11-15)** — 12 MCP servers live in `litellm/config.yml`
+> (all connected via docker DNS; per-key access groups per security Phase 2).
+> Original task text below.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
@@ -67,6 +78,14 @@ LiteLLM health works, existing model aliases work, Open WebUI can chat, and MCP 
 ---
 
 ## Phase 10 - Model Aliases & Per-Key Restrictions
+
+> **RESOLVED DIFFERENTLY (verified 2026-11-15)** — the `local/*` alias draft
+> was **never implemented** and was superseded by the live LiteLLM config
+> (see `docs/thor_model_alias_registry.md`: live aliases = `matrix-coder`,
+> `matrix-gemma4-moe`, `studio-gemma4-*`, `embeddings`, `homelab-embedding-v1`,
+> `hf-sd3`). Per-key restrictions landed via security Phase 2 (default-deny +
+> `family-mcp-full` access group) + the model-scoped `memory-service` key.
+> Original task text below.
 
 ```text
 MANUAL TASK FOR CHUCK:
@@ -145,6 +164,12 @@ Victoria Metrics API returns data for new job names.
 
 ## Phase 12 - Create Grafana Dashboards
 
+> **DONE (verified 2026-11-15)** — 8 dashboards provisioned in
+> `grafana/dashboards/` (homelab-overview, ai-work-spend, harness-learning,
+> mysql, dcgm, node-exporter-full, cadvisor, prometheus); in active use
+> (Grafana confirmed working from Mac Studio 2026-11-15). Original task text
+> below.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
@@ -163,6 +188,11 @@ Dashboards render with data from Victoria Metrics.
 
 ## Phase 14 - Skill Runner Caddy Routing
 
+> **DONE (verified 2026-11-15)** — skill-runner is routed via
+> `siri.choukalos.com` (`/siri/*` → `skill-runner:8091` in `caddy/Caddyfile`;
+> route live + key-gated, verified 2026-11-15). LAN access via
+> `192.168.4.54:8091`. Original task text below.
+
 ```text
 MANUAL TASK FOR CHUCK:
 Reason:
@@ -180,6 +210,12 @@ Skill runner health endpoint reachable through Caddy. Existing services unaffect
 ---
 
 ## Phase 14 - Cloudflare Tunnel (If Needed)
+
+> **RESOLVED — no extra routes needed (verified 2026-11-15)** — all public
+> access rides the existing 6 tunnel domains (llm, siri, invest, api,
+> choukalos.com, plausible); no additional remote endpoints have been needed
+> since (Open WebUI removed 2026-11-15). Revisit only if a new service needs
+> public reach. Original task text below.
 
 ```text
 MANUAL TASK FOR CHUCK:
@@ -316,14 +352,14 @@ Validation:
 | # | Phase | Task | Priority |
 |---|---|---|---|
 | 1 | 0 | Execute backup | ✅ DONE 2026-08-26/28 — `scripts/backup-memory.sh`, restore tested |
-| 2 | 3 | Review public access changes | High — affects all public services |
-| 3 | 10 | Apply LiteLLM MCP config | High — core integration |
-| 4 | 10 | Apply model aliases & key restrictions | High — core integration |
-| 5 | 11 | Harden Presenton auth | Medium — before remote skill access |
+| 2 | 3 | Review public access changes | ✅ DONE — implemented + reviewed Sept–Nov 2026 security work; living doc `docs/thor_public_access_model.md` (Caddy key gate verified 2026-11-15) |
+| 3 | 10 | Apply LiteLLM MCP config | ✅ DONE — 12 MCP servers live in `litellm/config.yml` (verified 2026-11-15) |
+| 4 | 10 | Apply model aliases & key restrictions | ✅ RESOLVED DIFFERENTLY — `local/*` draft superseded by live LiteLLM aliases (`docs/thor_model_alias_registry.md`); per-key scoping via security Phase 2 access groups + model-scoped memory-service key |
+| 5 | 11 | Harden Presenton auth | ✅ SUPERSEDED 2026-09-04 — passwordless + LAN-only (`DISABLE_AUTH=true` confirmed in compose); task no longer applies |
 | 6 | 12 | Enable skill runner /metrics | ✅ DONE 2026-08-28 — `/metrics` + VictoriaMetrics job `skill-runner` |
 | 7 | 12 | Extend Victoria Metrics scraping | ✅ skill-runner done 2026-08-28 (Qdrant/MCP/Caddy drafts open) |
-| 8 | 12 | Create Grafana dashboards | Low — nice to have |
-| 9 | 14 | Skill runner Caddy routing | High — LAN access |
-| 10 | 14 | Cloudflare tunnel (if needed) | Low — depends on remote needs |
+| 8 | 12 | Create Grafana dashboards | ✅ DONE — 8 dashboards provisioned in `grafana/dashboards/` (verified 2026-11-15) |
+| 9 | 14 | Skill runner Caddy routing | ✅ DONE — `siri.choukalos.com` `/siri/*` → skill-runner:8091 (verified 2026-11-15) |
+| 10 | 14 | Cloudflare tunnel (if needed) | ✅ RESOLVED — no extra routes needed; all public access on the existing 6 tunnel domains (verified 2026-11-15) |
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
-| 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | High — **LAN session only (at home), not via OpenVPN** |
+| 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | **OPEN** — High — **LAN session only (at home), not via OpenVPN** |

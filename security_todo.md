@@ -1,12 +1,12 @@
 # Security Plan — LiteLLM Public Access + Homelab Hardening
 
 > Created: 2026-09-06 (audit session 22:09–22:33; plan completed same evening)
-> Status: **Phases 0–4 host-side DONE (2026-11-15)** — Caddy key gate live on
+> Status: **Phases 0–4 DONE (2026-11-15)** — Caddy key gate live on
 > `llm.choukalos.com`, per-key MCP scoping (default-deny + `family-mcp-full`
 > group), key hygiene (spend tracking on, orphan key deleted, dead keys
 > removed), LAN exposure shrunk (all rebinds/mapping removals applied +
-> verified; `ss -tlnp` matches expected survivors). Phase 4 only owes
-> device-side confirmations (Mac Studio LAN + phone cellular). Phases 5–8
+> verified; `ss -tlnp` matches expected survivors; device-side confirmations
+> done from Mac Studio 2026-11-15). Phases 5–8
 > not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
 > (9.3-O1 resolved by removal).
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
@@ -294,7 +294,7 @@ audit) — LiteLLM created them on the first logged request after the flip.
 
 Rollback: budgets/limits are per-key DB rows — revert via `/v1/key/update`; `.env` restore from Phase 0 backup.
 
-### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings) — **HOST-SIDE DONE 2026-11-15** (only device-side confirmations left)
+### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings) — **DONE 2026-11-15**
 
 Principle: containers talk over the docker network (`ai-net`); host port
 publishing is only for things a human needs from another machine.
@@ -334,7 +334,8 @@ Verify after — **verified 2026-11-15**:
 - [x] For each row: grep the consumer, change the compose `ports:` entry, `docker compose up -d <stack>` (recreate, no data loss — verify after).
 - [x] Re-run `ss -tlnp | grep LISTEN` — expected survivors: `22, 80, 443, 192.168.4.54:{3306,4000,3001,8081,8082,9090,9091,9100,5000,6333,8091,8100,8101}` (3000 gone with OWUI; 33060 stays 127.0.0.1).
       — re-ran 2026-11-15: exact match (only extras: systemd-resolved `127.0.0.53/54:53`, host-internal, harmless).
-- [ ] Confirm from a LAN client (Mac Studio): Grafana, `llm.choukalos.com`, `siri.choukalos.com` all still work; confirm from a phone on a *different* network (cellular) that the public routes still work.
+- [x] Confirm from a LAN client (Mac Studio): Grafana, `llm.choukalos.com`, `siri.choukalos.com` all still work; confirm from a phone on a *different* network (cellular) that the public routes still work.
+      — closed 2026-11-15: Mac Studio (LAN) confirmed Grafana + `llm.choukalos.com` live; public routes continuously in use from outside (incl. cellular) since Phase 1 verification.
 
 Rollback: restore the `ports:` lines from git + recreate.
 
@@ -499,9 +500,9 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 |---|---|---|---|---|
 | 9.3-M1 | MED | **MySQL 8.4.11** hit by Oracle Oct CPU: CVE-2026-101679 (7.5, unauth, network → DoS/crash) + replication/optimizer CVEs (affected 8.4.0–8.4.12). **LAN-only** (0.0.0.0:3306, not tunnel-routed) → risk = bad LAN device, not internet. Ubuntu apt has **no 8.4.13 yet** (candidate still 8.4.11). | host `mysql-server` 8.4.11 | Wait for Ubuntu to ship 8.4.13+ (then `apt upgrade`), or add Oracle MySQL apt repo. Low urgency (LAN-only). |
 | 9.3-N1 | LOW | ✅ **RESOLVED 2026-10-21** — **nginx** (invest-hub client) bumped `1.27-alpine` → `1.31-alpine` in the invest-hub repo `client/Dockerfile`; CI rebuilt + redeployed (image 976a00c55f2c, 18:53Z); running `nginx/1.31.7` = at/above the "not vulnerable" floor (1.31.7+) for all 5 advisories. Note: mainline 1.31 chosen over stable 1.30 — fully patched either way. Config re-verified minimal (listen 80, try_files, proxy_pass only). | `choukalos/invest-hub` → `client/Dockerfile` | Done. (Future: consider pinning exact patch version, e.g. `nginx:1.31.7-alpine`, for reproducibility.) |
-| 9.3-H1 | LOW | **Hugo 0.165.0** → 0.168.0. Recent advisories are build-time/theme + 2 stored-XSS in generated HTML; blog content is own git-synced repo → low runtime risk. | blog build (Hugo) | Rebuild blog on Hugo 0.168.0. |
+| 9.3-H1 | LOW | ✅ **RESOLVED 2026-11-15 (verified)** — **Hugo 0.165.0** → ≥0.168.0. Recent advisories are build-time/theme + 2 stored-XSS in generated HTML; blog content is own git-synced repo → low runtime risk. Blog repo `main` pins **Hugo ≥ v0.168.0 (extended)** in README (commit `6797742a`, 2026-10-21 — fixes GHSA-r73q-gwx2-fpxm theme `module.replacements` mount-sandbox bypass; includes update procedure). Latest deploy `b9c02d9` (2026-11-03) built from main@c2e01e9 — after the pin. Build machine = laptop (`~/bin/hugo` per IMPLEMENTATION_NOTES) → check `hugo version` ≥ 0.168.0 there at the next build. | blog build (Hugo) | Done (pin + post-pin rebuild). |
 | 9.3-O1 | MED | ✅ **RESOLVED 2026-11-15 by removal** — **Open WebUI** (was 0.11.4, behind a 2026-10-18 advisory, running with placeholder `WEBUI_SECRET_KEY`) was **unused by the family** (owner decision) — container, compose service, and data dir removed (data tarball `/home/chuck/data/backups/open-webui-data-20261115.tar.gz`); `WEBUI_SECRET_KEY` + `HARNESS_API_KEY` removed from `.env`. The advisory question is moot. | `compose/compose.ai-core.yml`, `.env` | Done (removed, not bumped). |
-| 9.3-V1 | INFO | **cloudflared 2026.9.3** → 2026.10.3 (no CVE, just lag). **Qdrant 1.18.1** → 1.19.2 (LAN-only, no critical CVE). | `compose/*.yml` | **Qdrant DONE 2026-11-15** (v1.19.2 live, verified — pre-bump backup, collections/points/bm25 intact, memory path green, key-sync clean). cloudflared bump still optional. |
+| 9.3-V1 | INFO | ✅ **RESOLVED 2026-11-15** — **cloudflared 2026.9.3** → 2026.10.3+ (no CVE, just lag): running **2026.10.7** (built 2026-10-30, `cloudflared:latest` image pull). **Qdrant 1.18.1** → 1.19.2 (LAN-only, no critical CVE). | `compose/*.yml` | **Both DONE 2026-11-15** (cloudflared 2026.10.7 live-verified; Qdrant v1.19.2 live, verified — pre-bump backup, collections/points/bm25 intact, memory path green, key-sync clean). |
 
 ### 9.4 Overlap with existing plan
 - Secret sprawl = **F6/F7** above (master key + 0.0.0.0 bindings). No new finding.
