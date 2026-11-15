@@ -111,14 +111,21 @@ Phase 8 (internal-service key) is independent — any time.
 
 ## 5. Phases
 
-### Phase 0 — Backup & baseline (do first, every time)
+### Phase 0 — Backup & baseline (do first, every time) — **DONE 2026-11-15**
 
-- [ ] `git add -A && git commit` (Caddyfile, litellm config, compose, .env is gitignored — copy it separately):
+- [x] `git add -A && git commit` (Caddyfile, litellm config, compose, .env is gitignored — copy it separately):
       `cp .env /home/chuck/data/backups/env-$(date +%F).bak && chmod 600 /home/chuck/data/backups/env-$(date +%F).bak`
-- [ ] `bash scripts/backup-memory.sh` (Qdrant snapshot)
-- [ ] Snapshot LiteLLM key table (read-only):
-      `docker exec litellm-db psql -U litellm -d litellm -c "\copy (SELECT key_alias, key_name, user_id, max_budget, rpm_limit, tpm_limit, models FROM \"LiteLLM_VerificationToken\") /tmp/keys-$(date +%F).csv"`
-- [ ] Record current port state: `ss -tlnp | grep LISTEN > /tmp/ports-$(date +%F).txt`
+      — tree clean at `d6b0241` (nothing to commit); `.env` → `/home/chuck/data/backups/env-2026-11-15.bak` (600)
+- [x] `bash scripts/backup-memory.sh` (Qdrant snapshot)
+      — `mem0_memories-20261115-0021.snapshot` + `env-20261115-0021.env` in `/home/chuck/data/backups/`
+- [x] Snapshot LiteLLM key table (read-only):
+      — `/home/chuck/data/backups/keys-2026-11-15.txt` (4 keys: `chuck`, `dylan`,
+      model-scoped memory-service key, **1** orphaned `default_user_id`
+      `sk-...sOsg` — 2 of the 3 F5 orphans already gone since 2026-09-06)
+- [x] Record current port state: `ss -tlnp | grep LISTEN > /tmp/ports-$(date +%F).txt`
+      — `/home/chuck/data/backups/ports-2026-11-15.txt` (38 lines; F7 bindings
+      confirmed: 3306/6333/4000/8088/3000/monitoring/8005/11235 on 0.0.0.0;
+      skill-runner on 192.168.4.54:8091)
 
 ### Phase 1 — Caddy key gate on `llm.choukalos.com` (public = chuck/dylan only)
 
