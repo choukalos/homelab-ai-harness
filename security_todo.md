@@ -1,7 +1,10 @@
 # Security Plan — LiteLLM Public Access + Homelab Hardening
 
 > Created: 2026-09-06 (audit session 22:09–22:33; plan completed same evening)
-> Status: **DRAFT — nothing here is applied yet**
+> Status: **Phases 0–3 DONE (2026-11-15)** — Caddy key gate live on
+> `llm.choukalos.com`, per-key MCP scoping (default-deny + `family-mcp-full`
+> group), key hygiene (spend tracking on, orphan blocked, dead key removed).
+> Phases 4–8 not started. Orphan-key delete pending observation window.
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -90,9 +93,9 @@ done at home with a LAN client nearby.
 | Key hygiene (guardrails, retire orphans + dead key) | 3 | Caps the blast radius of a leaked key; cleans up dead/unknown keys. |
 
 After Session A, verify:
-- [ ] Public routes accept only the two family keys (negative-tested with a wrong key)
-- [ ] MCP tooling verified working from outside the LAN (Mac Studio on cellular) — confirms the trip story end-to-end
-- [ ] Commit + push (config changes are git-tracked)
+- [x] Public routes accept only the two family keys (negative-tested with a wrong key) — 2026-11-15 (Phase 1: wrong/no key → 401 on `llm.choukalos.com`; ungrouped key → 0 MCP servers)
+- [ ] MCP tooling verified working from outside the LAN (Mac Studio on cellular) — confirms the trip story end-to-end (manual step for Chuck; the public path itself was verified 2026-11-15 via CF edge → tunnel → caddy with live tool calls)
+- [x] Commit + push (config changes are git-tracked) — 2026-11-15 (`191572b`, `eb0542b`, `67ef257`, `fec6483`)
 
 ### Session B — LAN + host (when home, LAN client nearby, ~1 h)
 
@@ -238,7 +241,7 @@ from the v1.92 the original plan was researched on):
 
 Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the access group: `DELETE /v1/access_group/{id}`).
 
-### Phase 3 — Key hygiene (guardrails, retire orphans + dead key) — **IN PROGRESS 2026-11-15**
+### Phase 3 — Key hygiene (guardrails, retire orphans + dead key) — **DONE 2026-11-15** (orphan delete pending observation window)
 
 - [x] **Enable spend tracking** (prerequisite for budgets): in `litellm/config.yml` set `disable_spend_logs: false`, `disable_spend_updates: false`; restart litellm-proxy.
       — config edited 2026-11-15; takes effect on the Phase 3 recreate (below)
@@ -267,6 +270,15 @@ Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the a
 **Phase 3 apply step (Chuck):** `up -d litellm` — this time it **recreates** (the compose env changed: `LITELLM_PUBLIC_API_KEY` line removed), which loads the spend-tracking config AND drops the dead key from the container env:
 `cd /home/chuck/homelab && docker compose -f compose/compose.ai-core.yml --env-file .env up -d litellm`
 Verify after: (1) container env has no `LITELLM_PUBLIC_API_KEY`, (2) spend tracking live (new requests log spend; `key list` spend column moves), (3) sanity: chuck key 200 on `/v1/models` via public URL, MCP visibility unchanged (chuck 12 / memory-service 0).
+— **applied + verified 2026-11-15:** recreate done (Up, healthy);
+(1) container env: 0 matches for `LITELLM_PUBLIC_API_KEY` (only
+LITELLM_MASTER_KEY + LITELLM_API_KEY remain); (2) spend tracking live:
+`LiteLLM_SpendLogs` rows writing (4 rows, newest seconds old, full
+request/response + per-call spend; key spend field moving $1.21 → $1.47);
+(3) chuck 200 on public `/v1/models`; MCP visibility unchanged (chuck
+89 tools / 12 servers, memory-service 0). Note: the spend-log tables did
+not exist at all (spend logs had been off since before the 2026-09-06
+audit) — LiteLLM created them on the first logged request after the flip.
 
 Rollback: budgets/limits are per-key DB rows — revert via `/v1/key/update`; `.env` restore from Phase 0 backup.
 
@@ -461,5 +473,5 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 
 ### 9.4 Overlap with existing plan
 - Secret sprawl = **F6/F7** above (master key + 0.0.0.0 bindings). No new finding.
-- Caddy key-gate gap = **F1** (still open). The CVE cross-check confirms Caddy *itself* is patched, but the missing public-route gate is unchanged.
+- Caddy key-gate gap = **F1** — **CLOSED 2026-11-15** (Phase 1: Caddy key gate live on `llm.choukalos.com`, verified via the public path).
 - **Caveat:** only the 6 known tunnel domains were verified. If the Cloudflare Tunnel has extra public hostnames in the CF dashboard (pointing straight at other services, bypassing Caddy), review those separately.
