@@ -383,11 +383,11 @@ Rollback: `sudo ufw disable`.
 
 ### Phase 7 — Docs sync
 
-- [ ] `docs/thor_public_access_model.md`:
-  - [ ] `llm.choukalos.com` row: auth = Caddy OR-gate (chuck/dylan keys, `X-Api-Key` or `Bearer`), not `$LITELLM_PUBLIC_API_KEY`
-  - [ ] Key table: current inventory (Phase 3 output) incl. MCP access groups
-  - [ ] Add master-key-internal-only note (F6) + key-rotation procedure
-- [ ] `docs/thor_mcp_architecture.md`: note the 2026-08-25 `allow_all_keys` decision is **superseded** — per-key access groups now (Phase 2).
+- [x] `docs/thor_public_access_model.md` — **done 2026-11-15** (pulled forward with Phase 3; content re-verified 2026-11-15):
+  - [x] `llm.choukalos.com` row: auth = Caddy OR-gate (chuck/dylan keys, `X-Api-Key` or `Bearer`), not `$LITELLM_PUBLIC_API_KEY`
+  - [x] Key table: current inventory (Phase 3 output) incl. MCP access groups
+  - [x] Add master-key-internal-only note (F6) + key-rotation procedure
+- [ ] `docs/thor_mcp_architecture.md`: note the 2026-08-25 `allow_all_keys` decision is **superseded** — per-key access groups now (Phase 2). (Still stale as of 2026-11-15: `allow_all_keys: true` described in 3 places, no superseded note.)
 - [ ] Update this file: mark phases done with dates as they land; keep the §1 inventory table current.
 
 ---
