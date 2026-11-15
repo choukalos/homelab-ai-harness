@@ -44,7 +44,7 @@
 
 | key_alias | user_id | scope | budget | rpm/tpm | notes |
 |---|---|---|---|---|---|
-| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b open) | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
+| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b: no rate limits, decided 2026-11-15) | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
 | `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
 | *(no alias)* | — | models: matrix-coder, homelab-embedding-v1 | none | none | internal (skill-runner mem0, `MEMORY_LITELLM_KEY`); MCP: **none** (default-deny, Phase 2) |
 | *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **DELETED 2026-11-15** — F5 orphan; blocked same day, then deleted (observation window waived — already expired 2026-10-05, zero spend). (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |
@@ -247,8 +247,9 @@ Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the a
 - [x] **Enable spend tracking** (prerequisite for budgets): in `litellm/config.yml` set `disable_spend_logs: false`, `disable_spend_updates: false`; restart litellm-proxy.
       — config edited 2026-11-15; takes effect on the Phase 3 recreate (below)
 - [x] **Set limits on the two public keys** — family decision (2026-09-06): **no budget cap** (power users). Rate guardrails pending D2b:
-      — no change 2026-11-15: no budget cap (family decision), rpm/tpm/
-      max_parallel_requests left unset pending D2b (still open)
+      — resolved 2026-11-15: **no budget cap, no rate limits** (D2b decided: none).
+      No limits set on either public key; spend tracking (above) is the
+      visibility layer instead.
 - [x] **Retire the orphaned `default_user_id` keys** (investigation complete 2026-09-06 — see F5: dashboard-created test keys, zero repo references, zero spend):
       — only **1 of the 3** remained in the DB on 2026-11-15 (`sk-...sOsg`,
       `3409157c…d8a9`); the other two (created 07-15 / 08-15) were already deleted.
@@ -405,13 +406,13 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 | D3 | The 3 `default_user_id` keys | Investigated: **orphaned dashboard test keys** (F5) → confirm with Dylan → block → observe → delete |
 | D5 | Dead `.env` keys | `LITELLM_PUBLIC_API_KEY` = dead → remove. `SIRI_API_KEY` + `HARNESS_API_KEY` = **in use** (CLI, open-webui) → keep. **2026-11-15:** `LITELLM_PUBLIC_API_KEY` removed (Phase 3); `HARNESS_API_KEY` removed same day (open-webui gone); `SIRI_API_KEY` stays |
 | D6 | `internal-service` key | **Yes** — formalized as Phase 8 |
+| D2b | Rate guardrails for chuck/dylan | **None** — family decision 2026-11-15 (Chuck: no rate limits on the public keys). Consistent with D2 (unlimited budget): the keys are family-only (Caddy gate, Phase 1), spend tracking is live (Phase 3) so abuse is visible, and power-user agent sessions (pi, parallel tool calls) can hit ~60 RPM — any cap would just cause false positives. |
 
 ### Open
 
 | # | Question | Notes |
 |---|---|---|
 | D4 | ufw rules for the two home subnets (`192.168.4.0/24` + `192.168.5.0/24`) | See Phase 5 discussion list — settle before executing |
-| D2b | Rate guardrails for chuck/dylan: none, or loose (e.g. 120 RPM / 400k TPM / 8 parallel)? | Budget is unlimited; guardrails are anti-abuse-only. Power-user agent sessions (pi, parallel tool calls) can hit 60 RPM, so the original proposal was too tight if we keep any |
 
 ---
 
