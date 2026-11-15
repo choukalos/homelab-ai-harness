@@ -124,9 +124,9 @@ def main():
     p.add_argument("--model", default="homelab-embedding-v2",
                    help="NEW embedding alias to embed with")
     p.add_argument("--qdrant-url",
-                   default=os.environ.get("QDRANT_URL", "http://localhost:6333"))
+                   default=os.environ.get("QDRANT_URL", "http://192.168.4.54:6333"))
     p.add_argument("--litellm-url",
-                   default=os.environ.get("LITELLM_URL", "http://localhost:4000"))
+                   default=os.environ.get("LITELLM_URL", "http://192.168.4.54:4000"))
     p.add_argument("--dry-run", action="store_true",
                    help="show the plan; write nothing")
     args = p.parse_args()

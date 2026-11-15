@@ -38,7 +38,9 @@ services:
     networks:
       - ai-net
     ports:
-      - "4000:4000"
+      # Phase 4 (security_todo, 2026-11-15): LAN-IP bind — litellm is not
+      # public; LAN clients use 192.168.4.54:4000, containers use ai-net DNS.
+      - "${THOR_IP:-192.168.4.54}:4000:4000"
     volumes:
       - ../litellm/config.yml:/app/config.yaml:ro
       - /home/chuck/data/litellm:/app/data
@@ -79,7 +81,11 @@ services:
     networks:
       - ai-net
     ports:
-      - "6333:6333"
+      # Phase 4 (security_todo, 2026-11-15): THOR_IP bind instead of 0.0.0.0 —
+      # host scripts (backup-*.sh, reembed-memory.py) need host access and use
+      # 192.168.4.54:6333; containers use docker DNS (qdrant:6333). D9
+      # (no TLS, LAN trust) unchanged.
+      - "${THOR_IP:-192.168.4.54}:6333:6333"
     volumes:
       - /home/chuck/data/qdrant:/qdrant/storage
 
@@ -100,8 +106,6 @@ services:
       - ../.env
     networks:
       - ai-net
-    ports:
-      - "8088:8080"
     volumes:
       - /home/chuck/homelab/searxng/settings.yml:/etc/searxng/settings.yml:ro
       - /home/chuck/data/searxng:/var/cache/searxng
@@ -124,8 +128,6 @@ services:
     restart: unless-stopped
     networks:
       - ai-net
-    ports:
-      - "11235:11235"
     shm_size: "3g"
     # Operator token: entrypoint refuses to bind non-loopback without a
     # credential (mcp_crawl needs to reach it over ai-net). Sent by

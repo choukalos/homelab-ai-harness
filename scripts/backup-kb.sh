@@ -39,7 +39,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="/home/chuck/data/backups/kb"
-QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
+QDRANT_URL="${QDRANT_URL:-http://192.168.4.54:6333}"
 STAMP="$(date +%Y%m%d-%H%M)"
 
 # OPS credential: the ADMIN key (full access). From the environment if

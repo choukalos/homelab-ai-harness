@@ -31,7 +31,7 @@ ENV_FILE="${REPO_ROOT}/.env"
 IMAGE="skill-runner:local"
 CONTAINER="memory-regression"
 NETWORK="ai-net"
-QDRANT_HOST_URL="http://localhost:6333"
+QDRANT_HOST_URL="http://192.168.4.54:6333"
 # KB rebuild (2026-08-29): the old 384-dim family_kb collection was DROPPED
 # (snapshot saved to /home/chuck/data/backups/family_kb-<stamp>.snapshot). The
 # clean-state expectation is now that family_kb is ABSENT (404), not 18 points.

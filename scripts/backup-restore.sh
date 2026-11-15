@@ -277,7 +277,7 @@ do_clickhouse() {
 do_qdrant() {
   local name="$1" src="$2" entry="$3" cfg="$4"
   local col="${name#qdrant/}"
-  local url="${QDRANT_HOST_URL:-http://localhost:6333}"
+  local url="${QDRANT_HOST_URL:-http://192.168.4.54:6333}"
 
   if [[ "$TEST" -eq 1 ]]; then
     restore_log "  $name: TEST — recovering snapshot into disposable qdrant"
@@ -627,7 +627,7 @@ if [[ "$ACTION" == "full" ]]; then
       echo "## 4. Qdrant"
       echo "   docker compose up -d qdrant, then per collection (snapshots in $TARGET_DIR/qdrant/):"
       echo "   docker cp $TARGET_DIR/qdrant/<col>-*.snapshot qdrant:/qdrant/snapshots/restore.snapshot"
-      echo "   curl -X PUT http://localhost:6333/collections/<col>/snapshots/recover -H 'Content-Type: application/json' -d '{\"location\":\"file:///qdrant/snapshots/restore.snapshot\",\"priority\":\"snapshot\"}'"
+      echo "   curl -X PUT http://192.168.4.54:6333/collections/<col>/snapshots/recover -H 'Content-Type: application/json' -d '{\"location\":\"file:///qdrant/snapshots/restore.snapshot\",\"priority\":\"snapshot\"}'"
       echo
       echo "## 5. What was staged"
       echo "   | item | type | file |"

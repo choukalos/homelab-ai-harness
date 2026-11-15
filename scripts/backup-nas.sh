@@ -204,7 +204,7 @@ maybe_store() {
 
 gen_qdrant() {
   local item="$1"
-  local url="${QDRANT_HOST_URL:-http://localhost:6333}"
+  local url="${QDRANT_HOST_URL:-http://192.168.4.54:6333}"
   local key="${QDRANT_ADMIN_API_KEY:-}"
   if [[ -z "$key" ]]; then
     mark_failed "qdrant" qdrant_snapshot "QDRANT_ADMIN_API_KEY not set"

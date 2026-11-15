@@ -39,7 +39,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="/home/chuck/data/backups"
 QDRANT_DATA="/home/chuck/data/qdrant"
 ENV_FILE="${REPO_ROOT}/.env"
-QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
+QDRANT_URL="${QDRANT_URL:-http://192.168.4.54:6333}"
 COLLECTION="mem0_memories"
 STAMP="$(date +%Y%m%d-%H%M)"
 

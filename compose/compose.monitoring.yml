@@ -8,7 +8,8 @@ services:
     networks:
       - monitoring-net
     ports:
-      - "9100:9100"
+      # Phase 4 (security_todo, 2026-11-15): LAN-IP bind (monitoring is LAN-admin only)
+      - "192.168.4.54:9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -27,7 +28,7 @@ services:
     networks:
       - monitoring-net
     ports:
-      - "8081:8080"
+      - "192.168.4.54:8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
@@ -45,8 +46,8 @@ services:
       - monitoring-net
       - public-net
     ports:
-      - "9090:8428"
-      - "9091:8429"
+      - "192.168.4.54:9090:8428"
+      - "192.168.4.54:9091:8429"
     volumes:
       - ../prometheus/prometheus.yml:/etc/victoria-metrics/prometheus.yml:ro
       - /home/chuck/data/victoria-metrics:/victoria-metrics/data
@@ -81,7 +82,7 @@ services:
     networks:
       - monitoring-net
     ports:
-      - "3001:3000"
+      - "192.168.4.54:3001:3000"
     volumes:
       - /home/chuck/data/grafana:/var/lib/grafana
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
@@ -120,7 +121,7 @@ services:
       - monitoring-net
       - public-net
     ports:
-      - "8082:8000"
+      - "192.168.4.54:8082:8000"
     volumes:
       - plausible-app:/var/lib/plausible
     ulimits:

@@ -134,11 +134,11 @@ Environment variables (optional, all have defaults):
 | `DEEP_RESEARCH_MAX_RUNTIME` | `900` | Max runtime in seconds. |
 | `DEEP_RESEARCH_MODEL_ALIAS` | `local/qwen-coder` | Model alias for report synthesis. |
 | `DEEP_RESEARCH_ARTIFACT_DIR` | `/home/chuck/data/media/research_reports` | Artifact output directory. |
-| `LITELLM_BASE_URL` | `http://localhost:4000` | LiteLLM endpoint. |
+| `LITELLM_BASE_URL` | `http://192.168.4.54:4000` | LiteLLM endpoint. |
 | `LITELLM_API_KEY` | `""` | LiteLLM API key. |
 | `MCP_SEARCH_URL` | `http://localhost:8080` | SearXNG search endpoint. |
 | `MCP_CRAWL_URL` | `http://localhost:11235` | Crawl4AI endpoint. |
-| `MCP_KNOWLEDGE_URL` | `http://localhost:6333` | Qdrant endpoint. |
+| `MCP_KNOWLEDGE_URL` | `http://192.168.4.54:6333` | Qdrant endpoint. |
 
 ## Artifact Storage
 

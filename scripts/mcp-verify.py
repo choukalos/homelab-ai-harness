@@ -13,7 +13,7 @@ Usage:
 Exit code: 0 if no transport failures, 1 if any tool failed to respond.
 
 Requires LITELLM_MASTER_KEY in the repo .env (or the LITELLM_MASTER_KEY
-env var). LiteLLM proxy must be running on localhost:4000.
+env var). LiteLLM proxy must be running on 192.168.4.54:4000.
 """
 import json
 import os
@@ -28,7 +28,7 @@ import urllib.request
 # Configuration
 # ---------------------------------------------------------------------------
 
-BASE = os.environ.get("LITELLM_BASE", "http://localhost:4000")
+BASE = os.environ.get("LITELLM_BASE", "http://192.168.4.54:4000")
 ENV_FILE = os.environ.get(
     "HOMELAB_ENV",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

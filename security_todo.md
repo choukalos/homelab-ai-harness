@@ -23,7 +23,7 @@
 | F5 | MED | **3 orphaned `default_user_id` keys** (no alias, $0.25 budget each; created 07-15 / 08-15 / 08-30 via the **LiteLLM dashboard UI**). Investigated 2026-09-06: zero references anywhere in the repo (compose/scripts/code/docs), zero spend, empty AuditLog, no request-log tables; all plausible consumers ruled out (open-webui → master key, pi → Chuck's key, skill-runner/mcp_* → master, CLI → SIRI_API_KEY). Conclusion: **manual test keys, safe to retire** (block → observe → delete). | LiteLLM DB | Phase 3 |
 | F6 | MED | `LITELLM_MASTER_KEY == LITELLM_API_KEY` (same `sk-cb1678…` token) injected into 6 internal consumers (open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner). Master key = proxy admin = all models + all MCP servers. Acceptable *while it stays internal* — which is exactly what Phases 1/4/5 guarantee. **2026-11-15: now 5 consumers** (open-webui removed). | `.env`, `compose/*.yml` | Phase 3 (document) + Phase 8 (internal-service key — decided) |
 | F7 | MED | Wide `0.0.0.0` host bindings: MySQL `3306/33060`, Qdrant `6333`, LiteLLM `4000`, SearXNG `8088`, Open WebUI `3000`, monitoring stack `3001/8081/8082/9090/9091/9100`, `mcp_memory 8005`, crawl4ai `11235`. **ufw not running.** | `compose/*.yml`, host | Phase 4/5 |
-| F8 | MED | `mcp_memory` (host `:8005`) has **no auth of its own** and falls back to `MEMORY_USER_KEY` (Chuck's key) when the caller sends none → any LAN client can search **Chuck's private memories** unauthenticated. | `compose/compose.mcp.yml`, `mcp/servers/memory/server.py` | Phase 4 |
+| F8 | MED | `mcp_memory` (host `:8005`) has **no auth of its own** and falls back to `MEMORY_USER_KEY` (Chuck's key) when the caller sends none → any LAN client can search **Chuck's private memories** unauthenticated. **RESOLVED 2026-11-15 (Phase 4): host mapping removed** (no LAN consumers per log audit). | `compose/compose.mcp.yml`, `mcp/servers/memory/server.py` | Phase 4 ✅ |
 | F9 | LOW | sshd config not fully verified (password auth / root login status unknown). | host | Phase 5 |
 | F10 | LOW | Stale docs: `thor_public_access_model.md` describes a `$LITELLM_PUBLIC_API_KEY` gate and key table that don't match reality. | `docs/` | Phase 7 |
 | F11 | INFO | `.env` key consumers confirmed (2026-09-06): `LITELLM_PUBLIC_API_KEY` is **dead** (assigned to an unused variable in `lib/litellm-keys.sh:12`, passed to the litellm-proxy container env but unused; Caddy never used it) → remove. `SIRI_API_KEY` **in use** (`cli/run-skill.sh` legacy mode, `cli/verify_attribution.sh` T7) and `HARNESS_API_KEY` **in use** (open-webui → skill-runner harness) → keep. **2026-11-15: `LITELLM_PUBLIC_API_KEY` removed (Phase 3); `HARNESS_API_KEY` also removed** (its only consumer, open-webui, was removed the same day). | `.env`, `lib/litellm-keys.sh`, `cli/*.sh` | Phase 3 |
@@ -291,7 +291,7 @@ audit) — LiteLLM created them on the first logged request after the flip.
 
 Rollback: budgets/limits are per-key DB rows — revert via `/v1/key/update`; `.env` restore from Phase 0 backup.
 
-### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings)
+### Phase 4 — Shrink LAN exposure (rebind / remove host port mappings) — **IN PROGRESS 2026-11-15**
 
 Principle: containers talk over the docker network (`ai-net`); host port
 publishing is only for things a human needs from another machine.
@@ -309,9 +309,26 @@ publishing is only for things a human needs from another machine.
 | `80/443` (caddy) | 0.0.0.0 | keep | tunnel + LAN |
 | `22` (ssh) | 0.0.0.0 | keep; restrict source in Phase 5 | — |
 
-- [ ] For each row: grep the consumer (`grep -rn "<port or service name>" compose/ .env | grep -v ports:`), change the compose `ports:` entry, `docker compose up -d <stack>` (recreate, no data loss — verify after).
-- [ ] Re-run `ss -tlnp | grep LISTEN` — expected survivors: `22, 80, 443, 192.168.4.54:{3000,3306,4000,3001,8081,8082,9090,9091,9100,5000,8091}`.
-- [ ] Confirm from a LAN client (Mac Studio): Open WebUI, Grafana, `llm.choukalos.com`, `siri.choukalos.com` all still work; confirm from a phone on a *different* network (cellular) that the public routes still work.
+**Consumer verification (done 2026-11-15):**
+- qdrant 6333: 6 thor scripts defaulted to `localhost:6333` (backup-memory/kb/nas/restore, reembed-memory, memory-regression) → **rebind to THOR_IP** (not full removal) + script defaults updated to `192.168.4.54:6333`. Docker-DNS consumers (mcp_knowledge `QDRANT_URL=http://qdrant:6333`, skill-runner `MEMORY_QDRANT_URL`) unaffected.
+- litellm 4000: `lib/litellm-keys.sh` (`LITELLM_PROXY` default 127.0.0.1:4000), `scripts/reembed-memory.py`, `scripts/mcp-verify.py` used localhost → defaults updated to `192.168.4.54:4000`. VictoriaMetrics scrapes `host.docker.internal:4000` (LAN IP — unaffected). `skills/deep_research/skill.py` default is dead (runner injects `litellm-proxy:4000`). CLI `LAN_BASE` already used the LAN IP.
+- searxng 8088: only consumer is mcp_search via docker DNS (`searxng:8080`) → removed.
+- crawl4ai 11235: only consumer is mcp_crawl via docker DNS → removed.
+- mcp_memory 8005: **log audit 2026-11-15: zero Mac traffic** (172.18.x docker-bridge only + 1 hit from thor itself) → removed (F8 closed). Mac pi uses skill-runner `/api/memory/*` (8091).
+- mysql 3306: data-hub/report-hub/mcp_mysql/skill-runner all use `thor.local` (=192.168.4.54) → THOR_IP bind keeps them. No host scripts use localhost:3306.
+- monitoring: VM promscrape targets are docker DNS / `host.docker.internal` → host binds are human-only.
+
+**Applied 2026-11-15 (safe stacks):** qdrant + searxng + crawl4ai (ai-core), monitoring stack (5 services + 9091), mcp_memory (mcp) recreated. Verified: `ss -tlnp` shows the new binds; qdrant reachable at 192.168.4.54:6333 (localhost now refused); MCP 89 tools / 12 servers (all connected via docker DNS); live `mcp_search.search_web` tool call OK; Grafana 200 at 192.168.4.54:3001.
+
+**Pending (Chuck):**
+1. litellm recreate (rebind 4000): `cd /home/chuck/homelab && docker compose -f compose/compose.ai-core.yml --env-file .env up -d litellm`
+2. MySQL rebind (host service, sudo): `sudo sed -i 's/^bind-address\s*=\s*0.0.0.0/bind-address\t= 192.168.4.54/' /etc/mysql/mysql.conf.d/mysqld.cnf && sudo systemctl restart mysql` (mysqlx already 127.0.0.1)
+
+Verify after: (1) litellm at 192.168.4.54:4000 + `./homelab.sh key list` + public route + MCP 12 servers; (2) mysql at 192.168.4.54:3306 + data-hub/report-hub/mcp_mysql/skill-runner healthy.
+
+- [x] For each row: grep the consumer, change the compose `ports:` entry, `docker compose up -d <stack>` (recreate, no data loss — verify after).
+- [ ] Re-run `ss -tlnp | grep LISTEN` — expected survivors: `22, 80, 443, 192.168.4.54:{3306,4000,3001,8081,8082,9090,9091,9100,5000,6333,8091,8100,8101}` (3000 gone with OWUI; 33060 stays 127.0.0.1).
+- [ ] Confirm from a LAN client (Mac Studio): Grafana, `llm.choukalos.com`, `siri.choukalos.com` all still work; confirm from a phone on a *different* network (cellular) that the public routes still work.
 
 Rollback: restore the `ports:` lines from git + recreate.
 

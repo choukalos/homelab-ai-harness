@@ -247,10 +247,10 @@ services:
       # Callers that DO send Authorization: Bearer <their LiteLLM key> are
       # forwarded to skill-runner and resolved per-user (dylan -> dylan, etc.).
       - MEMORY_USER_KEY=${LITELLM_KEY_CHUCK}
-    ports:
-      # LAN-published so pi (Mac) can connect directly with the user's own
-      # LiteLLM key; skill-runner enforces per-user scoping server-side.
-      - "8005:8000"
+    # No host port mapping (Phase 4, security_todo, 2026-11-15): the former
+    # 8005 LAN publish (F8: unauthenticated, fell back to Chuck's key) had no
+    # LAN consumers (log check 2026-11-15: zero Mac traffic). LiteLLM reaches
+    # it via ai-net DNS (mcp_memory:8000); Mac pi uses skill-runner /api/memory/*.
     restart: unless-stopped
     networks:
       - ai-net
