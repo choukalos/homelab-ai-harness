@@ -1,6 +1,6 @@
 ---
 name: media-film
-description: Orchestrate a multi-shot short film through the mcp_media GPU pipeline — keyframes (Qwen-Image 2.1), I2V clips (Wan 2.2 / LTXV), TTS/music/SFX, assembly, vision QC, and publish. Crash-proof by design: on-disk state file written after every submit, retried MCP calls, timeboxed codemode chunks, and a resume protocol built on the durable job ledger (media_list_jobs).
+description: "Orchestrate a multi-shot short film through the mcp_media GPU pipeline — keyframes (Qwen-Image 2.1), I2V clips (Wan 2.2 / LTXV), TTS/music/SFX, assembly, vision QC, and publish. Crash-proof by design: on-disk state file written after every submit, retried MCP calls, timeboxed codemode chunks, and a resume protocol built on the durable job ledger (media_list_jobs)."
 ---
 
 # media-film — multi-shot film orchestration
