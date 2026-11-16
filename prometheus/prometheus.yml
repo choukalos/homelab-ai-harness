@@ -27,7 +27,11 @@ scrape_configs:
   metrics_path: /metrics/
   static_configs:
   - targets:
-    - host.docker.internal:4000
+    # litellm binds to THOR_IP (post-hardening: ufw 192.168.4.0/24 only +
+    # no 0.0.0.0 bind), so the docker0 gateway (host.docker.internal)
+    # cannot reach it — use the thor LAN IP mapped via extra_hosts in
+    # compose.monitoring.yml (same pattern as skill-runner).
+    - thor-lan:4000
     labels:
       instance: litellm
 - job_name: skill-runner
