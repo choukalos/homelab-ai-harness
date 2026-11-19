@@ -33,7 +33,7 @@ transcription (use the `song-transcribe` skill).
 | GPU host (matrix) | `192.168.4.55`, pipeline API `http://matrix:8189` — **LAN-only** |
 | Pipeline artifacts | `/home/chuck/data/comfyui/run/media_jobs/<job_id>/mp_<job_id>_00001.{mp4,png,wav,…}` — 14-day retention |
 | mcp_media container | thor `192.168.4.54`, proxies to `matrix:8189`, fetch dir `/home/chuck/data/media/generated/pipeline` |
-| MCP gateway | `https://llm.choukalos.com` (litellm proxy; MCP tools `mcp__litellm__mcp_media_*`) |
+| MCP gateway | `https://llm.choukalos.com` (litellm proxy). Tool names in the `tools` object are pi-codemode names, and they differ per pi/host version (verified 2026-11-19): **thor pi 1.3.0** = `mcp__litellm__mcp_media_<tool>` (underscore), **Mac (2026-11-17)** = `mcp_media-<tool>` (dash). Raw gateway names (`/v1/mcp/tools`) are dash-form. The chunk/resume templates auto-detect the working form with a cheap `media_list_jobs` call before the first real call — do the same in ad-hoc scripts. |
 | Public routes | `https://siri.choukalos.com/media/pipeline/upload` (X-Api-Key = chuck/dylan LiteLLM key) and `/media/pipeline/dl/<token>` (signed URL, token is the credential). Everything else under `/media/pipeline/*` is 404 off-LAN. |
 | Queue capacity | 1 running + 5 queued = **6 pending max**; submit returns **HTTP 503 + `retry_after_seconds`** when full |
 | MCP tool-call timeout | **60 s hard timeout** at the gateway ("MCP request timed out after 60000ms") — transient and expected on long orchestrations; the job is unaffected, retry the call |
@@ -66,10 +66,26 @@ other work.** A job ID that is not on disk is a job ID that will be lost.
 **Every** MCP call — media, vision, skills — goes through the wrapper. A
 single un-retried 60 s gateway timeout kills the whole chunk (verified in the
 2026-11-04 dry run: one un-wrapped vision call died the QC script and lost the
-preceding verdicts). `name` is the full tool name
-(`mcp__litellm__mcp_media_*`, `mcp__litellm__mcp_vision_*`, …):
+preceding verdicts). `name` is the full tool name — resolved prefix + tool
+(`M + "media_*"`, `V + "vision_*"`). **The prefix differs per pi/host version**
+(verified 2026-11-19: thor pi 1.3.0 = `mcp__litellm__mcp_media_` underscore form;
+Mac 2026-11-17 = `mcp_media-` dash form) — resolve it once with a cheap call
+before the first real call, trying both forms:
 
 ```js
+let M = null, V = null;
+const ensurePrefixes = async () => {
+  if (M) return;
+  const forms = [
+    ["mcp__litellm__mcp_media_", "mcp__litellm__mcp_vision_"],
+    ["mcp_media-", "mcp_vision-"],
+  ];
+  for (const [m, v] of forms) {
+    try { await tools[m + "media_list_jobs"]({ status: "running", limit: 1 }); M = m; V = v; return; } catch (_) {}
+  }
+  throw new Error("media tool prefix unresolved — both name forms failed");
+};
+
 const mcall = async (name, args, tries = 4) => {
   let last;
   for (let i = 0; i < tries; i++) {
@@ -78,10 +94,11 @@ const mcall = async (name, args, tries = 4) => {
     // Backoff WITHOUT timers — the codemode QuickJS sandbox has no setTimeout.
     // A cheap blocking call stands in (spec: media_job_result on a known-done
     // job with wait_seconds 25; media_list_jobs is the always-available variant).
-    try { await tools.mcp__litellm__mcp_media_media_list_jobs({ status: "running", limit: 1 }); } catch (_) {}
+    try { await tools[M + "media_list_jobs"]({ status: "running", limit: 1 }); } catch (_) {}
   }
   throw last;
 };
+await ensurePrefixes(); // run before the first MCP call
 ```
 
 Two failure shapes to handle differently:

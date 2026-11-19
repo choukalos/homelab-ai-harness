@@ -3,7 +3,9 @@
 The canonical contract lives on the GPU host (`docs/matrix_media_pipeline_api.md`
 + `docs/thor_media_mcp_handoff.md`) — unreachable off-LAN. This file is the
 self-contained summary the skill needs. Tool names below are the MCP names
-(`mcp__litellm__mcp_media_*` via the litellm gateway); the underlying pipeline
+(dash-form at the gateway, e.g. `mcp_media-media_list_jobs` per `/v1/mcp/tools`;
+in the pi codemode `tools` object they carry a version-dependent prefix — see
+SKILL.md "MCP gateway" row); the underlying pipeline
 endpoints are on `matrix:8189` (LAN-only).
 
 ## Job model

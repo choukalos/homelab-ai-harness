@@ -18,7 +18,18 @@ const CFG = {
   poll_wait: 20,              // media_job_result wait_seconds (max 25)
 };
 
-const M = "mcp__litellm__mcp_media_";
+// Tool-name prefix — pi's codemode MCP layer names gateway tools differently
+// per pi/host version (verified 2026-11-19: thor pi 1.3.0 = underscore form;
+// Mac film run 2026-11-17 = dash form). Resolve once with a cheap call before
+// any other MCP call; both forms are tried.
+let M = null;
+const ensurePrefix = async () => {
+  if (M) return;
+  for (const p of ["mcp__litellm__mcp_media_", "mcp_media-"]) {
+    try { await tools[p + "media_list_jobs"]({ status: "running", limit: 1 }); M = p; return; } catch (_) {}
+  }
+  throw new Error("media tool prefix unresolved — underscore and dash forms both failed (check MCP server registration)");
+};
 
 // ---- R2: retried MCP call (same wrapper as chunk.js — full tool names) ----
 const mcall = async (name, args, tries = 4) => {
@@ -31,6 +42,7 @@ const mcall = async (name, args, tries = 4) => {
   throw last;
 };
 const poll = (jid) => mcall(M + "media_job_result", { job_id: jid, wait_seconds: CFG.poll_wait });
+await ensurePrefix(); // resolve tool-name prefix before any MCP call (see note above)
 
 // ---- R1: state file ---------------------------------------------------------
 const loadState = async () =>

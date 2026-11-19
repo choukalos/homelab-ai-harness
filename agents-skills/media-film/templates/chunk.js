@@ -28,10 +28,28 @@ const CFG = {
   queue_limit: 5,             // max own in-flight submits (queue: 1 running + 5 queued, shared)
 };
 
-const M = "mcp__litellm__mcp_media_";
+// Tool-name prefixes — pi's codemode MCP layer names gateway tools
+// differently per pi/host version (verified 2026-11-19):
+//   thor pi 1.3.0: "mcp__litellm__mcp_media_" (underscore form works; dash fails)
+//   Mac (film run 2026-11-17): "mcp_media-" (dash form worked; underscore failed)
+// Raw gateway names are dash-form (mcp_media-media_list_jobs per /v1/mcp/tools);
+// pi re-names them per its codemode layer. Resolve once with a cheap call
+// BEFORE any other MCP call; both forms are tried.
+let M = null, V = null;
+const ensurePrefixes = async () => {
+  if (M) return;
+  const forms = [
+    ["mcp__litellm__mcp_media_", "mcp__litellm__mcp_vision_"],
+    ["mcp_media-", "mcp_vision-"],
+  ];
+  for (const [m, v] of forms) {
+    try { await tools[m + "media_list_jobs"]({ status: "running", limit: 1 }); M = m; V = v; return; } catch (_) {}
+  }
+  throw new Error("media tool prefix unresolved — underscore and dash forms both failed (check MCP server registration)");
+};
 
 // ---- R2: retried MCP call (4 attempts) ------------------------------------
-// `name` = FULL tool name (mcp__litellm__mcp_media_* / mcp__litellm__mcp_vision_*).
+// `name` = FULL tool name (resolved prefix + tool: M + "media_*" / V + "vision_*").
 // EVERY MCP call — media, vision, skills — goes through this wrapper. A single
 // un-retried 60s gateway timeout kills the whole chunk (verified in the
 // 2026-11-04 dry run: an un-wrapped vision call died the QC script).
@@ -48,6 +66,7 @@ const mcall = async (name, args, tries = 4) => {
   throw last;
 };
 const poll = (jid) => mcall(M + "media_job_result", { job_id: jid, wait_seconds: CFG.poll_wait });
+await ensurePrefixes(); // resolve tool-name prefixes before any MCP call (see note above)
 
 // ---- R1: state file (written immediately after every submit) --------------
 const loadState = async () =>
