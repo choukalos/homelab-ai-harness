@@ -100,6 +100,15 @@
       },
       "enabled": true,
       "timezone": "America/Chicago"
+    },
+    {
+      "id": "litellm-health-check",
+      "name": "LiteLLM Health Check (5-min outage poller)",
+      "cron": "*/5 * * * *",
+      "skill": "litellm_health_check",
+      "params": {},
+      "enabled": true,
+      "timezone": "America/Chicago"
     }
   ]
 }

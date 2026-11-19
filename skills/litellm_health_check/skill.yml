@@ -1,0 +1,31 @@
+name: litellm_health_check
+version: "1.0"
+description: "LiteLLM proxy outage poller — probes GET /health (with key) every 5 min; writes a public alert file to the drop zone (the existing notify path) when unhealthy_endpoints is non-empty or the proxy is unreachable; silent (removes the alert) when healthy. No LLM, no MCP."
+inputs:
+  - name: proxy_url
+    type: string
+    required: false
+    description: "Base URL of the LiteLLM proxy to probe. Defaults to the LITELLM_BASE_URL env (http://litellm-proxy:4000 inside the runner)."
+  - name: api_key
+    type: string
+    required: false
+    description: "LiteLLM key for the /health call. Defaults to the runner's LITELLM_API_KEY env."
+  - name: alert_path
+    type: string
+    required: false
+    default: "/home/chuck/data/media/public/briefs/litellm-health-alert.md"
+    description: "Public drop-zone alert file written when unhealthy (served at https://choukalos.com/files/briefs/litellm-health-alert.md). Removed on the next healthy check."
+  - name: timeout_seconds
+    type: integer
+    required: false
+    default: 30
+    description: "HTTP timeout for the /health call."
+config:
+  # Notify path: the public drop zone used by morning_brief's publish
+  # (/home/chuck/data/media/public/briefs/ -> https://choukalos.com/files/briefs/).
+  public_url: "https://choukalos.com/files/briefs/litellm-health-alert.md"
+  # Poll cadence lives in scheduler/schedules.json (litellm-health-check, */5).
+tools: []
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 60

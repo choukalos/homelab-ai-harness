@@ -2,8 +2,17 @@
 
 - slug: tier2-litellm-health-visibility
 - date: 2026-11-19
-- status: open
+- status: applied
 - tier: 2
+- applied: 2026-11-19 (pi, thor) — dashboard `grafana/dashboards/litellm-model-health.json`
+  (7 panels, provisioned, all queries verified live against VictoriaMetrics —
+  metric names adjusted to live reality: uptime % uses success_responses, p95
+  latency/TTFT + token throughput grouped by requested_model since histograms
+  lack model_group) + 5-min outage poller skill `skills/litellm_health_check/`
+  (schedule `litellm-health-check`, */5 * * * *) alerting via the public briefs
+  drop-zone. Verified live: scheduler fired on schedule, alert surfaced the real
+  macstudio outage (https://choukalos.com/files/briefs/litellm-health-alert.md),
+  healthy branch + recovery verified via mock tests; alert auto-removes when healthy.
 - target user: chuck
 - source: workspace/ideas/2026-11-17-litellm-model-info-and-uptime.md (Group 2c/2d)
 
