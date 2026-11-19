@@ -57,8 +57,8 @@ refers to the reflection pipeline's own roles).
 
 ## Current state (2026-11-19)
 
-- **tier1:** cloudflare-524-read-timeout · litellm-model-config-pass ·
-  macstudio-omlx-restart · media-film-tool-names
+- **tier1:** macstudio-omlx-restart (deferred — chuck back home 2026-11-20) ·
+  media-film-tool-names (applied 2026-11-19, pending archive)
 - **tier2:** mcp-sessions-remote-ingest · media-film-production-lessons ·
   pi-subagents-timeout-handling · litellm-health-visibility ·
   matrix-media-pipeline-improvements (⚠️ work host: matrix, not thor)
@@ -66,4 +66,6 @@ refers to the reflection pipeline's own roles).
   memory-dedupe-supersede · media-queue-mcp-tools (depends on the matrix
   proposal) · housekeeping
 - **archive:** 7 closed 2026-11-08 proposals (window guard, publish-file
-  dedup, checkpoint, etc. — the reflection pipeline's first batch)
+  dedup, checkpoint, etc. — the reflection pipeline's first batch) +
+  litellm-model-config-pass (applied 2026-11-19) +
+  cloudflare-524-read-timeout (dismissed 2026-11-19 — no CF Enterprise plan)

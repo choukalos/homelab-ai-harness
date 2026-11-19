@@ -2,8 +2,13 @@
 
 - slug: tier1-cloudflare-524-read-timeout
 - date: 2026-11-19
-- status: open
+- status: dismissed
 - tier: 1
+- dismissed: 2026-11-19 (chuck) — not on the Cloudflare Enterprise plan, so the zone read
+  timeout is not configurable; the reliable fix is out of reach. The 524 symptom
+  remains a known limitation for long worker turns behind llm.choukalos.com
+  (mitigation if revisited: stream long generations — the 120 s applies to gaps
+  between bytes, not total time).
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (A1) + autonomous_agents_ideas.md §6.12 (Phase 1 exit criterion)
 

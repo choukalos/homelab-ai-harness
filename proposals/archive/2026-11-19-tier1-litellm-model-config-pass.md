@@ -2,8 +2,16 @@
 
 - slug: tier1-litellm-model-config-pass
 - date: 2026-11-19
-- status: open
+- status: applied
 - tier: 1
+- applied: 2026-11-19 (pi, thor) — swapped via scripts/apply-tier1-litellm.sh
+  (atomic config+compose swap, functional verify, auto-rollback). Live-verified
+  post-swap: 5-model set, all capability tags served, matrix-coder-fast
+  reasoning_tokens=0, embeddings mode=embedding. First attempt (manual multi-
+  command swap) failed with a postgres/schema error of unknown cause — failed
+  container logs were lost on recreate; the script's log capture + auto-rollback
+  was added because of that. Gemma capability tags remain UNVERIFIED pending
+  tier1-macstudio-omlx-restart (deferred to 2026-11-20, chuck back home).
 - target user: chuck
 - source: workspace/ideas/2026-11-17-litellm-model-info-and-uptime.md (Group 1)
 
