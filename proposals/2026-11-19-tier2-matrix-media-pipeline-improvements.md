@@ -2,7 +2,10 @@
 
 - slug: tier2-matrix-media-pipeline-improvements
 - date: 2026-11-19
-- status: open
+- status: in progress (2026-11-19: matrix handoff written — `docs/matrix_media_pipeline_improvements_handoff.md`,
+  self-contained M1–M5 spec + acceptance tests; M1 defect re-verified live against
+  matrix:8189 — baseline job `bab0cbbed536`: 2× 6.0 s clips, requested 9 s each →
+  12.0 s output, silent ignore confirmed. Awaiting matrix session to implement.)
 - tier: 2
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (C14 root cause, C13 progress, A4) + workspace/harness-repo-recovery/improve_mediapipeline_todo.md
