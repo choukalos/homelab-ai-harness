@@ -98,7 +98,7 @@ services:
       - /home/chuck/data/redis:/data
 
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng@sha256:c642712fcedcdaa78fac44f71eada86aff510745826ba1bd1a368211fea2ce7f
     container_name: searxng
     restart: unless-stopped
     env_file:
@@ -122,7 +122,7 @@ services:
       - /home/chuck/data/searxng-valkey:/data
 
   crawl4ai:
-    image: unclecode/crawl4ai:latest
+    image: unclecode/crawl4ai@sha256:9021b3cb5c6f12570bbcd5395638495e0a06969b3148e377b953d174af2ebc9b
     container_name: crawl4ai
     restart: unless-stopped
     networks:
@@ -137,7 +137,7 @@ services:
       - /home/chuck/data/crawl4ai:/app/data
 
   presenton:
-    image: ghcr.io/presenton/presenton:latest
+    image: ghcr.io/presenton/presenton@sha256:ddf0d1f26397764856acdf94489dbbae5a2c0644a280723fd80bc7a80de338ba
     container_name: presenton
     restart: unless-stopped
     networks:
