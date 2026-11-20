@@ -9,7 +9,7 @@ inputs:
   - name: days
     type: integer
     required: false
-    default: 7
+    default: 1
     description: "Lookback window in days."
 config:
   # GitHub identity is known ONLY for users listed here (login). Users not

@@ -2,7 +2,8 @@
 
 - slug: recent-activity-slow-run-optimization
 - date: 2026-11-08
-- status: open
+- status: applied
+- applied: 2026-11-20 (pi, thor) — 24h/300s optimization: `skills/recent_activity/skill.yml` `days` default 7 → 1 (callers can still pass `days` explicitly; clamped 1–30); `skills/recent_activity/skill.py` code-side fallback default 7 → 1 (the runner does not inject yml input defaults into params), module-level 300 s TTL summary cache keyed by (user, date, days) so back-to-back runs within 5 min reuse the computed per-user summary (disable with `RECENT_ACTIVITY_CACHE_TTL=0`), and the job log now records the scan window start/end and run duration. skill.yml contract otherwise unchanged (inputs, tools, channels, artifact_path, max_runtime 240).
 - tier: 3
 - target user: chuck
 - reorganized: 2026-11-19 — file renamed with tier prefix (slug unchanged); sibling

@@ -16,7 +16,7 @@ Runs in-process inside skill-runner (importlib), so it uses the job's
 LiteLLM client for LLM + MCP and the in-process memory interface directly.
 
 Workflow (per user):
-  1. Collect inputs within the lookback window (`days`, default 7):
+  1. Collect inputs within the lookback window (`days`, default 1 = last 24h):
        - skill_jobs (MySQL durable index, JSON user_id filter)
        - recent Mem0 memories (in-process interface.list_memories)
        - GitHub public events (if user has a known GitHub identity + token)
@@ -31,11 +31,15 @@ Constraints:
   - GitHub is opt-in per user (known identity only) — no scanning of
     accounts whose identity/credentials we don't have.
   - Writes are non-fatal: a failed KB or Mem0 write never fails the job.
+  - Summary cache: per-user summaries are cached in-process for CACHE_TTL
+    seconds (default 300) keyed by (user, date, days); back-to-back runs
+    within the TTL reuse the summary instead of re-running the slow path.
 """
 
 import json
 import logging
 import os
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -67,6 +71,19 @@ ARTIFACT_DIR = Path(
 )
 
 MODEL_ALIAS = os.environ.get("RECENT_ACTIVITY_MODEL_ALIAS", "matrix-coder")
+
+# ---------------------------------------------------------------------------
+# Summary cache (TTL) — back-to-back runs are near-instant
+# ---------------------------------------------------------------------------
+# Module-level TTL cache keyed by (user, date, days) — same user, same UTC
+# day, same lookback window. A hit reuses the previously computed per-user
+# summary (input collection + LLM distillation + writes already done)
+# instead of re-running the slow path (observed runs: 100-176 s; proposal
+# 2026-11-08-tier3-recent-activity-slow-run-optimization).
+# Default TTL 300 s; set RECENT_ACTIVITY_CACHE_TTL=0 to disable (rollback).
+CACHE_TTL = int(os.environ.get("RECENT_ACTIVITY_CACHE_TTL", "300"))
+_summary_cache: dict[tuple, tuple[float, dict]] = {}
+
 
 DISTILL_PROMPT = """You are distilling a user's recent activity for their personal assistant.
 Below are raw inputs from the last {days} days for user '{user}':
@@ -404,17 +421,45 @@ def _write_memory(user: str, date_str: str, summary: str) -> bool:
 
 def run(params: dict, job: Any, client: Any) -> dict:
     """Distill recent activity for each known user (or one user if given)."""
-    days = max(1, min(int(params.get("days", 7) or 7), 30))
+    t0 = time.monotonic()
+    days = max(1, min(int(params.get("days", 1) or 1), 30))
     target = str(params.get("user") or "").strip().lower() or None
     users = [target] if target else _known_users()
     if not users:
         return {"error": "No known users (MEMORY_USER_KEYS empty?) and no 'user' param."}
 
     date_str = _now().strftime("%Y-%m-%d")
+    window_end = _now()
+    window_start = window_end - timedelta(days=days)
+    logger.info(
+        "recent_activity: scan window %s -> %s (days=%d, users=%d, cache_ttl=%ds)",
+        window_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        window_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        days,
+        len(users),
+        CACHE_TTL,
+    )
     per_user: dict[str, Any] = {}
     written: list[str] = []
 
     for user in users:
+        # TTL cache: back-to-back runs within CACHE_TTL seconds reuse the
+        # computed summary (input collection + distillation + writes done).
+        cache_key = (user, date_str, days)
+        hit = _summary_cache.get(cache_key)
+        if hit and time.monotonic() - hit[0] < CACHE_TTL:
+            cached = dict(hit[1])
+            cached["from_cache"] = True
+            per_user[user] = cached
+            logger.info(
+                "recent_activity: %s — cache hit (%ds old) — reusing summary",
+                user,
+                int(time.monotonic() - hit[0]),
+            )
+            if cached.get("kb_written") or cached.get("mem0_written"):
+                written.append(user)
+            continue
+
         inputs = {
             "skill_jobs": _recent_jobs(user, days),
             "recent_memories": _recent_memories(user, days),
@@ -453,6 +498,7 @@ def run(params: dict, job: Any, client: Any) -> dict:
             "mem0_written": mem_ok,
             "summary": summary,
         }
+        _summary_cache[cache_key] = (time.monotonic(), per_user[user])
         if kb_ok or mem_ok:
             written.append(user)
 
@@ -474,9 +520,12 @@ def run(params: dict, job: Any, client: Any) -> dict:
     except Exception as exc:  # noqa: BLE001
         logger.warning("recent_activity: artifact write failed: %s", exc)
 
+    elapsed = time.monotonic() - t0
     summary_line = (
         f"recent_activity: {len(written)}/{len(users)} user(s) updated "
-        f"({', '.join(written) if written else 'none'}); window={days}d"
+        f"({', '.join(written) if written else 'none'}); "
+        f"window={days}d ({window_start:%Y-%m-%dT%H:%M:%SZ} -> {window_end:%Y-%m-%dT%H:%M:%SZ}); "
+        f"duration={elapsed:.1f}s"
     )
     logger.info(summary_line)
     return {
