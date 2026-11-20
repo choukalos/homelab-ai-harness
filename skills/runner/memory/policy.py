@@ -10,7 +10,7 @@ Pure module (no mem0 import) — unit-testable without live services.
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 # ── Secret / credential patterns ──────────────────────────────────────
 # If a candidate memory matches any of these it is REJECTED (not stored).
@@ -133,6 +133,76 @@ def strip_remember_prefix(text: str) -> str:
     Returns the stripped text (may be empty when nothing remains).
     """
     return _REMEMBER_PREFIX_RE.sub("", (text or "").strip(), count=1).strip()
+
+
+# ── Write-time dedupe/supersede (harness_reflection lessons) ──────────
+# The reflection pipeline writes structured lesson facts:
+#   "Lesson (YYYY-MM-DD): <what happened> -> <what to do differently>"
+# The store is add-only, so the same lesson re-stored with a minor wording
+# variant (new date, updated counts, "superseding earlier counts")
+# accumulates 4-8 near-identical rows. The write path
+# (interface.learn_from_turn, source="harness_reflection") derives its
+# dedupe query from the lesson STEM (date prefix stripped — the date is
+# noise that lowers the cosine similarity between two wordings of the
+# same lesson) and refreshes the existing entry in place when the new
+# text supersedes it (is_supersede below) or is a near-duplicate (raw
+# cosine >= MEMORY_DEDUPE_THRESHOLD).
+LESSON_PREFIX_RE = re.compile(
+    r"^\s*Lesson\s*\((\d{4}-\d{2}-\d{2})\)\s*:\s*", re.IGNORECASE
+)
+# Explicit supersede wording in the NEW text ("superseding earlier
+# counts", "supersedes the earlier ...", "replaces the earlier ...").
+_SUPERSEDE_WORDING_RE = re.compile(
+    r"(?i)\b(?:supersed\w*|replac\w*\s+(?:the\s+)?(?:earlier|prior|previous|old)\b)"
+)
+
+
+def lesson_stem(text: str) -> str:
+    """Strip the ``Lesson (YYYY-MM-DD):`` prefix from a lesson fact.
+
+    "Lesson (2026-11-15): X failed -> fix Y" -> "X failed -> fix Y".
+    Non-lesson text is returned unchanged (stripped). The stem is the
+    dedupe query — the date prefix is noise that would lower the cosine
+    similarity between two wordings of the same lesson.
+    """
+    return LESSON_PREFIX_RE.sub("", (text or "").strip(), count=1).strip()
+
+
+def lesson_date(text: str) -> Optional[str]:
+    """The ``YYYY-MM-DD`` date from a ``Lesson (date):`` prefix, else None."""
+    m = LESSON_PREFIX_RE.match((text or "").strip())
+    return m.group(1) if m else None
+
+
+def _normalize_stem(stem: str) -> str:
+    """Case/whitespace-normalized stem for the textual same-lesson check."""
+    return re.sub(r"\s+", " ", (stem or "").lower()).strip()
+
+
+def is_supersede(new_text: str, existing_text: str) -> bool:
+    """True when ``new_text`` SUPERSEDES ``existing_text`` (the same
+    lesson/fact, newer statement) rather than stating a new fact.
+
+    Signals (any one suffices):
+      - same lesson stem: both texts carry a ``Lesson (date):`` prefix
+        and the date-stripped stems are textually the same (case/
+        whitespace normalized). A newer date is the expected case; the
+        check does not require it (a re-worded same-stem lesson still
+        supersedes).
+      - explicit supersede wording in the new text ("superseding earlier
+        counts", "supersedes the earlier ...", "replaces the earlier ...").
+
+    Used by the write-time dedupe path (interface.learn_from_turn) to
+    refresh the existing entry in place instead of appending a variant.
+    """
+    if not new_text or not existing_text:
+        return False
+    if lesson_date(new_text) and lesson_date(existing_text):
+        if _normalize_stem(lesson_stem(new_text)) == _normalize_stem(
+            lesson_stem(existing_text)
+        ):
+            return True
+    return bool(_SUPERSEDE_WORDING_RE.search(new_text))
 
 
 # ── Extraction guidance (mem0 ``custom_instructions``) ───────────────

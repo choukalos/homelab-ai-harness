@@ -337,6 +337,90 @@ def _search_scopes(
     return per_query, degraded, reason
 
 
+# ── Write-time dedupe/supersede (harness_reflection lessons) ─────────
+def _scored_hit(sp: Any) -> Dict[str, Any]:
+    """Normalize a raw Qdrant ``ScoredPoint`` (mem0 ``vector_store.search``).
+
+    The ``score`` here is the RAW cosine similarity — unlike mem0 2.x
+    ``Memory.search``, which returns a fused hybrid score (semantic + BM25
+    + entity boost, divided by the max possible) that is NOT on the cosine
+    scale. The dedupe threshold is defined on raw cosine, so the dedupe
+    search runs the semantic stage directly.
+    """
+    payload = sp.payload or {}
+    return {
+        "id": str(sp.id),
+        "text": str(payload.get("data", "") or ""),
+        "score": float(sp.score or 0.0),
+        "source": "private",  # label unused by the caller
+        "metadata": {},
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def _dedupe_find(
+    client: MemoryClient,
+    cfg: MemoryConfig,
+    user_id: str,
+    query: str,
+    new_text: str,
+) -> tuple:
+    """Find the existing memory that ``new_text`` should REFRESH instead
+    of duplicating (write-time dedupe/supersede).
+
+    Searches ONLY the write scope (``user_id`` — private or household;
+    never the merged chat view, so a private write can never refresh a
+    household fact and vice versa) with the dedupe query — the lesson
+    stem, date prefix stripped (policy.lesson_stem) — using the RAW
+    cosine score (mem0's semantic stage: embed the query, query the
+    vector store directly; mem0 2.x ``Memory.search`` returns a fused
+    hybrid score, not the cosine the threshold is defined on). Returns
+    ``(hit, kind)`` for the best qualifying hit, where ``kind`` is
+    ``"near-duplicate"`` (raw cosine >= ``cfg.dedupe_threshold`` — the
+    strict gate) or ``"supersede"`` (policy.is_supersede: same lesson
+    stem / explicit supersede wording, clearing the relevance floor
+    ``cfg.score_threshold``). ``(None, None)`` when nothing qualifies —
+    or on ANY error (the caller then degrades to a plain insert; memory
+    must never take the writer down).
+    """
+    if not cfg.retrieval_allowed or not query:
+        return None, None
+    floor = cfg.score_threshold or 0.0
+
+    def _op():
+        mem = client._ensure_client()
+        qvec = mem.embedding_model.embed(query, "search")
+        return mem.vector_store.search(
+            query, qvec, top_k=5, filters={"user_id": user_id}
+        )
+
+    try:
+        raw = client._with_timeout(_op, timeout_s=cfg.timeout_s)
+    except Exception as e:  # noqa: BLE001 - degrade to plain insert
+        logger.info(
+            "memory dedupe search failed for %s (degrading to insert): %s",
+            user_id, e,
+        )
+        return None, None
+
+    best: Optional[dict] = None
+    best_kind = ""
+    for sp in _as_list(raw):
+        nh = _scored_hit(sp)
+        if not nh["id"] or nh["score"] < floor:
+            continue
+        if nh["score"] >= cfg.dedupe_threshold:
+            kind = "near-duplicate"
+        elif _policy.is_supersede(new_text, nh["text"]):
+            kind = "supersede"
+        else:
+            continue
+        if best is None or nh["score"] > best["score"]:
+            best, best_kind = nh, kind
+    return (best, best_kind) if best is not None else (None, None)
+
+
 # ── Public API ────────────────────────────────────────────────────────
 def search_memory(
     user_id: str,
@@ -457,6 +541,18 @@ def learn_from_turn(
     family facts visible in every user's reads (merged by
     search_memory / list_memories). ``user_id`` is still validated as the
     CALLER (provenance ``written_by``), never as the write scope.
+
+    Write-time dedupe/supersede (harness_reflection only): for
+    ``source="harness_reflection"`` deterministic single-fact writes
+    (``infer=False``, one user message), the write scope is searched
+    first with the lesson stem (date prefix stripped). A hit at/above
+    ``cfg.dedupe_threshold`` (MEMORY_DEDUPE_THRESHOLD, default 0.85 raw
+    cosine) — or a same-stem / explicit-supersede match
+    (``policy.is_supersede``) clearing the relevance floor — is
+    refreshed IN PLACE via ``update_memory`` (newer text wins,
+    ``updated_at`` bumps) and its existing id is returned instead of a
+    new row. Any dedupe search/update error degrades to a plain insert
+    (non-fatal). All other sources are unaffected.
     """
     cfg = _get_config()
     if not cfg.writeback_allowed:
@@ -500,6 +596,47 @@ def learn_from_turn(
         )
 
     t0 = time.monotonic()
+
+    # ── Write-time dedupe/supersede (harness_reflection lessons only) ──
+    # The reflection pipeline re-stores the same lessons with minor wording
+    # variants (add-only store). For its deterministic single-fact writes
+    # (infer=False, exactly one user message), search the WRITE SCOPE for a
+    # near-duplicate before inserting: a hit at/above cfg.dedupe_threshold
+    # (strict raw-cosine gate) — or a same-stem / explicit-supersede match
+    # (policy.is_supersede) clearing the relevance floor — is refreshed IN
+    # PLACE (update_memory; newer text wins, updated_at bumps) and its id
+    # is returned instead of a new row. Non-fatal: ANY dedupe search/update
+    # error degrades to the plain insert below (memory must never take the
+    # writer down). Other sources (direct_user / chat / ...) and infer=True
+    # extractions are untouched.
+    if (
+        source == "harness_reflection"
+        and not infer
+        and cfg.dedupe_threshold > 0.0
+        and sum(1 for m in cleaned if m["role"] == "user") == 1
+    ):
+        fact_text = next(m["content"] for m in cleaned if m["role"] == "user")
+        # Dedupe query = the lesson stem (date prefix stripped); non-lesson
+        # text (corrections / supersedes) uses the text itself.
+        dedupe_query = _policy.lesson_stem(fact_text) or fact_text
+        hit, kind = _dedupe_find(client, cfg, write_scope, dedupe_query, fact_text)
+        if hit is not None:
+            if update_memory(hit["id"], fact_text):
+                logger.info(
+                    "learn_from_turn dedupe (%s): refreshed existing memory %s "
+                    "for %s (score=%.3f) instead of inserting",
+                    kind, hit["id"], user_id, hit["score"],
+                )
+                _metrics.get_metrics().record_writeback(
+                    "dedupe", time.monotonic() - t0, 1
+                )
+                return [str(hit["id"])]
+            logger.warning(
+                "learn_from_turn dedupe refresh failed for %s (%s) — "
+                "falling back to plain insert",
+                user_id, hit["id"],
+            )
+
     try:
         res = client._with_timeout(
             _add_op, timeout_s=cfg.writeback_timeout_s

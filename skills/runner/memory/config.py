@@ -77,6 +77,14 @@ class MemoryConfig:
     # similarity are dropped (conservative — an unrelated memory injected
     # into an unrelated task is worse than none). 0 disables the gate.
     score_threshold: float = 0.5
+    # Write-time dedupe/supersede (harness_reflection lessons only): a
+    # near-duplicate write (raw cosine >= this on the dedupe query — the
+    # lesson stem, date prefix stripped) refreshes the existing entry IN
+    # PLACE (update_memory, updated_at bumps) instead of inserting a new
+    # row. Deliberately STRICTER than score_threshold (0.5): only
+    # near-identical wordings merge. 0 disables the dedupe search (plain
+    # insert — the pre-dedupe add-only behavior).
+    dedupe_threshold: float = 0.85
     # Ranking boosts (memory_todo 3a/3e, 2026-10-21): multiplicative boosts
     # applied to the RAW score AFTER the relevance gate, before ranking —
     # a boost can never admit an irrelevant fact, only reorder relevant
@@ -152,6 +160,7 @@ def load_config() -> MemoryConfig:
         embed_dim=_env_int("MEMORY_EMBED_DIM", 768),
         top_k=_env_int("MEMORY_TOP_K", 6),
         score_threshold=_env_float("MEMORY_SCORE_THRESHOLD", 0.5),
+        dedupe_threshold=_env_float("MEMORY_DEDUPE_THRESHOLD", 0.85),
         recency_boost_max=_env_float("MEMORY_RECENCY_BOOST_MAX", 1.2),
         recency_half_life_days=_env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 30.0),
         importance_boost=_env_float("MEMORY_IMPORTANCE_BOOST", 1.15),

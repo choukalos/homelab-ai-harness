@@ -79,6 +79,9 @@ services:
       - MEMORY_EMBED_DIM=${MEMORY_EMBED_DIM}
       - MEMORY_TOP_K=${MEMORY_TOP_K}
       - MEMORY_SCORE_THRESHOLD=${MEMORY_SCORE_THRESHOLD}
+      # Write-time dedupe/supersede for harness_reflection lessons (strict
+      # raw-cosine gate; 0 = off). See .env.
+      - MEMORY_DEDUPE_THRESHOLD=${MEMORY_DEDUPE_THRESHOLD}
       # Ranking boosts (memory_todo 3a/3e) + multi-query (3b): see .env.
       - MEMORY_RECENCY_BOOST_MAX=${MEMORY_RECENCY_BOOST_MAX}
       - MEMORY_RECENCY_HALF_LIFE_DAYS=${MEMORY_RECENCY_HALF_LIFE_DAYS}

@@ -12,10 +12,15 @@ Purpose:
     5. existing open proposals (dedup — never re-propose something open)
   and produce three outputs:
 
-  A. Memory maintenance (Tier 0 writes, add-only semantics — written as
-     the TARGET USER via the in-process interface, never as service):
-       - contradictions / superseded facts -> `memory_remember`-style
-         supersede statements (self-contained, per memory-conventions)
+  A. Memory maintenance (Tier 0 writes — written as the TARGET USER via
+     the in-process interface, never as service). The memory interface
+     dedupes/supersedes at WRITE TIME for harness_reflection facts: a
+     near-duplicate or superseding lesson refreshes the existing entry
+     in place (newer text wins, updated_at bumps) instead of appending a
+     variant — so write ONLY the current truth, never "superseding
+     earlier counts" variants:
+       - contradictions / superseded facts -> supersede statements
+         (self-contained, current truth only, per memory-conventions)
        - corrections detected in sessions (user corrected the agent,
          same correction >=2x) -> preference memory, importance=high,
          provenance (session ref + date)
@@ -150,9 +155,9 @@ Return STRICT JSON (no markdown fences, no commentary) with exactly these keys:
 }}
 
 Rules:
-- supersedes: ONLY for contradictions or superseded facts among the memories (or a memory contradicted by session/job evidence). Each text must be self-contained (readable without the old fact) and state the current truth.
+- supersedes: ONLY for contradictions or superseded facts among the memories (or a memory contradicted by session/job evidence). Each text must be self-contained (readable without the old fact) and state the current truth — write ONLY the current truth, never "superseding earlier ..." variants: the memory write path merges it into the existing entry (write-time dedupe/supersede).
 - corrections: the user corrected the assistant in a session ("no, ...", "I told you ...", "I said that last week"). Only when the SAME correction appears >=2 times (across turns/sessions). text = the durable preference.
-- lessons: friction signals (failed jobs, lost work, restarts, retries, long durations). text = "<what happened> -> <what to do differently>" WITHOUT a "Lesson" prefix (it is added automatically).
+- lessons: friction signals (failed jobs, lost work, restarts, retries, long durations). text = "<what happened> -> <what to do differently>" WITHOUT a "Lesson" prefix (it is added automatically). When a lesson SUPERSEDES an earlier one (same lesson, updated counts/details), write ONLY the current truth — no "superseding earlier counts" variants: the memory write path merges it into the existing entry (write-time dedupe/supersede).
 - proposals: harness changes that would reduce friction or close a captured gap. AT MOST 5. Every proposal needs >=1 evidence ref.
 - Evidence ref grammar (use ONLY these forms, and ONLY ids that appear in the inputs above — never invent refs): memory:<id>, job:<job_id>, session:<session_id>, git:<sha>, user:<YYYY-MM-DD> "<quoted user statement>".
 - FORBIDDEN (drop any proposal that would touch these): .env files, compose/ files or restart semantics, memory privacy scoping (skills/runner/memory/*, household scope), litellm/ or qdrant config.
