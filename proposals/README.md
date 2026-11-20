@@ -55,17 +55,24 @@ Tier is a priority bucket, not a reflection-pipeline tier (the
 "Tier 1 propose-only / Tier 2 human applies" language in older footers
 refers to the reflection pipeline's own roles).
 
-## Current state (2026-11-19)
+## Current state (2026-11-20)
 
-- **tier1:** macstudio-omlx-restart (deferred — chuck back home 2026-11-20) ·
-  media-film-tool-names (applied 2026-11-19, pending archive)
-- **tier2:** mcp-sessions-remote-ingest · media-film-production-lessons ·
-  pi-subagents-timeout-handling · litellm-health-visibility ·
-  matrix-media-pipeline-improvements (⚠️ work host: matrix, not thor)
-- **tier3:** recent-activity-slow-run-optimization (open since 2026-11-08) ·
-  memory-dedupe-supersede · media-queue-mcp-tools (depends on the matrix
-  proposal) · housekeeping
+- **tier1:** macstudio-omlx-restart (open — host-side on the Mac Studio;
+  OMLX upstream verified down 2026-11-19, `matrix-coder` has no live
+  fallback until this lands)
+- **tier2:** mcp-sessions-remote-ingest (open) ·
+  pi-subagents-timeout-handling (open — source repo not on thor; locate
+  first) · matrix-media-pipeline-improvements (in progress — parked on
+  matrix cooperation; ⚠️ work host: matrix, not thor; self-contained
+  handoff spec at `docs/matrix_media_pipeline_improvements_handoff.md`)
+- **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
+  applied 2026-11-20; H3 `/model/info` restriction open pending feature
+  check; H4 Dylan scoping deferred by design) ·
+  media-queue-mcp-tools (open — depends on the matrix proposal M2/M3)
 - **archive:** 7 closed 2026-11-08 proposals (window guard, publish-file
   dedup, checkpoint, etc. — the reflection pipeline's first batch) +
-  litellm-model-config-pass (applied 2026-11-19) +
-  cloudflare-524-read-timeout (dismissed 2026-11-19 — no CF Enterprise plan)
+  2026-11-19: litellm-model-config-pass, litellm-health-visibility,
+  media-film-tool-names, media-film-production-lessons (all applied) +
+  cloudflare-524-read-timeout (dismissed — no CF Enterprise plan) +
+  2026-11-20: recent-activity-slow-run-optimization, memory-dedupe-supersede
+  (both applied)

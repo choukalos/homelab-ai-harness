@@ -14,10 +14,15 @@
   Legacy `family_kb` (384-dim) snapshotted + dropped; family-wiki
   (MkDocs) container removed; `family_kb_ingest` skill retired.
   Backups: `scripts/backup-kb.sh` → `/home/chuck/data/backups/kb/`.
-- **Images pinned:** `litellm-proxy` `ghcr.io/berriai/litellm:v1.92.0` (was
-  `main-latest`), `qdrant` `qdrant/qdrant:v1.19.2` (was `latest`; v1.18.1
-  until 2026-11-15) — memory
-  project Phase 9, verified live.
+- **Images pinned:** `litellm-proxy` `ghcr.io/berriai/litellm:v1.104.0`
+  (was `main-latest`; v1.92.0 until 2026-11-19), `qdrant`
+  `qdrant/qdrant:v1.19.2` (was `latest`; v1.18.1 until 2026-11-15) — memory
+  project Phase 9 + tier1-litellm-model-config-pass, verified live.
+  **2026-11-20 (tier3-housekeeping H1):** the three remaining `:latest`
+  images pinned to their running digests — `searxng/searxng@sha256:c642712f…`,
+  `unclecode/crawl4ai@sha256:9021b3cb…`,
+  `ghcr.io/presenton/presenton@sha256:ddf0d1f2…` (all ai-core images now
+  pinned; config-only change, no containers restarted).
 - **Qdrant auth enabled:** `JWT_RBAC=true`. Three scoped credentials:
   `QDRANT_ADMIN_API_KEY` (OPS-only — backups/ops scripts),
   `QDRANT_READ_ONLY_API_KEY` (mcp_knowledge), scoped JWT (skill-runner memory,
@@ -37,9 +42,12 @@
   map, retrieval/writeback, admin REST + CLI, `/metrics`) — see
   `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete 2026-08-28;
   current state 2026-10-21 — retrieval quality, mcp_memory, cold-start flag). Admin endpoints use the `X-Api-Key` header.
-- **LiteLLM:** 6 live aliases — `matrix-coder`, `matrix-gemma4-moe`,
-  `studio-gemma4-4b`, `embeddings`, `homelab-embedding-v1` (memory path),
-  `hf-sd3`. 11 MCP servers / **71 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28; 46 → 56 with `mcp_knowledge` v2 + `mcp_skills` on 2026-08-29; 56 → 64 with the 8 media post-gen edit/file-movement tools on 2026-09-07; 64 → 71 on 2026-09-20: `mcp_memory` added (2 tools) + `mcp_knowledge` digest tools (5) — and transport migrated streamable-http → SSE; 71 → 75 on 2026-09-25 (`media_job_result` + 3 voice tools). **Live count as of 2026-10-31: 87 tools (23 on `mcp_media`, including `media_transcribe_song`)** — the history line was not maintained through the Sept–Oct additions; counts are authoritative from LiteLLM `/mcp-rest/tools/list`.
+- **LiteLLM:** 5 live aliases (2026-11-20) — `matrix-coder` (+
+  `fallbacks: [studio-gemma4-26b]`), `matrix-coder-fast` (thinking OFF),
+  `studio-gemma4-26b` (OMLX backup; capability tags unverified — upstream
+  down, see `tier1-macstudio-omlx-restart`), `embeddings`,
+  `homelab-embedding-v1` (memory path). 2026-11-19 model-config pass:
+  capability tags, fast alias, fallback, `hf-sd3` removed. 11 MCP servers / **71 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28; 46 → 56 with `mcp_knowledge` v2 + `mcp_skills` on 2026-08-29; 56 → 64 with the 8 media post-gen edit/file-movement tools on 2026-09-07; 64 → 71 on 2026-09-20: `mcp_memory` added (2 tools) + `mcp_knowledge` digest tools (5) — and transport migrated streamable-http → SSE; 71 → 75 on 2026-09-25 (`media_job_result` + 3 voice tools). **Live count as of 2026-10-31: 87 tools (23 on `mcp_media`, including `media_transcribe_song`)** — the history line was not maintained through the Sept–Oct additions; counts are authoritative from LiteLLM `/mcp-rest/tools/list`. **Live count as of 2026-11-20: 89 tools across 12 servers** (`mcp_datahub` 10, `mcp_media` 25, `mcp_memory` 3 — verified per-server 2026-11-20).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.
 - **Observability:** VictoriaMetrics scrapes skill-runner `/metrics`
   (job `skill-runner`, target alias `thor-lan` — `thor`/`host.docker.internal`
@@ -58,6 +66,23 @@
   mysql (11), vision (5 — image/video analysis via matrix-coder; artifacts are
   ephemeral + non-public in `workspace/vision/`), skills (3). See
   `docs/thor_mcp_architecture.md`.
+- **Memory write path (2026-11-20, tier3-memory-dedupe-supersede):**
+  `harness_reflection` lessons are deduped/superseded at write time — a
+  near-duplicate (raw cosine ≥ `MEMORY_DEDUPE_THRESHOLD`, default 0.85)
+  refreshes the existing entry in place instead of appending a variant
+  (mem0 2.x fused-search scores are NOT raw cosine — the dedupe path runs
+  the raw semantic stage directly). One-time cleanup of existing
+  duplicates: 28 → 5 lesson entries (23 deleted, 1 updated). See
+  `docs/operations/2026-11-20-memory-dedupe-cleanup.md`.
+- **recent_activity skill (2026-11-20,
+  tier3-recent-activity-slow-run-optimization):** default lookback 7d →
+  24h, 300s summary cache (`RECENT_ACTIVITY_CACHE_TTL`, 0 = off), scan
+  window + run duration in the job log (runs were 100–176s; near-instant
+  on repeat runs).
+- **Ops policy (2026-11-20, tier3-housekeeping H2):**
+  `docs/operations/approval-gates.md` — no thor host reboots / whole-stack
+  shutdowns without explicit owner approval (extends the standing
+  no-restart rule; references the job-checkpoint mechanism).
 
 ---
 

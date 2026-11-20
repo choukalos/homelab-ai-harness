@@ -3,6 +3,8 @@
 _Ops doc for the `add-inflight-job-checkpoint` proposal (applied 2026-11-13).
 Mechanism: `checkpoint` field on the job record + `POST /skills/jobs/{job_id}/checkpoint`
 + `GET /api/jobs` list endpoint, in `skills/runner/main.py`.
+Process half: `approval-gates.md` (2026-11-20) — no thor host reboot or
+whole-stack shutdown without explicit owner approval._
 
 ## Why
 

@@ -2,18 +2,19 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 11 servers below are live in LiteLLM (SSE transport,
+> Status: **Implemented** — all 12 servers below are live in LiteLLM (SSE transport,
 > `ai-net`, 71 tools as of 2026-09-20 — 64 + 5 new `mcp_knowledge` digest tools
 > (kb_digest, kb_get_pages, kb_digest_store, kb_digest_get, kb_digest_list) + 2
 > `mcp_memory` tools; `mcp_memory` added 2026-09-02 with the memory project;
 > transport migrated streamable-http → SSE 2026-09-20). This doc is the design
 > baseline; the "Current state" notes reflect the live system.
 
-**Current state (2026-09-20)**
-- 11 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
+**Current state (2026-11-20)**
+- 12 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (18), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (2) — 71 tools total.
+  `mcp_media` (25), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
+  `mcp_memory` (3), `mcp_datahub` (10) — **89 tools total** (verified live
+  2026-11-20: LiteLLM `/mcp-rest/tools/list` + per-server `tools/list`).
 - **SSE transport (2026-09-20):** all servers now run FastMCP over the SSE
   transport (`GET /sse`; the streamable-http `/mcp` endpoint is gone). LiteLLM
   connects with `transport: sse`. The skill runner's direct streamable-http MCP
@@ -301,7 +302,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | **Artifacts** | `/home/chuck/workspace/vision/<slug>/` — frames, `summary.md`, `chapters.json`, `frame_metadata.jsonl`, `report.md`. **Ephemeral + NON-public** (no Caddy route, never under `media/public/`); cleaned via `vision_cleanup` or `scripts/cleanup-vision.sh` (manual, no cron) |
 | **Read/write** | Reads sources (ro mounts); writes only the artifact dir (rw mount nested in ro workspace) |
 | **Security** | ffmpeg/ffprobe/yt-dlp as arg lists (no shell); LiteLLM master key in-container; ai-net only |
-| **LiteLLM** | `allow_all_keys: true`, `timeout: 7200` (long videos = minutes) |
+| **LiteLLM** | `timeout: 7200` (long videos = minutes); per-key MCP access (see Rules — the 2026-08-25 `allow_all_keys` decision is superseded) |
 | **Notes** | A1/A2 E2E 2026-08-28: local mp4 (scene + commercial QA), GIF (40 frames), remote URL, YouTube (18 s e2e), raw mode (precise timestamps), budget guard, cleanup. See `mcp/servers/vision/README.md` + `mcp-vision-todo.md`. |
 
 ---
@@ -317,7 +318,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 | **Backend** | skill-runner `:8091` (`GET /skills`, `POST /skills/{name}`, `GET /skills/jobs/{id}`) |
 | **Read/write** | Read (`list_skills`, `get_skill_job`) + write (`run_skill` — executes a skill, may produce artifacts) |
 | **Security** | ai-net only (NOT exposed to host). No client ever talks to skill-runner directly. Per-user attribution via the caller key (complete 2026-09-04/06: `MEMORY_USER_KEYS` maps chuck/dylan to personal keys; `AUTH_KEY_THREADING_ENABLED=true` — see `docs/thor_cross_client_skills.md`). |
-| **LiteLLM** | `allow_all_keys: true`, `extra_headers: [Authorization]`, `timeout: 7200` (run_skill blocks up to max_runtime; deep_research=900s) |
+| **LiteLLM** | `extra_headers: [Authorization]`, `timeout: 7200` (run_skill blocks up to max_runtime; deep_research=900s); per-key MCP access (see Rules) |
 | **Deps** | `mcp>=1.10,<2`, `httpx>=0.27`. Transport: SSE, path `/sse`. |
 | **Notes** | Verified through LiteLLM 2026-08-29: `mcp_skills-list_skills` (15 skills as of 2026-08-31), `mcp_skills-run_skill` (morning_brief, siri_ask, business_analyst, content_writer, marketing_strategy completed), `mcp_skills-get_skill_job` (job retrieval), identity threading (X-API-Key → `service`). See `mcp/servers/skills/README.md` + `docs/thor_cross_client_skills.md`. |
 
@@ -358,12 +359,16 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 11 servers run as containers on `ai-net` (SSE transport,
+- **Implemented.** All 12 servers run as containers on `ai-net` (SSE transport,
   path `/sse`, port 8000)
-  and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`,
-  `allow_all_keys: true` —
-  decided 2026-08-25: every valid key may call every tool; no scoped grants).
-  `mcp_skills` additionally forwards the caller's `Authorization` header
+  and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`).
+  **MCP key access — superseded 2026-11-15 (security Phase 2):** the
+  2026-08-25 `allow_all_keys: true` decision (every valid key may call every
+  tool) no longer applies — the live `config.yml` (verified 2026-11-20) has
+  no `allow_all_keys` entries; access is per-key via LiteLLM key access
+  groups (default-deny, managed with `./homelab.sh key ...` — a new MCP
+  server is invisible to existing keys until granted). `mcp_skills`
+  additionally forwards the caller's `Authorization` header
   (`extra_headers: [Authorization]`) for per-user skill attribution.
 - MCP servers run as separate containers on Thor (`compose/compose.mcp.yml`).
 - The skill runner composes MCP tools into workflows — MCP servers do not know about skills.
