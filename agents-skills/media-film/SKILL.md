@@ -9,7 +9,10 @@ Orchestrate a multi-shot film (keyframes → I2V clips → audio → assembly �
 publish) through the `mcp_media` tools, the way the 2026-11-02 "A Peanut Risky
 Business" run (20 shots, ~5 h) should have been run. Everything in this skill is
 encoded from that incident: 4 orchestration-script deaths, 10 lost job IDs, ~1 h
-of log archaeology, 6 duplicate I2V jobs.
+of log archaeology, 6 duplicate I2V jobs. Extended 2026-11-19 with the
+2026-11-16/17 SW Holiday Spoof production lessons (36 shots, ~16 h, 30
+attempts — 11 children died on 524s, one 44.5 s-short cut cost a 4.5 h
+upscale render): items C1–C14, A2, D1 below.
 
 **Audience:** any LLM client orchestrating via `mcp_media` (pi on the Mac, Siri,
 n8n). The Mac is **off-LAN** — all pipeline access goes through the MCP gateway
@@ -144,11 +147,46 @@ the state summary and **pi starts a fresh chunk** from the on-disk state.
 - On 503: stop submitting, poll until a slot frees, then resume submitting.
   Honor `retry_after_seconds` (it is the only signal you get).
 
+## Shot-director fan-out conventions (A2, D1)
+
+The 2026-11-17 run fanned out 36 shot-director children in one wave; 11 died
+on 524s (Cloudflare origin read timeout) and production started with missing
+cards.
+
+- **A2 — cap fan-out at 8–12 concurrent**, batched into 3–4 waves. The GPU
+  queue is the real bottleneck downstream anyway — more concurrent children
+  does not speed up the pipeline, it just multiplies 524s.
+- **D1 — per-shot auto-retry:** 1 retry on `!ok` (child died / card missing),
+  with a 120 s backoff for 524s (the timeout is retryable; the first turn
+  often writes the card before dying — check disk before resubmitting).
+- **D1 — preflight gate before production:** verify all shot cards exist on
+  disk (P0 step 4) — never start production with missing cards.
+
 ## State file schema
 
 Proven in the peanut run's `state.json`; extended with `client`, `kf*`,
-`audio_jobs` (single source of truth per unit: the `kf`/`i2v`/`audio_jobs`
-tables; `shots.*_job`/`*_path` are convenience mirrors the chunk keeps in sync).
+`audio_jobs`. **C1 — single source of truth:** the per-shot records
+(`shots.<id>.{kf,i2v,qc,vo}` and the `kf`/`i2v`/`audio_jobs` tables) are the
+single source of truth; the `*_pending` lists are **derived at read time**
+(or recomputed on every write) — never the source of truth. `shots.*_job`/
+`*_path` are convenience mirrors the chunk keeps in sync. State drift
+(pending lists disagreeing with records) cost the 2026-11-17 run hours of
+manual reconciliation — run `tools/validate_state.py` as preflight (children
+refuse to proceed on mismatch; `--fix` repairs lists/mirrors from records).
+
+**C11 — one canonical state key per audio item:** `tts_<shot>` (e.g.
+`tts_S1`), `sfx_<name>`, `music_cue_<x>` in `audio_jobs` — written once at
+submit, updated in place on completion. No parallel key families (a stale
+`submitted` key in a second family over-reports pending audio). `audio` holds
+final mix inputs for assemble (paths only — e.g. the combined uploaded VO
+track — no job/status keys).
+
+**C12 — prompts are raw text end-to-end:** prompt fields in state are plain
+strings (the template's `rawPrompt` getter asserts this). Never
+`JSON.stringify` a prompt into state, and never paste JSON-encoded values
+into MCP prompt fields — bash submits build args with `jq -n --arg`. Preflight
+diff: the submitted prompt must equal the card's `i2v_prompt` exactly
+(validate_state.py rejects double-encoded prompts).
 
 ```json
 {
@@ -175,8 +213,8 @@ tables; `shots.*_job`/`*_path` are convenience mirrors the chunk keeps in sync).
   "kf_pending": ["S2"],
   "i2v":      { "S1": { "job_id": "def456", "path": "...", "status": "done" } },
   "i2v_pending": ["S13"],
-  "audio": { "music": "<path>", "vo": "<path>", "sfx": "<path>" },
-  "audio_jobs": { "music": { "job_id": "...", "status": "done" }, "vo": { "job_id": "...", "status": "submitted" } },
+  "audio": { "vo": "<combined uploaded track>", "music": "<path>", "sfx": "<path>" },
+  "audio_jobs": { "tts_S1": { "job_id": "...", "path": "...", "status": "done" }, "music_cue_main": { "job_id": "...", "status": "submitted" } },
   "assemble": { "job_id": "...", "path": "...", "shots": ["<gpu path>", ...], "text_overlays": [{ "text": "...", "start": 0, "end": 3 }] }
 }
 ```
@@ -194,14 +232,51 @@ tables; `shots.*_job`/`*_path` are convenience mirrors the chunk keeps in sync).
    character — reuse verbatim in every keyframe prompt).
 3. Per-job client tags follow the convention **`<project>/<shot>`**
    (e.g. `peanut-movie/S1`) — this is what the resume sweep matches on.
+4. **D1 — card preflight gate:** verify every shot card exists on disk
+   (`<project>/shots/<id>.json`, one per shot id in `state.shots`) and run
+   `python3 <skill>/tools/validate_state.py state.json --cards shots/` —
+   production never starts with missing cards (the 2026-11-17 run started
+   with 11 cards missing after 524 deaths).
+5. Run `tools/validate_state.py state.json` (C1) — lists vs records, mirrors
+   vs tables, C11 audio keys, C12 raw-text prompts. Refuse to proceed on
+   mismatch.
 
 ### P1 — Storyboard / beats
 
 `media_storyboard(brief, n_shots)` (or hand-write beats — fine for short
 films). Store the shot list in `state.shots`: `beat`, `kf_prompt` (full scene
-description + the character's canonical identity text), `i2v_prompt`
-(**visual style + gentle motion only** — fast-motion prompts cause I2V
-warble), `vo_text` if the shot carries VO.
+description + the character's canonical identity text), `i2v_prompt`,
+`vo_text` if the shot carries VO.
+
+**C2 — shot cards are schema'd.** One card per shot in
+`<project>/shots/<id>.json`, copied from `templates/_card_template.json`
+(canonical shape: string `vo_text`, canonical `voice`, numeric `duration_s`).
+The parent runs the validator before production (`validate_state.py
+--cards shots/`) — three different `vo_text` shapes appeared in one run, and
+each one cost a rework.
+
+**C3 — `i2v_prompt` identity re-anchor.** Template:
+`[one-line identity re-anchor per character in frame] + [gentle motion spec]
++ [1978 TV look]`. The keyframe only anchors frame 0 — over 5 s the model
+drifts back toward its priors (S4 drifted tuxedo bicolor → brown tabby).
+Re-state each character's identity in the prompt itself. Keep **gentle
+motion only** — fast-motion prompts cause I2V warble.
+
+**C4 — implied gags.** Feasibility rule at plan stage: if a gag depends on a
+complex object state (broken, headless, torn, melted), make it **implied** —
+SFX + caption + reaction shots — not rendered. I2V models cannot hold
+complex object-state changes; a rendered attempt is a wasted clip +
+fix-forward.
+
+**C5 — ≤3 characters per frame.** Count characters in each frame from the
+identity refs; enforce ≤3 (or flag for the reviewer) — more identity
+references degrades consistency.
+
+**C14 — never plan durations by estimate.** Per-shot durations MUST be
+derived from the actual clip length (`media_info` after I2V) — the assembler
+concatenates at natural clip length (`shots[].duration` has no effect, see
+the pipeline contract), so the plan's total is Σ of the measured clip
+lengths, not the creative estimate.
 
 ### P2 — Keyframes + QC
 
@@ -211,12 +286,19 @@ keyframe costs ~1 min to regen vs ~11 min of I2V (R6 below). For cross-shot
 character consistency, compose keyframes with `media_edit_image` using the
 character sheet / a previous keyframe as `references`.
 
+**C6 — bounded fix-forward:** kf = 3 attempts, then `ACCEPTED-WITH-NOTE` or
+the `shots.json` (storyboard) fallback — a fourth attempt is a scope decision
+for the owner, not the worker.
+
 ### P3 — I2V + QC
 
 Run `chunk.js` with `phase: "i2v"` — this is the long phase (wan14b: ~11 min
 per clip, serial queue → 20 shots ≈ 4+ h; expect many chunks). QC 2–3 action
 frames per clip post-I2V (see R6). A failed clip: fix the `i2v_prompt` (or
 seed) and resubmit — the shot stays in `i2v_pending`.
+
+**C6 — bounded fix-forward:** I2V clip = 2 attempts, then accept the best
+clip (record why in `qc`).
 
 ### P4 — Audio
 
@@ -227,9 +309,18 @@ seed) and resubmit — the shot stays in `i2v_pending`.
   (`curl -X POST -H "X-Api-Key: <chuck litellm key>" -F file=@vo_combined.wav
   https://siri.choukalos.com/media/pipeline/upload` → `{path}`), then pass a
   **single `vo` path with `vo_start: 0`** to assemble.
-- **Music:** `media_generate_music(prompt, duration≈final cut)`.
+- **Music:** `media_generate_music(prompt, duration≈final cut)` — state key
+  `music_cue_<x>`.
 - **SFX:** `media_sfx(video, description)` per clip if needed; assemble
-  accepts `sfx` as a list `[{path, at}]` for timestamped placement.
+  accepts `sfx` as a list `[{path, at}]` for timestamped placement — state
+  key `sfx_<name>`.
+- **C11 — canonical audio keys:** one `audio_jobs` key per audio item —
+  `tts_<shot>` / `sfx_<name>` / `music_cue_<x>` — written once at submit,
+  updated in place; no parallel key families (a stale `submitted` key in a
+  second family over-reports pending audio).
+- **C9 — TTS is 22050 Hz mono.** Probe the actual sample rate before any
+  `asetrate` (see **Audio timing** below) — the 2026-11-17 plan assumed
+  44100 and would have doubled every pitch shift (silent landmine).
 
 ### P5 — Assembly
 
@@ -237,17 +328,38 @@ seed) and resubmit — the shot stays in `i2v_pending`.
 
 - `shots`: **GPU-host paths** (from state) — never locally downloaded paths.
   Entries may be objects `{path, in?, out?, duration?}` for trims/stills.
+  **C14 — `duration` does NOT frame-hold:** the assembler concatenates each
+  clip at its **natural length**; the `duration` field is accepted but has no
+  effect (verified in the 2026-11-17 run: 36 × 5.042 s → 181.5 s output vs a
+  226 s plan). Plan on measured lengths only.
 - `vo` / `music` / `sfx`: GPU-host paths; `vo_start` for lead-in silence;
   `loudnorm: true` for EBU R128.
 - `text_overlays`: crisp titles (`{text, start?, end?, position?, size?, color?}`)
   — **never** bake text into I2V (both models warp it).
-- 1080p quality: `upscale_each: true` (SeedVR2, ~5 min/shot) — or upscale each
-  shot with `media_upscale_video(pipeline="b")` first.
+- **C8 — assemble preflight:** `media_info` on **every** shot path and every
+  audio path before submitting; abort with the precise missing list (a
+  44.5 s-short cut must never reach the render queue). `chunk.js` does this
+  automatically for `phase: "assemble"`.
+- **C13 — draft assemble before you pay for the final.** Assemble a draft
+  (`upscale_each: false`, ~90 s for 36 shots), run the full P6 QC on the
+  draft, and only submit the final upscaled render if the draft passes — the
+  2026-11-17 run paid a 4.5 h upscale render before discovering a 44.5 s-short
+  cut. Expected wall-clock per config is in the pipeline contract
+  (~12.5 min/shot upscale under shared-queue contention — NOT the ~5 min
+  estimate).
+- 1080p quality: `upscale_each: true` (SeedVR2 — plan ~12.5 min/shot under
+  contention, see the pipeline contract) — or upscale each shot with
+  `media_upscale_video(pipeline="b")` first.
 
 ### P6 — Final QC
 
 1. `media_info(final path)` — duration inside `target_duration_s`, video codec
-   sane, **audio present** (`audio_codecs` non-empty).
+   sane, **audio present** (`audio_codecs` non-empty). **C14 — the numeric
+   gate is not enough:** also verify the **last VO start + VO duration** and
+   the **last overlay end fit inside the cut** (`last_vo_start +
+   vo_duration ≤ cut_duration`, `max(overlay.end) ≤ cut_duration`). The
+   numeric gate alone let a 44.5 s-short film (missing closing VO + end card)
+   pass after a 4.5 h upscale render.
 2. Vision-check the final cut at **6–8 timeline points** (title card, each key
    beat, end card): pull the cut locally (signed URL from `media_pull`),
    extract frames with ffmpeg, vision each frame (see R6).
@@ -273,6 +385,20 @@ Vision-check at every expensive boundary:
 | Every keyframe | before I2V submit | ~11 min I2V per bad keyframe |
 | 2–3 action frames per clip | after I2V, before assembly | re-cut the whole film |
 | Final cut, 6–8 timeline points | before publish | shipping a bad film |
+
+**Verdicts:** `PASS` / `FAIL: reason` / **`ACCEPTED-WITH-NOTE`** (C4) — a
+first-class outcome, not a cop-out: the defect is real but the beat survives
+because **the VO or a neighbor shot carries it**. Record
+`ACCEPTED-WITH-NOTE: <what's wrong> + <where the beat lives>` in
+`state.shots.<id>.qc`. It never excuses identity drift that breaks the story.
+
+**C7 — batch vision QC:** if the vision tool accepts multiple images, judge
+the 3 action frames in **one call** (one verdict per clip) instead of three
+separate calls.
+
+**C6 — bounded fix-forward budgets:** kf = 3 (then accept-with-note or
+`shots.json` fallback), I2V clip = 2 (then accept best), audio = 2. Budgets
+are hard stops — a fourth attempt is a scope decision for the owner.
 
 **GPU-host image** (keyframe): `media_pull(path)` → signed URL →
 `mcp_vision_vision_analyze_image(source=<url>, focus="commercial",
@@ -314,22 +440,46 @@ single track:
 
 1. TTS each VO segment separately (`media_text_to_speech`).
 2. `media_info` each segment → durations.
-3. Mix locally (ffmpeg): `adelay=<ms>|<ms>` per segment + `amix`, one combined
-   `vo.wav` whose t=0 aligns with the cut's t=0.
-4. Upload combined track (public upload route, X-Api-Key) → single `vo` path,
+3. **C9 — probe the actual sample rate before any `asetrate`.** TTS output
+   is **22050 Hz mono** (music is 48000 Hz stereo — see the pipeline
+   contract). `SR=$(ffprobe -v error -select_streams a:0 -show_entries
+   stream=sample_rate -of csv=p=0 seg.wav)`; pitch-shift with
+   `asetrate=SR*P,aresample=44100` (P = pitch factor, **SR from the probe —
+   never from plan text**; a 44100-based formula on 22050 Hz audio doubles
+   every pitch shift — a silent landmine).
+4. **C10 — mix with `amix=normalize=0`, always.** The default normalize
+   divides by the input count: a 19-input mix lands ~25 dB too quiet —
+   effectively silent.
+5. **C10 — post-mix level check before upload:** `ffmpeg -i vo_combined.wav
+   -af volumedetect -f null -` → sanity-gate `mean_volume` / `max_volume`
+   (expect mean ≈ -20…-12 dB, max < 0 dB; a mean near -30 dB means the mix
+   is silent — do not upload).
+6. Mix locally (ffmpeg): `adelay=<ms>|<ms>` per segment +
+   `amix=inputs=N:normalize=0`, one combined `vo.wav` whose t=0 aligns with
+   the cut's t=0.
+7. Upload combined track (public upload route, X-Api-Key) → single `vo` path,
    `vo_start: 0`.
 
-## Templates
+## Templates & tools
 
 Both templates are codemode scripts: **pi adapts the `CFG` block** (state path,
 client tag, phase, prompts already live in state) and runs the whole file.
 They persist state through `tools.bash` heredocs after every submit/completion.
 
 - `templates/chunk.js` — submit pending units + poll to completion, up to
-  `max_completions` per run. Re-run until `pending` is empty.
+  `max_completions` per run. Re-run until `pending` is empty. Enforces the
+  C12 raw-text prompt getter, the C8 assemble preflight, and C11 canonical
+  audio keys.
 - `templates/resume.js` — the R4 protocol: re-poll known IDs, ledger sweep for
   lost IDs, adopt-or-resubmit, report pending. Run it **first** after any
   crash, timeout, or session reset — before submitting anything new.
+- `templates/_card_template.json` — the canonical shot card (C2); copy to
+  `<project>/shots/_card_template.json` and emit one card per shot.
+- `tools/validate_state.py` — C1 state validator: cross-checks `*_pending`
+  lists vs records, mirrors vs tables, job ids, C11 audio keys, C12 raw-text
+  prompts; `--cards shots/` validates shot cards (C2); `--fix` repairs
+  lists/mirrors from the records (records win). Run as preflight (P0 steps
+  4–5) and after every chunk; exit 1 = refuse to proceed.
 
 ## Verification plan
 
@@ -338,6 +488,9 @@ They persist state through `tools.bash` heredocs after every submit/completion.
   state file (simulating the incident-#1 crash), then run `resume.js`; confirm
   the ledger sweep recovers the ID and the shot is **not** resubmitted
   (ledger shows exactly one `shots` job for that client tag).
+- **State validator:** `validate_state.py` on a real project state (+
+  `--cards`) exits 0; inject a drift (a done id left in `i2v_pending`, a
+  stale mirror) → exit 1; `--fix` repairs lists/mirrors from the records.
 
 ## Known upstream gaps (pi codemode — not fixable from the skill)
 

@@ -37,7 +37,7 @@ endpoints are on `matrix:8189` (LAN-only).
 | `media_text_to_speech` | VO | `text, voice="trailer"\|library name\|ref wav path` | `{path}` |
 | `media_generate_music` | ACE-Step | `prompt, lyrics="", duration=30, seed=42` | `{path}` |
 | `media_sfx` | MMAudio SFX bed | `video, description, duration=8.0` | `{path}` |
-| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration?}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume` | `{path}` |
+| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration? (accepted, NO EFFECT — see "Assemble semantics")}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume` | `{path}` |
 | `media_upscale_video` | SeedVR2 / fast | `video, pipeline="b"\|"a2", resolution=1080` | `{path}` |
 | `media_trim` / `media_freeze` / `media_caption` | ffmpeg post | source (gpu or staging path) | `{path}` |
 | `media_info` | ffprobe (sync) | `path` | `{duration_s,width,height,fps,video_codec,audio_codecs[],size_bytes,bitrate_bps}` |
@@ -65,6 +65,13 @@ endpoints are on `matrix:8189` (LAN-only).
 
 ## Quality rules (tuned on the GPU host)
 
+- **C14 — Assemble semantics: `shots[].duration` has NO effect (no frame-hold).**
+  The assembler concatenates each clip at its **natural length**; the
+  `duration` field is accepted but silently ignored (no `tpad
+  stop_mode=clone` hold). Verified 2026-11-17 production: 36 × 5.042 s clips
+  → 181.5 s output vs a 226 s plan (44.5 s short — the missing closing VO +
+  end card). Plan totals from measured clip lengths (`media_info` after I2V),
+  never from `duration` or creative estimates.
 - I2V `prompt`: **visual style + gentle motion only** — fast-motion prompts
   cause warble.
 - Don't bake text into I2V (both models warp it) — use `media_assemble`
@@ -78,3 +85,26 @@ endpoints are on `matrix:8189` (LAN-only).
   locally downloaded paths.
 - Assemble `sfx`/`text_overlays` `at`/`start`/`end` = **absolute timeline
   seconds** from t=0 of the final cut.
+
+## Audio formats (verified 2026-11-17)
+
+- **TTS output: 22050 Hz mono.** Probe the actual sample rate before any
+  `asetrate` (`ffmpeg -i` / `media_info`); pitch-shift with
+  `asetrate=SR*P,aresample=44100` using the probed SR. A 44100-based formula
+  would double every pitch shift (silent landmine).
+- **Music (ACE-Step): 48000 Hz stereo.**
+- **`amix` mixes with `normalize=0`** — the default divides by the input
+  count (19 inputs ≈ 25 dB too quiet, effectively silent). Level-check the
+  mix (`volumedetect`/`astats` mean/max dB) before upload.
+
+## Assemble wall-clock (observed 2026-11-17 — 36-shot film)
+
+Range-based, under shared-queue contention — plan with the top of the range:
+
+| Config | Observed |
+|---|---|
+| Draft assemble (`upscale_each: false`) | **~90 s for 36 shots** |
+| Upscaled assemble (`upscale_each: true`, SeedVR2) | **~12.5 min/shot** (~7+ h for 36 shots) — the ~5 min/shot estimate is optimistic |
+
+**Draft-then-final (C13):** assemble the draft, run full final QC on it, and
+only pay for the upscaled render if the draft passes.

@@ -72,7 +72,8 @@ for (const [phase, pkey] of [["kf", "kf"], ["i2v", "i2v"], ["audio", "audio_jobs
       table[id] = { ...e, path, status: "done" };
       if (phase === "kf") st.shots[id].kf_path = path;
       if (phase === "i2v") { st.shots[id].i2v_job = e.job_id; st.shots[id].i2v_path = path; }
-      if (phase === "audio") st.audio[id] = path;
+      // C11: the audio path lives in the canonical audio_jobs record above —
+      // no parallel key family.
       st[phase + "_pending"] = (st[phase + "_pending"] || []).filter((x) => x !== id);
       log.push(phase + "/" + id + ": recovered done -> " + path);
     } else if (r.status === "error" || r.status === "timeout") {
@@ -129,8 +130,9 @@ for (const j of sweep) {
   const unit = mtag[1];
   const phase = FLOW2PHASE[j.flow];
   if (!phase) { log.push("ledger: " + j.job_id + " (" + j.flow + "/" + unit + ") — unclaimed flow, manual review"); continue; }
-  if (phase === "audio" && !["music", "vo", "sfx"].includes(unit)) {
-    log.push("ledger: " + j.job_id + " (audio/" + unit + ") — unknown audio unit, manual review"); continue;
+  // C11: canonical audio keys — tts_<shot> / sfx_<name> / music_cue_<x>.
+  if (phase === "audio" && !/^(tts_|sfx_|music_cue_)/.test(unit)) {
+    log.push("ledger: " + j.job_id + " (audio/" + unit + ") — non-canonical audio unit, manual review"); continue;
   }
   // (d) ADOPT — this job belongs to the unit; do NOT resubmit.
   const path = j.status === "done" ? pathOf(j) : null;
@@ -143,7 +145,8 @@ for (const j of sweep) {
     if (j.status === "done" && path) {
       if (phase === "kf") st.shots[unit].kf_path = path;
       if (phase === "i2v") { st.shots[unit].i2v_job = j.job_id; st.shots[unit].i2v_path = path; }
-      if (phase === "audio") st.audio[unit] = path;
+      // C11: the audio path lives in the canonical audio_jobs record above —
+      // no parallel key family.
       st[phase + "_pending"] = (st[phase + "_pending"] || []).filter((x) => x !== unit);
     }
   }

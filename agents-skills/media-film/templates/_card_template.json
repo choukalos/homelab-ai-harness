@@ -1,0 +1,11 @@
+{
+  "_doc": "Canonical shot card (C2). Copy this file to <project>/shots/_card_template.json and write one card per shot: <project>/shots/S1.json, S2.json, ... Validate before production: python3 tools/validate_state.py state.json --cards <project>/shots/. Rules: vo_text is a raw STRING (never an array/object/JSON-encoded — three different vo_text shapes appeared in one run), voice is a canonical name from media_list_voices, duration_s is a NUMBER derived from the measured clip length after I2V (C14 — never a creative estimate; the assembler ignores duration). i2v_prompt template (C3): [one-line identity re-anchor per character in frame] + [gentle motion spec] + [1978 TV look].",
+  "id": "S1",
+  "beat": "one-line beat",
+  "characters": ["<character id from state.identity>"],
+  "kf_prompt": "full scene description + the character's canonical identity text (verbatim from state.identity)",
+  "i2v_prompt": "[one-line identity re-anchor per character in frame] + [gentle motion spec] + [1978 TV look]",
+  "vo_text": "raw VO line (string; empty string if the shot has no VO)",
+  "voice": "trailer",
+  "duration_s": 5.0
+}

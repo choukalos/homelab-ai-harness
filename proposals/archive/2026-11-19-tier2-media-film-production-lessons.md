@@ -2,7 +2,8 @@
 
 - slug: tier2-media-film-production-lessons
 - date: 2026-11-19
-- status: open
+- status: applied
+- applied: 2026-11-19 (pi, thor) — baked all thor-side lessons into `agents-skills/media-film/`: SKILL.md (C1 single-source-of-truth state + validate_state preflight, C2 shot-card schema, C3 `i2v_prompt` identity re-anchor, C4 implied-gag rule + `ACCEPTED-WITH-NOTE` first-class QC outcome, C5 ≤3 characters/frame, C6 bounded fix-forward budgets, C7 batch vision QC, C8 assemble preflight, C9 22050 Hz probe before `asetrate`, C10 `amix normalize=0` + post-mix level check, C11 canonical audio keys, C12 raw-text prompt getter, C13 draft-then-final assemble, C14 no-frame-hold caveat + last-VO/overlay fit gate, A2 fan-out cap 8–12, D1 per-shot auto-retry + card preflight gate); references/pipeline-contract.md (C14 `tpad`/natural-length semantics, C9 audio formats 22050 Hz mono / 48000 Hz stereo, C13 assemble wall-clock table); templates/chunk.js + templates/resume.js (C8 preflight, C11 canonical keys, C12 `rawPrompt`); new `templates/_card_template.json` (C2) and `tools/validate_state.py` (C1/C2/C11/C12 + `--fix` + optional ledger/info cross-checks). Verified: all 16 thor-side items grep-able in the skill; the seven previously-verified-absent markers (tpad/natural-length caveat, 22050 probe, `amix normalize=0`, `validate_state`, identity re-anchor, implied-gag rule, `ACCEPTED-WITH-NOTE`) all present; matrix-side M1–M5 untouched (parked `tier2-matrix-media-pipeline-improvements`); `validate_state.py` functionally tested (clean/drift/`--fix`/cards/ledger paths, exit codes 0/1/2); chunk.js + resume.js pass syntax check as codemode async bodies. (A3b — tool names — already applied via `tier1-media-film-tool-names`.)
 - tier: 2
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (C1–C14, A2, D1 — thor-side items; matrix-side items are in `tier2-matrix-media-pipeline-improvements`)

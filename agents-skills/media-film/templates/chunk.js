@@ -11,6 +11,12 @@
 // R2: every MCP call goes through mcall (4 attempts).
 // R5: at most CFG.queue_limit own in-flight submits; on 503 stop submitting
 //     and keep polling.
+// C8:  assemble phase runs a media_info preflight on every shot + audio
+//      path and aborts with the precise missing list.
+// C11: audio_jobs keys are the single canonical family (tts_<shot> /
+//      sfx_<name> / music_cue_<x>) — written once at submit, updated in place.
+// C12: prompt fields go through rawPrompt (raw text only — never
+//      JSON-encoded values into MCP prompt fields).
 //
 // pi adapts CFG (state path, client tag, phase, model, prompts in state) and
 // runs this whole script in codemode.
@@ -79,11 +85,24 @@ const saveState = async (st) => {
   });
 };
 
+// ---- C12: raw-text prompt getter -------------------------------------------
+// Prompt fields are plain strings in state. Never JSON.stringify a prompt
+// into state and never paste JSON-encoded values into MCP prompt fields
+// (bash submits: jq -n --arg). Fail fast on double-encoded prompts.
+const rawPrompt = (s, what) => {
+  if (typeof s !== "string") throw new Error(what + " is not a raw string: " + JSON.stringify(s).slice(0, 120));
+  if (s.length > 1 && s.startsWith('"') && s.endsWith('"')) throw new Error(what + " looks JSON-encoded — store raw text in state (C12)");
+  return s;
+};
+
 // ---- phase plumbing --------------------------------------------------------
 const st = await loadState();
 const PKEY = { kf: "kf", i2v: "i2v", audio: "audio_jobs", assemble: null }[CFG.phase];
 
 // units = the work items this phase drives (shot ids / audio unit names)
+// C11: audio unit names are the single canonical key family —
+// tts_<shot> / sfx_<name> / music_cue_<x> (written once at submit, updated
+// in place; no parallel key families).
 const units =
   CFG.phase === "kf"       ? (st.kf_pending || []).map((id) => ({ id })) :
   CFG.phase === "i2v"      ? (st.i2v_pending || []).map((id) => ({ id })) :
@@ -97,29 +116,64 @@ const jobOf = (u) =>
   CFG.phase === "audio"    ? st.audio_jobs?.[u.id]?.job_id :
                              st.assemble?.job_id;
 
+// C11: first done audio path in the canonical family (for assemble inputs).
+const audioDonePath = (prefix) => {
+  for (const [k, v] of Object.entries(st.audio_jobs || {}))
+    if (k.startsWith(prefix) && v && v.status === "done" && v.path) return v.path;
+  return "";
+};
+
 const SUBMIT = {
   kf: (u) => mcall(M + "media_generate_image", {
-    prompt: st.shots[u.id].kf_prompt, width: 1280, height: 720,
+    prompt: rawPrompt(st.shots[u.id].kf_prompt, "kf_prompt " + u.id), width: 1280, height: 720,
     non_blocking: true, client: CFG.client + "/" + u.id,
   }),
   i2v: (u) => mcall(M + "media_generate_shot", {
-    keyframe: st.shots[u.id].kf_path, prompt: st.shots[u.id].i2v_prompt,
+    // C3: the card's i2v_prompt already carries the per-character identity
+    // re-anchor + gentle motion + 1978 TV look — submit it verbatim.
+    // C12: raw text only (never re-encode); preflight diff = exact match
+    // with the card.
+    keyframe: st.shots[u.id].kf_path, prompt: rawPrompt(st.shots[u.id].i2v_prompt, "i2v_prompt " + u.id),
     model: CFG.model || st.model || "wan14b", non_blocking: true,
     client: CFG.client + "/" + u.id,
   }),
-  audio: (u) =>
-    u.id === "music"
-      ? mcall(M + "media_generate_music", {
-          prompt: st.music_prompt, duration: st.music_duration || 60,
-          non_blocking: true, client: CFG.client + "/music",
-        })
-      : mcall(M + "media_text_to_speech", {
-          text: st.vo_text || st.shots[u.id]?.vo_text, voice: st.voice || "trailer",
-          non_blocking: true, client: CFG.client + "/" + u.id,
-        }),
+  audio: (u) => {
+    // C11: canonical audio keys — tts_<shot> / sfx_<name> / music_cue_<x>.
+    if (u.id.startsWith("music_cue_")) {
+      const c = (st.music_cues || {})[u.id.slice(11)] || {};
+      return mcall(M + "media_generate_music", {
+        prompt: rawPrompt(c.prompt || st.music_prompt, "music prompt " + u.id),
+        duration: c.duration || st.music_duration || 60,
+        non_blocking: true, client: CFG.client + "/" + u.id,
+      });
+    }
+    if (u.id.startsWith("sfx_")) {
+      const c = (st.sfx_cues || {})[u.id.slice(4)] || {};
+      return mcall(M + "media_sfx", {
+        video: c.video, description: rawPrompt(c.description, "sfx description " + u.id),
+        duration: c.duration || 8.0,
+        non_blocking: true, client: CFG.client + "/" + u.id,
+      });
+    }
+    if (u.id.startsWith("tts_")) {
+      const sid = u.id.slice(4); // tts_S1 -> S1
+      return mcall(M + "media_text_to_speech", {
+        text: rawPrompt(st.shots[sid]?.vo_text || st.vo_text, "vo_text " + u.id),
+        voice: st.voice || "trailer",
+        non_blocking: true, client: CFG.client + "/" + u.id,
+      });
+    }
+    throw new Error("audio key '" + u.id + "' is not canonical (tts_<shot> / sfx_<name> / music_cue_<x>) — C11; run tools/validate_state.py");
+  },
   assemble: () => mcall(M + "media_assemble", {
-    shots: st.assemble.shots, vo: st.audio?.vo || "", music: st.audio?.music || "",
-    sfx: st.audio?.sfx || "", text_overlays: st.assemble.text_overlays || null,
+    // C11: derive final audio inputs from the canonical audio_jobs family
+    // (st.audio holds the combined uploaded VO track when the multi-segment
+    // mix pattern was used).
+    shots: st.assemble.shots,
+    vo: st.audio?.vo || audioDonePath("tts_"),
+    music: st.audio?.music || audioDonePath("music_cue_"),
+    sfx: st.audio?.sfx || "",
+    text_overlays: st.assemble.text_overlays || null,
     non_blocking: true, client: CFG.client + "/assemble",
   }),
 };
@@ -138,13 +192,41 @@ const recordDone = (u, r) => {
   st[PKEY][u.id] = { job_id: jid, path, status: "done" };
   if (CFG.phase === "kf") st.shots[u.id].kf_path = path;
   if (CFG.phase === "i2v") { st.shots[u.id].i2v_job = jid; st.shots[u.id].i2v_path = path; }
-  if (CFG.phase === "audio") st.audio[u.id] = path;
+  // C11: the audio path lives in the single canonical audio_jobs record
+  // above — no parallel key family (stale second families over-report
+  // pending audio).
   st[CFG.phase + "_pending"] = (st[CFG.phase + "_pending"] || []).filter((x) => x !== u.id);
 };
 const recordError = (u, r) => {
   if (CFG.phase === "assemble") { st.assemble.error = r.error; return; }
   st[PKEY][u.id] = { ...(st[PKEY]?.[u.id] || {}), status: "error", error: r.error };
   // stays in <phase>_pending — pi decides: fix prompt/seed and resubmit.
+};
+
+// ---- C8: assemble preflight — media_info every shot + audio path ----------
+// A 44.5 s-short cut must never reach the render queue. One sync media_info
+// per path is cheap next to a 4.5 h upscale render. Abort with the precise
+// missing list.
+const assemblePreflight = async (st) => {
+  const paths = [
+    ...(st.assemble?.shots || []).map((s) => (typeof s === "string" ? s : s.path)).filter(Boolean),
+    st.audio?.vo, st.audio?.music,
+    ...(Array.isArray(st.audio?.sfx) ? st.audio.sfx : (st.audio?.sfx ? [st.audio.sfx] : []))
+      .map((s) => (typeof s === "string" ? s : s.path)).filter(Boolean),
+  ];
+  const missing = [];
+  for (const p of paths) {
+    try {
+      const r = await mcall(M + "media_info", { path: p });
+      if (!r || r.status === "error" || (typeof r.duration_s !== "number" && !r.path))
+        missing.push(p + " (media_info: " + JSON.stringify(r).slice(0, 80) + ")");
+    } catch (e) { missing.push(p + " (" + String(e).slice(0, 80) + ")"); }
+  }
+  if (missing.length) {
+    await saveState(st); // R1: persist before aborting
+    throw new Error("assemble preflight (C8) — " + missing.length + " path(s) failed media_info:\n  " + missing.join("\n  "));
+  }
+  return paths.length;
 };
 
 // ---------------------------------------------------------------- main loop
@@ -186,7 +268,13 @@ while (completions < CFG.max_completions && passes < CFG.max_passes &&
     if (doneIds.has(u.id) || jobOf(u)) continue;
     if (inflight >= CFG.queue_limit) { log.push("queue full (" + inflight + " in-flight) — polling"); break; }
     let r;
-    try { r = await SUBMIT[CFG.phase](u); }
+    try {
+      if (CFG.phase === "assemble") {
+        log.push("C8 preflight: media_info on all shot + audio paths");
+        await assemblePreflight(st); // aborts with the precise missing list
+      }
+      r = await SUBMIT[CFG.phase](u);
+    }
     catch (e) {
       const msg = String(e && e.message ? e.message : e);
       if (msg.includes("503")) { log.push(u.id + ": 503 queue full — stop submitting, keep polling"); break; }
