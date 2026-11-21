@@ -13,8 +13,8 @@ import { type Idea } from "./ideas.js";
 export interface IceboxMoveResult {
   /** Ideas that were moved (state now `moved`). */
   ideas: Idea[];
-  /** Tasks created in the backlog (one per idea). */
-  tasks: Array<{ id: number; ideaId: number; projectId: number; state: "backlog" }>;
+  /** Tasks created in the backlog (one per idea; owner inherited from the idea). */
+  tasks: Array<{ id: number; ideaId: number; projectId: number; state: "backlog"; owner: string }>;
 }
 
 /**
@@ -60,6 +60,9 @@ export async function moveIceboxToBacklog(db: Db, ideaIds: number[]): Promise<Ic
         spec: idea.spec as IdeaSpec,
         state: "backlog",
         stateChangedAt: now,
+        // Owner = the idea's owner (who asked for the work), not the caller
+        // of the move.
+        owner: idea.owner,
         createdAt: now,
       });
     // Single-user app: the newest backlog task of this idea is ours (1:1).
@@ -74,7 +77,7 @@ export async function moveIceboxToBacklog(db: Db, ideaIds: number[]): Promise<Ic
       .set({ state: "moved", updatedAt: now })
       .where(eq(ideas.id, idea.id));
     ideasOut.push({ ...idea, state: "moved" });
-    tasksOut.push({ id: task.id, ideaId: idea.id, projectId: idea.projectId, state: "backlog" });
+    tasksOut.push({ id: task.id, ideaId: idea.id, projectId: idea.projectId, state: "backlog", owner: task.owner });
   }
   return { ideas: ideasOut, tasks: tasksOut };
 }

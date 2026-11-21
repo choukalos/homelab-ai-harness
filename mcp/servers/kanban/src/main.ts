@@ -6,7 +6,6 @@ import { ConfigError, loadConfig } from "./config.js";
 import { initDb } from "./db/index.js";
 import { AgentRuntime, TaskSessionRunner } from "./agent/sessions.js";
 import { GroomingManager } from "./agent/grooming.js";
-import { ResolutionDialog } from "./agent/resolve.js";
 import type { Db } from "./services/common.js";
 import { Orchestrator } from "./orchestrator.js";
 import { buildApp } from "./http/app.js";
@@ -39,17 +38,10 @@ async function main(): Promise<void> {
     tasks: taskRunner,
     workspaceRoot: cfg.workspace.dir,
   });
-  const resolve = new ResolutionDialog({
-    db: db.db as unknown as Db,
-    cfg,
-    agent,
-    workspacePathFor: (taskId) => orchestrator.workspacePath(taskId),
-    restart: (taskId) => orchestrator.restartTask(taskId),
-  });
   const services = createKanbanServices(db, { grooming, orchestrator });
   await orchestrator.start();
 
-  const app = buildApp({ cfg, db, agent, services, orchestrator, grooming, resolve });
+  const app = buildApp({ cfg, db, agent, services, orchestrator, grooming });
   await app.listen({ host: cfg.server.bindAddr, port: cfg.server.port });
 
   let shuttingDown = false;
@@ -62,7 +54,6 @@ async function main(): Promise<void> {
         await orchestrator.stop();
         await app.close();
         grooming.dispose();
-        resolve.dispose();
         agent.dispose();
         await db.close();
         process.exit(0);

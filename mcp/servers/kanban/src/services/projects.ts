@@ -18,6 +18,8 @@ export interface ProjectSummary {
   id: number;
   name: string;
   description: string;
+  /** Owner (caller identity of the creating mutation); '' = unattributed (legacy). */
+  owner: string;
 }
 
 /** Project fields accepted by create/update (requirements §6). */
@@ -94,10 +96,10 @@ function normalize(input: ProjectInput, requireName: boolean): Normalized {
   };
 }
 
-/** All projects (id, name, description), ordered by name. */
+/** All projects (id, name, description, owner), ordered by name. */
 export async function listProjects(db: Db): Promise<ProjectSummary[]> {
   return db
-    .select({ id: projects.id, name: projects.name, description: projects.description })
+    .select({ id: projects.id, name: projects.name, description: projects.description, owner: projects.owner })
     .from(projects)
     .orderBy(asc(projects.name));
 }
@@ -108,8 +110,9 @@ export async function getProject(db: Db, id: number): Promise<Project | undefine
   return row;
 }
 
-/** Create a project. 400 on invalid input, 409 on duplicate name. */
-export async function createProject(db: Db, input: ProjectInput): Promise<Project> {
+/** Create a project. 400 on invalid input, 409 on duplicate name.
+ * `owner` = caller identity of the creating mutation (MCP key → user name). */
+export async function createProject(db: Db, input: ProjectInput, owner = ""): Promise<Project> {
   const n = normalize(input, true);
   const now = Date.now();
   try {
@@ -125,6 +128,7 @@ export async function createProject(db: Db, input: ProjectInput): Promise<Projec
       constraints: n.constraints ?? null,
       architectureNotes: n.architectureNotes ?? null,
       notes: n.notes ?? null,
+      owner: owner ?? "",
       createdAt: now,
       updatedAt: now,
     });
@@ -157,6 +161,8 @@ export interface ProjectStatus {
   name: string;
   description: string;
   goal: string;
+  /** Owner (caller identity of the creating mutation); '' = unattributed (legacy). */
+  owner: string;
   repoUrl: string | null;
   defaultBranch: string | null;
   blogRepoUrl: string | null;
@@ -196,6 +202,7 @@ export async function getProjectStatus(db: Db, id: number): Promise<ProjectStatu
     name: project.name,
     description: project.description,
     goal: project.goal,
+    owner: project.owner,
     repoUrl: project.repoUrl,
     defaultBranch: project.defaultBranch,
     blogRepoUrl: project.blogRepoUrl,

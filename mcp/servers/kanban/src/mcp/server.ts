@@ -3,10 +3,17 @@
  * the standard @modelcontextprotocol/sdk as a thin layer over the same
  * transport-agnostic service functions the REST API uses.
  *
- * Slice 1 tools: list_projects, get_project, create_project, update_project,
- * list_ideas, add_idea. Slice 2: groom_idea, move_to_backlog. Slice 3:
- * start_task, retry_deploy, restart_task, task_status. Slice 4:
- * project_status. Slice 5: control (pause_task, resume_task, stop_task).
+ * MCP-first (2026-11-21): the web UI is read-only; the MCP surface is the
+ * only mutation interface. Tools: list_projects, get_project,
+ * create_project, update_project, list_ideas, add_idea, board_status,
+ * interactive grooming (start_grooming, groom_message, groom_status,
+ * groom_accept, groom_cancel, groom_re_groom), discard_idea,
+ * move_to_backlog, start_task, pause/resume/stop_task, retry_deploy,
+ * restart_task, task_status, project_status.
+ *
+ * Owner attribution: the caller's LiteLLM key resolves to a user name
+ * (MCP_KEY_OWNERS); create_project / add_idea stamp it on the row, and
+ * tasks inherit the idea's owner at move_to_backlog.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -28,14 +35,21 @@ export const MCP_CAPABILITY_SETS = {
     "list_projects",
     "get_project",
     "list_ideas",
+    "board_status",
     "task_status",
     "project_status",
   ],
-  /** read + board mutation (ideas, grooming, backlog, task control). */
+  /** read + board mutation (ideas, interactive grooming, backlog, task control). */
   control: [
     "read",
     "add_idea",
-    "groom_idea",
+    "start_grooming",
+    "groom_message",
+    "groom_status",
+    "groom_accept",
+    "groom_cancel",
+    "groom_re_groom",
+    "discard_idea",
     "move_to_backlog",
     "start_task",
     "pause_task",
@@ -58,7 +72,14 @@ export const MCP_TOOL_NAMES: readonly string[] = [
   "update_project",
   "list_ideas",
   "add_idea",
-  "groom_idea",
+  "board_status",
+  "start_grooming",
+  "groom_message",
+  "groom_status",
+  "groom_accept",
+  "groom_cancel",
+  "groom_re_groom",
+  "discard_idea",
   "move_to_backlog",
   "start_task",
   "pause_task",
@@ -135,19 +156,65 @@ export function resolveMcpCapabilities(
 }
 
 /**
+ * Parse the MCP_KEY_OWNERS env var: `name:key-suffix;...` where key-suffix
+ * is the TAIL of a Bearer key (same tail-matching style as
+ * MCP_KEY_CAPABILITIES — keys are secret, match on the last N chars).
+ * Maps a caller key to the user name stamped on the items they create
+ * (owner attribution). Unknown/malformed entries are dropped; an empty
+ * mapping yields {} (non-kanban keys resolve to "unknown").
+ */
+export function parseMcpKeyOwners(raw: string | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!raw) return out;
+  for (const entry of raw.split(";")) {
+    const [name, suffix] = entry.split(":");
+    const n = (name ?? "").trim();
+    const s = (suffix ?? "").trim();
+    if (n && s) out.set(s, n);
+  }
+  return out;
+}
+
+/**
+ * Resolve the owner name for a Bearer key:
+ * - the kanban key (LITELLM_API_KEY) → "kanban" (service-driven mutations);
+ * - a key whose tail matches a MCP_KEY_OWNERS entry → that user name;
+ * - anything else → "unknown" (authorized keys missing from the map).
+ */
+export function resolveMcpOwner(
+  bearerKey: string,
+  kanbanKey: string,
+  mapping: Map<string, string> = new Map(),
+): string {
+  if (bearerKey === kanbanKey) return "kanban";
+  for (const [suffix, name] of mapping) {
+    if (bearerKey.length >= suffix.length && bearerKey.endsWith(suffix)) {
+      return name;
+    }
+  }
+  return "unknown";
+}
+
+/**
  * Build the MCP server with the kanban tools registered. When `allowedTools`
  * is given (per-key capability scoping), only those tools are registered and
  * the rest are invisible to tools/list; calls to unknown tool names are
- * answered with a clear "not available for this key" error.
+ * answered with a clear "not available for this key" error. `owner` is the
+ * caller's user name (key → user via MCP_KEY_OWNERS) stamped on the items
+ * the caller creates.
  */
-export function createKanbanMcpServer(services: KanbanServices, allowedTools?: Set<string>): McpServer {
+export function createKanbanMcpServer(
+  services: KanbanServices,
+  allowedTools?: Set<string>,
+  owner = "",
+): McpServer {
   // Declaring the tools capability up front makes tools/list respond
   // instead of "Method not found".
   const server = new McpServer(
     { ...MCP_SERVER_INFO },
     { capabilities: { tools: { listChanged: true } } },
   );
-  registerMcpTools(server, services, allowedTools);
+  registerMcpTools(server, services, allowedTools, owner);
   if (allowedTools) {
     // Scoped keys: answer calls to out-of-scope tool names with a clear
     // error instead of the SDK's generic "Tool not found". The SDK
@@ -243,7 +310,12 @@ function toProjectInput(args: { name?: string } & ProjectFieldArgs): ProjectInpu
  * those tools are registered (per-key capability scoping) and the rest are
  * invisible to tools/list.
  */
-export function registerMcpTools(server: McpServer, services: KanbanServices, allowedTools?: Set<string>): void {
+export function registerMcpTools(
+  server: McpServer,
+  services: KanbanServices,
+  allowedTools?: Set<string>,
+  owner = "",
+): void {
   const reg = (
     name: string,
     def: { description: string; inputSchema?: Record<string, unknown> },
@@ -280,10 +352,11 @@ export function registerMcpTools(server: McpServer, services: KanbanServices, al
     {
       description:
         "Create a project. name is required (unique); other fields optional " +
-        "(repo_url + default_branch, blog_repo_url + blog_content_path, media_paths, ...).",
+        "(repo_url + default_branch, blog_repo_url + blog_content_path, media_paths, ...). " +
+        "The project is stamped with the caller's owner.",
       inputSchema: { name: z.string().min(1), ...projectFields },
     },
-    (args) => run(async () => ok(await services.createProject(toProjectInput(args)))),
+    (args) => run(async () => ok(await services.createProject(toProjectInput(args), owner))),
   );
 
   reg(
@@ -320,27 +393,140 @@ export function registerMcpTools(server: McpServer, services: KanbanServices, al
   reg(
     "add_idea",
     {
-      description: "Drop a raw idea (state=idea) into a project.",
+      description:
+        "Drop a raw idea (state=idea) into a project. The idea is stamped with " +
+        "the caller's owner (it propagates to the idea's task).",
       inputSchema: {
         project_id: z.number().int().positive(),
         text: z.string().min(1),
       },
     },
-    ({ project_id, text }) => run(async () => ok(await services.addIdea(project_id, text))),
+    ({ project_id, text }) => run(async () => ok(await services.addIdea(project_id, text, owner))),
   );
 
   reg(
-    "groom_idea",
+    "board_status",
     {
       description:
-        "Autonomous one-shot grooming for non-GUI clients: runs the idea's grooming " +
-        "session and finalizes the structured spec (goal/steps/acceptance/kind/" +
-        "publish_targets/notes) plus LLM-identified depends_on among the project's " +
-        "current icebox items. The idea moves to the icebox. Idempotent if the idea " +
-        "is already in the icebox (returns the existing spec).",
+        "Board overview focused on needs-attention: task counts per state, " +
+        "each needs-attention task (title, project, owner, failure reason, last " +
+        "activity, accepted resolution if any), and running tasks (paused, cost). " +
+        "Resolve a needs-attention task one by one: task_status(task_id) for the " +
+        "full failure context + log tail, dialog with the user, then " +
+        "restart_task(task_id, resolution_note).",
+      inputSchema: {
+        project_id: z.number().int().positive().optional(),
+        owner: z.string().min(1).optional(),
+      },
+    },
+    ({ project_id, owner: ownerFilter }) =>
+      run(async () =>
+        ok(
+          await services.boardStatus(
+            {
+              ...(project_id !== undefined ? { projectId: project_id } : {}),
+              ...(ownerFilter !== undefined ? { owner: ownerFilter } : {}),
+            },
+          ),
+        ),
+      ),
+  );
+
+  reg(
+    "start_grooming",
+    {
+      description:
+        "Start INTERACTIVE grooming for an idea (state idea → grooming): runs " +
+        "the seed turn, in which the grooming LLM researches (web/KB/memory via " +
+        "its session tools), states its assumptions, and asks questions. Returns " +
+        "the idea + the assistant's seed message — relay it to the user and " +
+        "answer its questions with groom_message. This is the only grooming " +
+        "path: grooming is interactive by design (the user steers before the " +
+        "idea is prepped for execution).",
       inputSchema: { idea_id: z.number().int().positive() },
     },
-    ({ idea_id }) => run(async () => ok(await services.groomIdea(idea_id))),
+    ({ idea_id }) => run(async () => ok(await services.groomStart(idea_id))),
+  );
+
+  reg(
+    "groom_message",
+    {
+      description:
+        "Send one user message to an idea's interactive grooming session " +
+        "(state grooming) and wait for the assistant's reply (blocking; the " +
+        "reply may take minutes at deep thinking levels — relay it to the " +
+        "user). Answer the assistant's questions, correct its assumptions, or " +
+        "share links/images for it to analyze.",
+      inputSchema: {
+        idea_id: z.number().int().positive(),
+        text: z.string().min(1),
+      },
+    },
+    ({ idea_id, text }) => run(async () => ok(await services.groomMessage(idea_id, text))),
+  );
+
+  reg(
+    "groom_status",
+    {
+      description:
+        "Poll an idea's grooming state: state (idea/grooming/icebox/...), " +
+        "whether a turn is in flight (label + since), the transcript tail " +
+        "(last 5 messages), and the finalized spec once the idea is in the " +
+        "icebox. Poll after groom_accept until state=icebox.",
+      inputSchema: { idea_id: z.number().int().positive() },
+    },
+    ({ idea_id }) => run(async () => ok(await services.groomStatus(idea_id))),
+  );
+
+  reg(
+    "groom_accept",
+    {
+      description:
+        "Accept the grooming: the finalize turn runs in the BACKGROUND (xhigh " +
+        "finalize can take several minutes) and produces the structured spec " +
+        "(goal/steps/acceptance/kind/publish_targets/notes) plus LLM-identified " +
+        "depends_on among the project's current icebox items. Returns the idea " +
+        "(state still grooming); poll groom_status until state=icebox (spec " +
+        "present). A failed finalize leaves the idea in grooming — keep " +
+        "chatting (groom_message) or re-accept.",
+      inputSchema: { idea_id: z.number().int().positive() },
+    },
+    ({ idea_id }) => run(async () => ok(await services.groomAccept(idea_id))),
+  );
+
+  reg(
+    "groom_cancel",
+    {
+      description:
+        "Cancel grooming (state grooming → idea): the chat session is " +
+        "discarded. The idea text is kept and can be re-groomed later.",
+      inputSchema: { idea_id: z.number().int().positive() },
+    },
+    ({ idea_id }) => run(async () => ok(await services.groomCancel(idea_id))),
+  );
+
+  reg(
+    "groom_re_groom",
+    {
+      description:
+        "Re-groom (state grooming → grooming): the chat session is replaced " +
+        "with a fresh one, re-seeded with the idea (awaited re-seed). Use when " +
+        "the conversation went off the rails.",
+      inputSchema: { idea_id: z.number().int().positive() },
+    },
+    ({ idea_id }) => run(async () => ok(await services.groomReGroom(idea_id))),
+  );
+
+  reg(
+    "discard_idea",
+    {
+      description:
+        "Discard an idea (state idea/grooming → discarded, soft-deleted — an " +
+        "audit trail is kept). Icebox items cannot be discarded (they have a " +
+        "finalized spec; move them to the backlog instead).",
+      inputSchema: { idea_id: z.number().int().positive() },
+    },
+    ({ idea_id }) => run(async () => ok(await services.discardIdea(idea_id))),
   );
 
   reg(

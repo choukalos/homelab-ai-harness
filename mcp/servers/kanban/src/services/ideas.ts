@@ -43,8 +43,9 @@ export async function getIdea(db: Db, id: number): Promise<Idea | undefined> {
 /**
  * Drop a raw idea into a project (state `idea`).
  * 400 on empty text, 404 on unknown project.
+ * `owner` = caller identity of the creating mutation (MCP key → user name).
  */
-export async function addIdea(db: Db, projectId: number, text: string): Promise<Idea> {
+export async function addIdea(db: Db, projectId: number, text: string, owner = ""): Promise<Idea> {
   const t = (text ?? "").trim();
   if (t === "") throw new ServiceError(400, "idea text is required");
   const [proj] = await db
@@ -61,6 +62,7 @@ export async function addIdea(db: Db, projectId: number, text: string): Promise<
     state: "idea",
     spec: null,
     dependsOn: [],
+    owner: owner ?? "",
     createdAt: now,
     updatedAt: now,
   });

@@ -17,6 +17,7 @@ logs/
 .env.staging
 .env.backup
 .env.bak
+.env.bak-*
 .env.*.local
 .env.*.production
 

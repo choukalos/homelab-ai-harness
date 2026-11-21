@@ -292,8 +292,23 @@ value; containers reach it the same way `mcp_mysql` does).
 - **LiteLLM restart severs active proxy sessions** — the config swap is an
   explicit operator step (like the 2026-11-21 studio-gemma4 flag reload).
 
+## MCP-first cutover (2026-11-21) — plan: `proposals/2026-11-21-tier2-mcp-kanban-mcp-first.md`
+
+Decisions locked 2026-11-21 (chuck): web UI (thor.local:3000) becomes
+**read-only**; MCP is the only mutation interface. New MCP tools:
+interactive grooming (start_grooming / groom_message / groom_status /
+groom_accept / groom_cancel / groom_re_groom — the LLM asks questions and
+the user steers from their client of choice), `discard_idea`,
+`board_status` (needs-attention counts + per-job summary for in-dialog
+resolution via task_status → restart_task). **Owner attribution** (key →
+user name via `KANBAN_KEY_OWNERS`) on projects/ideas/tasks, shown as a tag
+on the board/web view. Note: this **pulls owner capture forward from
+Phase 2** — the `owner` columns are the attribution data Phase 2's spend
+work uses.
+
 ## Phase 2 (follow-up, not in this change)
 
-- Per-user/per-agent LLM spend attribution (Q2 design above): `owner_user`
-  capture + per-user `ModelRuntime`/auth + `KANBAN_USER_KEYS` map.
+- Per-user/per-agent LLM spend attribution (Q2 design above): ~~`owner_user`
+  capture~~ (done in the MCP-first change: `owner` columns +
+  `KANBAN_KEY_OWNERS`) + per-user `ModelRuntime`/auth + `KANBAN_USER_KEYS` map.
 - Consider: per-project cost budgets / alerts once attribution lands.

@@ -360,10 +360,10 @@ export class GroomingManager {
    * the (new) persisted session, and seed it with the idea text. Idempotent
    * when the idea is already grooming (resumes the session after a restart).
    *
-   * `background: true` (GUI page load) returns as soon as the state flip is
-   * persisted; the seed LLM turn runs in the background and is visible via
-   * `turnStatus` + transcript polling. Default (MCP one-shot, tests) awaits
-   * the seed turn.
+   * `background: true` (read-only UI page load) returns as soon as the
+   * state flip is persisted; the seed LLM turn runs in the background and
+   * is visible via `turnStatus` + transcript polling. Default (MCP
+   * `start_grooming`, tests) awaits the seed turn.
    */
   async startGrooming(ideaId: number, opts: { background?: boolean } = {}): Promise<IdeaRow> {
     const idea = await this.requireIdea(ideaId, ["idea", "grooming"]);
@@ -396,8 +396,8 @@ export class GroomingManager {
 
   /**
    * One chat turn (blocking): append the user message, run the turn, return
-   * the new assistant message. Used by MCP/tests; the GUI POST uses
-   * `postGroomMessage` (non-blocking) instead.
+   * the new assistant message. Used by the MCP `groom_message` tool and
+   * tests — the client relays the reply to the user in its own conversation.
    */
   async sendGroomMessage(ideaId: number, text: string): Promise<GroomMessage> {
     const t = (text ?? "").trim();
@@ -413,21 +413,7 @@ export class GroomingManager {
     return { role: "assistant", text: reply };
   }
 
-  /**
-   * Queue a chat turn without waiting for the reply (GUI POST): the user
-   * message is echoed by the caller immediately; the assistant reply appears
-   * via transcript polling. Turns are serialized per idea (a message sent
-   * while the seed/another turn is running is queued behind it).
-   */
-  async postGroomMessage(ideaId: number, text: string): Promise<void> {
-    const t = (text ?? "").trim();
-    if (t === "") throw new ServiceError(400, "message is required");
-    const idea = await this.requireIdea(ideaId, ["grooming"]);
-    const session = await this.ensureSeeded(idea, true);
-    await this.withTurn(ideaId, "chat", () => session.prompt(t));
-  }
-
-  /** Live status for the chat page (is a turn in flight for this idea?). */
+  /** Live status for the grooming viewer (is a turn in flight for this idea?). */
   turnStatus(ideaId: number): { active: boolean; since: number | null; label: string | null } {
     const since = this.turnSince.get(ideaId);
     return { active: since !== undefined, since: since ?? null, label: this.turnLabel.get(ideaId) ?? null };
@@ -461,10 +447,10 @@ export class GroomingManager {
   }
 
   /**
-   * Accept without waiting for the finalize turn (GUI POST): validates the
-   * state, then runs `acceptGrooming` in the background. The idea lands in
-   * the icebox when the finalize prompt settles (visible via turnStatus /
-   * the project page refresh). A failed finalize leaves the idea in
+   * Accept without waiting for the finalize turn (MCP `groom_accept`):
+   * validates the state, then runs `acceptGrooming` in the background. The
+   * idea lands in the icebox when the finalize prompt settles (visible via
+   * turnStatus / groomStatus polling). A failed finalize leaves the idea in
    * grooming — the user can re-accept or keep chatting.
    */
   async postAcceptGrooming(ideaId: number): Promise<void> {
@@ -484,8 +470,9 @@ export class GroomingManager {
 
   /**
    * Re-groom (grooming → grooming): fresh session, re-seeded with the idea.
-   * `background: true` (GUI) returns immediately; the re-seed runs in the
-   * background (visible via turnStatus + transcript polling).
+   * `background: true` returns immediately; the re-seed runs in the
+   * background (visible via turnStatus + transcript polling). Default (MCP
+   * `groom_re_groom`, tests) awaits the re-seed.
    */
   async reGroom(ideaId: number, opts: { background?: boolean } = {}): Promise<IdeaRow> {
     const idea = await this.requireIdea(ideaId, ["grooming"]);
@@ -507,7 +494,7 @@ export class GroomingManager {
 
   /**
    * Discard (idea/grooming → discarded): soft-deleted (the `discarded` state
-   * keeps an audit trail; the idea disappears from every GUI column).
+   * keeps an audit trail; the idea disappears from every view).
    */
   async discardIdea(ideaId: number): Promise<IdeaRow> {
     await this.requireIdea(ideaId, ["idea", "grooming"]);
@@ -517,25 +504,10 @@ export class GroomingManager {
   }
 
   /**
-   * Autonomous one-shot grooming (MCP `groom_idea`): seed if needed, then
-   * finalize in the same call. Idempotent when the idea is already in the
-   * icebox.
-   */
-  async groomIdeaOneShot(ideaId: number): Promise<IdeaRow> {
-    const idea = await this.requireIdea(ideaId, ["idea", "grooming", "icebox"]);
-    if (idea.state === "icebox") return idea;
-    if (idea.state === "idea") {
-      await this.startGrooming(ideaId);
-    } else {
-      await this.ensureSeeded(idea, true);
-    }
-    return await this.acceptGrooming(ideaId);
-  }
-
-  /**
-   * Transcript for the chat page (resumes the session if needed). Never
-   * blocks on a seed turn: a stuck-empty session gets a background re-seed
-   * and the (possibly empty) transcript is returned immediately.
+   * Transcript for the read-only grooming viewer (resumes the session if
+   * needed). Never blocks on a seed turn: a stuck-empty session gets a
+   * background re-seed and the (possibly empty) transcript is returned
+   * immediately.
    */
   async transcript(ideaId: number): Promise<GroomMessage[]> {
     const idea = await this.requireIdea(ideaId, ["idea", "grooming"]);

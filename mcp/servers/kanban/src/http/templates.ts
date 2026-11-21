@@ -74,6 +74,7 @@ export function layout(title: string, active: NavPage, body: string, opts: Layou
   .card { background: #1c212c; border: 1px solid #262b36; border-radius: 6px; padding: 0.5rem 0.6rem; margin-bottom: 0.5rem; font-size: 0.9rem; }
   .card-top { display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.25rem; }
   .tag { background: rgba(37, 99, 235, 0.15); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.4); border-radius: 4px; padding: 0 0.35rem; font-size: 0.75rem; }
+  .tag.owner { background: rgba(22, 101, 52, 0.18); color: #86efac; border-color: rgba(22, 101, 52, 0.45); }
   .badge { background: #7c2d12; color: #fdba74; border-radius: 4px; padding: 0 0.35rem; font-size: 0.75rem; }
   .card-title { color: #e5e7eb; }
   .card-meta { color: #6b7280; font-size: 0.8rem; margin-top: 0.2rem; }
@@ -111,9 +112,8 @@ export function layout(title: string, active: NavPage, body: string, opts: Layou
   .msg-role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; margin-bottom: 0.25rem; }
   .msg-text { white-space: pre-wrap; word-break: break-word; font-size: 0.92rem; }
   #groom-messages { max-height: 60vh; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.25rem; }
-  #groom-chat { display: flex; gap: 0.5rem; align-items: flex-end; }
-  #groom-chat textarea { flex: 1; }
-  #groom-chat button { white-space: nowrap; }
+  .groom-note { display: flex; gap: 0.75rem; align-items: flex-start; background: #1a2332; border: 1px solid #1e3a5f; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.75rem 0; color: #dbeafe; font-size: 0.9rem; }
+  .groom-note code { background: #0f1115; border: 1px solid #262b36; border-radius: 4px; padding: 0 0.3rem; font-size: 0.85rem; }
   button.danger { background: #7f1d1d; }
   .icebox-move { margin-top: 0.5rem; }
   .badge.state-backlog { background: #1e3a5f; color: #93c5fd; }
@@ -202,6 +202,8 @@ export interface BoardCardView {
   title: string;
   paused: boolean;
   cost: number;
+  /** Owner (inherited from the idea); '' = unattributed (legacy). */
+  owner: string;
   waitingOn: string[];
 }
 
@@ -217,8 +219,8 @@ function cardHtml(card: BoardCardView): string {
   }
   return `<a class="card card-link" href="/tasks/${card.taskId}" data-task-panel="${card.taskId}">
   <div class="card-top"><span class="tag">${escapeHtml(card.projectName)}</span>${
-    card.paused ? '<span class="badge">paused</span>' : ""
-  }</div>
+    card.owner !== "" ? `<span class="tag owner">${escapeHtml(card.owner)}</span>` : ""
+  }${card.paused ? '<span class="badge">paused</span>' : ""}</div>
   <div class="card-title">${escapeHtml(trunc(card.title, 90))}</div>
   <div class="card-meta">${meta.map(escapeHtml).join(" · ")}</div>
 </a>`;
@@ -250,87 +252,28 @@ export interface ProjectSummaryView {
   id: number;
   name: string;
   description: string;
+  owner: string;
 }
 
-/** Projects list: name + short description, New project button + editor dialog. */
+/** Projects list (read-only): name + owner + short description. */
 export function projectsPage(data: { projects: ProjectSummaryView[] }): string {
   const rows =
     data.projects.length > 0
       ? data.projects
           .map(
             (p) =>
-              `<tr><td><a href="/projects/${p.id}">${escapeHtml(p.name)}</a></td><td>${escapeHtml(
-                p.description || "—",
-              )}</td></tr>`,
+              `<tr><td><a href="/projects/${p.id}">${escapeHtml(p.name)}</a></td><td>${
+                p.owner !== "" ? `<span class="tag owner">${escapeHtml(p.owner)}</span>` : "—"
+              }</td><td>${escapeHtml(p.description || "—")}</td></tr>`,
           )
           .join("\n")
-      : `<tr><td colspan="2" class="muted">No projects yet — create one.</td></tr>`;
+      : `<tr><td colspan="3" class="muted">No projects yet — create one via the MCP <code>create_project</code> tool.</td></tr>`;
   return `<h1>Projects</h1>
-<div class="page-actions"><button onclick="document.getElementById('project-editor').showModal()">New project</button></div>
+<p class="muted">Read-only view — projects, ideas, grooming, and task control happen via the MCP tools (the web UI shows where things are at).</p>
 <table class="project-list">
-<tr><th>Name</th><th>Description</th></tr>
+<tr><th>Name</th><th>Owner</th><th>Description</th></tr>
 ${rows}
-</table>
-${projectEditorDialog("/projects", { title: "New project", submitLabel: "Create project" })}`;
-}
-
-interface ProjectFormValues {
-  name?: string | null;
-  description?: string | null;
-  goal?: string | null;
-  repoUrl?: string | null;
-  defaultBranch?: string | null;
-  blogRepoUrl?: string | null;
-  blogContentPath?: string | null;
-  mediaPaths?: string[] | null;
-  constraints?: string | null;
-  architectureNotes?: string | null;
-  notes?: string | null;
-}
-
-function field(
-  label: string,
-  name: string,
-  value: string,
-  opts: { textarea?: boolean; rows?: number; required?: boolean } = {},
-): string {
-  const req = opts.required ? " *" : "";
-  if (opts.textarea) {
-    return `<label>${label}${req}<textarea name="${name}" rows="${opts.rows ?? 2}"${
-      opts.required ? " required" : ""
-    }>${escapeHtml(value)}</textarea></label>`;
-  }
-  return `<label>${label}${req}<input name="${name}" value="${escapeHtml(value)}"${
-    opts.required ? " required" : ""
-  } maxlength="512"></label>`;
-}
-
-/**
- * Project editor popup (native <dialog>): create (action /projects) or
- * edit (action /projects/<id>, pre-filled).
- */
-export function projectEditorDialog(
-  action: string,
-  opts: { title: string; submitLabel: string; values?: ProjectFormValues },
-): string {
-  const v = opts.values ?? {};
-  return `<dialog id="project-editor">
-<form method="post" action="${action}">
-<h2>${escapeHtml(opts.title)}</h2>
-${field("Name", "name", v.name ?? "", { required: true })}
-${field("Description", "description", v.description ?? "", { textarea: true })}
-${field("Goal", "goal", v.goal ?? "", { textarea: true })}
-${field("Repo URL", "repo_url", v.repoUrl ?? "")}
-${field("Default branch", "default_branch", v.defaultBranch ?? "")}
-${field("Blog repo URL", "blog_repo_url", v.blogRepoUrl ?? "")}
-${field("Blog content path", "blog_content_path", v.blogContentPath ?? "")}
-${field("Media paths (comma-separated)", "media_paths", (v.mediaPaths ?? []).join(", "))}
-${field("Constraints", "constraints", v.constraints ?? "", { textarea: true })}
-${field("Architecture notes", "architecture_notes", v.architectureNotes ?? "", { textarea: true })}
-${field("Notes", "notes", v.notes ?? "", { textarea: true })}
-<div class="form-actions"><button type="submit">${escapeHtml(opts.submitLabel)}</button><button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button></div>
-</form>
-</dialog>`;
+</table>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +283,8 @@ ${field("Notes", "notes", v.notes ?? "", { textarea: true })}
 export interface ProjectPageData {
   id: number;
   name: string;
+  /** Owner (caller identity of the creating mutation); '' = unattributed (legacy). */
+  owner: string;
   description: string;
   goal: string;
   repoUrl: string | null;
@@ -355,6 +300,7 @@ export interface ProjectPageData {
     id: number;
     text: string;
     state: string;
+    owner: string;
     dependsOn: number[] | null;
     spec: { goal: string; steps: string[]; acceptance: string[]; kind: string; publish_targets?: string[]; notes?: string } | null;
   }>;
@@ -371,12 +317,12 @@ export interface ProjectPageData {
 }
 
 /**
- * Project page: settings + LLM state summary + the three pipeline columns
- * (Idea / Grooming / Icebox) + idea drop popup + edit dialog + the
- * completed/deployed items list (hidden by default, paginated —
- * requirements §9). Idea/Grooming cards link to the grooming chat page;
- * the Icebox column shows finalized specs (goal, kind, dependencies) with
- * multi-select + Move to Backlog.
+ * Project page (READ-ONLY): settings + LLM state summary + the three
+ * pipeline columns (Idea / Grooming / Icebox) + the completed/deployed
+ * items list (hidden by default, paginated — requirements §9).
+ * Idea/Grooming cards link to the grooming transcript viewer; the Icebox
+ * column shows finalized specs (goal, kind, dependencies). All mutations
+ * (new idea, grooming, move to backlog) happen via the MCP tools.
  */
 export function projectPage(data: ProjectPageData): string {
   const byState = (s: string) => data.ideas.filter((i) => i.state === s);
@@ -384,6 +330,9 @@ export function projectPage(data: ProjectPageData): string {
 
   const pipelineCard = (i: ProjectPageData["ideas"][number], hint: string, badge?: string) =>
     `<a class="card card-link" href="/ideas/${i.id}/groom">
+  <div class="card-top">${
+    i.owner !== "" ? `<span class="tag owner">${escapeHtml(i.owner)}</span>` : ""
+  }</div>
   <div class="card-title">${escapeHtml(trunc(i.text, 90))}</div>
   ${badge ?? ""}
   <div class="card-meta">${hint}</div>
@@ -422,27 +371,28 @@ export function projectPage(data: ProjectPageData): string {
                     .map((d) => escapeHtml(trunc(d, 40)))
                     .join(", ")}</div>`
                 : "";
-            return `<label class="card icebox-card">
-  <div class="card-top"><input type="checkbox" name="idea_ids" value="${i.id}"><span class="tag">${escapeHtml(i.spec?.kind ?? "other")}</span></div>
+            return `<div class="card icebox-card">
+  <div class="card-top">${
+    i.owner !== "" ? `<span class="tag owner">${escapeHtml(i.owner)}</span>` : ""
+  }<span class="tag">${escapeHtml(i.spec?.kind ?? "other")}</span></div>
   <div class="card-title">${escapeHtml(trunc(i.text, 90))}</div>
   ${goal}
   ${depsLine}
-</label>`;
+</div>`;
           })
           .join("\n")
       : `<p class="empty">—</p>`;
-  const iceboxColumn = `<form method="post" action="/projects/${data.id}/icebox/move">
-<section class="column"><h2>Icebox <span class="count">${iceboxItems.length}</span></h2>
+  const iceboxColumn = `<section class="column"><h2>Icebox <span class="count">${iceboxItems.length}</span></h2>
 ${iceboxCards}
 ${
   iceboxItems.length > 0
-    ? `<div class="icebox-move"><button type="submit">Move to Backlog</button></div>`
+    ? `<p class="muted" style="margin-top:0.5rem;font-size:0.8rem">Move to backlog via the MCP <code>move_to_backlog</code> tool.</p>`
     : ""
 }
-</section>
-</form>`;
+</section>`;
 
   const settings: Array<[string, string]> = [
+    ["Owner", data.owner],
     ["Description", data.description],
     ["Goal", data.goal],
     [
@@ -493,10 +443,7 @@ ${pager}
 </details>`;
 
   return `<h1>${escapeHtml(data.name)}</h1>
-<div class="page-actions">
-  <button onclick="document.getElementById('idea-drop').showModal()">New idea</button>
-  <button onclick="document.getElementById('project-editor').showModal()">Edit project</button>
-</div>
+<p class="muted">Read-only view — add ideas, groom, and move icebox items to the backlog via the MCP tools.</p>
 <section class="settings">
   <h2>Settings</h2>
   <dl>${dl || '<dd class="muted">—</dd>'}</dl>
@@ -506,35 +453,11 @@ ${pager}
   )}</p>
 </section>
 <div class="columns three">
-${column("Idea", byState("idea"), "click to groom")}
-${column("Grooming", byState("grooming"), "continue chat →", true)}
+${column("Idea", byState("idea"), "groom via MCP")}
+${column("Grooming", byState("grooming"), "view chat →", true)}
 ${iceboxColumn}
 </div>
-${completedSection}
-<dialog id="idea-drop">
-<form method="post" action="/projects/${data.id}/ideas">
-<h2>New idea — ${escapeHtml(data.name)}</h2>
-<label>Idea *<textarea name="text" rows="4" required></textarea></label>
-<div class="form-actions"><button type="submit">Add idea</button><button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button></div>
-</form>
-</dialog>
-${projectEditorDialog(`/projects/${data.id}`, {
-    title: `Edit project — ${data.name}`,
-    submitLabel: "Save changes",
-    values: {
-      name: data.name,
-      description: data.description,
-      goal: data.goal,
-      repoUrl: data.repoUrl,
-      defaultBranch: data.defaultBranch,
-      blogRepoUrl: data.blogRepoUrl,
-      blogContentPath: data.blogContentPath,
-      mediaPaths: data.mediaPaths,
-      constraints: data.constraints,
-      architectureNotes: data.architectureNotes,
-      notes: data.notes,
-    },
-  })}`;
+${completedSection}`;
 }
 
 // ---------------------------------------------------------------------------

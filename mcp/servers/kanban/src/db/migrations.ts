@@ -204,4 +204,21 @@ export const MIGRATIONS: readonly Migration[] = [
     sqlite: INIT_SQLITE,
     mysql: INIT_MYSQL,
   },
+  {
+    version: "0002_owner",
+    description:
+      "Owner attribution (MCP-first change): owner column on projects/ideas/tasks — " +
+      "the caller identity (LiteLLM key → user name) of the mutation; tasks inherit " +
+      "the idea's owner at move-to-backlog. Additive-only; legacy rows stay '' (unattributed).",
+    sqlite: `
+ALTER TABLE "projects" ADD COLUMN "owner" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "ideas" ADD COLUMN "owner" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "tasks" ADD COLUMN "owner" TEXT NOT NULL DEFAULT '';
+`,
+    mysql: `
+ALTER TABLE \`projects\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE \`ideas\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE \`tasks\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
+`,
+  },
 ];

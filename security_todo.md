@@ -8,7 +8,8 @@
 > verified; `ss -tlnp` matches expected survivors; device-side confirmations
 > done from Mac Studio 2026-11-15). Phases 5–8
 > not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
-> (9.3-O1 resolved by removal).
+> (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
+> program) added as a **grooming stub** 2026-11-21.
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -416,6 +417,99 @@ Master-key consumers found 2026-09-06 (6 services; **5 as of 2026-11-15** — op
 - [ ] Update docs (Phase 7) + key inventory (§1)
 
 Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY}`, recreate, `./homelab.sh key delete internal-service`.
+
+---
+
+### Phase 9 — Secrets management & rotation program — **STUB (2026-11-21, groom with pi)**
+
+> Status: **stub — groom before scoping.** Triggered by the 2026-11-21 GitHub
+> token-rotation work (`scripts/rotate-github-tokens.sh` + the runner-token
+> discussion). Goal: turn ad-hoc key handling into a program — inventory,
+> delivery, rotation, breach response — and decide how far to move away from
+> the single massive `.env`.
+
+**Current state (facts, 2026-11-21):**
+- One massive `.env` at repo root — 97 vars, ~30 secrets (LiteLLM keys,
+  several MySQL users/passwords, Qdrant admin+RO, CF tunnel, GitHub PATs,
+  JWT secrets, app-level keys). Perms `600`, gitignored. Single source of
+  truth for every stack.
+- Delivery to containers: compose `${...}` interpolation + `env_file: .env`
+  whole-file injection on many services → **carrier problem**: ~13 containers
+  (caddy, cloudflared, skill-runner, searxng, plausible, the hubs, …) carry
+  ALL secrets in their env although most use only a few. `docker inspect`
+  on any of them dumps the whole secret set.
+- Rotation tooling (partial, per-secret): `scripts/rotate-github-tokens.sh`
+  (GitHub classic PAT — API-minted, 2026-11-21), `scripts/rotate-cf-tunnel.sh`,
+  `./homelab.sh key …` (LiteLLM), Caddy-reload procedure
+  (`docs/thor_public_access_model.md` § Key Strategy). No orchestrator,
+  no cadence, no runbooks for the rest (MySQL, Qdrant, app keys).
+- Drift detection: `scripts/key-sync-check.sh` (2026-10-21 incident) —
+  catches stale values in containers after a rotation. **Not** a leak detector.
+- Known dead secret: `GITHUB_RUNNER_TOKEN` (fine-grained PAT, unconsumed —
+  revoke in UI + drop the `.env` line).
+- Known sharing: one classic PAT (`GITHUB_ACCESS_TOKEN`) powers 3 self-hosted
+  runners + the mcp_kanban deploy stage (`KANBAN_GITHUB_TOKEN`, same value).
+- `.env.bak-*` rotation backups were NOT gitignored (fixed 2026-11-21).
+
+**Insights carried in from the 2026-11-21 GitHub rotation work:**
+1. **Least-privilege scope per consumer.** Runners only need Actions r/w on
+   their own repo (job checkouts use the ephemeral job token); kanban deploy
+   only needs Contents r/w on its target repos. One `repo`-scope PAT for all
+   of them is the anti-pattern (leak = everything).
+2. **Classic vs fine-grained PAT trade-off.** Classic: API-mintable (fully
+   scriptable rotation) but coarse scope. Fine-grained: per-repo +
+   per-permission (least privilege) but UI-only create/revoke for personal
+   accounts → rotation tooling needs a `--manual` paste-and-verify mode.
+3. **Expiry as a safety net.** ~120-day expiry on a 90-day rotation cadence
+   makes a forgotten rotation fail-closed instead of lingering.
+4. **Rotation ≠ revocation.** A rotated token stays valid until revoked; every
+   runbook must end with the revocation step (manual for GitHub classic PATs —
+   no API for that).
+5. **Discovery beats hardcoding.** Consumer discovery from compose source
+   (name-based) + live env (value-based) caught the 4 real consumers AND the
+   9 carriers; hardcoded lists go stale.
+6. **GitHub App is the end-state for runners** (ephemeral installation tokens,
+   no long-lived PATs); kanban could mint 1-h installation tokens at deploy
+   time → zero long-lived push secrets. Bigger migration (runner image swap).
+7. **Backups and temp files are secrets.** `.env.bak-*` and the mint-response
+   temp file carry full secrets → gitignore + auto-prune + mktemp/trap
+   discipline.
+
+**Grooming agenda (open questions — decide before scoping):**
+1. **Inventory.** Master secrets table: secret | issuer | consumers (env var,
+   container) | scope | rotation cadence | revocation path (API/UI/manual) |
+   breach response. Covers everything in `.env`, not just the ones with
+   scripts today.
+2. **Delivery.** Move from whole-`.env` injection to per-service env (each
+   container gets only its vars). Options by effort: (a) compose
+   `environment:` lists per service (no new tooling), (b) Docker secrets,
+   (c) external manager (SOPS-encrypted `.env` / Vault). Decide target +
+   migration order. (This is the "stop loading a massive .env" question.)
+3. **Storage & at-rest.** `.env` is 600 + gitignored (good). Decide:
+   encrypted off-host backup (age/SOPS), `.env.bak-*` lifecycle (auto-prune
+   >30d?), secret scanning in CI (gitleaks) so nothing ever lands in git.
+4. **Rotation program.** Per-class cadence (GitHub 90d, LiteLLM quarterly,
+   CF per tunnel doc, MySQL/Qdrant annual or on personnel change, app keys
+   annual). One `scripts/rotate-all.sh` orchestrator vs per-secret runbooks?
+   Extend `thor_public_access_model.md` § Key Strategy to ALL secrets. Add
+   `--manual` mode to the rotation script for UI-only secrets.
+5. **Breach response.** Detection: GitHub audit log / abuse alerts, LiteLLM
+   spend + 401 alerts (Phase 6), CF logs, key-sync-check (drift ≠ leak).
+   Response runbook: **REVOKE first** (fastest kill-switch), then rotate, then
+   investigate. One table-top exercise (simulate a leaked runner token).
+6. **Least-privilege pass.** Per-consumer MySQL users (already done for
+   ai-kanban — audit the rest), Qdrant RO vs admin, Phase 8 internal-service
+   key (master key out of 5 consumers), retire dead secrets
+   (GITHUB_RUNNER_TOKEN).
+7. **Runner tokens (2026-11-21 discussion).** Option A: per-repo fine-grained
+   PATs (3 runners + 1 kanban push token; `--manual` rotation). Option B:
+   GitHub App (runners + ephemeral kanban tokens). Working recommendation:
+   **A now, B as end-state**.
+
+**Exit criteria (stub → real phases when groomed):** inventory table complete +
+committed; per-service env migration ordered; rotation runbook for every
+secret class; one full rotation drill executed end-to-end (incl. revocation);
+breach runbook + table-top done.
 
 ---
 

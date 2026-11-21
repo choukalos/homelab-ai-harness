@@ -164,6 +164,11 @@ export interface TaskStatus {
   id: number;
   state: string;
   paused: boolean;
+  /** Idea text (1:1 with the task). */
+  title: string;
+  project: { id: number; name: string };
+  /** Owner (inherited from the idea); '' = unattributed (legacy). */
+  owner: string;
   branch: string | null;
   lastCommit: string | null;
   qaRounds: number;
@@ -198,6 +203,9 @@ export async function getTaskStatus(db: Db, taskId: number, logLimit = 50): Prom
     id: t.id,
     state: t.state,
     paused: t.paused,
+    title: detail.idea.text,
+    project: detail.project,
+    owner: t.owner,
     branch: t.branch,
     lastCommit: t.lastCommit,
     qaRounds: t.qaRounds,

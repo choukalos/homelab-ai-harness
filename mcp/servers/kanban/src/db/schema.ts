@@ -80,6 +80,8 @@ export const projects = sqliteTable("projects", {
   notes: text("notes"),
   /** LLM-maintained current completion state of the project. */
   stateSummary: text("state_summary"),
+  /** Caller identity (LiteLLM key → user name) of the creating mutation; '' = unattributed (legacy). */
+  owner: text("owner").notNull().default(""),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -97,6 +99,8 @@ export const ideas = sqliteTable(
     spec: text("spec", { mode: "json" }).$type<IdeaSpec>(),
     /** JSON list of idea ids this idea depends on. */
     dependsOn: text("depends_on", { mode: "json" }).$type<number[]>(),
+    /** Caller identity (LiteLLM key → user name) of the creating mutation; '' = unattributed (legacy). */
+    owner: text("owner").notNull().default(""),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -126,6 +130,8 @@ export const tasks = sqliteTable(
     workspace: text("workspace"),
     /** Accepted resolution plan (Needs Attention → Backlog). */
     resolution: text("resolution"),
+    /** Owner (inherited from the idea at task creation); '' = unattributed (legacy). */
+    owner: text("owner").notNull().default(""),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [
@@ -205,6 +211,7 @@ export const mysqlProjects = mysqlTable(
     architectureNotes: mediumtext("architecture_notes"),
     notes: mediumtext("notes"),
     stateSummary: mediumtext("state_summary"),
+    owner: varchar("owner", { length: 64 }).notNull().default(""),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
@@ -222,6 +229,7 @@ export const mysqlIdeas = mysqlTable(
     state: varchar("state", { length: 32 }).notNull().default("idea"),
     spec: mysqlJson("spec").$type<IdeaSpec>(),
     dependsOn: mysqlJson("depends_on").$type<number[]>(),
+    owner: varchar("owner", { length: 64 }).notNull().default(""),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
@@ -247,6 +255,7 @@ export const mysqlTasks = mysqlTable(
     paused: boolean("paused").notNull().default(false),
     workspace: varchar("workspace", { length: 512 }),
     resolution: mediumtext("resolution"),
+    owner: varchar("owner", { length: 64 }).notNull().default(""),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
