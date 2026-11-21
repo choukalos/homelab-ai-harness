@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# rotate-github-tokens.sh — rotate the homelab's classic GitHub PAT(s) in .env.
+# rotate-github-tokens.sh — rotate the homelab's GitHub PAT(s) in .env.
 #
-# What it does (default target: GITHUB_ACCESS_TOKEN):
-#   1. Preflight: .env present, token set, token still valid (GET /user).
+# GitHub REMOVED the classic-PAT creation API endpoint (POST /user/tokens
+# -> 404, verified 2026-11-21), so the NEW PAT is minted in the GitHub UI
+# and this script takes it, verifies it, and applies it deterministically:
+#
+#   1. Preflight: .env present, old token set + still valid (GET /user).
 #   2. Discovery:
 #      - DIRECT CONSUMERS: compose services whose `environment` references
 #        ${GITHUB_ACCESS_TOKEN} / ${KANBAN_GITHUB_TOKEN} (parsed from
@@ -17,27 +20,42 @@
 #   3. Kanban sync: if KANBAN_GITHUB_TOKEN holds the SAME value as the
 #      target var, it is swapped too (current state 2026-11-21: both vars
 #      share one PAT — the runners' token was reused for mcp_kanban).
-#   4. Backs up .env (.env.bak-<timestamp>), mints a replacement classic PAT
-#      via the GitHub API (POST /user/tokens, authorized by the old token),
-#      verifies the new token, swaps the .env value(s) atomically.
-#   5. Recreates the direct consumers via their compose labels
+#   4. New token: --new-token-file PATH (first line) or interactive hidden
+#      paste. Verified against the API (GET /user) BEFORE anything is
+#      touched — an invalid token aborts with zero side effects.
+#   5. Backs up .env (.env.bak-<timestamp>), swaps the value(s) atomically.
+#   6. Recreates the direct consumers via their compose labels
 #      (com.docker.compose.project / .service / .project.config_files),
 #      waits for running/healthy.
-#   6. Verifies: each direct consumer holds the NEW value and no direct
+#   7. Verifies: each direct consumer holds the NEW value and no direct
 #      consumer holds the old one; remaining carriers are reported;
 #      scripts/key-sync-check.sh runs — drift limited to carriers is
 #      expected (informational), drift on a direct consumer fails the run.
-#   7. Reports: masked old token + manual revocation steps (classic PATs
-#      cannot be listed/revoked via the API — UI only), and a note about
-#      GITHUB_RUNNER_TOKEN (fine-grained PAT, currently unconsumed — revoke
-#      in the UI and drop the .env line if you agree it's dead).
+#   8. Reports: masked old token + manual revocation steps (the old PAT
+#      stays valid until revoked in the UI — classic PATs cannot be
+#      revoked via the API), and a note about GITHUB_RUNNER_TOKEN
+#      (fine-grained PAT, currently unconsumed — revoke in the UI and drop
+#      the .env line if you agree it's dead).
+#
+# Minting in the UI (do this BEFORE running the script):
+#   https://github.com/settings/tokens  ->  "Generate new token (classic)"
+#   - scopes:    `repo` (covers runner auth + kanban deploy pushes)
+#   - expiration: 120–365 days (a 120-day expiry on a 90-day rotation
+#     cadence makes a forgotten rotation fail closed)
+#   - note:      "homelab GITHUB_ACCESS_TOKEN rotated <YYYY-MM-DD>"
+#     (this is how you'll find it at the next revocation)
+#   The script is token-type-agnostic (it verifies the new token works),
+#   so a fine-grained PAT with the right repo permissions is acceptable
+#   too — but runners currently expect classic `repo` scope.
 #
 # Safety:
 #   - --dry-run shows the full plan and changes nothing.
-#   - Confirmation prompt before any mutation (skip with --yes).
-#   - Tokens are never printed in full (masked to 12 chars).
-#   - .env is backed up before any edit; the API mint happens BEFORE .env is
-#     touched, so a failed mint leaves the system untouched.
+#   - Confirmation prompt before any mutation (skip with --yes; --yes
+#     requires --new-token-file).
+#   - Tokens are never printed in full (masked to 12 chars); the paste
+#     prompt is hidden (read -s).
+#   - .env is backed up before any edit; the new token is verified BEFORE
+#     the backup/swap, so a bad token leaves the system untouched.
 #   - Only DIRECT consumers are recreated — session-carrying or public-edge
 #     containers that merely carry the .env (skill-runner, caddy,
 #     cloudflared, ...) are left running.
@@ -46,19 +64,16 @@
 #     so only the API token changes — no re-registration needed.
 #
 # Usage:
-#   scripts/rotate-github-tokens.sh [--dry-run] [--yes] [--scopes repo]
-#                                   [--expires-days 365] [--var NAME]
-#                                   [--no-recreate]
+#   scripts/rotate-github-tokens.sh [--dry-run] [--yes] [--var NAME]
+#                                   [--new-token-file PATH] [--no-recreate]
 #
-#   --var NAME        env var holding the token to rotate
-#                     (default GITHUB_ACCESS_TOKEN; use KANBAN_GITHUB_TOKEN
-#                     if it ever diverges from the runners' token)
-#   --scopes LIST     comma-separated scopes for the new PAT (default: repo —
-#                     covers runner auth + kanban deploy pushes; the API
-#                     cannot read the old token's scopes, so widen here if a
-#                     consumer needs more)
-#   --expires-days N  expiry for the new PAT (default 365; 0 = no expiry)
-#   --no-recreate     swap .env only; skip container recreation
+#   --var NAME           env var holding the token to rotate
+#                        (default GITHUB_ACCESS_TOKEN; use KANBAN_GITHUB_TOKEN
+#                        if it ever diverges from the runners' token)
+#   --new-token-file P   read the new token from file P (first line,
+#                        whitespace-trimmed) — required with --yes; without
+#                        it an interactive hidden paste is used
+#   --no-recreate        swap .env only; skip container recreation
 #
 # Exit: 0 = rotated + verified · 1 = failed/aborted · 2 = preflight failure
 #
@@ -72,8 +87,7 @@ ENV_FILE="$REPO_ROOT/.env"
 
 # ── Defaults / flags ───────────────────────────────────────────────────────
 TARGET_VAR="GITHUB_ACCESS_TOKEN"
-SCOPES="repo"
-EXPIRES_DAYS=365
+NEW_TOKEN_FILE=""
 DRY_RUN=0
 ASSUME_YES=0
 NO_RECREATE=0
@@ -84,9 +98,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    --scopes) SCOPES="${2:?--scopes needs a value}"; shift ;;
-    --expires-days) EXPIRES_DAYS="${2:?--expires-days needs a value}"; shift ;;
     --var) TARGET_VAR="${2:?--var needs a value}"; shift ;;
+    --new-token-file) NEW_TOKEN_FILE="${2:?--new-token-file needs a path}"; shift ;;
     --no-recreate) NO_RECREATE=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown flag: $1 (see --help)" >&2; exit 2 ;;
@@ -98,11 +111,6 @@ mask() { local v="$1"; [ ${#v} -le 12 ] && { echo "(short)"; return; }; echo "${
 step() { echo; echo "── $1"; }
 die()  { echo; echo "ABORT: $*" >&2; exit 1; }
 die2() { echo; echo "PREFLIGHT FAILURE: $*" >&2; exit 2; }
-
-# Temp files (the mint response contains the new token) — always cleaned up.
-TMP_USER="$(mktemp /tmp/rotate-gh-user.XXXXXX)"
-TMP_MINT="$(mktemp /tmp/rotate-gh-mint.XXXXXX)"
-trap 'rm -f "$TMP_USER" "$TMP_MINT"' EXIT
 
 # ── 1. Preflight ───────────────────────────────────────────────────────────
 step "Preflight"
@@ -126,15 +134,16 @@ if [ -n "$KANBAN_TOKEN" ]; then
   fi
 fi
 
-# Old token must still work (it authorizes the mint)
+# Old token must still work (sanity: it's what consumers use today)
 step "Old-token validity (GET /user)"
-HTTP="$(curl -sS -o "$TMP_USER" -w '%{http_code}' \
+HTTP="$(curl -sS -o /tmp/rotate-gh-user.json -w '%{http_code}' \
   -H "Authorization: token $OLD_TOKEN" \
   -H "Accept: application/vnd.github+json" \
   https://api.github.com/user)" || die "cannot reach api.github.com"
-LOGIN="$(python3 -c "import json;print(json.load(open('$TMP_USER')).get('login',''))" 2>/dev/null || true)"
-[ "$HTTP" = "200" ] || die "old token rejected by GitHub (HTTP $HTTP) — it is already dead/invalid; set a working $TARGET_VAR in .env first (rotation mints with the old token)"
+LOGIN="$(python3 -c "import json;print(json.load(open('/tmp/rotate-gh-user.json')).get('login',''))" 2>/dev/null || true)"
+[ "$HTTP" = "200" ] || die "old token rejected by GitHub (HTTP $HTTP) — it is already dead/invalid; set a working $TARGET_VAR in .env first"
 echo "old token valid — github user: $LOGIN"
+rm -f /tmp/rotate-gh-user.json
 
 # ── 2. Discovery ───────────────────────────────────────────────────────────
 step "Discovery: direct consumers (compose source parse)"
@@ -199,12 +208,14 @@ if [ -n "$RUNNER_TOKEN" ] && [ "$RUNNER_TOKEN" != "$OLD_TOKEN" ]; then
 fi
 
 # ── 3. Plan + confirm ─────────────────────────────────────────────────────
-EXPIRES_AT=""
-if [ "$EXPIRES_DAYS" -gt 0 ]; then
-  EXPIRES_AT="$(date -u -d "+${EXPIRES_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
-fi
 step "Plan"
-echo "  mint new classic PAT: scopes=[$SCOPES]${EXPIRES_AT:+, expires $EXPIRES_AT (in ${EXPIRES_DAYS} days)}"
+if [ -n "$NEW_TOKEN_FILE" ]; then
+  echo "  new token: from $NEW_TOKEN_FILE (minted in the GitHub UI)"
+else
+  echo "  new token: interactive hidden paste (mint it in the GitHub UI first:"
+  echo "    https://github.com/settings/tokens -> Generate new token (classic)"
+  echo "    scopes=repo, expiry 120-365d, note 'homelab ${TARGET_VAR} rotated <date>')"
+fi
 echo "  .env: $TARGET_VAR <- new token"
 [ "$KANBAN_SYNC" = "1" ] && echo "  .env: KANBAN_GITHUB_TOKEN <- new token (synced, same value)"
 if [ "$NO_RECREATE" = "1" ]; then
@@ -227,40 +238,37 @@ if [ "$ASSUME_YES" = "0" ]; then
   [ "$ans" = "y" ] || [ "$ans" = "Y" ] || { echo "aborted (no changes made)"; exit 1; }
 fi
 
-# ── 4. Backup + mint + swap ───────────────────────────────────────────────
-step "Backup .env"
-TS="$(date +%Y%m%d-%H%M%S)"
-BACKUP="$ENV_FILE.bak-$TS"
-cp "$ENV_FILE" "$BACKUP"
-echo "  backup: $BACKUP"
-
-step "Mint replacement PAT (POST /user/tokens)"
-SCOPES_JSON="$(python3 -c "import json,sys;print(json.dumps(sys.argv[1].split(',')))" "$SCOPES")"
-DESC="homelab ${TARGET_VAR} rotated $(date -u +%Y-%m-%d) (replaces $(mask "$OLD_TOKEN"))"
-MINT_BODY="$(python3 -c "
-import json,sys
-d={'scopes':json.loads(sys.argv[1]),'description':sys.argv[2]}
-if sys.argv[3]: d['expires_at']=sys.argv[3]
-print(json.dumps(d))" "$SCOPES_JSON" "$DESC" "$EXPIRES_AT")"
-HTTP="$(curl -sS -o "$TMP_MINT" -w '%{http_code}' \
-  -X POST -H "Authorization: token $OLD_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  -H "Content-Type: application/json" \
-  -d "$MINT_BODY" https://api.github.com/user/tokens)" || die "mint request failed"
-NEW_TOKEN="$(python3 -c "import json;print(json.load(open('$TMP_MINT')).get('token',''))" 2>/dev/null || true)"
-if [ "$HTTP" = "201" ] && [ -n "$NEW_TOKEN" ]; then
-  echo "  new PAT minted: $(mask "$NEW_TOKEN")"
+# ── 4. Provide + verify new token (BEFORE any side effect) ────────────────
+step "Provide new token"
+NEW_TOKEN=""
+if [ -n "$NEW_TOKEN_FILE" ]; then
+  [ -f "$NEW_TOKEN_FILE" ] || die "--new-token-file: no such file: $NEW_TOKEN_FILE"
+  NEW_TOKEN="$(head -1 "$NEW_TOKEN_FILE" | tr -d '[:space:]')"
+  [ -n "$NEW_TOKEN" ] || die "--new-token-file: file is empty: $NEW_TOKEN_FILE"
+  echo "  new token read from $NEW_TOKEN_FILE: $(mask "$NEW_TOKEN")"
+elif [ "$ASSUME_YES" = "1" ]; then
+  die "--yes requires --new-token-file (no interactive paste possible)"
 else
-  MSG="$(python3 -c "import json;print(json.load(open('$TMP_MINT')).get('message',''))" 2>/dev/null || true)"
-  die "mint failed (HTTP $HTTP ${MSG:+— $MSG}); .env untouched, old token still valid"
+  printf "Paste the new token (hidden, Enter to submit): "
+  read -r -s NEW_TOKEN || die "no token provided"
+  echo
+  [ -n "$NEW_TOKEN" ] || die "no token provided"
+  echo "  new token: $(mask "$NEW_TOKEN")"
 fi
 
 step "Verify new token (GET /user)"
 HTTP="$(curl -sS -o /dev/null -w '%{http_code}' \
   -H "Authorization: token $NEW_TOKEN" \
   -H "Accept: application/vnd.github+json" https://api.github.com/user)"
-[ "$HTTP" = "200" ] || die "new token failed verification (HTTP $HTTP)"
+[ "$HTTP" = "200" ] || die "new token rejected by GitHub (HTTP $HTTP) — .env untouched; mint a working token in the UI and rerun"
 echo "  new token valid"
+
+# ── 5. Backup + swap ──────────────────────────────────────────────────────
+step "Backup .env"
+TS="$(date +%Y%m%d-%H%M%S)"
+BACKUP="$ENV_FILE.bak-$TS"
+cp "$ENV_FILE" "$BACKUP"
+echo "  backup: $BACKUP"
 
 step "Swap .env values (atomic)"
 python3 - "$ENV_FILE" "$TARGET_VAR" "$OLD_TOKEN" "$NEW_TOKEN" "$KANBAN_SYNC" <<'PYEOF'
@@ -282,7 +290,7 @@ os.replace(tmp, path)
 print(f"  swapped {swapped} line(s)")
 PYEOF
 
-# ── 5. Recreate direct consumers ───────────────────────────────────────────
+# ── 6. Recreate direct consumers ───────────────────────────────────────────
 if [ "$NO_RECREATE" = "1" ]; then
   step "Skipping container recreation (--no-recreate)"
 else
@@ -325,7 +333,7 @@ else
   fi
 fi
 
-# ── 6. Verify ──────────────────────────────────────────────────────────────
+# ── 7. Verify ──────────────────────────────────────────────────────────────
 step "Verify: direct consumers hold the NEW value (and not the old)"
 VERIFY="$(python3 - "$OLD_TOKEN" "$NEW_TOKEN" "$CONSUMERS" <<'PYEOF'
 import subprocess, sys
@@ -407,7 +415,7 @@ else
   echo "  (scripts/key-sync-check.sh not found — skipped)"
 fi
 
-# ── 7. Report ──────────────────────────────────────────────────────────────
+# ── 8. Report ──────────────────────────────────────────────────────────────
 step "Done — rotation complete"
 cat <<EOF
   .env updated: $TARGET_VAR = $(mask "$NEW_TOKEN")
@@ -418,10 +426,12 @@ fi
 echo "  backup of pre-rotation .env: $BACKUP"
 cat <<EOF
 
-  ⚠  THE OLD TOKEN IS STILL VALID until you revoke it (manual — classic PATs
+  ⚠  THE OLD TOKEN IS STILL VALID until you revoke it (manual — GitHub PATs
      cannot be revoked via the API):
        1. https://github.com/settings/tokens
-       2. find: $(mask "$OLD_TOKEN")  (description: "homelab ${TARGET_VAR} rotated ...")
+       2. find the OLD token: $(mask "$OLD_TOKEN")  (its full value is in the
+          backup above; if you gave the NEW token a note like
+          "homelab ${TARGET_VAR} rotated ...", the other one is the old)
        3. delete it
   Revoke promptly: until then both old and new tokens work.
 EOF

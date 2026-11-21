@@ -456,10 +456,13 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
    their own repo (job checkouts use the ephemeral job token); kanban deploy
    only needs Contents r/w on its target repos. One `repo`-scope PAT for all
    of them is the anti-pattern (leak = everything).
-2. **Classic vs fine-grained PAT trade-off.** Classic: API-mintable (fully
-   scriptable rotation) but coarse scope. Fine-grained: per-repo +
-   per-permission (least privilege) but UI-only create/revoke for personal
-   accounts → rotation tooling needs a `--manual` paste-and-verify mode.
+2. **Classic vs fine-grained PAT trade-off.** Classic: coarse scope
+   (`repo` = all repos) but what the runners currently expect. Fine-grained:
+   per-repo + per-permission (least privilege). **Both are UI-only now** —
+   GitHub removed the classic-PAT creation API endpoint (`POST /user/tokens`
+   → 404, verified 2026-11-21), so rotation tooling is receive-and-verify:
+   mint in the UI, script takes the token (`--new-token-file` or hidden
+   paste), verifies it, applies it deterministically.
 3. **Expiry as a safety net.** ~120-day expiry on a 90-day rotation cadence
    makes a forgotten rotation fail-closed instead of lingering.
 4. **Rotation ≠ revocation.** A rotated token stays valid until revoked; every
@@ -491,8 +494,10 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 4. **Rotation program.** Per-class cadence (GitHub 90d, LiteLLM quarterly,
    CF per tunnel doc, MySQL/Qdrant annual or on personnel change, app keys
    annual). One `scripts/rotate-all.sh` orchestrator vs per-secret runbooks?
-   Extend `thor_public_access_model.md` § Key Strategy to ALL secrets. Add
-   `--manual` mode to the rotation script for UI-only secrets.
+   Extend `thor_public_access_model.md` § Key Strategy to ALL secrets.
+   (GitHub rotation script already has the receive-and-verify pattern —
+   `--new-token-file` + hidden paste — since the PAT creation API endpoint
+   was removed 2026-11-21; generalize it to other UI-only secrets.)
 5. **Breach response.** Detection: GitHub audit log / abuse alerts, LiteLLM
    spend + 401 alerts (Phase 6), CF logs, key-sync-check (drift ≠ leak).
    Response runbook: **REVOKE first** (fastest kill-switch), then rotate, then
