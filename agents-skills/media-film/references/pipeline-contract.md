@@ -1,7 +1,7 @@
 # mcp_media pipeline contract (self-contained summary, verified 2026-11-04)
 
-The canonical contract lives on the GPU host (`docs/matrix_media_pipeline_api.md`
-+ `docs/thor_media_mcp_handoff.md`) — unreachable off-LAN. This file is the
+The canonical contract lives on the GPU host (`docs/matrix_media_pipeline_api.md`)
+— unreachable off-LAN. This file is the
 self-contained summary the skill needs. Tool names below are the MCP names
 (dash-form at the gateway, e.g. `mcp_media-media_list_jobs` per `/v1/mcp/tools`;
 in the pi codemode `tools` object they carry a version-dependent prefix — see

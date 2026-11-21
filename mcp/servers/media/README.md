@@ -238,7 +238,7 @@ thresholds on purpose: on dense distorted mixes the contour is tracking
 noise. `test_solo_marks.py` (5 suites); `mcp_media` rebuilt + restarted;
 Back in Black re-rendered with 13 bends + 18 vibrato marks; all 4 published
 tabs re-rendered + republished 16:46 UTC, public sha256 verified
-(`docs/thor_validation_log.md` part 11; `enhance_tab_tool.md` §B4).
+(`docs/thor_validation_log.md` part 11).
 
 2026-11-06: `media_render_tab_pdf` **SOLO board readability** (the per-measure
 boards were too small to read at 1× inside the 7-measure rows):
@@ -253,9 +253,9 @@ boards were too small to read at 1× inside the 7-measure rows):
   (e.g. Sweet Child O' Mine 8 → 13 pages). `test_chord_shapes.py` 6/6
   (unchanged); all 4 QA tabs re-rendered + republished (`overwrite=true`).
 
-2026-11-04: client-facing job recovery + reliability (thor handoff T1–T4,
-per `thor_media_mcp_handoff.md` — pipeline-side `/jobs` durable ledger +
-404 hints shipped on Matrix 2026-11-04):
+2026-11-04: client-facing job recovery + reliability (thor handoff T1–T4 —
+pipeline-side `/jobs` durable ledger + 404 hints shipped on Matrix 2026-11-04;
+handoff doc removed 2026-11-21, all items shipped):
 - **T2** — new `media_list_jobs` tool (durable `GET /jobs` with
   status/client/user/flow/since/limit filters; finished jobs survive
   pipeline restarts, live in-flight jobs included) + optional `client`
@@ -304,8 +304,9 @@ stdlib mock with the durable `/jobs` ledger, live pipeline untouched) +
   submit→poll→done with the default `pi` tag.
 
 2026-11-06: `media_render_tab_pdf` **chord-shape coverage + SOLO lane
-rework (Phase 1–3)** (per `enhance_tab_tool.md`, triggered by 4 tabs
-published 2026-11-05 that rendered several chords as "NO SHAPE / n/a"):
+rework (Phase 1–3)** (triggered by 4 tabs published 2026-11-05 that rendered
+several chords as "NO SHAPE / n/a" — planning doc removed 2026-11-21, all
+phases shipped):
 - **Shape library** (`tab_pdf.py` `OPEN_CHORDS`): added the 6th/9th family
   the QA tabs hit (B6/F6/G6) plus D6/E6/A9/D9/G9/Am9 — every entry
   interval-verified. Also corrected 5 pre-existing entries the checker
@@ -454,8 +455,8 @@ LiteLLM `/mcp-rest/tools/list`; Riptide end-to-end with `chord_style=power`
 `docs/thor_validation_log.md`).
 
 2026-10-31: `media_transcribe_song` — song → guitar tab + lyrics (new
-`/transcribe` job flow on the GPU host, per
-`docs/song_transcribe_matrix_handoff.md`). `source` = YouTube URL (yt-dlp
+`/transcribe` job flow on the GPU host — contract in
+`docs/media-mcp-handoff.md`). `source` = YouTube URL (yt-dlp
 audio in-container, then `/upload` — `yt-dlp` added to the Dockerfile,
 `mcp_vision` pattern) | direct http(s) URL (pipeline `/download`) | GPU-host
 media_jobs path | staging file (auto-`/upload`). `instrument` v1 = `guitar`

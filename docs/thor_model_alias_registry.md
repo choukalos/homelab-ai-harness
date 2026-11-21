@@ -19,6 +19,13 @@ No longer live as of 2026-11-20: `hf-sd3` (removed 2026-11-19 — no
 consumer), `matrix-gemma4-moe` and `studio-gemma4-4b` (superseded by the
 `studio-gemma4-26b` OMLX upstream).
 
+**Planned:** `matrix-copywriter` (gemma4:31b on Ollama, `matrix:11434`) —
+Phase 3/4 of the Matrix 2-GPU plan (GPU 1, XOR the media pipeline). Note for
+when it lands: gemma4:31b is a **reasoning model** — short
+`num_predict`/max-tokens budgets return empty content (the text lands in the
+`thinking` field); the alias needs a generous output budget. (From
+`docs/thor_2gpu_grafana_handoff.md`, removed 2026-11-21.)
+
 **Per-key reality (2026-08-28):** the July per-key allowlist table below was
 never implemented. Keys in LiteLLM: master (OPS), public (`llm.choukalos.com`),
 service, and the **memory service key scoped to exactly
