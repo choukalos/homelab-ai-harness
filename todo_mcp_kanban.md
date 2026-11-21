@@ -373,3 +373,14 @@ Per-user LLM spend attribution using the owner columns (Q2 design above):
       validates both user keys; real grooming turn billed to the owner's
       key (usage row stamped; proxy spend lands on the user's key);
       /reports renders the per-user section.
+- [x] **E2E bug fix (commit 699afbc):** live `add_idea` / `list_ideas`
+      crashed with "Unexpected end of JSON input" — the service layer
+      queried through the SQLite table objects on MySQL, and the SQLite
+      `text({mode:"json"})` mappers double-parse the already-parsed JSON
+      objects mysql2 returns (`JSON.parse(String([]))`). Fix:
+      `src/db/tables.ts` driver-conditional table objects (DB_DRIVER switch
+      at module load); the 9 service/agent/orchestrator modules import
+      table objects from there. Regression tests + live re-verify done
+      (grooming turn as chuck: usage row owner=chuck, cost 0.01156275 =
+      LiteLLM spend log for the session exactly; /reports per-user section
+      renders; throwaway project cascade-deleted).

@@ -210,7 +210,7 @@ mcp/servers/kanban/
 └── src/
     ├── main.ts            # bootstrap: config, db, http, mcp, orchestrator
     ├── config.ts          # .env parsing/defaults + startup validation
-    ├── db/                # Drizzle schema + migrations (sqlite/mysql)
+    ├── db/                # Drizzle schema + migrations (sqlite/mysql); tables.ts = driver-conditional table objects (JSON columns map correctly on both drivers)
     ├── services/          # board, projects, ideas, tasks, usage (transport-agnostic)
     ├── http/              # Fastify routes + HTMX templates
     ├── charts.ts          # server-rendered SVG chart helpers

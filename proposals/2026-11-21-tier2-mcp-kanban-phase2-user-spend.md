@@ -103,6 +103,7 @@ status tools are unchanged).
 | tests | config / sessions / db / reports / grooming / orchestrator / http |
 | `compose/compose.mcp.yml` | `USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}` |
 | `.env.example`, `README.md` | `USER_KEYS` + per-user spend docs |
+| `src/db/tables.ts` (+ tests) | **Bug fix found in E2E**: driver-conditional table objects (MySQL JSON double-parse) |
 
 ## Rollout
 
@@ -113,6 +114,42 @@ status tools are unchanged).
       keys; a real grooming turn runs on the owner's key (usage row stamped;
       proxy spend lands on the user's key, not the service key); /reports
       renders the per-user section (per-project/total still all-keys)
+
+## Bug found in E2E: MySQL JSON double-parse (fixed, commit 699afbc)
+
+The first live `add_idea` / `list_ideas` calls failed with
+"Unexpected end of JSON input" even though the inserts persisted. Root cause:
+the service layer queries through the **SQLite** table objects on every
+driver (the MySQL drizzle instance is cast at the service boundary). The
+SQL is compatible (identical column names), but drizzle maps result rows
+through the table's column mappers — and SQLite `text({mode:"json"})`
+`JSON.parse()`s driver values, while **mysql2 returns native JSON columns
+already parsed (objects)**. Double-parse: `JSON.parse(String([])) ===
+JSON.parse("")` → crash. Latent before Phase 2: any full-row read of
+`ideas` / `tasks` (or `projects.media_paths` / `task_events.payload`) on
+MySQL would have failed — the earlier E2E only exercised the JSON-free
+`projects` table.
+
+Fix: `src/db/tables.ts` exports driver-conditional table objects (DB_DRIVER
+switch at module load — the driver is fixed for the process lifetime); the
+9 service/agent/orchestrator modules import table objects from there (types
++ constants still from `schema.ts`). Regression tests pin the mapper
+behavior on both dialects + the env switch.
+
+## Verification record (live, 2026-11-21)
+
+- `list_ideas` / `add_idea` OK on the live MySQL (post-fix; pre-fix both
+  crashed with the double-parse despite successful inserts).
+- Grooming turn as chuck (idea 10, project 3): usage row
+  `role=groom, model=matrix-coder, tokens 4275/1857, cost 0.01156275,
+  owner=chuck`. LiteLLM spend log for the same session: exactly 1
+  completion, $0.01156275, 6132 tokens — the usage row matches the proxy
+  billing exactly, and the spend landed on chuck's key (not the service
+  key).
+- `/reports`: "Per user — rolling 12 months" shows chuck $0.01 (Nov);
+  per-project + total sections show the same $0.01 (all-keys, unchanged).
+- Throwaway project 3 (10 test ideas + 1 usage row) cascade-deleted after
+  verification.
 
 ## Status
 
