@@ -56,3 +56,6 @@ mysql-exporter/.my.cnf
 skills/market_research_brief/references/*.crawls.json
 
 *.bak*
+
+# litellm rollback backups (kept on disk, not in git)
+litellm/config.yml.pre-*
