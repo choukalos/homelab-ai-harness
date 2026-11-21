@@ -937,7 +937,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_GPU_UTIL{instance=\"matrix\"}",
-     "legendFormat": "{{modelName}}",
+     "legendFormat": "GPU {{gpu}}",
      "refId": "A"
     }
    ],
@@ -996,7 +996,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_GPU_TEMP{instance=\"matrix\"}",
-     "legendFormat": "{{modelName}}",
+     "legendFormat": "GPU {{gpu}}",
      "refId": "A"
     }
    ],
@@ -1055,7 +1055,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_FB_USED{instance=\"matrix\"}",
-     "legendFormat": "Used",
+     "legendFormat": "GPU {{gpu}} \u2014 Used",
      "refId": "A"
     }
    ],
@@ -1114,7 +1114,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}",
-     "legendFormat": "{{modelName}}",
+     "legendFormat": "GPU {{gpu}}",
      "refId": "A"
     }
    ],
@@ -1173,7 +1173,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_GPU_UTIL{instance=\"matrix\"}",
-     "legendFormat": "{{modelName}}",
+     "legendFormat": "GPU {{gpu}}",
      "refId": "A"
     }
    ],
@@ -1214,12 +1214,12 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_GPU_TEMP{instance=\"matrix\"}",
-     "legendFormat": "Temp (\u00b0C)",
+     "legendFormat": "GPU {{gpu}} \u2014 Temp (\u00b0C)",
      "refId": "A"
     },
     {
      "expr": "DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}",
-     "legendFormat": "Power (W)",
+     "legendFormat": "GPU {{gpu}} \u2014 Power (W)",
      "refId": "B"
     }
    ],
@@ -1299,12 +1299,12 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_FB_USED{instance=\"matrix\"}",
-     "legendFormat": "Used (MB)",
+     "legendFormat": "GPU {{gpu}} \u2014 Used (MB)",
      "refId": "A"
     },
     {
      "expr": "DCGM_FI_DEV_FB_FREE{instance=\"matrix\"}",
-     "legendFormat": "Free (MB)",
+     "legendFormat": "GPU {{gpu}} \u2014 Free (MB)",
      "refId": "B"
     }
    ],
@@ -1345,7 +1345,7 @@
    "targets": [
     {
      "expr": "avg_over_time(DCGM_FI_DEV_GPU_UTIL{instance=\"matrix\"}[1d])",
-     "legendFormat": "Avg 24h Utilization",
+     "legendFormat": "GPU {{gpu}} \u2014 Avg 24h Util",
      "refId": "A"
     }
    ],

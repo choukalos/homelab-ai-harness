@@ -57,6 +57,13 @@ endpoints are on `matrix:8189` (LAN-only).
 | `qwen21` | keyframes (default) | Qwen-Image-2.1, 25 steps, steps clamped [10,50] | ~30–120 s @1280×720 |
 | `legacy` | keyframes (fast) | Qwen-Image-2512 GGUF + Lightning, steps=4 | seconds |
 
+> **VRAM gate note (2026-11-21):** the pipeline host is 2-GPU since 2026-11-14 —
+> the media pipeline runs on the dedicated **RTX PRO 4000 24GB** (GPU 1,
+> `device_ids: ['1']`, XOR the Ollama copywriter); GPU 0 (RTX PRO 5000 72GB)
+> is the vLLM daily-LLM card. The resolution ceilings above (e.g. wan14b
+> 720p → 400, measured 2026-10-25) predate the 2nd card — re-verify against
+> the 24GB card before relaxing them.
+
 ## Paths & retention
 
 - GPU-host artifacts: `/home/chuck/data/comfyui/run/media_jobs/<job_id>/mp_<job_id>_00001.{mp4,png,wav,…}` — **14-day retention**.

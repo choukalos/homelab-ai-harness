@@ -1442,7 +1442,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_POWER_USAGE{instance=\"matrix\"}",
-     "legendFormat": "W",
+     "legendFormat": "GPU {{gpu}} (W)",
      "refId": "A"
     }
    ],
@@ -1475,7 +1475,7 @@
      "mode": "multi"
     }
    },
-   "description": "Live since the DCGM fix (2026-09-09). Idle \u2248 14 W; spikes to ~300 W under diffusion/audio load."
+   "description": "GPU 0 (RTX PRO 5000 72GB, daily LLM) + GPU 1 (RTX PRO 4000 24GB, media/copywriter). Idle \u2248 14 W/card; spikes to ~300 W under diffusion/audio load (GPU 1). Live since the DCGM fix (2026-09-09); per-GPU since 2026-11-14."
   },
   {
    "id": 44,
@@ -1494,7 +1494,7 @@
    "targets": [
     {
      "expr": "DCGM_FI_DEV_GPU_UTIL{instance=\"matrix\"}",
-     "legendFormat": "%",
+     "legendFormat": "GPU {{gpu}} (%)",
      "refId": "A"
     }
    ],

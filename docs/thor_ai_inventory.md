@@ -55,10 +55,14 @@
   resolve to 127.0.1.1 from inside containers); 12 `memory_*` series live.
   **Matrix remote scrapes (2026-09-09):** vLLM engine metrics (`matrix:8000`,
   operational tokens/latency), media-pipeline work meter (`matrix:8189`,
-  per-user `media_*` cost/work series), DCGM (`matrix:9400`, GPU power/util —
-  live again after the DCGM 3.x pin fix). New **"AI Work & Spend"** Grafana
-  dashboard (`/d/ai-work-spend`): per-user LLM + media cost, total work $,
-  GPU $ & payback. See `METRICS.md` ("Media Work Metering (v2)").
+  per-user `media_*` cost/work series), DCGM (`matrix:9400`, GPU
+  power/util/VRAM/temp/XID **per GPU index** — `gpu="0"` RTX PRO 5000 72GB
+  (daily LLM) + `gpu="1"` RTX PRO 4000 24GB (media/copywriter), 2-GPU since
+  2026-11-14; live again after the DCGM 3.x pin fix). New **"AI Work &
+  Spend"** Grafana dashboard (`/d/ai-work-spend`): per-user LLM + media cost,
+  total work $, GPU $ & payback (per-GPU panels since 2026-11-21; dedicated
+  **"Matrix GPUs (2-GPU)"** dashboard at `/d/matrix-2gpu`). See `METRICS.md`
+  ("Media Work Metering (v2)").
 - **Backups:** `scripts/backup-memory.sh` (.env copy + `mem0_memories` snapshot,
   restore-tested) + git for config/code. The July "backup NOT DONE" gap is closed.
 - **MCP servers (10 live):** search (3), crawl (1), knowledge (11, v2 Qdrant

@@ -85,7 +85,9 @@ Gemma 26B is the sole alternative — for family chat, copywriting, translations
 
 ## 70B-72B Model Recommendation for `experiment` Alias
 
-You have 72GB VRAM on Matrix. For a 70-80B class model at INT4 quantization, here are the top candidates:
+You have 72GB VRAM on Matrix's LLM card (GPU 0, RTX PRO 5000 — the 24GB
+RTX PRO 4000 on GPU 1 runs the media pipeline / copywriter and is not an
+LLM card). For a 70-80B class model at INT4 quantization, here are the top candidates:
 
 | Model | Params | VRAM at INT4 (weights) | VRAM with KV headroom (est.) | MMLU | MATH | SWE-bench | License | Notes |
 |---|---|---|---|---|---|---|---|---|

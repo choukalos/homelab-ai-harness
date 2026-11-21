@@ -66,8 +66,9 @@ Runs:
 - Large local models
 - Image/video generation
 
-Current GPU:
-- RTX 5000 72GB
+Current GPUs (2026-11-14 — 2nd card added for the media pipeline):
+- GPU 0: RTX PRO 5000 72GB — daily LLM (vLLM qwen38)
+- GPU 1: RTX PRO 4000 24GB — media pipeline XOR Ollama copywriter (`device_ids: ['1']`)
 
 ---
 
