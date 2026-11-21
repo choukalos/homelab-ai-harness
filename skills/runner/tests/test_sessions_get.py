@@ -203,6 +203,21 @@ r = client.get("/api/sessions/ingests", headers=CHUCK)
 check("literal /ingests route wins over {session_id}",
       r.status_code == 503 and "index unavailable" in r.text.lower(), r.text[:120])
 
+print("== read cap (SSE 1 MiB event limit) ==")
+# 600 KB transcript: over the 512 KiB read cap, under the 2 MiB ingest cap
+BIG_LINE = '{"role":"user","content":"' + "y" * 900 + '"}'
+BIG = (BIG_LINE + "\n") * 600  # ~600 KB
+r = ingest("sess-big-read", BIG, CHUCK)
+check("chuck ingests 600 KB transcript", r.get("status") == "stored", str(r)[:200])
+r = client.get("/api/sessions/sess-big-read", headers=CHUCK)
+check("full read-back over cap -> 413 with paging hint",
+      r.status_code == 413 and "narrow" in r.text and "total_lines" in r.text, r.text[:160])
+r = client.get("/api/sessions/sess-big-read", params={"line_start": 1, "line_end": 100}, headers=CHUCK)
+j = r.json()
+check("narrow slice under cap -> 200",
+      r.status_code == 200 and j.get("line_range") == [1, 100] and j.get("total_lines") == 600,
+      r.text[:160])
+
 print()
 print(f"{'PASS' if FAIL == 0 else 'FAIL'}: {PASS} passed, {FAIL} failed")
 if FAILURES:

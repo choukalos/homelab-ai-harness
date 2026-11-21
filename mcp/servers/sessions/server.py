@@ -301,7 +301,10 @@ def sessions_list(
         "line_start/line_end are given; split sessions are read as the "
         "parts concatenated in part order) plus a citation header: "
         "{citation, session_id, part, line_range, total_lines, "
-        "sha256_prefix, bytes}. Citation format: "
+        "sha256_prefix, bytes}. The returned content is capped at 512 KiB "
+        "(413 above it) — for long transcripts, page with narrow "
+        "line_start/line_end ranges and use total_lines to plan the pages. "
+        "Citation format: "
         "session:{user_id}/{session_id}#L{start}-L{end} (single file) or "
         "#p{N}L{start}-L{end} (split — N is the part holding the first "
         "returned line; line numbers are over the concatenated stream). "
@@ -326,7 +329,9 @@ def sessions_get(
 
     Returns:
         {user_id, session_id, citation, part, line_range, total_lines,
-        sha256_prefix, bytes, content}.
+        sha256_prefix, bytes, content}. Content is capped at 512 KiB — a
+        larger range is a 413 with a paging hint; narrow the range and
+        page using total_lines.
     """
     params: dict = {}
     if line_start is not None:

@@ -41,6 +41,13 @@ SESSIONS_ROOT = Path(os.environ.get("SESSIONS_DATA_ROOT", "/data/sessions"))
 # session jsonl; longer sessions are split (session_id.partN convention).
 SESSION_TRANSCRIPT_MAX_BYTES = 2 * 1024 * 1024
 
+# Read-back content cap: the LiteLLM proxy's MCP SSE client (httpx2) raises
+# on any single SSE event > 1 MiB, and an MCP tool result is one SSE event —
+# so a full 2 MiB transcript can never traverse the proxy path. Cap the
+# returned content well below that (default 512 KiB) and let callers page
+# with narrower line ranges. Env-tunable (SESSIONS_READ_MAX_BYTES).
+SESSIONS_READ_MAX_BYTES = int(os.environ.get("SESSIONS_READ_MAX_BYTES", str(512 * 1024)))
+
 # session_id goes into a file name — restrict to a safe charset (the
 # split convention "session_id.partN" needs dots). ``\Z`` (not ``$``) so a
 # trailing newline can never sneak through.

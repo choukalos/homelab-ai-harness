@@ -1742,6 +1742,17 @@ def sessions_get(
         # Not stored, or stored under another user: identical 404 (no leak).
         raise HTTPException(status_code=404, detail="Session not found")
     start, end = result["line_range"]
+    content_bytes = len(result["content"].encode("utf-8"))
+    if content_bytes > sessions.SESSIONS_READ_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"slice too large ({content_bytes} bytes > "
+                f"{sessions.SESSIONS_READ_MAX_BYTES}-byte read cap); narrow "
+                f"line_start/line_end and page (total_lines="
+                f"{result['total_lines']})"
+            ),
+        )
     anchor = f"#L{start}-L{end}" if result["part"] == 0 else f"#p{result['part']}L{start}-L{end}"
     return {
         "user_id": user_id,
@@ -1751,7 +1762,7 @@ def sessions_get(
         "line_range": result["line_range"],
         "total_lines": result["total_lines"],
         "sha256_prefix": result["sha256_prefix"],
-        "bytes": len(result["content"].encode("utf-8")),
+        "bytes": content_bytes,
         "content": result["content"],
     }
 

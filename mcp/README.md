@@ -13,6 +13,7 @@ MCP (Model Context Protocol) servers provide reusable, read-mostly tools that sk
 | [stocks](servers/stocks/) | | Financial data, market lookups |
 | [homelab_status](servers/homelab_status/) | | Homelab infrastructure health and metrics |
 | [media](servers/media/) | | Media asset lookup (LAN-only) |
+| [sessions](servers/sessions/) | | Session transcript ingest + owner-scoped read-back (mcp_sessions Phase 1, 2026-11-21) |
 | [home](servers/home/) | | Home automation/status (LAN-only) |
 
 ## Deferred

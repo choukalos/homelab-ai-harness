@@ -2,7 +2,28 @@
 
 - slug: tier2-mcp-sessions-remote-ingest
 - date: 2026-11-19
-- status: open
+- status: applied (2026-11-21 — Phase 1 live + verified end-to-end through the
+  LiteLLM proxy. skill-runner: `GET /api/sessions/{session_id}` (owner-only,
+  404 on non-owner, line slicing, part concatenation, citation header) +
+  user-scoped `GET /api/sessions/ingests`; 48-check test suite green (existing
+  238-check suite unregressed). mcp-sessions: 13th server (SSE :8000 ai-net),
+  `sessions_ingest` (server-side ≤2 MiB split, 20 MiB cap, 30/h rate limit),
+  `sessions_list`, `sessions_get`; 25-check splitter suite green. Compose
+  service + LiteLLM registration (`extra_headers: [Authorization]`) +
+  `family-mcp-full` access group updated to 13 servers (PUT
+  /v1/access_group/07c1acf8-…). E2E through the proxy with chuck's family key:
+  ingest → stored, re-call → duplicate, list, get (slice + full), and a real
+  2.58 MB / 1005-line session split into 2 parts and read back verbatim in 7
+  pages. Discovered + fixed: the proxy's MCP SSE client (httpx2) raises on any
+  single SSE event > 1 MiB, so a full 2 MiB transcript can never traverse the
+  proxy path — read-back content is now capped at 512 KiB
+  (SESSIONS_READ_MAX_BYTES, 413 + paging hint above it). session-sync skill:
+  remote mode documented (verbatim sessions_ingest, no curl/splitting). Docs:
+  thor_mcp_architecture.md (13 servers / 92 tools) + mcp/README.md row.
+  Pending (data step, not code): the stranded 2026-11-16 Mac transcript
+  (2026-11-16T21-16-06-464Z…, 585 KB) — sync from the Mac with a single
+  sessions_ingest call (session-sync remote mode); thor has no SSH path to
+  the Mac. harness_reflection will see the ingested sessions next weekly run.)
 - tier: 2
 - target user: chuck
 - source: workspace/ideas/2026-11-16-mcp-sessions-ingest.md (full design; open question 1 resolved by this review)

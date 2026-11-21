@@ -61,11 +61,12 @@ refers to the reflection pipeline's own roles).
   reloaded on the Mac Studio, `/v1/models` + proxy chat completion verified
   200; capability probes run and `litellm/config.yml` flags updated to match,
   staged pending a litellm-proxy restart)
-- **tier2:** mcp-sessions-remote-ingest (open) ·
-  pi-subagents-timeout-handling (open — source repo not on thor; locate
+- **tier2:** pi-subagents-timeout-handling (open — source repo not on thor; locate
   first) · matrix-media-pipeline-improvements (in progress — parked on
   matrix cooperation; ⚠️ work host: matrix, not thor; self-contained
   handoff spec at `docs/matrix_media_pipeline_improvements_handoff.md`)
+  · mcp-sessions-remote-ingest (applied 2026-11-21 — Phase 1 live + E2E
+  verified through the proxy; see archive note)
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
   applied 2026-11-20; H3 `/model/info` restriction open pending feature
   check; H4 Dylan scoping deferred by design) ·
@@ -76,4 +77,5 @@ refers to the reflection pipeline's own roles).
   media-film-tool-names, media-film-production-lessons (all applied) +
   cloudflare-524-read-timeout (dismissed — no CF Enterprise plan) +
   2026-11-20: recent-activity-slow-run-optimization, memory-dedupe-supersede
-  (both applied) + 2026-11-21: macstudio-omlx-restart (applied)
+  (both applied) + 2026-11-21: macstudio-omlx-restart (applied) +
+  mcp-sessions-remote-ingest (applied — Phase 1)

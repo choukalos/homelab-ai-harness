@@ -11,6 +11,32 @@ Works on any pi that can reach thor (homelab and Mac). This skill only reads
 the local session file and POSTs to the skill-runner — it never touches
 other services.
 
+## Remote mode (preferred — mcp_sessions, 2026-11-21)
+
+If the `sessions_ingest` tool is available (the `mcp_sessions` server, routed
+through the LiteLLM proxy — the only surface reachable from a remote
+machine), use it: call `sessions_ingest` with the **verbatim transcript**
+(raw .jsonl contents), the `session_id` (file basename without `.jsonl`),
+and `host` (this machine's hostname). The server splits long transcripts
+into ≤2 MiB parts automatically — **no base64, no curl, no manual
+splitting, no 2 MiB bookkeeping**.
+
+- `status: "stored"` → success. Report the part count + byte count.
+- `status: "duplicate"` → already on the homelab (idempotent re-sync).
+- `401`-style error → identity problem (key not mapped); fall back to the
+  LAN curl path below if on the LAN, otherwise tell the user.
+- Rate limit ~30 ingests/hour — batch at most a few sessions per hour.
+
+Reading back: `sessions_get(session_id, line_start?, line_end?)` returns the
+stored transcript (or a line slice) with a verifiable citation
+(`session:{user_id}/{session_id}#L{start}-L{end}` / `#p{N}L{start}-L{end}`).
+Content is capped at 512 KiB per call (413 above it) — page long
+transcripts with narrow line ranges; `sessions_list()` shows what is
+stored (metadata only).
+
+The LAN curl path below remains as the fallback when the MCP tools are not
+available (e.g. the proxy is down or this pi has no MCP access).
+
 ## Privacy rules (read first)
 
 - **User-initiated only.** Never auto-upload mid-session, and never upload
@@ -96,5 +122,6 @@ report how many parts were stored.
 - No auto-upload, ever — user-initiated only, with the one-time warning.
 - No uploads on behalf of another identity — the transcript lands under
   the caller's own user_id.
-- This skill never touches services other than the skill-runner ingest
-  endpoint (no restarts, no reboots).
+- This skill never touches services other than the skill-runner session
+  endpoints (via the `mcp_sessions` tools or the direct ingest route — no
+  restarts, no reboots).

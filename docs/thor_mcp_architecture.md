@@ -2,19 +2,22 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 12 servers below are live in LiteLLM (SSE transport,
+> Status: **Implemented** — all 13 servers below are live in LiteLLM (SSE transport,
 > `ai-net`, 71 tools as of 2026-09-20 — 64 + 5 new `mcp_knowledge` digest tools
 > (kb_digest, kb_get_pages, kb_digest_store, kb_digest_get, kb_digest_list) + 2
 > `mcp_memory` tools; `mcp_memory` added 2026-09-02 with the memory project;
 > transport migrated streamable-http → SSE 2026-09-20). This doc is the design
 > baseline; the "Current state" notes reflect the live system.
 
-**Current state (2026-11-20)**
-- 12 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
+**Current state (2026-11-21)**
+- 13 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
   `mcp_media` (25), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10) — **89 tools total** (verified live
-  2026-11-20: LiteLLM `/mcp-rest/tools/list` + per-server `tools/list`).
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3) — **92 tools total**
+  (verified live 2026-11-21: LiteLLM `/mcp-rest/tools/list` + per-server
+  `tools/list`). `mcp_sessions` added 2026-11-21 (mcp_sessions Phase 1 —
+  remote session ingest + owner-scoped read-back; `sessions_ingest`,
+  `sessions_list`, `sessions_get`).
 - **SSE transport (2026-09-20):** all servers now run FastMCP over the SSE
   transport (`GET /sse`; the streamable-http `/mcp` endpoint is gone). LiteLLM
   connects with `transport: sse`. The skill runner's direct streamable-http MCP
@@ -359,7 +362,7 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 12 servers run as containers on `ai-net` (SSE transport,
+- **Implemented.** All 13 servers run as containers on `ai-net` (SSE transport,
   path `/sse`, port 8000)
   and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`).
   **MCP key access — superseded 2026-11-15 (security Phase 2):** the
