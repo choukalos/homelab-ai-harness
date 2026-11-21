@@ -1,0 +1,29 @@
+# mcp_kanban — LiteLLM proxy MCP registration (homelab).
+#
+# Registers the mcp_kanban container's MCP endpoint (POST /mcp, streamable
+# HTTP) with the LiteLLM proxy, so LLM clients can drive the board by
+# conversation. Applied as the `mcp_kanban` entry under `mcp_servers:` in
+# litellm/config.yml (see the live config header for the applied date).
+#
+# Transport: `http` = MCP streamable HTTP (LiteLLM MCPTransport.http). The
+# kanban app serves stateless streamable HTTP at POST /mcp (fresh
+# server + transport per request), so no SSE endpoint is needed.
+#
+# Identity threading (same pattern as mcp_sessions / mcp_skills): the
+# caller's LiteLLM key is forwarded to the container via the
+# Authorization header (extra_headers: [Authorization]) and the container
+# scopes the tool set per key (MCP_KEY_CAPABILITIES). The kanban key
+# (LITELLM_API_KEY in the container) always gets the full tool set.
+#
+# NOTE: LiteLLM v1.104.0 supports `transport: http` (verified in the
+# running image: litellm.types.mcp.MCPTransport = {sse, http, stdio}).
+# Tool names are exposed to clients as `mcp_kanban-<tool>` (server-name
+# prefix + "-" separator), e.g. `mcp_kanban-list_projects`.
+
+mcp_servers:
+  mcp_kanban:
+    transport: http
+    url: http://mcp_kanban:3000/mcp
+    extra_headers:
+      - Authorization
+    timeout: 7200

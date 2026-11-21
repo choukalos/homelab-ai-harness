@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# environment (secrets; see .env.example)
+.env
+.env.local
+.env.*.local
+
+# runtime data (DB, Pi session files, harness clone, mission briefs)
+data/
+
+# pi long-task scratch state
+tmp/
+
+# workspace artifacts (task-<id> dirs, groom-<idea> scratch, clones)
+workspace/
+task-*/
+groom-*/
+
+# logs & OS noise
+*.log
+.DS_Store
