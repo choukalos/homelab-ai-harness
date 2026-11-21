@@ -281,6 +281,62 @@ services:
     networks:
       - ai-net
 
+  # --- Kanban (mcp_kanban): LLM task queue + grooming + execution ----------
+  # Stateful service (not a thin client): Fastify GUI + REST + MCP
+  # (streamable HTTP at /mcp) + in-process Pi agent sessions + orchestrator.
+  # Web UI is LAN-only (bound to THOR_IP, no auth — LAN trust).
+  # MySQL on Thor: DB ai_kanban pre-created (chuck), app runs table migrations.
+  mcp_kanban:
+    build:
+      context: ../mcp/servers/kanban
+    container_name: mcp_kanban
+    # Run as chuck (uid/gid 1000): /data writes must be chuck-owned.
+    user: "1000:1000"
+    # Compose v5 project dir = compose/ (no .env there) — load the repo .env
+    # explicitly so ${KANBAN_*} / ${LITELLM_API_KEY} interpolate (searxng pattern).
+    env_file:
+      - ../.env
+    environment:
+      # LiteLLM proxy (models + MCP tools) — internal ai-net URL.
+      - LITELLM_BASE_URL=http://litellm-proxy:4000/v1
+      # Service key: outbound LLM calls AND the "kanban key" (full MCP set).
+      # Phase 2: per-user key threading (todo_mcp_kanban.md Q2).
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      # Model + concurrency: .env-tunable (KANBAN_MODEL / KANBAN_CONCURRENT_TASKS).
+      - MODEL=${KANBAN_MODEL:-matrix-coder}
+      - CONCURRENT_TASKS=${KANBAN_CONCURRENT_TASKS:-1}
+      # git push auth (deploy stage) — unset until chuck provides it.
+      - GITHUB_TOKEN=${KANBAN_GITHUB_TOKEN:-}
+      # MySQL on Thor (DB pre-created; app runs migrations — tables only).
+      - DB_DRIVER=mysql
+      - MYSQL_HOST=${MYSQL_DB_HOST:-thor.local}
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${KANBAN_DB_USER}
+      - MYSQL_PASSWORD=${KANBAN_DB_PASS}
+      - MYSQL_DATABASE=${KANBAN_DB_NAME}
+      # Per-role thinking levels (app defaults).
+      - GROOM_THINKING=xhigh
+      - TASK_THINKING=medium
+      - QA_THINKING=xhigh
+      - SUMMARY_THINKING=medium
+      # Caller-key scoping (tails of LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
+      - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
+    # LAN-only web UI (presenton pattern: LAN-IP bind, not 0.0.0.0).
+    ports:
+      - "${THOR_IP:-192.168.4.54}:3000:3000"
+    volumes:
+      - /home/chuck/data/ai-kanban:/data
+      - /home/chuck/workspace:/workspace
+    restart: unless-stopped
+    networks:
+      - ai-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:

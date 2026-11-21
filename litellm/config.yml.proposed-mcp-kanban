@@ -1,0 +1,251 @@
+# PROPOSED (2026-11-21) — mcp_kanban registration (proposals/2026-11-21-tier2-mcp-kanban.md).
+# Base = live config.yml as of 2026-11-21 + ONE change: the `mcp_kanban` entry
+# under mcp_servers (14th server; transport: http — streamable HTTP, unlike
+# the SSE servers). Swap to make live: copy over config.yml and
+# `docker compose -f compose/compose.ai-core.yml up -d litellm`
+# (restart severs active proxy sessions — pick a quiet moment).
+#
+# LIVE since 2026-11-19 — tier1-litellm-model-config-pass (proposals/2026-11-19-tier1-litellm-model-config-pass.md)
+# 2026-11-21: studio-gemma4-26b capability flags verified against the reloaded
+# OMLX upstream (see model_info comment) — supports_function_calling/response_schema
+# raised to true. Requires `docker compose -f compose/compose.ai-core.yml up -d litellm`
+# to take effect (restart severs active proxy sessions — needs explicit approval).
+model_list:
+  # -- Gemma-4 via OMLX on Mac Studio M1 (Backup LLM) -----------------------
+  - model_name: studio-gemma4-26b
+    model_info:
+      mode: chat
+      # VERIFIED 2026-11-21 against the reloaded OMLX upstream
+      # (macstudio:8000, /v1/models → 262144 max_model_len):
+      #   - tool calling: WORKS (finish_reason tool_calls, well-formed call)
+      #   - response_format json_schema: WORKS (schema-conformant JSON)
+      #   - image_url content: 500 from OMLX (text-only MLX model) → no vision
+      #   - context: 128k input + 16k output = 144384 < 262144 (conservative,
+      #     valid; upstream headroom left for prompt+completion safety)
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      supports_function_calling: true   # probed 2026-11-21
+      supports_vision: false            # probed 2026-11-21 (500, text-only)
+      supports_reasoning: false       # Gemma has no native reasoning tokens
+      supports_response_schema: true    # probed 2026-11-21
+      input_cost_per_token: 0.00000025
+      output_cost_per_token: 0.000002
+      cache_creation_input_token_cost: 0.000000025
+      cache_read_input_token_cost: 0.0000000025
+    litellm_params:
+      model: openai/gemma-4-26B-A4B-it-QAT-MLX-4bit
+      api_base: http://macstudio:8000/v1
+      api_key: "unused"
+      num_retries: 2
+
+  # ── Qwen3.6-27B via vLLM (port 8000) ─────────────────────────────
+  - model_name: matrix-coder
+    model_info:
+      mode: chat
+      # Cap max output at 32k. Without this, LiteLLM derives it from the
+      # upstream vLLM max_model_len (196608) and clients (e.g. pi) pick up
+      # a 192k output budget, which is nonsensical and breaks long-prompt
+      # sessions (max_tokens + prompt > context window).
+      max_input_tokens: 196608
+      max_output_tokens: 32768
+      # Capability tags — verified live via the proxy 2026-11-19 (re-probed
+      # after the config incident):
+      #   supports_function_calling:          tool call returned tool_calls
+      #   supports_parallel_function_calling: 2 parallel tool calls in one turn
+      #   supports_vision:                    solid-color + split-layout image
+      #     tests passed — this deployment SEES images (not text-only)
+      #   supports_reasoning:                 reasoning_content present (Qwen3
+      #     thinking mode; vLLM emits reasoning tokens)
+      #   supports_response_schema:           response_format json_schema honored
+      #   supports_prompt_caching:            vLLM automatic prefix caching
+      #     (vllm-0.30.0)
+      supports_function_calling: true
+      supports_parallel_function_calling: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_response_schema: true
+      supports_prompt_caching: true
+      input_cost_per_token: 0.00000075
+      output_cost_per_token: 0.0000045
+      cache_creation_input_token_cost: 0.000000075
+      cache_read_input_token_cost: 0.0000000075
+    litellm_params:
+      model: openai/qwen38-27b
+      api_base: http://matrix:8000/v1
+      api_key: "unused"
+      num_retries: 2
+      # Make the "Backup LLM" real: fail over to gemma when matrix vLLM is
+      # down. enable_pre_call_checks (router_settings) skips the dead
+      # deployment while OMLX is down, so this is inert until macstudio:8000
+      # is back (tier1-macstudio-omlx-restart). Caveat: cross-model fallback
+      # changes behavior (homelab availability > model fidelity — accepted).
+      fallbacks:
+        - {model: studio-gemma4-26b}
+
+  # ── Qwen3.6-27B, thinking OFF — fast mode for straightforward tasks ──
+  # Qwen3 thinking is BINARY (reasoning_effort is ignored by the model): a
+  # session running PI_REASONING_LEVEL=off still billed 2.57M reasoning
+  # tokens (~$11.60) on matrix-coder (2026-11-17). enable_thinking:false is
+  # verified end-to-end via client extra_body (0 reasoning tokens vs 52–53
+  # baseline). Config-level extra_body is documented for LiteLLM — confirm
+  # with one test request after the next proxy restart: usage.
+  # completion_tokens_details.reasoning_tokens should be 0.
+  - model_name: matrix-coder-fast
+    model_info:
+      mode: chat
+      max_input_tokens: 196608
+      max_output_tokens: 32768
+      supports_function_calling: true
+      supports_parallel_function_calling: true
+      supports_vision: true
+      supports_reasoning: false       # thinking is baked off for this alias
+      supports_response_schema: true
+      supports_prompt_caching: true
+      input_cost_per_token: 0.00000075
+      output_cost_per_token: 0.0000045
+      cache_creation_input_token_cost: 0.000000075
+      cache_read_input_token_cost: 0.0000000075
+    litellm_params:
+      model: openai/qwen38-27b
+      api_base: http://matrix:8000/v1
+      api_key: "unused"
+      num_retries: 2
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  # ── Nomic embed-text — mcp_knowledge (KB search/digests;
+  #    EMBED_MODEL=embeddings in compose.mcp.yml) ──
+  - model_name: embeddings
+    model_info:
+      mode: embedding
+      max_input_tokens: 8192          # nomic-embed-text context
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000001
+      cache_creation_input_token_cost: 0.0000001
+      cache_read_input_token_cost: 0.00000001
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://matrix:11434
+      api_key: "unused"
+      num_retries: 2
+      drop_params: true
+
+  # ── Nomic embed-text — long-term memory (Mem0 via skill-runner).
+  #    Versioned alias: a model swap must NOT mix old/new vector spaces. ──
+  - model_name: homelab-embedding-v1
+    model_info:
+      mode: embedding
+      max_input_tokens: 8192          # nomic-embed-text context
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000001
+      cache_creation_input_token_cost: 0.0000001
+      cache_read_input_token_cost: 0.00000001
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://matrix:11434
+      api_key: "unused"
+      num_retries: 2
+      drop_params: true
+
+general_settings:
+  master_key: "os.environ/LITELLM_MASTER_KEY"
+  database_url: "os.environ/LITELLM_DATABASE_URL"
+  debug_level: "WARNING"
+  store_model_in_db: true
+  mcp_client_timeout: 30
+  disable_spend_logs: false
+  disable_spend_updates: false
+
+litellm_settings:
+  callbacks:
+    - prometheus
+  require_auth_for_metrics_endpoint: false
+
+router_settings:
+  enable_pre_call_checks: true
+  num_retries: 0
+
+mcp_servers:
+  mcp_search:
+    transport: sse
+    url: http://mcp_search:8000/sse
+    timeout: 7200
+
+  mcp_knowledge:
+    transport: sse
+    url: http://mcp_knowledge:8000/sse
+    timeout: 7200
+
+  mcp_crawl:
+    transport: sse
+    url: http://mcp_crawl:8000/sse
+    timeout: 7200
+
+  mcp_filesystem_readonly:
+    transport: sse
+    url: http://mcp_filesystem_readonly:8000/sse
+    timeout: 7200
+
+  mcp_mysql:
+    transport: sse
+    url: http://mcp_mysql:8000/sse
+    timeout: 7200
+
+  mcp_datahub:
+    transport: sse
+    url: http://mcp_datahub:8000/sse
+    timeout: 7200
+
+  mcp_homelab_status:
+    transport: sse
+    url: http://mcp_homelab_status:8000/sse
+    timeout: 7200
+
+  mcp_filesystem:
+    transport: sse
+    url: http://mcp_filesystem:8000/sse
+    timeout: 7200
+
+  mcp_media:
+    transport: sse
+    url: http://mcp_media:8000/sse
+    timeout: 7200
+
+  mcp_vision:
+    transport: sse
+    url: http://mcp_vision:8000/sse
+    timeout: 7200
+
+  mcp_memory:
+    transport: sse
+    url: http://mcp_memory:8000/sse
+    timeout: 7200
+
+  mcp_sessions:
+    transport: sse
+    url: http://mcp_sessions:8000/sse
+    extra_headers:
+      - Authorization
+    timeout: 7200
+
+  mcp_skills:
+    transport: sse
+    url: http://mcp_skills:8000/sse
+    extra_headers:
+      - Authorization
+    timeout: 7200
+
+  # mcp_kanban — LLM task queue + grooming + execution (14th server,
+  # 2026-11-21). Streamable HTTP (transport: http) at POST /mcp — the only
+  # non-SSE MCP entry; verified supported in LiteLLM v1.104.0
+  # (MCPTransport = {sse, http, stdio}). Caller key forwarded via
+  # Authorization for per-key tool scoping (MCP_KEY_CAPABILITIES in the
+  # container: chuck=admin, dylan=control). Tools surface as
+  # mcp_kanban-<tool> (e.g. mcp_kanban-list_projects).
+  mcp_kanban:
+    transport: http
+    url: http://mcp_kanban:3000/mcp
+    extra_headers:
+      - Authorization
+    timeout: 7200

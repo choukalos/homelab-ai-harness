@@ -14,6 +14,7 @@ MCP (Model Context Protocol) servers provide reusable, read-mostly tools that sk
 | [homelab_status](servers/homelab_status/) | | Homelab infrastructure health and metrics |
 | [media](servers/media/) | | Media operations via the GPU-host media-pipeline on Matrix (27 tools — generation, edit, assemble, voice, transcribe, job queue mgmt) |
 | [sessions](servers/sessions/) | | Session transcript ingest + owner-scoped read-back (mcp_sessions Phase 1, 2026-11-21) |
+| [kanban](servers/kanban/) | | LLM task queue + grooming + execution (stateful; board UI LAN-only at `thor.local:3000`; MySQL on Thor; MCP key scoping chuck=admin / dylan=control — 2026-11-21) |
 | [home](servers/home/) | | Home automation/status (LAN-only) |
 
 ## Deferred

@@ -68,28 +68,35 @@ already per-key). Phase 2 = per-user spend attribution. Adding the
 attribution data available from day one — do it in Phase 1 if low-risk, else
 start Phase 2 with the schema change.
 
-## MySQL on Thor (decision 7)
+## MySQL on Thor (decision 7) — DONE 2026-11-21
 
 App runs the table migrations itself; the **DB must pre-exist** and the user
 needs privileges on `ai_kanban.*` only (homelab convention, cf. `AI_DB_*`).
 
-**chuck action item** — run on Thor (`mysql -u root -p`):
+**chuck action item — completed 2026-11-21**: DB `ai_kanban` + user
+`ai-kanban` created on Thor (MySQL bound to `192.168.4.54:3306`, reached via
+`thor.local` — the `MYSQL_DB_HOST` value); `KANBAN_DB_PASS` set in `.env`.
+
+Reference (as executed — user named `ai-kanban`, not `kanban`):
 
 ```sql
 CREATE DATABASE ai_kanban CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'kanban'@'%' IDENTIFIED BY '<strong-password>';
-GRANT ALL PRIVILEGES ON ai_kanban.* TO 'kanban'@'%';
+CREATE USER 'ai-kanban'@'%' IDENTIFIED BY '<strong-password>';
+GRANT ALL PRIVILEGES ON ai_kanban.* TO 'ai-kanban'@'%';
 FLUSH PRIVILEGES;
 ```
 
-Then set `KANBAN_DB_PASS` in `.env` (user `kanban`, DB `ai_kanban`, host
-`thor.local` — already the `MYSQL_DB_HOST` value; containers reach it the
-same way `mcp_mysql` does).
+`KANBAN_DB_PASS` set in `.env` (host `thor.local` — the `MYSQL_DB_HOST`
+value; containers reach it the same way `mcp_mysql` does).
 
 ## Chuck action items (in order)
 
-1. **MySQL**: create `ai_kanban` DB + `kanban` user on Thor (SQL above); set
-   `KANBAN_DB_PASS` in `.env`.
+1. **MySQL**: ~~create `ai_kanban` DB + `kanban` user on Thor (SQL above);
+   set `KANBAN_DB_PASS` in `.env`.~~ **DONE 2026-11-21** — DB `ai_kanban` +
+   user `ai-kanban` created on Thor (privileges on `ai_kanban.*` only),
+   `KANBAN_DB_PASS` set in `.env`; connectivity verified from thor
+   (`mysql -h 192.168.4.54 -u ai-kanban` OK; DB visible, empty — the app
+   ran its migrations at first boot: 7 tables).
 2. **GitHub token**: set `KANBAN_GITHUB_TOKEN` in `.env` (repo scope — the
    deploy stage pushes task branches / blog posts / media).
 3. **LiteLLM swap**: replace `litellm/config.yml` with
@@ -124,27 +131,50 @@ same way `mcp_mysql` does).
       `KANBAN_MODEL`, `KANBAN_CONCURRENT_TASKS`,
       `KANBAN_MCP_KEY_CAPABILITIES=faxfoUszvw:admin;JAS3o6tu0A:control`,
       `KANBAN_GITHUB_TOKEN` (empty — action), `KANBAN_DB_USER/DB_PASS/DB_NAME`
-      (pass empty — action)
+      (pass filled 2026-11-21 — chuck created DB `ai_kanban` + user
+      `ai-kanban` on Thor with privileges; connectivity verified from thor:
+      `mysql -h 192.168.4.54 -u ai-kanban` OK, DB visible)
+- [x] **compose** (2026-11-21): `mcp_kanban` added to `compose/compose.mcp.yml`
+      (MySQL + KANBAN_* mapping + `env_file: ../.env` — see the
+      Compose-v5-interpolation note in Verification below)
+- [x] **Proposed litellm config** (2026-11-21): `litellm/config.yml.proposed-mcp-kanban`
+      = full copy of live config + the `mcp_kanban` entry (14th server,
+      `transport: http`). Live config untouched — chuck swaps it in (action item 2)
+- [x] **Docs** (2026-11-21): kanban rows in `mcp/README.md` + `mcp/servers/README.md`
+- [x] **Proposal doc** (2026-11-21): `proposals/2026-11-21-tier2-mcp-kanban.md`
+- [x] **Build verification** (2026-11-21): `docker compose -f
+      compose/compose.mcp.yml -p ai-mcp build mcp_kanban` — clean build
+      (npm ci + Go 1.24.5 tarball + TS build; no build-essential needed —
+      better-sqlite3 prebuilds covered node22/bookworm; MySQL driver is
+      pure JS)
+- [x] **Runtime verification** (2026-11-21): container up; entrypoint
+      pulled harness skills + validated `matrix-coder` against the proxy
+      (fail-fast OK); app booted on MySQL; **7 tables migrated**
+      (projects, ideas, tasks, task_events, usage, kv, schema_migrations);
+      `/health` 200 (`{"ok":true,"model":"matrix-coder","db":"mysql",
+      "concurrentTasks":1}`); board UI 200 at `http://192.168.4.54:3000`
+      (LAN-bound, no auth); direct `/mcp` tools/list key scoping verified:
+      chuck key → 16 tools (admin, incl. create_project/update_project),
+      dylan key → 14 tools (control, no project admin), unknown key → 401
+      with a helpful message. Note: first boot failed twice — (a) Docker
+      created `/home/chuck/data/ai-kanban` root-owned (fixed: chown 1000:1000
+      via a throwaway root container — chuck has no passwordless sudo),
+      (b) `${...}` interpolation empty (fixed: `env_file: ../.env` in the
+      compose entry + `compose/.env -> ../.env` symlink; see below)
+- [x] **Commit** (decision 6, 2026-11-21): WIP checkpoint `3243885` (app
+      code + todo) + deploy commit (compose entry, proposed litellm config,
+      docs, proposal)
+- [x] **Pattern-fit assessment** (2026-11-21): in the proposal doc —
+      stateful self-contained service (deliberate exception to the
+      read-mostly thin-client pattern, like mcp_sessions); streamable-HTTP
+      transport (only non-SSE MCP entry — verified supported in LiteLLM
+      v1.104.0); per-key tool scoping (mcp_sessions pattern); LAN-only UI
+      (presenton pattern); dedicated MySQL DB/user (AI_DB_* convention)
 
-### Not started
-1. **compose**: add `mcp_kanban` to `compose/compose.mcp.yml` (draft below —
-   now with MySQL + KANBAN_* mapping)
-2. **Proposed litellm config**: `litellm/config.yml.proposed-mcp-kanban` =
-   full copy of current `config.yml` + the `mcp_kanban` entry. **Do not touch
-   the live config** — chuck swaps it in (action item 3).
-3. **Docs**: kanban rows in `mcp/README.md` + `mcp/servers/README.md`
-4. **Proposal doc**: `proposals/2026-11-21-tier2-mcp-kanban.md`
-   (What/Why/Risk/Files per proposals/README pattern)
-5. **Build verification**: `docker compose -f compose/compose.mcp.yml build
-   mcp_kanban` — highest-risk step (npm ci + Go tarball + better-sqlite3
-   native module; if prebuilds miss, add `build-essential` to the Dockerfile)
-6. **Runtime verification** (after build): `up -d`, `/health` 200, board UI
-   at `http://thor.local:3000`, direct `/mcp` tools/list with chuck key
-7. **E2E through proxy** (after chuck swaps the litellm config):
+### Pending
+1. **E2E through proxy** (after chuck swaps the litellm config):
    `mcp_kanban-list_projects` visible in the proxy tool list; call with
    chuck's key (full set) and dylan's key (control set); unknown key → 401
-8. **Commit** to `main` (decision 6)
-9. **Pattern-fit assessment** (final summary + proposal doc)
 
 ### Draft compose entry (for step 1)
 
@@ -204,6 +234,24 @@ same way `mcp_mysql` does).
 
 ## Verification notes / open items
 
+- **Compose v5 `.env` interpolation (found 2026-11-21, cost two failed
+  boots):** with `docker compose -f compose/compose.mcp.yml`, the project
+  directory is the **compose file's directory** (`compose/`), so compose's
+  interpolation engine looks for `compose/.env` — not the repo `.env`.
+  `env_file: ../.env` in a service only injects vars into the *container*;
+  it does NOT feed `${...}` interpolation. Fix (both applied): (a)
+  `env_file: - ../.env` on the mcp_kanban entry (searxng pattern), and
+  (b) machine-local symlink `compose/.env -> ../.env` (gitignored via the
+  `.env` pattern) so interpolation works for any compose file in `compose/`.
+  Pre-existing services (mcp_sessions etc.) got their values because their
+  deploy shells had sourced the repo `.env` — recreate them any other way
+  and their `${...}` refs resolve empty.
+- **Docker-created bind dirs are root-owned**: first `up` created
+  `/home/chuck/data/ai-kanban` as root (uid 0) — the `1000:1000` container
+  then failed on `/data` writes. Fix: chown via a throwaway root container
+  (`docker run --rm -v /home/chuck/data/ai-kanban:/data alpine chown -R
+  1000:1000 /data`) — chuck has no passwordless sudo on thor. Pre-create
+  chuck-owned dirs before first `up` for future stateful services.
 - **Proxy MCP gateway probe hung**: `POST http://litellm-proxy:4000/mcp`
   (initialize) blocked with no response (aborted after ~2 min). The kanban
   *task agents* use the proxy's MCP gateway (origin of LITELLM_BASE_URL +
