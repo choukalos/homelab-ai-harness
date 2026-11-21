@@ -446,7 +446,8 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 - Drift detection: `scripts/key-sync-check.sh` (2026-10-21 incident) —
   catches stale values in containers after a rotation. **Not** a leak detector.
 - Known dead secret: `GITHUB_RUNNER_TOKEN` (fine-grained PAT, unconsumed —
-  revoke in UI + drop the `.env` line).
+  ~~revoke in UI + drop the `.env` line~~ **DONE 2026-11-21: revoked in UI,
+  line removed from `.env`**).
 - Known sharing: one classic PAT (`GITHUB_ACCESS_TOKEN`) powers 3 self-hosted
   runners + the mcp_kanban deploy stage (`KANBAN_GITHUB_TOKEN`, same value).
 - `.env.bak-*` rotation backups were NOT gitignored (fixed 2026-11-21).
@@ -505,7 +506,7 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 6. **Least-privilege pass.** Per-consumer MySQL users (already done for
    ai-kanban — audit the rest), Qdrant RO vs admin, Phase 8 internal-service
    key (master key out of 5 consumers), retire dead secrets
-   (GITHUB_RUNNER_TOKEN).
+   (~~GITHUB_RUNNER_TOKEN~~ — revoked + removed 2026-11-21).
 7. **Runner tokens (2026-11-21 discussion).** Option A: per-repo fine-grained
    PATs (3 runners + 1 kanban push token; `--manual` rotation). Option B:
    GitHub App (runners + ephemeral kanban tokens). Working recommendation:

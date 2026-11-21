@@ -1121,3 +1121,39 @@ it is set.~~ **RESOLVED 2026-11-21 (later):** token set by chuck;
 creation — `docker restart` alone would not refresh it); verified:
 present in container env (40 chars), no `[config] GITHUB_TOKEN not set`
 warning, `git ls-remote https://x-access-token:***@github.com/choukalos/homelab-ai-harness.git` → HEAD `9197689` (token valid, repo access OK).
+
+## Part 14 — GitHub PAT rotation + revocation (2026-11-21)
+
+**Context:** first real run of `scripts/rotate-github-tokens.sh`. The initial
+run aborted at the mint step — GitHub had REMOVED the classic-PAT creation API
+endpoint (`POST /user/tokens` → 404, verified 2026-11-21) — so the script was
+rewritten to a receive-and-verify flow: mint the replacement in the GitHub UI
+(classic, `repo` scope, note "homelab GITHUB_ACCESS_TOKEN rotated <date>"),
+then the script takes it (`--new-token-file` or hidden paste), verifies it
+(`GET /user`) BEFORE any side effect, and applies it deterministically.
+
+**Verified:**
+- [x] New classic PAT verified pre-swap (GET /user 200); bad-token path tested
+      first (fake token → 401 → clean abort, `.env` untouched)
+- [x] `.env`: `GITHUB_ACCESS_TOKEN` + `KANBAN_GITHUB_TOKEN` swapped atomically
+      (backup taken first; both vars stay in sync)
+- [x] 4 direct consumers recreated + holding the new value: github-runner,
+      data-hub-runner, report-hub-runner, mcp_kanban
+- [x] All 3 runners `online` on GitHub (API-verified per repo). Transient
+      "A session for this runner already exists" conflicts from the pre-
+      recreation sessions self-resolved in ~2 min (data-hub 21:38, rest 21:40)
+- [x] mcp_kanban deploy path: `git ls-remote` with the new token → HEAD OK
+- [x] Old classic PATs revoked in the UI (chuck found 2 old ones) → confirmed
+      dead (GET /user 401 with the pre-rotation value)
+- [x] Dead fine-grained `GITHUB_RUNNER_TOKEN` (unconsumed leftover) revoked in
+      the UI + line removed from `.env`
+- [x] Rotation backups (`.env.bak-20261121-*`) deleted after revocation
+      confirmed — no stale copies of secrets left behind
+- [x] key-sync-check: 9 drifts, ALL carriers (whole-.env injection: caddy,
+      cloudflared, hubs, …), zero direct consumers — expected until their next
+      recreate; self-heals
+
+**Cadence:** every ~90 days — mint in UI → `scripts/rotate-github-tokens.sh
+--dry-run` → `--new-token-file ...` → revoke old in UI → verify runners +
+kanban. The runner-token architecture (per-repo fine-grained PATs vs GitHub
+App) is tracked in `security_todo.md` Phase 9, item 7.
