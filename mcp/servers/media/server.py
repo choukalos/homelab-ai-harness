@@ -557,9 +557,10 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
     name="media_generate_shot",
     description=(
         "Animate a keyframe into a video clip (I2V) via the GPU-host media "
-        "pipeline. `model`: 'wan14b' (quality; Wan 2.2 14B — 832x480 only, "
-        "~5s clip, ~10-12 min) | 'ltxv2b' (fast draft; LTXV 2B — 768x512, "
-        "~4s clip, ~8s). Omitted = server default (wan14b as of 2026-10-31). "
+        "pipeline. `model`: 'wan14b' (quality; Wan 2.2 14B — 832x480 ~5s clip "
+        "~10-12 min, or 1280x720 ~55 min (CPU offload)) | 'ltxv2b' (fast "
+        "draft; LTXV 2B — 768x512, ~4s clip, ~8s). Omitted = server default "
+        "(wan14b as of 2026-10-31). "
         "Omitted width/height/frames/fps -> model-native defaults. `keyframe` "
         "may be a local image path OR a GPU-host path (auto-fetched). "
         "`prompt` should describe VISUAL STYLE (not fast motion) to minimize "

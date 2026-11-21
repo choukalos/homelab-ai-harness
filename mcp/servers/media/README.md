@@ -17,7 +17,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_storyboard` | `/storyboard` | Brief → shot list JSON (VLLM) |
 | `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
 | `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
-| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B, ~5s clip, ~10–12 min, 832×480 only) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
+| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B, ~5s clip, 832×480 ~10–12 min or 1280×720 ~55 min (CPU offload)) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
 | `media_text_to_speech` | `/tts` | Script → voice-over wav (`voice` = library name — `trailer` default, `default`, `narrator_f`, `deep_m`, ... — or a reference wav path on the GPU host) |
 | `media_list_voices` | `/voices` (sync) | TTS voice library: name, description, gender, style, audition sample path |
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
@@ -235,6 +235,17 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-21: **wan14b 720p cap lifted** (matrix add_card_plan Phase 6 — the
+720p VRAM gate passed on the dedicated 24 GB GPU 1 card: peak 19,641 MiB,
+4.8 GB headroom, `qa_wan_phase1.py 720 --gpu 1`). `media_generate_shot`
+`model=wan14b` now accepts **832×480 (~10–12 min/clip) or 1280×720
+(~55 min/clip — ComfyUI auto-offloads ~1.8 GB of weights to CPU, hence the
+~5× slowdown)**; other dims still 400. Descriptions updated (tool + client
+docstring); the pipeline-side change (matrix repo) is live in the
+`media_pipeline` container — this server picks up the new description on its
+next rebuild/restart. The 2026-10-31 entry's "720p rejected" line is
+historical (it was the GPU-0 co-location ceiling).
 
 2026-11-21: **pipeline M1–M5 client layer** (`media_pipeline_m1_m5_handoff.md` —
 the pipeline-side changes shipped 2026-11-19/21, image `media-pipeline:latest`

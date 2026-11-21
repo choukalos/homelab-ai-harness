@@ -468,9 +468,9 @@ class MediaPipelineClient:
 
         model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512, 97f,
         25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q5 —
-        832x480 ONLY, 81f (4n+1), 16fps, ~10-12 min/clip; 720p is rejected
-        with a 400 — VRAM OOM gate 2026-10-25). None = server default
-        (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted
+        832x480 ~10-12 min/clip or 1280x720 ~55 min/clip (CPU offload),
+        81f (4n+1), 16fps; other dims rejected with a 400). None = server
+        default (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted
         width/height/frames/fps -> the server applies the selected model's
         native defaults.
         strength: ltxv2b only — how strongly the keyframe anchors the clip

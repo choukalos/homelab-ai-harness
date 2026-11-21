@@ -63,7 +63,7 @@ endpoints are on `matrix:8189` (LAN-only).
 
 | Model | Flow | Specs | Speed |
 |---|---|---|---|
-| `wan14b` | I2V (default) | Wan 2.2 14B, **832×480 only** (720p → 400 VRAM gate), 81f (4n+1), 16fps, ~5 s clip | ~10–12 min/clip |
+| `wan14b` | I2V (default) | Wan 2.2 14B, **832×480 (~10–12 min/clip) or 1280×720 (~55 min/clip — CPU offload)** (2026-11-21 Phase 6 gate: 720p peak 19.6 GB on the 24 GB card), 81f (4n+1), 16fps, ~5 s clip | ~10–12 min (480p) / ~55 min (720p) |
 | `ltxv2b` | I2V (draft) | LTXV 2B, 768×512, 97f, 25fps, ~4 s clip; `strength=0.7` anchors the keyframe | ~8 s/clip |
 | `qwen21` | keyframes (default) | Qwen-Image-2.1, 25 steps, steps clamped [10,50] | ~30–120 s @1280×720 |
 | `legacy` | keyframes (fast) | Qwen-Image-2512 GGUF + Lightning, steps=4 | seconds |
@@ -102,7 +102,7 @@ endpoints are on `matrix:8189` (LAN-only).
   `references` (up to 9; canvas follows the edited image, references steer
   identity) → I2V from those keyframes. Expect 1–3 retries/shot.
 - 1080p: assemble from SeedVR2-upscaled shots (`upscale_each: true` or
-  `media_upscale_video(pipeline="b")` per shot) — never raw 832×480.
+  `media_upscale_video(pipeline="b")` per shot) — never raw 480p/720p.
 - `media_assemble` `shots` MUST be GPU-host paths (auto-fetched) — never
   locally downloaded paths.
 - Assemble `sfx`/`text_overlays` `at`/`start`/`end` = **absolute timeline
