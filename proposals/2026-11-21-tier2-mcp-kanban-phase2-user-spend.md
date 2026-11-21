@@ -1,7 +1,8 @@
 # Proposal — mcp_kanban Phase 2: per-user LLM spend attribution + per-user spend trend
 
 Status: **implemented** (2026-11-21) — see Rollout/Status
-Supersedes: the "Phase 2 (follow-up)" section of `todo_mcp_kanban.md` (Q2 design)
+Supersedes: the Q2 per-user spend design (drafted in `todo_mcp_kanban.md`,
+deleted 2026-11-21 — this proposal is the record)
 Follows: `proposals/2026-11-21-tier2-mcp-kanban-mcp-first.md` (owner columns)
 
 ## Problem
@@ -24,7 +25,7 @@ the reports page only shows total + per-project spend.
    (chuck's call: they must include every key, incl. unattributed/legacy —
    i.e. they are not filtered to known users).
 
-## Design (per the Q2 design in `todo_mcp_kanban.md`)
+## Design (per the Q2 key-attribution design)
 
 ### 1. User→key map: `USER_KEYS` (container env)
 

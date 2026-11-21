@@ -4,14 +4,18 @@
 - date: 2026-11-21
 - status: applied (2026-11-21: app code + compose entry + litellm config
   live; container built, running, and runtime-verified on thor —
-  `/health` 200, board UI live at `thor.local:3000`, MCP key scoping verified
-  (chuck admin 16 tools / dylan control 14 / unknown 401), MySQL migrations
-  ran (7 tables), proxy registration + E2E verified (110 proxy tools,
-  family-mcp-full access group extended), `KANBAN_GITHUB_TOKEN` set +
-  verified (git ls-remote OK). All chuck action items done.)
+  `/health` 200, board UI live at `thor.local:3000`, MCP key scoping verified,
+  MySQL migrations ran (7 tables), proxy registration + E2E verified,
+  `KANBAN_GITHUB_TOKEN` set + verified. All chuck action items done.)
+- superseded by: `2026-11-21-tier2-mcp-kanban-mcp-first.md` (read-only web
+  UI, interactive grooming, 23 tools) and
+  `2026-11-21-tier2-mcp-kanban-phase2-user-spend.md` (per-user spend
+  attribution) — both applied 2026-11-21. Tool counts and the mutable web
+  UI described below reflect the Phase 1 state.
 - tier: 2
 - target user: chuck
-- source: workspace/ai-kanban (existing app, 46 TS files) + todo_mcp_kanban.md (decisions locked 2026-11-21)
+- source: workspace/ai-kanban (existing app, 46 TS files); decisions locked
+  2026-11-21 (chuck)
 
 ## What
 Transform the `workspace/ai-kanban` code into `mcp_kanban` — a stateful
@@ -35,10 +39,11 @@ self-contained Docker container (not a thin client) that:
 
 **Identity & keys (Phase 1):** inbound MCP auth is per-caller-key (the
 proxy forwards the caller's LiteLLM key via `extra_headers: [Authorization]`;
-key = user for access control). Outbound LLM work uses the service key
-(`LITELLM_API_KEY` in the container). Per-user spend attribution is Phase 2
-(design in `todo_mcp_kanban.md` Q2: `owner_user` capture + `KANBAN_USER_KEYS`
-map + per-user Pi runtimes).
+key = user for access control). Outbound LLM work initially used the service
+key (`LITELLM_API_KEY` in the container). Per-user spend attribution was
+Phase 2 — implemented in `2026-11-21-tier2-mcp-kanban-phase2-user-spend`
+(owner columns + `USER_KEYS` key profiles + per-user spend trend on
+`/reports`).
 
 ## Why
 - The ai-kanban app exists and works, but lives outside the homelab: no
@@ -77,8 +82,7 @@ LAN-bound) web UI and outbound LLM spend via the service key.
   entry; verified supported in LiteLLM v1.104.0)
 - `.env` — `# ===== mcp_kanban =====` block (machine-local): `KANBAN_MODEL`,
   `KANBAN_CONCURRENT_TASKS`, `KANBAN_MCP_KEY_CAPABILITIES`,
-  `KANBAN_GITHUB_TOKEN` (empty — chuck action), `KANBAN_DB_USER/PASS/NAME`
-- `todo_mcp_kanban.md` — decisions, Q2 design, status
+  `KANBAN_GITHUB_TOKEN`, `KANBAN_DB_USER/PASS/NAME`
 - Docs: `mcp/README.md` + `mcp/servers/README.md` (kanban rows)
 
 ## Chuck action items (in order)

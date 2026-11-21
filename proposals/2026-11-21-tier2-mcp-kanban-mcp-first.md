@@ -2,8 +2,7 @@
 
 - slug: tier2-mcp-kanban-mcp-first
 - date: 2026-11-21
-- status: implemented (2026-11-21: code + tests green, committed; deploy +
-  implemented + deployed + verified 2026-11-21 — see Rollout/Status)
+- status: implemented + deployed + verified 2026-11-21 — see Rollout/Status
 - tier: 2
 - target user: chuck
 - source: pi session 2026-11-21 (UX review of `thor.local:3000`); extends
@@ -52,7 +51,8 @@ status view**:
   already happens (the user's LLM client), not in a LAN-only browser page.
 - **Observability:** "who owns what / who did what" makes the read-only
   board genuinely informative, and the captured owner is the attribution
-  data Phase 2 (per-user spend, `todo_mcp_kanban.md` Q2) needs.
+  data Phase 2 (per-user spend — implemented in
+  `2026-11-21-tier2-mcp-kanban-phase2-user-spend.md`) needs.
 
 ## Locked decisions (2026-11-21, chuck)
 
@@ -246,7 +246,7 @@ Homelab:
    `/health` 200; UI read-only (no forms; owner tags render "—" on legacy
    rows).
 4. E2E via proxy (step 2 test plan).
-5. Update this proposal → applied; update `todo_mcp_kanban.md` status.
+5. Update this proposal → applied.
 
 ## Risks + rollback
 
