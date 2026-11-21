@@ -1114,6 +1114,10 @@ servers / **110 tools** + kanban note; rules section), `README.md`
 (tool-naming + discovery-auth notes), `proposals/2026-11-21-tier2-mcp-kanban.md`
 + `todo_mcp_kanban.md` (action items done, E2E results).
 
-**Open items:** `KANBAN_GITHUB_TOKEN` still empty in `.env` — the board
+**Open items:** ~~`KANBAN_GITHUB_TOKEN` still empty in `.env` — the board
 runs without it; only the kanban deploy stage's git push fails until
-it is set.
+it is set.~~ **RESOLVED 2026-11-21 (later):** token set by chuck;
+`mcp_kanban` force-recreated to pick it up (env is baked at container
+creation — `docker restart` alone would not refresh it); verified:
+present in container env (40 chars), no `[config] GITHUB_TOKEN not set`
+warning, `git ls-remote https://x-access-token:***@github.com/choukalos/homelab-ai-harness.git` → HEAD `9197689` (token valid, repo access OK).

@@ -12,7 +12,7 @@ only on the local homelab. Checked in to this repo as `mcp/servers/kanban/`.
 |---|---|---|
 | 1 | Capabilities | chuck → `admin`, dylan → `control` (queue/groom/start/stop tasks, no project admin) |
 | 2 | Keys | Inbound MCP auth is already per-caller-key (key = user). Outbound LLM attribution: **Phase 1** service key; **Phase 2** per-user/per-agent key threading (design below) |
-| 3 | GITHUB_TOKEN | In `.env` as `KANBAN_GITHUB_TOKEN` (configured); **chuck action item** to fill the token |
+| 3 | GITHUB_TOKEN | In `.env` as `KANBAN_GITHUB_TOKEN` — **set + verified 2026-11-21** (container force-recreated; `git ls-remote` OK) |
 | 4 | Model / concurrency | `.env`-tunable: `KANBAN_MODEL=matrix-coder`, `KANBAN_CONCURRENT_TASKS=1` (defaults, both changeable without code) |
 | 5 | LAN port | `thor.local:3000` (openwebui dropped that port) |
 | 6 | Commit | Commit to `main` when done |
@@ -100,10 +100,16 @@ value; containers reach it the same way `mcp_mysql` does).
    ran its migrations at first boot: 7 tables).
 2. **GitHub token**: set `KANBAN_GITHUB_TOKEN` in `.env` (repo scope — the
    deploy stage pushes task branches / blog posts / media).
+   **DONE 2026-11-21** — token set (chuck); container force-recreated to
+   pick it up; verified present in container env (40 chars), no config
+   warning, `git ls-remote` against choukalos/homelab-ai-harness OK.
 3. **LiteLLM swap**: replace `litellm/config.yml` with
    `litellm/config.yml.proposed-mcp-kanban` and restart
    (`docker compose -f compose/compose.ai-core.yml up -d litellm`). Restart
    severs active proxy sessions — pick a quiet moment.
+   **DONE 2026-11-21** — chuck swapped + manual restart; proxy verified
+   (110 tools) + E2E `tools/call` with chuck/dylan/unknown keys (see
+   Pending item 1).
 
 ## Status
 

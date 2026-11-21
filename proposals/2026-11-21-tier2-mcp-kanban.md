@@ -2,12 +2,13 @@
 
 - slug: tier2-mcp-kanban
 - date: 2026-11-21
-- status: open (2026-11-21: app code + compose entry + proposed litellm config
-  checked in; container built, running, and runtime-verified on thor —
+- status: applied (2026-11-21: app code + compose entry + litellm config
+  live; container built, running, and runtime-verified on thor —
   `/health` 200, board UI live at `thor.local:3000`, MCP key scoping verified
   (chuck admin 16 tools / dylan control 14 / unknown 401), MySQL migrations
-  ran (7 tables). Awaiting chuck: `KANBAN_GITHUB_TOKEN` in `.env` + the
-  litellm config swap (restart severs active proxy sessions).)
+  ran (7 tables), proxy registration + E2E verified (110 proxy tools,
+  family-mcp-full access group extended), `KANBAN_GITHUB_TOKEN` set +
+  verified (git ls-remote OK). All chuck action items done.)
 - tier: 2
 - target user: chuck
 - source: workspace/ai-kanban (existing app, 46 TS files) + todo_mcp_kanban.md (decisions locked 2026-11-21)
@@ -83,7 +84,10 @@ LAN-bound) web UI and outbound LLM spend via the service key.
 ## Chuck action items (in order)
 1. **GitHub token**: set `KANBAN_GITHUB_TOKEN` in `.env` (repo scope — the
    deploy stage pushes task branches / blog posts / media). The board runs
-   without it; only the deploy stage's git push fails. *(still open)*
+   without it; only the deploy stage's git push fails.
+   **DONE 2026-11-21** — token set (chuck), container force-recreated to
+   pick it up, verified: present in container env (40 chars), no config
+   warning, `git ls-remote` against choukalos/homelab-ai-harness OK.
 2. **LiteLLM swap**: replace `litellm/config.yml` with
    `litellm/config.yml.proposed-mcp-kanban` and restart
    (`docker compose -f compose/compose.ai-core.yml up -d litellm`).
