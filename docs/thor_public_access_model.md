@@ -230,6 +230,18 @@ A dedicated `internal-service` key for the 6 internal consumers is Phase 8
 (`$HARNESS_API_KEY` — formerly open-webui → skill-runner harness — was removed
 from `.env` 2026-11-15 with the open-webui service; its only consumer was gone.)
 
+### GitHub Tokens
+
+| Env Var | Used By | Rotation |
+|---|---|---|
+| `$GITHUB_ACCESS_TOKEN` | 3 self-hosted Actions runners (invest-hub, data-hub, report-hub — via `ACCESS_TOKEN`) + `mcp_kanban` deploy stage (via `KANBAN_GITHUB_TOKEN`, **same token** as of 2026-11-21) | **`scripts/rotate-github-tokens.sh`** (added 2026-11-21): mints a replacement classic PAT via the GitHub API (`POST /user/tokens`, authorized by the old token), backs up `.env`, swaps the value(s), recreates the direct consumers (compose-source discovery), waits for healthy, re-verifies via `key-sync-check.sh`. `--dry-run` first; the old PAT must be revoked manually afterwards (classic PATs can't be revoked via the API — https://github.com/settings/tokens). Default: `repo` scope, 365-day expiry. |
+| `$GITHUB_RUNNER_TOKEN` | **none** (fine-grained PAT, leftover from the original invest-hub runner setup — unconsumed as of 2026-11-21) | Revoke in the UI + delete the `.env` line (fine-grained PATs are UI-managed only; the rotation script prints an advisory when it is set) |
+
+Runner registrations survive rotation (persistent `/runner/data` volumes +
+`DISABLE_AUTOMATIC_DEREGISTRATION` — only the API token changes). Containers
+that carry the whole `.env` (caddy, cloudflared, skill-runner, …) hold the
+old value until their next recreate; `key-sync-check.sh` tracks them.
+
 ### Caddy Gate Keys
 
 | Env Var | Gates | Rotation Policy |

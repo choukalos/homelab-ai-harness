@@ -379,7 +379,7 @@ Rollback: `sudo ufw disable`.
 - [ ] **401 spike alert** on `llm.choukalos.com` + `siri.choukalos.com` (Caddy access logs → Victoria Metrics → Grafana alert): sustained >N 401s/min = brute force or leaked key. (Exact metric wiring per `docs/thor_observability_plan.md`.)
 - [ ] **Spend alert** per LiteLLM key (now that spend tracking is on, Phase 3): alert if `chuck`/`dylan` spend > $X/day.
 - [ ] **Key audit script** `scripts/audit-litellm-keys.sh`: list keys (alias, user, budget, rpm/tpm, models, MCP group) + compare against the §1 inventory table; run monthly / after any key change.
-- [ ] **Quarterly key rotation** cadence for `LITELLM_KEY_CHUCK` / `LITELLM_KEY_DYLAN` (rotate → update `.env` → Caddy reload → old key deleted in LiteLLM).
+- [ ] **Quarterly key rotation** cadence for `LITELLM_KEY_CHUCK` / `LITELLM_KEY_DYLAN` (rotate → update `.env` → Caddy reload → old key deleted in LiteLLM). GitHub PAT rotation has a one-command tool since 2026-11-21: `scripts/rotate-github-tokens.sh` (see `docs/thor_public_access_model.md` § Key Strategy → GitHub Tokens).
 - [ ] Log-review habit: after any trip/absence, skim Caddy logs for 401s + LiteLLM spend for the period.
 
 ### Phase 7 — Docs sync
