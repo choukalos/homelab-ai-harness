@@ -323,13 +323,24 @@ Implementation (2026-11-21, committed):
 - [x] Dead code deleted: `src/agent/resolve.ts` (+ mock + test) — the MCP
       resolution loop (task_status → restart_task) replaces it
 - [x] `npm test` green (172 tests: 171 pass, 1 skip = MySQL w/o test server)
-- [ ] Deploy on thor: `docker compose -f compose/compose.mcp.yml up -d
+- [x] Deploy on thor: `docker compose -f compose/compose.mcp.yml up -d
       --build mcp_kanban` (compose now passes `MCP_KEY_OWNERS`;
       `.env` has `KANBAN_MCP_KEY_OWNERS=chuck:faxfoUszvw;dylan:JAS3o6tu0A`)
-- [ ] Verify post-deploy: migration `0002_owner` applied (owner column on
+      — **DONE 2026-11-21** (commit `c45e418` pushed; container rebuilt +
+      healthy)
+- [x] Verify post-deploy: migration `0002_owner` applied (owner column on
       3 tables); UI read-only (no forms; owner tags); E2E via proxy —
       23 new tools visible, **no bare-name collisions** against the other
       proxy tools, chuck/dylan calls stamp the right owner, unknown key 401
+      — **DONE 2026-11-21**: `schema_migrations` = 0001_init + 0002_owner,
+      `owner varchar(64) NOT NULL` on projects/ideas/tasks; board/projects
+      pages 0 forms + read-only hints; `POST /projects` → 404; direct MCP:
+      kanban key 23 tools, chuck 23, dylan 21, unknown 401; `create_project`
+      as chuck → `owner: "chuck"` (tag renders on the projects page; test
+      row removed); proxy `/mcp` gateway: 117 tools (94 + 23 kanban,
+      `mcp_kanban-` prefixed by the gateway — no dupes), chuck
+      `board_status` OK, dylan `create_project` refused with the
+      capability message
 
 ## Phase 2 (follow-up, not in this change)
 

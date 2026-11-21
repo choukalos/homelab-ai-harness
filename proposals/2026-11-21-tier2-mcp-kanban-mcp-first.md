@@ -3,7 +3,7 @@
 - slug: tier2-mcp-kanban-mcp-first
 - date: 2026-11-21
 - status: implemented (2026-11-21: code + tests green, committed; deploy +
-  E2E pending — see Rollout/Status)
+  implemented + deployed + verified 2026-11-21 — see Rollout/Status)
 - tier: 2
 - target user: chuck
 - source: pi session 2026-11-21 (UX review of `thor.local:3000`); extends
@@ -273,6 +273,22 @@ Homelab:
       locked decision 2)
 - [x] `npm test` green (172 tests: 171 pass, 1 skip = MySQL w/o test server)
 - [x] Commit
-- [ ] Deploy on thor + verify (migration, UI, E2E via proxy)
-- [ ] Docs updated (READMEs, .env.example, todo pointer) — in progress
-- [ ] Mark applied
+- [x] Deploy on thor + verify (migration, UI, E2E via proxy)
+- [x] Docs updated (READMEs, .env.example, todo pointer)
+- [x] Mark applied
+
+### Verification record (2026-11-21, commit `c45e418`)
+
+- `docker compose -f compose/compose.mcp.yml up -d --build mcp_kanban`
+  — clean build, container healthy.
+- MySQL: `schema_migrations` = `0001_init` + `0002_owner`; `owner
+  varchar(64) NOT NULL` on `projects`, `ideas`, `tasks`.
+- UI: board + projects pages 0 forms, read-only hints present;
+  `POST /projects` → 404; owner tag `chuck` renders on the projects page.
+- Direct MCP (`thor.local:3000/mcp`): kanban key 23 tools; chuck 23;
+  dylan 21; unknown key 401. `create_project` as chuck → `owner: "chuck"`
+  (test row removed afterwards).
+- Proxy (`/mcp` gateway): 117 tools = 94 + 23 kanban (`mcp_kanban-`
+  prefixed by the gateway; no duplicates/collisions). `board_status` as
+  chuck → correct camelCase payload; `create_project` as dylan → refused
+  with the capability message.
