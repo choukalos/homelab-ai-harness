@@ -6,7 +6,8 @@
 > group), key hygiene (spend tracking on, orphan key deleted, dead keys
 > removed), LAN exposure shrunk (all rebinds/mapping removals applied +
 > verified; `ss -tlnp` matches expected survivors; device-side confirmations
-> done from Mac Studio 2026-11-15). Phases 5–8
+> done from Mac Studio 2026-11-15). **Phase 7 DONE 2026-11-21** (docs sync —
+> see §5). Phases 5–6 + 8
 > not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
 > (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
 > program) added as a **grooming stub** 2026-11-21.
@@ -48,11 +49,16 @@
 
 | key_alias | user_id | scope | budget | rpm/tpm | notes |
 |---|---|---|---|---|---|
-| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b: no rate limits, decided 2026-11-15) | public (llm + siri routes); MCP: all 13 via `family-mcp-full` group |
-| `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
+| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b: no rate limits, decided 2026-11-15) | public (llm + siri routes); MCP: all 14 via `family-mcp-full` group |
+| `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 14 via `family-mcp-full` group |
 | *(no alias)* | — | models: matrix-coder, homelab-embedding-v1 | none | none | internal (skill-runner mem0, `MEMORY_LITELLM_KEY`); MCP: **none** (default-deny, Phase 2) |
 | *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **DELETED 2026-11-15** — F5 orphan; blocked same day, then deleted (observation window waived — already expired 2026-10-05, zero spend). (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |
-| master (`sk-cb1678…`) | — | admin, everything | — | — | internal only (F6); MCP: all 12 via `admin_view_unscoped` (verified in v1.104.0 source) |
+| master (`sk-cb1678…`) | — | admin, everything | — | — | internal only (F6); MCP: all 14 via `admin_view_unscoped` (verified in v1.104.0 source) |
+
+**2026-11-21 refresh (Phase 7):** no key adds/removals since 2026-11-15
+(verified live: 3 keys + master). MCP counts updated — `family-mcp-full`
+extended to all **14** servers (+`mcp_sessions`, +`mcp_kanban`, both
+2026-11-21; group description in the DB records the same).
 
 ---
 
@@ -383,14 +389,14 @@ Rollback: `sudo ufw disable`.
 - [ ] **Quarterly key rotation** cadence for `LITELLM_KEY_CHUCK` / `LITELLM_KEY_DYLAN` (rotate → update `.env` → Caddy reload → old key deleted in LiteLLM). GitHub PAT rotation has a one-command tool since 2026-11-21: `scripts/rotate-github-tokens.sh` (see `docs/thor_public_access_model.md` § Key Strategy → GitHub Tokens).
 - [ ] Log-review habit: after any trip/absence, skim Caddy logs for 401s + LiteLLM spend for the period.
 
-### Phase 7 — Docs sync
+### Phase 7 — Docs sync — **DONE 2026-11-21**
 
 - [x] `docs/thor_public_access_model.md` — **done 2026-11-15** (pulled forward with Phase 3; content re-verified 2026-11-15):
   - [x] `llm.choukalos.com` row: auth = Caddy OR-gate (chuck/dylan keys, `X-Api-Key` or `Bearer`), not `$LITELLM_PUBLIC_API_KEY`
   - [x] Key table: current inventory (Phase 3 output) incl. MCP access groups
   - [x] Add master-key-internal-only note (F6) + key-rotation procedure
-- [ ] `docs/thor_mcp_architecture.md`: note the 2026-08-25 `allow_all_keys` decision is **superseded** — per-key access groups now (Phase 2). (Still stale as of 2026-11-15: `allow_all_keys: true` described in 3 places, no superseded note.)
-- [ ] Update this file: mark phases done with dates as they land; keep the §1 inventory table current.
+- [x] `docs/thor_mcp_architecture.md`: note the 2026-08-25 `allow_all_keys` decision is **superseded** — per-key access groups now (Phase 2). **Landed 2026-11-20** (commit `4b130f4` docs refresh: Rules section carries the superseded note — "verified 2026-11-20", all 3 `allow_all_keys` references in the file now read as superseded); re-verified 2026-11-21.
+- [x] Update this file: mark phases done with dates as they land; keep the §1 inventory table current. **Done 2026-11-21** — header status + Phase 7 marked; §1 table MCP counts refreshed 12/13 → 14 (live-verified: 3 keys + master, `family-mcp-full` = 14 servers).
 
 ---
 
@@ -550,7 +556,7 @@ breach runbook + table-top done.
 - [ ] **internal-service key (LAN):** models work, 0 MCP servers; master key no longer present in the 6 internal container envs (Phase 8)
 - [ ] `ss -tlnp` matches Phase 4 expected survivors; `ufw status` active
 - [ ] Grafana: 401 + spend panels live
-- [ ] Docs updated (Phase 7)
+- [x] Docs updated (Phase 7) — 2026-11-21
 
 ## 8. Rollback (global)
 

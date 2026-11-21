@@ -2,7 +2,11 @@
 
 - slug: tier2-pi-subagents-timeout-handling
 - date: 2026-11-19
-- status: open
+- status: dismissed
+- dismissed: 2026-11-21 (chuck) — pi-subagents is a **third-party extension**
+  loaded into the owner's own pi client (pi.dev); chasing timeout fixes
+  upstream is a PITA, not worth the maintenance. Revisit only if the
+  extension's author lands the fixes or a fork becomes the de-facto runtime.
 - tier: 2
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (B1–B5)
