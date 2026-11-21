@@ -146,6 +146,13 @@ services:
       # LAN-only (family use): bind to the LAN IP, not 0.0.0.0
       - "${THOR_IP}:5000:80"
     volumes:
+      # NOTE (2026-11-21): the app runs as root in-container, so files it
+      # creates are root-owned. `userConfig.json` (+ .bak) hold the auth
+      # secret and are 600 root:root — which breaks the chuck-run backup
+      # rsync (Permission denied). After any re-provision/recreate that
+      # leaves them root-owned: docker exec presenton chown 1000:1000
+      # /app_data/userConfig.json /app_data/userConfig.json.bak
+      # (root in-container still reads/writes them; keep 600 — secret).
       - /home/chuck/data/presenton:/app_data
     environment:
       # Passwordless (auth_todo.md Phase 5.5): DISABLE_AUTH=true skips the
