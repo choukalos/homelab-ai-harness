@@ -290,6 +290,80 @@ class MediaPipelineClient:
         path = "/jobs" + ("?" + urllib.parse.urlencode(q) if q else "")
         return self._get_json(path, timeout)
 
+    def kill_job(self, job_id: str, client: str | None = None,
+                 timeout: float = 30) -> dict:
+        """DELETE /jobs/{id} (M2, 2026-11-19) — kill a QUEUED job.
+
+        Only queued jobs can be killed: the job is removed from the FIFO so
+        the slot is actually freed (the next queued job starts). A RUNNING
+        job is never killed (GPU work in progress) — raises PipelineError
+        (HTTP 409). Terminal jobs (done/error/timeout/killed) are an
+        idempotent 200 no-op. `client` is the caller's tag: if the job has
+        a client tag and it doesn't match, the kill is refused (403);
+        omitted (or the job untagged) -> allowed.
+
+        Returns the pipeline's response dict:
+          kill:  {"job_id", "killed": True, "status": "killed",
+                  "queue_position_freed": N}
+          no-op: {"job_id", "killed": False, "status": "<status>"}
+        Raises PipelineError on 404 (unknown id — recover via list_jobs),
+        409 (running), 403 (client mismatch)."""
+        q = ("?client=" + urllib.parse.quote(client)
+             if client else "")
+        req = urllib.request.Request(
+            f"{self.base}/jobs/{job_id}{q}", method="DELETE")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = {}
+            try:
+                body = json.loads(e.read())
+            except Exception:
+                pass
+            # FastAPI wraps HTTPException bodies in `detail`.
+            detail = body.get("detail", body) if isinstance(body, dict) else body
+            if e.code == 404:
+                raise PipelineError(
+                    f"HTTP 404: job {job_id} not found — unknown id (or "
+                    f"terminal job with no ledger row). List jobs with "
+                    f"list_jobs() / media_list_jobs (durable ledger)")
+            if e.code == 409:
+                raise PipelineError(
+                    f"HTTP 409: job {job_id} is running (GPU work in "
+                    f"progress); kill is queued-only — wait for it to "
+                    f"finish or leave it")
+            if e.code == 403:
+                raise PipelineError(
+                    f"HTTP 403: client tag mismatch — job {job_id} belongs "
+                    f"to a different client tag. Pass the tag you "
+                    f"submitted with (or omit client for an untagged job)")
+            raise PipelineError(
+                f"DELETE /jobs/{job_id} -> HTTP {e.code} {detail}")
+
+    def queue_status(self, timeout: float = 15) -> dict:
+        """GET /health -> the M3 queue summary (2026-11-19).
+
+        Returns {ok, pending, running, queued, max_concurrent,
+        max_queue_depth, queue: {counts: {running, queued}, queued_jobs:
+        [{job_id, flow, client, created, waited_s}] (FIFO, oldest first),
+        oldest_queued: {...}|None}, features: [...]}. `pending` ==
+        counts.running + counts.queued. Use it to check whether the queue
+        is full before submitting (full -> 503 + retry_after_seconds) and
+        to estimate wait (oldest_queued.waited_s + known per-flow
+        wall-clocks)."""
+        h = self.health()
+        return {
+            "ok": h.get("ok"),
+            "pending": h.get("pending"),
+            "running": h.get("running"),
+            "queued": h.get("queued"),
+            "max_concurrent": h.get("max_concurrent"),
+            "max_queue_depth": h.get("max_queue_depth"),
+            "queue": h.get("queue"),
+            "features": h.get("features"),
+        }
+
     def fetch(self, host_path: str, local_dir: str = ".") -> str:
         """Download a result file from the GPU host to the local machine.
         On a basename collision in local_dir the file is suffixed

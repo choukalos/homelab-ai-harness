@@ -26,11 +26,13 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_transcribe_song` | `/transcribe` (job) | Song → **guitar tab + timestamped lyrics** (deterministic DSP + ASR + LLM polish; `source` = YouTube URL / http(s) URL / GPU-host path / staging file; v1 `instrument="guitar"`, `tuning="standard"` only; `stems` default true = demucs vocal stem for cleaner lyrics; `full_notes` = full note events; `whisper_model` override). **Chord/key/fingering surface** (deterministic post-processing, 2026-10-31 — the LLM never touches it): `transpose_semitones` (−12..12) / `target_key` (tonic like `E`/`Bb`/`F#m`, offset from the detected key, wins over transpose) re-render tab + MIDI in the new key; `chord_style` = `as_detected` (default) / `triads` / `power` (root+5th, metal-friendly); `capo=true` suggests the smallest capo (0–5) when the key has no open shapes (chords shown as finger shapes); `shape_hints` (default true) annotates every chord with its easiest fingering (open / E- or A-shape barre / power) |
 | `media_sfx` | `/sfx` | Video → synced SFX bed (MMAudio, upload) |
 | `media_upscale_video` | `/upscale` | Video → 1080p (`b`=SeedVR2 quality, `a2`=fast, upload) |
-| `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
+| `media_assemble` | `/assemble` | Concat shots + mix VO/music/SFX → final mp4 (M4: object shots `{path, in?, out?, duration?}`, timestamped `sfx: [{path, at}]`, `vo_start`, `loudnorm`; **M1 (2026-11-19): `duration` on an object shot is enforced — frame-hold (last frame) or trim to the requested length, ±0.1 s tolerance = no-op, applied after in/out and before upscale_each; every adjustment reported in the job's `duration_adjustments`**; quality: `upscale_each` SeedVR2 per-shot → true 1080p, `text_overlays` burned-in titles — string forms still work) |
 | `media_fetch` | `/files/{name}` | Download a pipeline result to the local media library |
 | `media_render_tab_pdf` | local (WeasyPrint) | Transcribe job → **styled PDF song sheet** (deterministic — no LLM; `tab_pdf.py` renders the job's `tab.md` verbatim with Playfair Display / Inter / JetBrains Mono). **Layout (2026-11-01 part 5): CHORDS — a grid of fixed-size chord fingering diagrams (name + shape + starting-fret annotation; power/barre shapes generated from the pipeline's `shape` hint, open chords from a standard-shape library); then SCORE — a measure-aligned score per section so you can sing & play at once (with a friend): VOCALS lane (word-timed lyrics with a mini chord diagram above the measure where each change lands, from ASR word timestamps + chord event times), RHYTHM lane (chord diagrams, instrumental sections), SOLO lane (per-measure fretboard boards — same visual language as the CHORDS diagrams: dot size + duration tail = hold time, number = play order, h/p = hammer-on/pull-off, arrow = slide, wave = hold/vibrato; decoded by the SOLO KEY panel at the top of the SCORE part; over-dense measures fall back to the compact 6-line text tab; 2026-11-06 Phase 3).** Fetches `tab.md` / `lyrics.txt` / `analysis.json` from the GPU host, renders locally to `MEDIA_PIPELINE_FETCH_DIR/<slug>/<slug>-tab.pdf`. `title`/`artist` override the LLM-guessed header (pass the real identity); `slug` names the output dir (default: job_id); `solo_style` = 'board' (default) or 'text' (legacy compact tab). Returns `{local_path, size_bytes, pages, title, artist, sections, missing_shapes, synthesized_shapes, solo_style, solo_fallbacks}` (shape-coverage warnings + solo-lane reporting, 2026-11-06). Publish with the `publish_file` skill (subdirectory `tabs`) for a public URL |
-| `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again |
-| `media_list_jobs` | `GET /jobs` (sync) | List jobs from the durable ledger (filters: `status`/`client`/`user`/`flow`/`since`/`limit`; newest-first) — the recovery path for lost `job_id`s; finished jobs survive pipeline restarts (2026-11-04) |
+| `media_job_result` | `GET /jobs/{id}` (long-poll) | Poll a submitted job to its final result (≤25 s per poll — kept under the ~30 s client tool-call timeout). Returns the final result (same shape as the blocking tool) or `{status: 'running'}` to poll again (with `progress: {stage, completed, total, label}` while an assemble is in flight — M5, 2026-11-19) |
+| `media_list_jobs` | `GET /jobs` (sync) | List jobs from the durable ledger (filters: `status`/`client`/`user`/`flow`/`since`/`limit`; newest-first) — the recovery path for lost `job_id`s; finished jobs survive pipeline restarts (2026-11-04). Status taxonomy: `queued|running|done|error|timeout|killed` |
+| `media_kill_job` | `DELETE /jobs/{id}` (sync) | Kill a **queued** job — frees its FIFO slot so the next queued job starts (M2, 2026-11-19). Running → refused (409, GPU work is never killed); terminal → idempotent no-op. Optional `client` tag scope (mismatch → 403). Returns `{job_id, killed, status, queue_position_freed?}` |
+| `media_queue_status` | `GET /health` (sync) | Queue summary (M3, 2026-11-19): `{ok, pending, running, queued, max_concurrent, max_queue_depth, queue: {counts, queued_jobs (FIFO: job_id/flow/client/created/waited_s), oldest_queued}, features}` — check before submitting (full queue → 503) and to estimate wait |
 
 **Submit-and-poll (2026-09-25):** every job tool above accepts
 `non_blocking: bool = False`. With `non_blocking=true` the tool returns
@@ -45,11 +47,12 @@ abort window without touching litellm/pi.
 **Job recovery + client tags (2026-11-04, thor handoff T1–T4):**
 
 - **`media_list_jobs`** (new) — lists jobs from the pipeline's **durable
-  ledger** (`GET /jobs`): `status` (`running`|`done`|`error`|`timeout`,
-  default `running`; comma-separated for multiple), `client`, `user`,
-  `flow`, `since` (ISO timestamp or epoch seconds), `limit` (default 50,
-  max 200) → `{count, jobs: [{job_id, flow, status, client, user, created,
-  done, model, duration_s, cost_usd, error, output, outputs}]}` newest-
+  ledger** (`GET /jobs`): `status` (`queued`|`running`|`done`|`error`|
+  `timeout`|`killed`, default `running`; comma-separated for multiple),
+  `client`, `user`, `flow`, `since` (ISO timestamp or epoch seconds),
+  `limit` (default 50, max 200) → `{count, jobs: [{job_id, flow, status,
+  client, user, created, done, model, duration_s, cost_usd, error, output,
+  outputs}]}` newest-
   first. **Finished jobs
   survive pipeline restarts** (the `jobs.jsonl` ledger), and live in-flight
   jobs are included — this is the recovery path when a `job_id` is lost to
@@ -82,6 +85,40 @@ abort window without touching litellm/pi.
   (`vo.wav` → `vo_2.wav`, `vo_3.wav`, …); **existing files are never
   overwritten**. The tool returns `renamed: true` + a `note` when this
   happens, and logs a `FETCH` line with the local path.
+
+**Queue control (2026-11-19, pipeline M1–M5 — `media_pipeline_m1_m5_handoff.md`):**
+
+- **`media_kill_job(job_id, client?)`** (new) — `DELETE /jobs/{id}` (M2):
+  kills a **queued** job and frees its FIFO slot (the next queued job
+  starts). Running jobs are refused (409 — GPU work is never killed
+  mid-flight); terminal jobs (`done`/`error`/`timeout`/`killed`) are an
+  idempotent 200 no-op. Optional `client` tag scope: if the job has a tag
+  and it doesn't match, 403 (pass the tag you submitted with; omit for
+  untagged jobs). Returns `{job_id, killed, status}` + `queue_position_freed`
+  on a real kill. Killed jobs get a durable ledger row (`status=killed` —
+  findable via `media_list_jobs(status="killed")` after a restart). Logs a
+  `KILL job_id=... client=... -> killed=... status=...` line.
+- **`media_queue_status()`** (new) — `GET /health` (M3): the queue summary —
+  `{ok, pending, running, queued, max_concurrent, max_queue_depth, queue:
+  {counts: {running, queued}, queued_jobs: [{job_id, flow, client, created,
+  waited_s}] (FIFO, oldest first), oldest_queued}, features}`. Check it
+  before submitting (full queue → 503 + `retry_after_seconds`) and to
+  estimate wait (`oldest_queued.waited_s` + per-flow wall-clocks). The
+  `features` list (`["assemble-duration-hold", "job-kill", "queue-summary",
+  "job-progress"]`) is the pipeline's feature-detection surface. Logs a
+  `QUEUE_STATUS ok=... pending=... running=N queued=N` line.
+- **`media_assemble` `shots[].duration` is enforced (M1)** — the C14 root
+  cause is fixed: an object shot's `duration` now frame-holds (last frame,
+  `tpad stop_mode=clone`) or trims the clip to the requested length (±0.1 s
+  tolerance = no-op), applied after `in`/`out` and **before** `upscale_each`.
+  Every adjustment is reported in the job's `duration_adjustments`
+  (`[{shot, natural_s, requested_s, applied: hold|trim|none, held_s?/trimmed_s?}]`)
+  — visible via `media_list_jobs` `output`. Film plans can now pass the
+  planned per-shot durations instead of re-planning from measured lengths.
+- **`media_job_result` in-flight progress (M5)** — while an assemble job is
+  running, the poll response carries `progress: {stage, completed, total,
+  label}` (per-shot stage counts); terminal progress is in the job result
+  and ledger row.
 
 **Post-gen edit + file movement (2026-09-07, media_pipeline_gaps.md M1–M8):**
 
@@ -198,6 +235,26 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-21: **pipeline M1–M5 client layer** (`media_pipeline_m1_m5_handoff.md` —
+the pipeline-side changes shipped 2026-11-19/21, image `media-pipeline:latest`
+`aa802b6e60b5`; client layer accepted live: `test_m1m5_client.py` 24/24 PASS): the two new queue-control tools + the M1/M5 semantics in the
+existing tool descriptions (full notes in the "Queue control" section above):
+- **`media_kill_job(job_id, client?)`** (M2) — `DELETE /jobs/{id}`: queued-only
+  kill, frees the FIFO slot; running → 409, terminal → idempotent no-op,
+  unknown → 404 (hint → `media_list_jobs`), client-tag mismatch → 403.
+- **`media_queue_status()`** (M3) — `GET /health` queue summary
+  (`queue.counts` / `queued_jobs` FIFO with `waited_s` / `oldest_queued` /
+  `features`).
+- **`media_assemble`**: `shots[].duration` is now ENFORCED (M1 — frame-hold /
+  trim, the C14 root cause); adjustments reported in the job's
+  `duration_adjustments` (via `media_list_jobs` `output`).
+- **`media_job_result`**: in-flight `progress: {stage, completed, total,
+  label}` on assemble polls (M5). **`media_list_jobs`**: status taxonomy now
+  `queued|running|done|error|timeout|killed` (M4).
+Client methods added to `media_pipeline_client.py`: `kill_job()`,
+`queue_status()`. Live acceptance: `test_m1m5_client.py` (run on matrix
+2026-11-21 against :8189 — all checks PASS).
 
 2026-11-14: closed out `improve_mediapipeline_todo.md` (2026-11-02, after
 the "A Peanut Risky Business" run — 4 orchestration-script deaths, 10 lost

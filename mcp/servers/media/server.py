@@ -994,7 +994,12 @@ async def media_upscale_video(
         "composite here). M4 extensions (backward compatible): `shots` entries may be "
         "objects {path, in?, out?, duration?} to trim/hold a shot (still image + "
         "duration renders a static clip); `sfx` may be a list [{path, at}] for "
-        "timestamped placement. TIMING: `sfx[].at`, `text_overlays` `start`/`end`, "
+        "timestamped placement. M1 (2026-11-19): `duration` on an object shot is "
+        "NOW ENFORCED — the clip is frame-held (last frame) or trimmed to the "
+        "requested length (±0.1 s tolerance = no-op), applied after in/out and "
+        "before upscale_each; every adjustment is reported in the job's "
+        "duration_adjustments (visible via media_list_jobs `output` — check it "
+        "after a film assemble instead of assuming the plan total). TIMING: `sfx[].at`, `text_overlays` `start`/`end`, "
         "and `vo_start` are ABSOLUTE timeline seconds in the final cut — compute "
         "each shot's start as the sum of prior shots' durations (`media_info` on "
         "each shot); `vo_start` offsets the VO from t=0; `loudnorm` applies "
@@ -1058,6 +1063,8 @@ async def media_assemble(
         "result — same shape as the blocking tool ({path, location} for media "
         "jobs, {shots} for storyboard, voice output for add_voice) — or "
         "{status: 'running'}: call media_job_result again to keep polling. "
+        "While an assemble job is in flight the running response also carries "
+        "progress: {stage, completed, total, label} (M5, 2026-11-19). "
         "Lost a job_id? Use media_list_jobs — durable ledger: finished jobs "
         "survive pipeline restarts, live in-flight jobs are included. "
         "Finished files are retained 14d and can be pulled via media_pull "
@@ -1079,10 +1086,13 @@ async def media_job_result(job_id: str, wait_seconds: float = 20.0,
         return _pipeline_error(exc, {"job_id": job_id})
     job = r["job"]
     if r["status"] == "running":
-        return {"job_id": job_id, "flow": job.get("flow"),
-                "status": "running", "waited_s": r.get("waited_s"),
-                "note": "Still running — call media_job_result again to keep "
-                        "polling (the job continues on the GPU host)."}
+        out = {"job_id": job_id, "flow": job.get("flow"),
+               "status": "running", "waited_s": r.get("waited_s"),
+               "note": "Still running — call media_job_result again to keep "
+                       "polling (the job continues on the GPU host)."}
+        if job.get("progress"):  # M5: in-flight assemble progress
+            out["progress"] = job["progress"]
+        return out
     if r["status"] in ("error", "timeout"):
         logger.info("DONE job_id=%s status=%s path=-", job_id, r["status"])
         return {"job_id": job_id, "flow": job.get("flow"),
@@ -1108,8 +1118,8 @@ async def media_job_result(job_id: str, wait_seconds: float = 20.0,
     description=(
         "List media-pipeline jobs from the pipeline's durable ledger — "
         "recovers job ids lost to session resets, timeouts, or crashed "
-        "clients. Filters: status (running|done|error|timeout — default "
-        "running), client (your tag, e.g. 'project/shot'), user, flow, "
+        "clients. Filters: status (queued|running|done|error|timeout|killed — "
+        "default running), client (your tag, e.g. 'project/shot'), user, flow, "
         "since (ISO timestamp or '2h'/'30m'), limit (default 50, max 200). "
         "Returns {count, jobs: [{job_id, flow, status, client, user, "
         "created, done, model, duration_s, cost_usd, error, output, "
@@ -1139,6 +1149,65 @@ async def media_list_jobs(status: str = "running", client: Optional[str] = None,
         return res
     except Exception as exc:
         return _pipeline_error(exc, {"status": status, "client": client})
+
+
+@mcp.tool(
+    name="media_kill_job",
+    description=(
+        "Kill a QUEUED media-pipeline job — frees its queue slot so the next "
+        "queued job starts. Use it for superseded/orphaned jobs (a re-shot "
+        "that replaced a queued submit, a job you no longer need). Only "
+        "queued jobs can be killed: a RUNNING job is refused (GPU work is "
+        "never killed mid-flight — wait for it instead); terminal jobs "
+        "(done/error/timeout/killed) are an idempotent no-op, not an error. "
+        "`client` scopes the kill to your tag — pass the SAME client tag you "
+        "submitted the job with (a mismatch is refused); omit it for an "
+        "untagged job. Returns {job_id, killed, status} — on a real kill "
+        "also queue_position_freed (how far back the queue moved). "
+        "Check the queue first with media_queue_status; find a lost job_id "
+        "with media_list_jobs. " + _TIMEOUT_NOTE
+    ),
+)
+async def media_kill_job(job_id: str, client: Optional[str] = None,
+                         ctx: Context = None) -> dict:
+    """DELETE /jobs/{job_id} (queued-only kill; frees the FIFO slot)."""
+    try:
+        res = await asyncio.to_thread(PIPELINE.kill_job, job_id, client)
+        logger.info("KILL job_id=%s client=%s -> killed=%s status=%s "
+                    "queue_position_freed=%s",
+                    job_id, client or "-", res.get("killed"),
+                    res.get("status"), res.get("queue_position_freed", "-"))
+        return res
+    except Exception as exc:
+        return _pipeline_error(exc, {"job_id": job_id, "client": client})
+
+
+@mcp.tool(
+    name="media_queue_status",
+    description=(
+        "Cheap global view of the media-pipeline job queue: how many jobs "
+        "are running/queued, WHO is waiting (job_id, flow, client tag, how "
+        "long each has waited — FIFO order), and the pipeline's feature "
+        "list. Use it BEFORE submitting (a full queue rejects with 503 + "
+        "retry_after_seconds — check here first) and to estimate wait: "
+        "oldest_queued.waited_s plus the known per-flow wall-clocks (I2V "
+        "wan14b ~10–12 min/clip; upscale SeedVR2 ~12.5 min/shot under "
+        "contention; draft assemble ~90 s/36 shots). Returns {ok, pending, "
+        "running, queued, max_concurrent, max_queue_depth, queue: {counts, "
+        "queued_jobs, oldest_queued}, features}. " + _TIMEOUT_NOTE
+    ),
+)
+async def media_queue_status(ctx: Context = None) -> dict:
+    """GET /health -> queue summary (M3)."""
+    try:
+        res = await asyncio.to_thread(PIPELINE.queue_status)
+        logger.info("QUEUE_STATUS ok=%s pending=%s running=%d queued=%d",
+                    res.get("ok"), res.get("pending"),
+                    len(res.get("running") or []),
+                    len(res.get("queued") or []))
+        return res
+    except Exception as exc:
+        return _pipeline_error(exc, {})
 
 
 @mcp.tool(

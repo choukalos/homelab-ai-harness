@@ -1,4 +1,4 @@
-# mcp_media pipeline contract (self-contained summary, verified 2026-11-04)
+# mcp_media pipeline contract (self-contained summary, updated 2026-11-21)
 
 The canonical contract lives on the GPU host (`docs/matrix_media_pipeline_api.md`)
 — unreachable off-LAN. This file is the
@@ -10,11 +10,20 @@ endpoints are on `matrix:8189` (LAN-only).
 
 ## Job model
 
-- Every generation flow is a **job**: `queued → running → done|error`.
+- Every generation flow is a **job**: `queued → running → done|error` (or
+  `killed` — a queued job aborted via `media_kill_job`; terminal, ledger-
+  recorded).
 - **Queue:** 1 running + 5 queued = 6 in-flight max (global, shared by all
   clients). Full queue → **HTTP 503 + `retry_after_seconds`**.
-- **Durable ledger:** finished jobs survive pipeline restarts; live in-flight
-  jobs are included. 14-day retention on result files.
+- **Queue visibility:** `media_queue_status()` (M3, 2026-11-19) — running/
+  queued job IDs, per-job `waited_s` (FIFO), `oldest_queued`, and the
+  pipeline's `features` list. Check it before submitting; estimate wait from
+  `oldest_queued.waited_s` + the wall-clocks below.
+- **Kill:** `media_kill_job(job_id, client?)` (M2, 2026-11-19) — queued-only
+  (frees the FIFO slot); running → refused (GPU work is never killed);
+  terminal → idempotent no-op. Use it for superseded/orphaned queued jobs.
+- **Durable ledger:** finished jobs (incl. `killed`) survive pipeline
+  restarts; live in-flight jobs are included. 14-day retention on result files.
 - **Job ID validity:** `media_job_result` works while the job is in the
   pipeline's registry (live) or the durable ledger (finished).
 - **MCP gateway timeout:** 60 s hard per tool call — transient
@@ -37,12 +46,14 @@ endpoints are on `matrix:8189` (LAN-only).
 | `media_text_to_speech` | VO | `text, voice="trailer"\|library name\|ref wav path` | `{path}` |
 | `media_generate_music` | ACE-Step | `prompt, lyrics="", duration=30, seed=42` | `{path}` |
 | `media_sfx` | MMAudio SFX bed | `video, description, duration=8.0` | `{path}` |
-| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration? (accepted, NO EFFECT — see "Assemble semantics")}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume` | `{path}` |
+| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration? (ENFORCED since 2026-11-19 — see "Assemble semantics")}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume` | `{path}` (+ `duration_adjustments` in the job output when any shot requested a duration) |
 | `media_upscale_video` | SeedVR2 / fast | `video, pipeline="b"\|"a2", resolution=1080` | `{path}` |
 | `media_trim` / `media_freeze` / `media_caption` | ffmpeg post | source (gpu or staging path) | `{path}` |
 | `media_info` | ffprobe (sync) | `path` | `{duration_s,width,height,fps,video_codec,audio_codecs[],size_bytes,bitrate_bps}` |
-| `media_job_result` | poll a job | `job_id, wait_seconds=20 (max 25)` | final result `{path,...}` or `{status:"running"}` or `{status:"error",error}` |
-| `media_list_jobs` | **durable ledger** | `status="running"\|"done"\|"error"\|"timeout" (default running), client?, user?, flow?, since? (ISO-8601 ONLY), limit=50 (max 200)` | `{count, jobs:[{job_id,flow,status,client,user,created,done,model,duration_s,cost_usd,error,output,outputs}]}` newest-first |
+| `media_job_result` | poll a job | `job_id, wait_seconds=20 (max 25)` | final result `{path,...}` or `{status:"running"}` (+ `progress: {stage, completed, total, label}` while an assemble is in flight — M5) or `{status:"error",error}` |
+| `media_list_jobs` | **durable ledger** | `status="queued"\|"running"\|"done"\|"error"\|"timeout"\|"killed" (default running), client?, user?, flow?, since? (ISO-8601 ONLY), limit=50 (max 200)` | `{count, jobs:[{job_id,flow,status,client,user,created,done,model,duration_s,cost_usd,error,output,outputs}]}` newest-first |
+| `media_kill_job` | kill a queued job | `job_id, client? (tag you submitted with; mismatch → refused)` | `{job_id, killed, status, queue_position_freed?}` — queued-only (running → error; terminal → no-op) |
+| `media_queue_status` | queue summary (sync) | — | `{ok, pending, running, queued, max_concurrent, max_queue_depth, queue: {counts, queued_jobs (FIFO: job_id/flow/client/created/waited_s), oldest_queued}, features}` |
 | `media_pull` | signed public URL | `path (abs gpu path \| media_jobs/<job>/<file> \| job_id), ttl_hours=24 (max 168), local_dir? (thor-local copy)` | `{url, expires_at, ...}` — `https://siri.choukalos.com/media/pipeline/dl/<token>` |
 | `media_fetch` | → local media library (thor) | `host_path, subdirectory?` | local path under `/home/chuck/data/media/generated/pipeline` (basename collisions get `_2` suffix; never overwrites) |
 | `media_put` / `media_download` / `media_upload` | stage inputs | `media_put` = thor-local file under `/home/chuck/workspace/media`; `media_download` = http(s) URL; `media_upload` = matrix ComfyUI basedir file | `{path}` (media_jobs) |
@@ -72,13 +83,17 @@ endpoints are on `matrix:8189` (LAN-only).
 
 ## Quality rules (tuned on the GPU host)
 
-- **C14 — Assemble semantics: `shots[].duration` has NO effect (no frame-hold).**
-  The assembler concatenates each clip at its **natural length**; the
-  `duration` field is accepted but silently ignored (no `tpad
-  stop_mode=clone` hold). Verified 2026-11-17 production: 36 × 5.042 s clips
-  → 181.5 s output vs a 226 s plan (44.5 s short — the missing closing VO +
-  end card). Plan totals from measured clip lengths (`media_info` after I2V),
-  never from `duration` or creative estimates.
+- **C14 — Assemble semantics: `shots[].duration` IS enforced (fixed
+  2026-11-19, M1).** The assembler now frame-holds (last frame, `tpad
+  stop_mode=clone`) or trims each object shot to its requested `duration`
+  (±0.1 s tolerance = no-op), applied after `in`/`out` and before
+  `upscale_each`. Every adjustment is reported in the job's
+  `duration_adjustments` (`applied: hold|trim|none`) — visible via
+  `media_list_jobs` `output`; **check it after a film assemble** instead of
+  assuming the plan total. (Pre-fix history: the field was silently ignored
+  — 2026-11-17 production: 36 × 5.042 s clips → 181.5 s output vs a 226 s
+  plan. For pre-2026-11-19 jobs, plan totals from measured clip lengths
+  (`media_info` after I2V), never from `duration` or creative estimates.)
 - I2V `prompt`: **visual style + gentle motion only** — fast-motion prompts
   cause warble.
 - Don't bake text into I2V (both models warp it) — use `media_assemble`
