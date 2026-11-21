@@ -2,7 +2,14 @@
 
 - slug: tier3-media-queue-mcp-tools
 - date: 2026-11-19
-- status: open
+- status: applied
+- applied: 2026-11-21 — `media_kill_job` + `media_queue_status` live in
+  `mcp_media` (commit `7f2d0d3`), thin clients over the matrix M2/M3
+  endpoints; live acceptance 24/24 + MCP-level E2E through the proxy
+  (queued kill → slot freed, re-kill idempotent no-op, running → 409,
+  tag mismatch → 403, unknown id → 404, killed rows in the durable ledger —
+  `docs/thor_validation_log.md` part 12, 2026-11-21). `pipeline-contract.md`
+  tool table updated (both rows + queue-visibility/kill notes).
 - tier: 3
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (A4 — thor-side half)

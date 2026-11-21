@@ -2,10 +2,18 @@
 
 - slug: tier2-matrix-media-pipeline-improvements
 - date: 2026-11-19
-- status: in progress (2026-11-19: matrix handoff written — `docs/matrix_media_pipeline_improvements_handoff.md`,
-  self-contained M1–M5 spec + acceptance tests; M1 defect re-verified live against
-  matrix:8189 — baseline job `bab0cbbed536`: 2× 6.0 s clips, requested 9 s each →
-  12.0 s output, silent ignore confirmed. Awaiting matrix session to implement.)
+- status: applied
+- applied: 2026-11-21 — M1–M5 all landed. Matrix shipped the pipeline side on
+  2026-11-19 (`media-pipeline/qa_m1_m5.py` accepted on the GPU host); `/health`
+  advertises all four features (`assemble-duration-hold`, `job-kill`,
+  `queue-summary`, `job-progress`) with job IDs + FIFO details in the queue
+  block (M3/M4). M1 duration is now ENFORCED (frame-hold / trim, loud
+  `duration_adjustments`, never silent ignore). Thor-side client layer + live
+  acceptance in commit `7f2d0d3` (`test_m1m5_client.py` 24/24 + MCP E2E
+  through the proxy — `docs/thor_validation_log.md` part 12, 2026-11-21).
+  `agents-skills/media-film/references/pipeline-contract.md` updated with the
+  new semantics. (Supersedes the "awaiting matrix session" state of the
+  2026-11-19 handoff.)
 - tier: 2
 - target user: chuck
 - source: workspace/ideas/2026-11-17-media-pipeline-improvements.md (C14 root cause, C13 progress, A4) + workspace/harness-repo-recovery/improve_mediapipeline_todo.md
