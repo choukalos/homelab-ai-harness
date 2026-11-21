@@ -8,12 +8,9 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { KanbanConfig } from "../config.js";
 import { initDb } from "../db/index.js";
 import { ideas, projects, taskEvents, tasks, usage } from "../db/schema.js";
-import { monthWindow } from "../services/reports.js";
 import type { AgentRuntime, TaskRunContext, TaskRunResult, TaskRunner } from "../agent/sessions.js";
 import { GroomingManager } from "../agent/grooming.js";
 import { createMockGrooming, type MockGrooming } from "../agent/grooming-mock.js";
-import { ResolutionDialog } from "../agent/resolve.js";
-import { createMockResolution, type MockResolution } from "../agent/resolve-mock.js";
 import { Orchestrator, type DeployRunnerLike, type QaGateLike, type SummaryUpdaterLike } from "../orchestrator.js";
 import type { QaRunContext, QaVerdict } from "../agent/qa.js";
 import type { SummaryUpdateContext } from "../agent/summary.js";
@@ -95,9 +92,14 @@ class FixedSummaryUpdater implements SummaryUpdaterLike {
 }
 
 /** App wired to a real (temp) sqlite db — routes + MCP hit the service layer.
- * Grooming + resolution run against mocked Pi sessions (file-backed); the
- * orchestrator runs the real state machine with mocked task/QA/deploy/summary. */
-async function makeApp(opts: { groomSlowMs?: number; mcpKeyCapabilities?: Map<string, Set<string>> } = {}) {
+ * The web UI is READ-ONLY: mutations in tests go through the service layer
+ * or the MCP endpoint. Grooming runs against mocked Pi sessions (file-backed);
+ * the orchestrator runs the real state machine with mocked task/QA/deploy/summary. */
+async function makeApp(opts: {
+  groomSlowMs?: number;
+  mcpKeyCapabilities?: Map<string, Set<string>>;
+  mcpKeyOwners?: Map<string, string>;
+} = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-http-"));
   const cfg = testCfg(path.join(dir, "kanban.db"));
   const db = await initDb(cfg);
@@ -124,15 +126,6 @@ async function makeApp(opts: { groomSlowMs?: number; mcpKeyCapabilities?: Map<st
     workspaceRoot: path.join(dir, "workspace"),
     noTimer: true,
   });
-  const resolveMock: MockResolution = createMockResolution();
-  const resolve = new ResolutionDialog({
-    db: db.db as unknown as BetterSQLite3Database<any>,
-    cfg,
-    sessionFactory: resolveMock.factory,
-    workspacePathFor: (taskId) => orchestrator.workspacePath(taskId),
-    sessionsDir: path.join(dir, "sessions"),
-    restart: (taskId) => orchestrator.restartTask(taskId),
-  });
   const services = createKanbanServices(db, { grooming, orchestrator });
   const app = buildApp({
     cfg,
@@ -141,10 +134,10 @@ async function makeApp(opts: { groomSlowMs?: number; mcpKeyCapabilities?: Map<st
     services,
     orchestrator,
     grooming,
-    resolve,
     mcpKeyCapabilities: opts.mcpKeyCapabilities,
+    mcpKeyOwners: opts.mcpKeyOwners,
   });
-  return { app, db, cfg, services, grooming, mock, orchestrator, taskRunner, deploy, resolve, resolveMock };
+  return { app, db, cfg, services, grooming, mock, orchestrator, taskRunner, deploy };
 }
 
 /** Parse a streamable-HTTP response body (JSON or SSE) into a JSON-RPC object. */
@@ -159,6 +152,7 @@ function parseRpc(body: string): any {
   return JSON.parse(dataLines[dataLines.length - 1]!);
 }
 
+/** MCP test headers: the kanban service key (LITELLM_API_KEY, full tool set). */
 const MCP_HEADERS = {
   "content-type": "application/json",
   accept: "application/json, text/event-stream",
@@ -184,12 +178,83 @@ function mcpText(result: any): any {
   return JSON.parse(result.content[0].text);
 }
 
+/** Create a project + idea via the service layer (the UI is read-only). */
+async function makeProjectAndIdea(ctx: Awaited<ReturnType<typeof makeApp>>, name: string, ideaText: string, owner = "") {
+  const project = await ctx.services.createProject({ name }, owner);
+  const idea = await ctx.services.addIdea(project.id, ideaText, owner);
+  return { projectId: project.id, ideaId: idea.id };
+}
+
 /** drizzle's returning() is typed `Row | Row[]`; normalize to a single row. */
 function one<T>(r: T | T[], label: string): T {
   const row = Array.isArray(r) ? r[0] : r;
   assert.ok(row, label);
   return row;
 }
+
+/** Poll groom_status until the grooming turn settles (finalize/seed). */
+async function groomSettled(app: Awaited<ReturnType<typeof makeApp>>["app"], ideaId: number) {
+  for (let i = 0; i < 50; i++) {
+    const status = mcpText(await mcpCall(app, "groom_status", { idea_id: ideaId }));
+    if (!status.turn.active) return status;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error("grooming turn did not settle");
+}
+
+/** Create a project + a task in the given state with log events + usage. */
+let taskFixtureSeq = 0;
+async function makeTaskFixture(
+  ctx: Awaited<ReturnType<typeof makeApp>>,
+  opts: { state: string; log?: boolean; usage?: boolean; owner?: string } = { state: "running" },
+) {
+  const { services, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  taskFixtureSeq += 1;
+  const project = await services.createProject(
+    { name: `TaskProject ${taskFixtureSeq}`, repoUrl: "https://github.com/chuck/taskproj", defaultBranch: "main", constraints: "no force-push" },
+    opts.owner ?? "",
+  );
+  const idea = await services.addIdea(project.id, "Build the task engine", opts.owner ?? "");
+  const now = Date.now();
+  const task = one(
+    await q
+      .insert(tasks)
+      .values({
+        ideaId: idea.id,
+        projectId: project.id,
+        spec: { goal: "Build the task engine", steps: ["scaffold", "wire"], acceptance: ["tests green"], kind: "code" },
+        state: opts.state,
+        stateChangedAt: now,
+        createdAt: now,
+        branch: "task/1",
+        workspace: "/workspace/task-1",
+        lastCommit: "abc1234",
+        owner: opts.owner ?? "",
+      })
+      .returning(),
+    "task",
+  );
+  if (opts.log) {
+    await q.insert(taskEvents).values([
+      { taskId: task.id, ts: now, type: "state", payload: { from: "backlog", to: "running" } },
+      { taskId: task.id, ts: now + 1, type: "log", payload: { line: "[tool] bash: {\"command\":\"npm test\"}" } },
+      { taskId: task.id, ts: now + 2, type: "log", payload: { line: "[agent] scaffolding the engine" } },
+      { taskId: task.id, ts: now + 3, type: "heartbeat", payload: { commit: "abc1234" } },
+    ]);
+  }
+  if (opts.usage) {
+    await q.insert(usage).values([
+      { projectId: project.id, taskId: task.id, ts: now, role: "task", model: "m", thinking: "medium", tokensIn: 100, tokensOut: 50, cost: 1.5 },
+      { projectId: project.id, taskId: task.id, ts: now, role: "qa", model: "m", thinking: "xhigh", tokensIn: 10, tokensOut: 5, cost: 0.25 },
+    ]);
+  }
+  return { projectId: project.id, idea: idea.id, task };
+}
+
+// ---------------------------------------------------------------------------
+// Read-only web UI
+// ---------------------------------------------------------------------------
 
 test("GET /health returns ok with model + db driver", async () => {
   const { app } = await makeApp();
@@ -202,8 +267,33 @@ test("GET /health returns ok with model + db driver", async () => {
   await app.close();
 });
 
-test("GET / renders the board with stats, columns, and 60s auto-refresh", async () => {
-  const { app } = await makeApp();
+test("GET / renders the read-only board; mutation endpoints are gone", async () => {
+  const { app, services, db } = await makeApp();
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const project = await services.createProject({ name: "Alpha", description: "alpha desc" }, "chuck");
+  const idea1 = await services.addIdea(project.id, "First idea", "chuck");
+  const idea2 = await services.addIdea(project.id, "Second idea", "dylan");
+  const now = Date.now();
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+  await q.insert(tasks).values({
+    ideaId: idea1.id,
+    projectId: project.id,
+    spec,
+    state: "backlog",
+    stateChangedAt: now,
+    createdAt: now,
+    owner: "chuck",
+  });
+  await q.insert(tasks).values({
+    ideaId: idea2.id,
+    projectId: project.id,
+    spec,
+    state: "backlog",
+    stateChangedAt: now,
+    createdAt: now,
+    owner: "dylan",
+  });
+
   const res = await app.inject({ method: "GET", url: "/" });
   assert.equal(res.statusCode, 200);
   assert.match(res.headers["content-type"] ?? "", /text\/html/);
@@ -211,113 +301,82 @@ test("GET / renders the board with stats, columns, and 60s auto-refresh", async 
   for (const label of ["Board", "Projects", "Reports"]) {
     assert.ok(html.includes(`>${label}<`), `nav missing ${label}`);
   }
-  assert.ok(html.includes('href="/" class="active"'), "Board nav link should be active");
-  assert.ok(html.includes("color-scheme: dark"), "dark theme only");
   for (const col of ["Backlog", "Running", "Deploy", "Done", "Needs Attention"]) {
     assert.ok(html.includes(col), `board column missing: ${col}`);
   }
-  assert.ok(html.includes("Spend this month"), "month spend stat");
-  assert.ok(html.includes("Completed this month"), "month completed stat");
-  assert.ok(html.includes("$0.00"), "empty board shows zero spend");
-  assert.ok(html.includes('hx-trigger="every 60s"'), "60s HTMX auto-refresh");
-  assert.ok(html.includes("htmx.org"), "HTMX script tag");
-  assert.ok(html.includes('id="task-panel"'), "layout carries the #task-panel slide-over dialog");
-  assert.ok(html.includes("openTaskPanel"), "panel opener script");
-  await app.close();
-});
+  assert.ok(html.includes("First idea"), "task card title");
+  assert.ok(html.includes(">chuck<"), "owner tag on the board");
+  assert.ok(html.includes(">dylan<"), "owner tag for the other owner");
+  assert.ok(!html.includes("<form"), "read-only board: no forms");
+  assert.ok(html.includes("Read-only"), "read-only hint");
 
-test("GET /projects and /reports render with nav", async () => {
-  const { app } = await makeApp();
-  for (const [url, active] of [
-    ["/projects", "/projects"],
-    ["/reports", "/reports"],
-  ] as const) {
-    const res = await app.inject({ method: "GET", url });
-    assert.equal(res.statusCode, 200);
-    assert.ok(res.payload.includes(`href="${active}" class="active"`), `${url} active nav`);
+  // Every former mutation endpoint is gone (404 route-not-found). Empty
+  // payloads go out without a content-type (Fastify 400s on empty JSON
+  // bodies before routing).
+  const mutationRoutes = [
+    { url: "/projects", payload: JSON.stringify({ name: "Ghost" }), json: true },
+    { url: "/projects/1", payload: JSON.stringify({ name: "Ghost2" }), json: true },
+    { url: "/projects/1/ideas", payload: JSON.stringify({ text: "ghost idea" }), json: true },
+    { url: "/ideas/1/groom/messages", payload: JSON.stringify({ message: "hi" }), json: true },
+    { url: "/ideas/1/groom/accept", payload: "" },
+    { url: "/ideas/1/groom/cancel", payload: "" },
+    { url: "/ideas/1/groom/re-groom", payload: "" },
+    { url: "/ideas/1/discard", payload: "" },
+    { url: "/projects/1/icebox/move", payload: "idea_ids=1" },
+    { url: "/tasks/1/pause", payload: JSON.stringify({}), json: true },
+    { url: "/tasks/1/resume", payload: JSON.stringify({}), json: true },
+    { url: "/tasks/1/stop", payload: JSON.stringify({}), json: true },
+    { url: "/tasks/1/retry-deploy", payload: JSON.stringify({}), json: true },
+    { url: "/tasks/1/resolve/messages", payload: JSON.stringify({ message: "hi" }), json: true },
+    { url: "/tasks/1/resolve/accept", payload: JSON.stringify({}), json: true },
+  ];
+  for (const route of mutationRoutes) {
+    const gone = await app.inject({
+      method: "POST",
+      url: route.url,
+      headers: route.json ? { "content-type": "application/json" } : {},
+      payload: route.payload,
+    });
+    assert.equal(gone.statusCode, 404, `POST ${route.url} should be gone`);
   }
-  const projects = await app.inject({ method: "GET", url: "/projects" });
-  assert.ok(projects.payload.includes("New project"), "New project button");
-  assert.ok(projects.payload.includes("<dialog"), "project editor dialog");
   await app.close();
 });
 
-test("POST /projects (JSON) creates, 409 on duplicate, 400 without name", async () => {
-  const { app } = await makeApp();
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({
-      name: "Demo",
-      description: "A demo project",
-      repoUrl: "https://github.com/chuck/demo",
-      defaultBranch: "main",
-      mediaPaths: ["media/a", "media/b"],
-    }),
-  });
-  assert.equal(created.statusCode, 201);
-  const body = created.json();
-  assert.equal(body.name, "Demo");
-  assert.equal(body.description, "A demo project");
-  assert.equal(body.repoUrl, "https://github.com/chuck/demo");
-  assert.deepEqual(body.mediaPaths, ["media/a", "media/b"]);
-  assert.ok(body.id > 0);
+test("GET /projects renders the read-only project list", async () => {
+  const { app, services } = await makeApp();
+  await services.createProject({ name: "Alpha", description: "alpha desc" }, "chuck");
+  await services.createProject({ name: "Beta", description: "beta desc" });
 
-  const dup = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Demo" }),
-  });
-  assert.equal(dup.statusCode, 409);
-  assert.match(dup.json().error, /already exists/);
-
-  const noName = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ description: "no name" }),
-  });
-  assert.equal(noName.statusCode, 400);
+  const res = await app.inject({ method: "GET", url: "/projects" });
+  assert.equal(res.statusCode, 200);
+  const html = res.payload;
+  assert.ok(html.includes("Alpha"), "project name in list");
+  assert.ok(html.includes("alpha desc"), "description in list");
+  assert.ok(html.includes(">chuck<"), "owner column");
+  assert.ok(!html.includes("<form"), "read-only list: no forms");
+  assert.ok(!html.includes("New project"), "no create dialog");
   await app.close();
 });
 
-test("POST /projects (form) redirects and the project shows in the list", async () => {
-  const { app } = await makeApp();
-  const res = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "name=Form+Project&description=made+via+form&repo_url=https%3A%2F%2Fgithub.com%2Fx%2Fy",
-  });
-  assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, "/projects");
-
-  const list = await app.inject({ method: "GET", url: "/projects" });
-  assert.ok(list.payload.includes("Form Project"), "project name in list");
-  assert.ok(list.payload.includes("made via form"), "description in list");
-  await app.close();
-});
-
-test("GET /projects/<id> renders settings, pipeline columns, and dialogs", async () => {
-  const { app } = await makeApp();
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({
+test("GET /projects/<id> renders the read-only project page", async () => {
+  const { app, services, db } = await makeApp();
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const project = await services.createProject(
+    {
       name: "Alpha",
       description: "alpha desc",
       goal: "ship it",
       repoUrl: "https://github.com/chuck/alpha",
       defaultBranch: "main",
       constraints: "never force-push",
-    }),
-  });
-  const id = created.json().id;
+    },
+    "chuck",
+  );
+  const idea = await services.addIdea(project.id, "An idea", "chuck");
+  void idea;
+  await q.update(projects).set({ stateSummary: "state summary text" }).where(eq(projects.id, project.id));
 
-  const res = await app.inject({ method: "GET", url: `/projects/${id}` });
+  const res = await app.inject({ method: "GET", url: `/projects/${project.id}` });
   assert.equal(res.statusCode, 200);
   const html = res.payload;
   for (const col of ["Idea", "Grooming", "Icebox"]) {
@@ -328,11 +387,11 @@ test("GET /projects/<id> renders settings, pipeline columns, and dialogs", async
   assert.ok(html.includes("https://github.com/chuck/alpha (main)"), "settings: repo + branch");
   assert.ok(html.includes("never force-push"), "settings: constraints");
   assert.ok(html.includes("State summary"), "state summary section");
-  assert.ok(html.includes('id="idea-drop"'), "idea drop dialog");
-  assert.ok(html.includes(`action="/projects/${id}/ideas"`), "idea drop form action");
-  assert.ok(html.includes('id="project-editor"'), "project editor dialog");
-  assert.ok(html.includes(`action="/projects/${id}"`), "edit form action");
-  assert.ok(html.includes('value="Alpha"'), "edit form pre-filled name");
+  assert.ok(html.includes(">chuck<"), "owner shown in settings");
+  assert.ok(!html.includes("<form"), "read-only page: no forms");
+  assert.ok(!html.includes('id="idea-drop"'), "no idea-drop dialog");
+  assert.ok(!html.includes('id="project-editor"'), "no project editor dialog");
+  assert.ok(html.includes("MCP"), "points at the MCP tools");
 
   const missing = await app.inject({ method: "GET", url: "/projects/999" });
   assert.equal(missing.statusCode, 404);
@@ -340,11 +399,14 @@ test("GET /projects/<id> renders settings, pipeline columns, and dialogs", async
 });
 
 test("project page + grooming page show live 'agent working' indicators while a turn is in flight", async () => {
-  const { app } = await makeApp({ groomSlowMs: 300 });
-  const { projectId, ideaId } = await makeProjectAndIdea(app, "Badge", "Badge idea");
+  const ctx = await makeApp({ groomSlowMs: 300 });
+  const { app } = ctx;
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Badge", "Badge idea", "chuck");
 
-  // Start grooming: the seed turn (300ms mock) is in flight.
-  await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
+  // Start grooming via MCP (fire-and-forget: the seed turn — 300ms mock —
+  // is in flight while we render the pages).
+  const startedP = mcpCall(app, "start_grooming", { idea_id: ideaId });
+  await new Promise((r) => setTimeout(r, 50));
 
   // Project page: the Grooming column card carries the working badge.
   const proj = await app.inject({ method: "GET", url: `/projects/${projectId}` });
@@ -356,108 +418,16 @@ test("project page + grooming page show live 'agent working' indicators while a 
   assert.ok(groom.payload.includes('<div class="groom-banner">'), "working banner on the grooming page");
   assert.ok(groom.payload.includes("The agent is working on this idea"), "banner text");
 
-  // After the seed settles: quiet badge, no banner.
-  await new Promise((r) => setTimeout(r, 400));
+  // The seed settles; the MCP call resolves with the idea + seed message.
+  const started = mcpText(await startedP);
+  assert.equal(started.idea.state, "grooming");
+  assert.ok(started.lastAssistant.length > 0, "seed assistant message");
+
+  // After the seed settles: no working badge, no banner.
   const proj2 = await app.inject({ method: "GET", url: `/projects/${projectId}` });
   assert.ok(!proj2.payload.includes("groom-badge working"), "no working badge after settle");
-  assert.ok(proj2.payload.includes('class="groom-badge"'), "quiet 'in grooming chat' badge");
   const groom2 = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
   assert.ok(!groom2.payload.includes('<div class="groom-banner">'), "no banner after settle");
-  await app.close();
-});
-
-test("POST /projects/<id> (JSON) updates; unknown id 404s", async () => {
-  const { app } = await makeApp();
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Alpha", description: "keep me" }),
-  });
-  const id = created.json().id;
-
-  const updated = await app.inject({
-    method: "POST",
-    url: `/projects/${id}`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Alpha 2" }),
-  });
-  assert.equal(updated.statusCode, 200);
-  assert.equal(updated.json().name, "Alpha 2");
-  assert.equal(updated.json().description, "keep me", "partial update keeps untouched fields");
-
-  const dup = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Beta" }),
-  });
-  const conflict = await app.inject({
-    method: "POST",
-    url: `/projects/${id}`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Beta" }),
-  });
-  assert.equal(conflict.statusCode, 409);
-
-  const missing = await app.inject({
-    method: "POST",
-    url: "/projects/999",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Ghost" }),
-  });
-  assert.equal(missing.statusCode, 404);
-  await app.close();
-});
-
-test("POST /projects/<id>/ideas drops an idea (form + JSON)", async () => {
-  const { app } = await makeApp();
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Alpha" }),
-  });
-  const id = created.json().id;
-
-  const form = await app.inject({
-    method: "POST",
-    url: `/projects/${id}/ideas`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "text=My+great+idea",
-  });
-  assert.equal(form.statusCode, 302);
-  assert.equal(form.headers.location, `/projects/${id}`);
-
-  const json = await app.inject({
-    method: "POST",
-    url: `/projects/${id}/ideas`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ text: "Another idea" }),
-  });
-  assert.equal(json.statusCode, 201);
-  assert.equal(json.json().state, "idea");
-  assert.equal(json.json().projectName, "Alpha");
-
-  const empty = await app.inject({
-    method: "POST",
-    url: `/projects/${id}/ideas`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ text: "   " }),
-  });
-  assert.equal(empty.statusCode, 400);
-
-  const page = await app.inject({ method: "GET", url: `/projects/${id}` });
-  assert.ok(page.payload.includes("My great idea"), "form idea in Idea column");
-  assert.ok(page.payload.includes("Another idea"), "json idea in Idea column");
-
-  const badProject = await app.inject({
-    method: "POST",
-    url: "/projects/999/ideas",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ text: "orphan" }),
-  });
-  assert.equal(badProject.statusCode, 404);
   await app.close();
 });
 
@@ -466,44 +436,43 @@ test("board shows task cards with tag, usage, deps, and month stats", async () =
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const now = Date.now();
 
-  const alpha = await services.createProject({ name: "Alpha" });
-  const beta = await services.createProject({ name: "Beta" });
+  const alpha = await services.createProject({ name: "Alpha" }, "chuck");
+  const beta = await services.createProject({ name: "Beta" }, "dylan");
 
   // Ideas: a1 (Alpha), a2 (Alpha, depends on a1), a3 (Alpha), b1 (Beta).
-  const a1 = await services.addIdea(alpha.id, "First idea");
-  const a2 = await services.addIdea(alpha.id, "Second idea");
-  const a3 = await services.addIdea(alpha.id, "Third idea");
-  const b1 = await services.addIdea(beta.id, "Beta idea");
+  const a1 = await services.addIdea(alpha.id, "First idea", "chuck");
+  const a2 = await services.addIdea(alpha.id, "Second idea", "chuck");
+  const a3 = await services.addIdea(alpha.id, "Third idea", "chuck");
+  const b1 = await services.addIdea(beta.id, "Beta idea", "dylan");
   await q.update(ideas).set({ dependsOn: [a1.id] }).where(eq(ideas.id, a2.id));
 
-  // Tasks: t1 (a1, running — so a1 has no done task yet), t2 (a2, backlog —
-  // waiting on a1), t3 (b1, running), t4 (a3, done).
+  // Tasks: t1 (a1, running), t2 (a2, backlog — waiting on a1), t3 (b1, running), t4 (a3, done).
   const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
   const t1 = one(
     await q
       .insert(tasks)
-      .values({ ideaId: a1.id, projectId: alpha.id, spec, state: "running", stateChangedAt: now, createdAt: now })
+      .values({ ideaId: a1.id, projectId: alpha.id, spec, state: "running", stateChangedAt: now, createdAt: now, owner: "chuck" })
       .returning(),
     "t1",
   );
   const t2 = one(
     await q
       .insert(tasks)
-      .values({ ideaId: a2.id, projectId: alpha.id, spec, state: "backlog", stateChangedAt: now, createdAt: now })
+      .values({ ideaId: a2.id, projectId: alpha.id, spec, state: "backlog", stateChangedAt: now, createdAt: now, owner: "chuck" })
       .returning(),
     "t2",
   );
   const t3 = one(
     await q
       .insert(tasks)
-      .values({ ideaId: b1.id, projectId: beta.id, spec, state: "running", stateChangedAt: now, createdAt: now })
+      .values({ ideaId: b1.id, projectId: beta.id, spec, state: "running", stateChangedAt: now, createdAt: now, owner: "dylan" })
       .returning(),
     "t3",
   );
   const t4 = one(
     await q
       .insert(tasks)
-      .values({ ideaId: a3.id, projectId: alpha.id, spec, state: "done", stateChangedAt: now, createdAt: now })
+      .values({ ideaId: a3.id, projectId: alpha.id, spec, state: "done", stateChangedAt: now, createdAt: now, owner: "chuck" })
       .returning(),
     "t4",
   );
@@ -526,8 +495,13 @@ test("board shows task cards with tag, usage, deps, and month stats", async () =
   assert.ok(html.includes("$0.25"), "backlog card usage");
   assert.ok(html.includes("$1.85"), "month spend incl. null-task grooming (1.50+0.25+0.10)");
   assert.ok(html.includes(">1<"), "month completed count");
+  assert.ok(html.includes('class="tag owner"'), "owner tag on task cards");
   await app.close();
 });
+
+// ---------------------------------------------------------------------------
+// MCP endpoint
+// ---------------------------------------------------------------------------
 
 test("POST /mcp auth: actions require a key; discovery is open (proxy registry)", async () => {
   const { app } = await makeApp();
@@ -559,7 +533,7 @@ test("POST /mcp auth: actions require a key; discovery is open (proxy registry)"
   assert.equal(noAuthList.statusCode, 200);
   const rpc = parseRpc(noAuthList.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  assert.equal(names.length, 16, `expected the full 16-tool set, got ${names.length}`);
+  assert.equal(names.length, 23, `expected the full 23-tool set, got ${names.length}`);
   // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
@@ -596,7 +570,7 @@ test("POST /mcp answers the initialize handshake", async () => {
   await app.close();
 });
 
-test("POST /mcp tools/list returns the Slice 1+2+3 tool set", async () => {
+test("POST /mcp tools/list returns the 23-tool set", async () => {
   const { app } = await makeApp();
   const res = await app.inject({
     method: "POST",
@@ -609,9 +583,15 @@ test("POST /mcp tools/list returns the Slice 1+2+3 tool set", async () => {
   const names = rpc.result.tools.map((t: any) => t.name).sort();
   assert.deepEqual(names, [
     "add_idea",
+    "board_status",
     "create_project",
+    "discard_idea",
     "get_project",
-    "groom_idea",
+    "groom_accept",
+    "groom_cancel",
+    "groom_message",
+    "groom_re_groom",
+    "groom_status",
     "list_ideas",
     "list_projects",
     "move_to_backlog",
@@ -620,6 +600,7 @@ test("POST /mcp tools/list returns the Slice 1+2+3 tool set", async () => {
     "restart_task",
     "resume_task",
     "retry_deploy",
+    "start_grooming",
     "start_task",
     "stop_task",
     "task_status",
@@ -628,29 +609,31 @@ test("POST /mcp tools/list returns the Slice 1+2+3 tool set", async () => {
   await app.close();
 });
 
-test("MCP tools: project + idea round-trip", async () => {
+test("MCP tools: project + idea round-trip with owner attribution", async () => {
   const { app, services } = await makeApp();
   const created = mcpText(await mcpCall(app, "create_project", { name: "MCP Project", description: "via mcp" }));
   assert.equal(created.name, "MCP Project");
+  assert.equal(created.owner, "kanban", "the kanban key's owner is stamped");
 
   const listed = mcpText(await mcpCall(app, "list_projects", {}));
   assert.ok(listed.some((p: any) => p.name === "MCP Project"), "list_projects includes the new project");
 
   const fetched = mcpText(await mcpCall(app, "get_project", { project_id: created.id }));
   assert.equal(fetched.description, "via mcp");
+  assert.equal(fetched.owner, "kanban");
 
-  const updated = mcpText(
-    await mcpCall(app, "update_project", { project_id: created.id, name: "MCP Project 2" }),
-  );
+  const updated = mcpText(await mcpCall(app, "update_project", { project_id: created.id, name: "MCP Project 2" }));
   assert.equal(updated.name, "MCP Project 2");
   assert.equal(updated.description, "via mcp", "partial update keeps fields");
 
   const idea = mcpText(await mcpCall(app, "add_idea", { project_id: created.id, text: "mcp idea" }));
   assert.equal(idea.state, "idea");
   assert.equal(idea.projectName, "MCP Project 2");
+  assert.equal(idea.owner, "kanban", "idea owner stamped from the key");
 
   const ideas = mcpText(await mcpCall(app, "list_ideas", { project_id: created.id }));
   assert.ok(ideas.some((i: any) => i.text === "mcp idea"), "list_ideas includes the new idea");
+  assert.equal(ideas[0].owner, "kanban");
 
   // Errors surface as isError results.
   const missing = await mcpCall(app, "get_project", { project_id: 999 });
@@ -660,7 +643,7 @@ test("MCP tools: project + idea round-trip", async () => {
   assert.equal(dup.isError, true);
   assert.match(dup.content[0].text, /already exists/);
 
-  // The REST layer sees the same data (shared service layer).
+  // The service layer sees the same data (shared service layer).
   const rest = await services.listProjects();
   assert.ok(rest.some((p) => p.name === "MCP Project 2"));
   await app.close();
@@ -674,618 +657,206 @@ test("GET /mcp is not a valid MCP method", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Slice 2: grooming chat + icebox
+// MCP interactive grooming (start → message → accept / cancel / re-groom)
 // ---------------------------------------------------------------------------
 
-/** Create a project + idea via REST and return their ids. */
-async function makeProjectAndIdea(app: Awaited<ReturnType<typeof makeApp>>["app"], name: string, ideaText: string) {
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name }),
-  });
-  assert.equal(created.statusCode, 201, `project create: ${created.payload}`);
-  const projectId = created.json().id;
-  const ideaId = await addIdea(app, projectId, ideaText);
-  return { projectId, ideaId };
-}
+test("MCP interactive grooming: start → message → status → accept → icebox", async () => {
+  const ctx = await makeApp();
+  const { app, services } = ctx;
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Groom", "Build a kanban export", "chuck");
 
-/** Drop an idea into an existing project via REST; return its id. */
-async function addIdea(app: Awaited<ReturnType<typeof makeApp>>["app"], projectId: number, text: string): Promise<number> {
-  const dropped = await app.inject({
-    method: "POST",
-    url: `/projects/${projectId}/ideas`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ text }),
-  });
-  assert.equal(dropped.statusCode, 201, `idea drop: ${dropped.payload}`);
-  return dropped.json().id;
-}
+  // start_grooming: seed turn completes (mock), idea is in grooming.
+  const started = mcpText(await mcpCall(app, "start_grooming", { idea_id: ideaId }));
+  assert.equal(started.idea.state, "grooming");
+  assert.ok(started.lastAssistant.length > 0, "seed assistant message");
+  assert.equal(started.idea.owner, "chuck", "idea owner preserved");
 
-test("GET /ideas/<id>/groom starts grooming and renders the chat page", async () => {
-  const { app, services } = await makeApp();
-  const { projectId, ideaId } = await makeProjectAndIdea(app, "Groom", "Build a widget");
+  // groom_message: a user question + the assistant's reply.
+  const msg = mcpText(await mcpCall(app, "groom_message", { idea_id: ideaId, text: "Should it export to CSV?" }));
+  assert.equal(msg.role, "assistant");
+  assert.ok(msg.text.length > 0, "assistant reply");
 
-  const res = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
-  assert.equal(res.statusCode, 200);
-  const html = res.payload;
-  assert.ok(html.includes("Grooming —"), "grooming page title");
-  assert.ok(html.includes("Build a widget"), "idea text shown");
-  assert.ok(html.includes('id="groom-messages"'), "message list");
-  assert.ok(html.includes('hx-post="/ideas/' + ideaId + '/groom/messages"'), "HTMX chat turn");
-  assert.ok(html.includes('hx-target="#groom-messages"'), "HTMX target");
-  assert.ok(html.includes('action="/ideas/' + ideaId + '/groom/accept"'), "Accept form");
-  assert.ok(html.includes('action="/ideas/' + ideaId + '/groom/cancel"'), "Cancel form");
-  assert.ok(html.includes('action="/ideas/' + ideaId + '/groom/re-groom"'), "Re-groom form");
-  assert.ok(html.includes('action="/ideas/' + ideaId + '/discard"'), "Discard form");
-  assert.ok(html.includes("mock reply to: Build a widget"), "seeded assistant reply");
+  // groom_status: state + turn + transcript tail.
+  const status = mcpText(await mcpCall(app, "groom_status", { idea_id: ideaId }));
+  assert.equal(status.state, "grooming");
+  assert.equal(status.turn.active, false);
+  assert.ok(status.messages.length >= 4, "transcript tail (seed pair + chat pair)");
+  assert.equal(status.messages[status.messages.length - 1].role, "assistant");
 
-  // The idea transitioned to grooming.
+  // groom_accept: background finalize → poll until settled → icebox + spec.
+  const accepted = mcpText(await mcpCall(app, "groom_accept", { idea_id: ideaId }));
+  assert.equal(accepted.state, "grooming", "still grooming while finalizing");
+  const settled = await groomSettled(app, ideaId);
+  assert.equal(settled.turn.active, false);
+  assert.equal(settled.state, "icebox");
+  assert.equal(settled.spec?.goal, "Mock goal");
   const idea = await services.getIdea(ideaId);
-  assert.equal(idea?.state, "grooming");
+  assert.equal(idea?.state, "icebox");
+  assert.equal(idea?.spec?.goal, "Mock goal");
 
-  // Unknown idea → 404.
-  const missing = await app.inject({ method: "GET", url: "/ideas/999/groom" });
-  assert.equal(missing.statusCode, 404);
-  await app.close();
-});
-
-test("POST /ideas/<id>/groom/messages echoes the user message; reply arrives via poll", async () => {
-  const { app } = await makeApp();
-  const { ideaId } = await makeProjectAndIdea(app, "Groom2", "Chat idea");
-  await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` }); // start
-
-  // The POST is non-blocking: it returns the user's message immediately and
-  // the assistant reply arrives via the 3s transcript poll.
-  const res = await app.inject({
-    method: "POST",
-    url: `/ideas/${ideaId}/groom/messages`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "message=What+kind+is+this%3F",
-  });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers["content-type"] ?? "", /text\/html/);
-  assert.ok(res.payload.includes('class="msg user"'), "user fragment echoed");
-  assert.ok(res.payload.includes("What kind is this?"), "user text");
-
-  // The assistant reply lands in the transcript (mock turn is fast).
-  await new Promise((r) => setTimeout(r, 25));
-  const poll = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom/messages` });
-  assert.equal(poll.statusCode, 200);
-  assert.ok(poll.payload.includes('id="groom-messages"'), "poll returns the container");
-  assert.ok(poll.payload.includes('hx-trigger="every 3s"'), "poll attributes re-emitted");
-  assert.ok(poll.payload.includes("mock reply to: What kind is this?"), "assistant reply in transcript");
-
-  // Empty message → 400 error fragment.
-  const empty = await app.inject({
-    method: "POST",
-    url: `/ideas/${ideaId}/groom/messages`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "message=",
-  });
-  assert.equal(empty.statusCode, 400);
-  assert.ok(empty.payload.includes('class="msg error"'));
-  await app.close();
-});
-
-test("grooming transitions: accept → icebox, cancel → idea, re-groom, discard", async () => {
-  const { app, services } = await makeApp();
-  const { projectId, ideaId } = await makeProjectAndIdea(app, "Transitions", "Transition idea");
-  await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` }); // start
-
-  // Accept (form) → 302 to the project page IMMEDIATELY; the finalize turn
-  // runs in the background and the idea lands in the icebox when it settles.
-  const accept = await app.inject({
-    method: "POST",
-    url: `/ideas/${ideaId}/groom/accept`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(accept.statusCode, 302);
-  assert.equal(accept.headers.location, `/projects/${projectId}`);
-
-  // Wait for the background finalize to settle (mock turn is fast).
-  let iceboxed = await services.getIdea(ideaId);
-  for (let i = 0; i < 50 && iceboxed?.state !== "icebox"; i++) {
-    await new Promise((r) => setTimeout(r, 10));
-    iceboxed = await services.getIdea(ideaId);
-  }
-  assert.equal(iceboxed?.state, "icebox");
-  assert.equal(iceboxed?.spec?.goal, "Mock goal");
-  assert.deepEqual(iceboxed?.dependsOn, []);
-
-  // Accept on an icebox idea → 409 (no longer groomable).
-  const lateAccept = await app.inject({
-    method: "POST",
-    url: `/ideas/${ideaId}/groom/accept`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(lateAccept.statusCode, 409);
-
-  // Groom page for an icebox idea → 409.
-  const stale = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
-  assert.equal(stale.statusCode, 409);
-  assert.ok(stale.payload.includes("no longer in grooming"));
-
-  // A second idea: re-groom (while grooming), then cancel.
-  const i2 = await addIdea(app, projectId, "Cancel idea");
-  await app.inject({ method: "GET", url: `/ideas/${i2}/groom` }); // start
-
-  // Re-groom (while grooming) → 302 back to the grooming page, state stays grooming.
-  const reGroom = await app.inject({
-    method: "POST",
-    url: `/ideas/${i2}/groom/re-groom`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(reGroom.statusCode, 302);
-  assert.equal(reGroom.headers.location, `/ideas/${i2}/groom`);
-  assert.equal((await services.getIdea(i2))?.state, "grooming");
-
-  // Cancel → back to idea.
-  const cancel = await app.inject({
-    method: "POST",
-    url: `/ideas/${i2}/groom/cancel`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(cancel.statusCode, 302);
-  assert.equal((await services.getIdea(i2))?.state, "idea");
-
-  // Re-groom is invalid once back in the idea state.
-  const reGroomTooLate = await app.inject({
-    method: "POST",
-    url: `/ideas/${i2}/groom/re-groom`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(reGroomTooLate.statusCode, 409);
-
-  // Discard → 302; idea soft-deleted.
-  const discard = await app.inject({
-    method: "POST",
-    url: `/ideas/${i2}/discard`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(discard.statusCode, 302);
-  assert.equal((await services.getIdea(i2))?.state, "discarded");
-
-  // Guards: accept/cancel/re-groom on a discarded idea → 409.
-  for (const route of ["/groom/accept", "/groom/cancel", "/groom/re-groom"]) {
-    const res = await app.inject({
-      method: "POST",
-      url: `/ideas/${i2}${route}`,
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      payload: "",
-    });
-    assert.equal(res.statusCode, 409, route);
-  }
-  await app.close();
-});
-
-test("POST /projects/<id>/icebox/move moves selected items to the backlog", async () => {
-  const { app, services, db } = await makeApp();
-  const { projectId } = await makeProjectAndIdea(app, "Icebox", "Icebox idea A");
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-
-  // Finalize two ideas into the icebox via the grooming accept flow.
-  const ideas = await services.listIdeas(projectId);
-  const ideaA = ideas[0]!;
-  await app.inject({ method: "POST", url: `/projects/${projectId}/ideas`, headers: { "content-type": "application/json" }, payload: JSON.stringify({ text: "Icebox idea B" }) });
-  const ideaB = (await services.listIdeas(projectId)).find((i) => i.text === "Icebox idea B")!;
-  await app.inject({ method: "GET", url: `/ideas/${ideaA.id}/groom` });
-  await app.inject({ method: "POST", url: `/ideas/${ideaA.id}/groom/accept`, headers: { "content-type": "application/x-www-form-urlencoded" }, payload: "" });
-  await app.inject({ method: "GET", url: `/ideas/${ideaB.id}/groom` });
-  await app.inject({ method: "POST", url: `/ideas/${ideaB.id}/groom/accept`, headers: { "content-type": "application/x-www-form-urlencoded" }, payload: "" });
-
-  // The project page shows the icebox specs with checkboxes + move form.
-  const page = await app.inject({ method: "GET", url: `/projects/${projectId}` });
-  assert.ok(page.payload.includes('name="idea_ids" value="' + ideaA.id + '"'), "icebox checkbox A");
-  assert.ok(page.payload.includes('name="idea_ids" value="' + ideaB.id + '"'), "icebox checkbox B");
-  assert.ok(page.payload.includes('action="/projects/' + projectId + '/icebox/move"'), "move form");
-  assert.ok(page.payload.includes("Move to Backlog"), "move button");
-  assert.ok(page.payload.includes("Mock goal"), "finalized spec goal shown");
-  assert.ok(page.payload.includes(">code<"), "spec kind tag");
-
-  // Move one item (form) → 302; task created in the backlog.
-  const move = await app.inject({
-    method: "POST",
-    url: `/projects/${projectId}/icebox/move`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: `idea_ids=${ideaA.id}`,
-  });
-  assert.equal(move.statusCode, 302);
-  assert.equal(move.headers.location, `/projects/${projectId}`);
-  assert.equal((await services.getIdea(ideaA.id))?.state, "moved");
-  const taskRows = await q.select().from(tasks).where(eq(tasks.ideaId, ideaA.id));
-  assert.equal(taskRows.length, 1);
-  assert.equal(taskRows[0]!.state, "backlog");
-  assert.equal(taskRows[0]!.spec?.goal, "Mock goal");
-
-  // Move the second (JSON) → 200 with the result.
-  const moveJson = await app.inject({
-    method: "POST",
-    url: `/projects/${projectId}/icebox/move`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ idea_ids: [ideaB.id] }),
-  });
-  assert.equal(moveJson.statusCode, 200);
-  const body = moveJson.json();
-  assert.equal(body.tasks.length, 1);
-  assert.equal(body.tasks[0].ideaId, ideaB.id);
-  assert.equal(body.ideas[0].state, "moved");
-
-  // Guards: moving a moved idea → 409; empty selection → 400; foreign idea → 400.
-  const again = await app.inject({
-    method: "POST",
-    url: `/projects/${projectId}/icebox/move`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ idea_ids: [ideaA.id] }),
-  });
-  assert.equal(again.statusCode, 409);
-  const emptyMove = await app.inject({
-    method: "POST",
-    url: `/projects/${projectId}/icebox/move`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ idea_ids: [] }),
-  });
-  assert.equal(emptyMove.statusCode, 400);
-
-  // The board now shows the two backlog tasks.
-  const board = await app.inject({ method: "GET", url: "/" });
-  assert.ok(board.payload.includes("Icebox idea A"), "backlog card A");
-  assert.ok(board.payload.includes("Icebox idea B"), "backlog card B");
-  await app.close();
-});
-
-test("MCP groom_idea + move_to_backlog drive the pipeline", async () => {
-  const { app, services } = await makeApp();
-  const { projectId, ideaId } = await makeProjectAndIdea(app, "MCP Groom", "MCP groomed idea");
-
-  // groom_idea: one-shot idea → icebox.
-  const groomed = mcpText(await mcpCall(app, "groom_idea", { idea_id: ideaId }));
-  assert.equal(groomed.state, "icebox");
-  assert.equal(groomed.spec.goal, "Mock goal");
-  assert.deepEqual(groomed.dependsOn, []);
-
-  // Idempotent.
-  const again = mcpText(await mcpCall(app, "groom_idea", { idea_id: ideaId }));
-  assert.equal(again.state, "icebox");
-
-  // move_to_backlog (one or more).
-  const ideaId2 = await addIdea(app, projectId, "Second MCP idea");
-  await mcpCall(app, "groom_idea", { idea_id: ideaId2 });
-  const moved = mcpText(await mcpCall(app, "move_to_backlog", { idea_ids: [ideaId, ideaId2] }));
-  assert.equal(moved.tasks.length, 2);
-  assert.ok(moved.tasks.every((t: any) => t.state === "backlog"));
-  assert.equal((await services.getIdea(ideaId))?.state, "moved");
-
-  // Errors surface as isError results.
-  const missing = await mcpCall(app, "groom_idea", { idea_id: 999 });
+  // Guards.
+  const notGrooming = await mcpCall(app, "groom_message", { idea_id: ideaId, text: "too late" });
+  assert.equal(notGrooming.isError, true);
+  assert.match(notGrooming.content[0].text, /is in state "icebox"/);
+  const missing = await mcpCall(app, "start_grooming", { idea_id: 999 });
   assert.equal(missing.isError, true);
   assert.match(missing.content[0].text, /not found/);
+  await app.close();
+});
+
+test("MCP grooming: cancel back to idea, re_groom (fresh session), discard_idea", async () => {
+  const ctx = await makeApp();
+  const { app, services } = ctx;
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Groom2", "Another idea", "chuck");
+
+  // start → cancel: back to idea.
+  await mcpCall(app, "start_grooming", { idea_id: ideaId });
+  const cancelled = mcpText(await mcpCall(app, "groom_cancel", { idea_id: ideaId }));
+  assert.equal(cancelled.state, "idea");
+  assert.equal((await services.getIdea(ideaId))?.state, "idea");
+
+  // Guards: start_grooming on a non-idea/grooming idea → isError.
+  const iceboxed = await services.addIdea(projectId, "Iceboxed idea", "chuck");
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+  const q = ctx.db.db as unknown as BetterSQLite3Database<any>;
+  await q.update(ideas).set({ state: "icebox", spec, dependsOn: [] }).where(eq(ideas.id, iceboxed.id));
+  const notIdea = await mcpCall(app, "start_grooming", { idea_id: iceboxed.id });
+  assert.equal(notIdea.isError, true);
+  assert.match(notIdea.content[0].text, /is in state "icebox"/);
+  // re_groom expects the grooming state (a fresh-session restart of a
+  // conversation that went off the rails) — not the icebox.
+  const notGrooming = await mcpCall(app, "groom_re_groom", { idea_id: iceboxed.id });
+  assert.equal(notGrooming.isError, true);
+  assert.match(notGrooming.content[0].text, /is in state "icebox"/);
+
+  // re_groom: grooming → grooming with a fresh session (old chat discarded,
+  // re-seeded with the idea).
+  await mcpCall(app, "start_grooming", { idea_id: ideaId });
+  await mcpCall(app, "groom_message", { idea_id: ideaId, text: "a question" });
+  const statusBefore = mcpText(await mcpCall(app, "groom_status", { idea_id: ideaId }));
+  assert.ok(statusBefore.messages.length >= 4, "seed pair + chat pair");
+  const reGroomed = mcpText(await mcpCall(app, "groom_re_groom", { idea_id: ideaId }));
+  assert.equal(reGroomed.state, "grooming");
+  const statusAfter = mcpText(await mcpCall(app, "groom_status", { idea_id: ideaId }));
+  assert.equal(statusAfter.messages.length, 2, "fresh session: only the seed pair");
+  // Cancel again to leave it in a clean state.
+  await mcpCall(app, "groom_cancel", { idea_id: ideaId });
+
+  // discard_idea: soft delete.
+  const idea3 = await services.addIdea(projectId, "Trash idea", "chuck");
+  const discarded = mcpText(await mcpCall(app, "discard_idea", { idea_id: idea3.id }));
+  assert.equal(discarded.state, "discarded");
+  assert.equal((await services.getIdea(idea3.id))?.state, "discarded");
+  const listed = mcpText(await mcpCall(app, "list_ideas", { project_id: projectId }));
+  assert.ok(!listed.some((i: any) => i.id === idea3.id), "discarded ideas are not listed");
+  // Guards.
+  const again = await mcpCall(app, "discard_idea", { idea_id: idea3.id });
+  assert.equal(again.isError, true);
+  assert.match(again.content[0].text, /is in state "discarded"/);
+  const missing = await mcpCall(app, "discard_idea", { idea_id: 999 });
+  assert.equal(missing.isError, true);
+  assert.match(missing.content[0].text, /not found/);
+  await app.close();
+});
+
+test("MCP board_status: counts + needs_attention + running + filters", async () => {
+  const ctx = await makeApp();
+  const { app, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const now = Date.now();
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Board", "Stuck idea", "chuck");
+  const { projectId: dylanProjectId } = await makeProjectAndIdea(ctx, "Board2", "Dylan idea", "dylan");
+
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+  const idea2 = await ctx.services.addIdea(projectId, "Running idea", "dylan");
+  const idea3 = await ctx.services.addIdea(projectId, "Backlog idea", "chuck");
+  const stuck = one(
+    await q
+      .insert(tasks)
+      .values({ ideaId, projectId, spec, state: "needs_attention", stateChangedAt: now, createdAt: now, owner: "chuck" })
+      .returning(),
+    "stuck",
+  );
+  const running = one(
+    await q
+      .insert(tasks)
+      .values({ ideaId: idea2.id, projectId, spec, state: "running", stateChangedAt: now, createdAt: now, owner: "dylan" })
+      .returning(),
+    "running",
+  );
+  const backlog = one(
+    await q
+      .insert(tasks)
+      .values({ ideaId: idea3.id, projectId, spec, state: "backlog", stateChangedAt: now, createdAt: now, owner: "chuck" })
+      .returning(),
+    "backlog",
+  );
+  await q.insert(taskEvents).values([
+    { taskId: stuck.id, ts: now - 60000, type: "state", payload: { from: "running", to: "needs_attention", reason: "watchdog: no activity" } },
+    { taskId: stuck.id, ts: now - 30000, type: "log", payload: { line: "last line" } },
+    { taskId: running.id, ts: now - 1000, type: "heartbeat", payload: { kind: "watchdog" } },
+  ]);
+  await q.insert(usage).values([
+    { projectId, taskId: running.id, ts: now, role: "task", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 0.42 },
+  ]);
+
+  const status = mcpText(await mcpCall(app, "board_status", {}));
+  assert.deepEqual(status.counts, { backlog: 1, running: 1, deploy: 0, done: 0, needs_attention: 1 });
+  assert.equal(status.needsAttention.length, 1);
+  const na = status.needsAttention[0];
+  assert.equal(na.taskId, stuck.id);
+  assert.equal(na.title, "Stuck idea");
+  assert.equal(na.project, "Board");
+  assert.equal(na.owner, "chuck");
+  assert.equal(na.reason, "watchdog: no activity");
+  assert.equal(na.lastActivityAt, now - 30000);
+  assert.equal(na.resolution, null);
+  assert.equal(status.running.length, 1);
+  assert.equal(status.running[0].taskId, running.id);
+  assert.equal(status.running[0].cost, 0.42);
+
+  // Filters.
+  const byProject = mcpText(await mcpCall(app, "board_status", { project_id: dylanProjectId }));
+  assert.deepEqual(byProject.counts, { backlog: 0, running: 0, deploy: 0, done: 0, needs_attention: 0 });
+  const byOwner = mcpText(await mcpCall(app, "board_status", { owner: "dylan" }));
+  assert.equal(byOwner.counts.running, 1);
+  assert.equal(byOwner.counts.backlog, 0);
+  assert.deepEqual(byOwner.needsAttention, []);
+
+  // The resolution loop: task_status carries the failure context.
+  const taskStatus = mcpText(await mcpCall(app, "task_status", { task_id: stuck.id }));
+  assert.equal(taskStatus.state, "needs_attention");
+  assert.equal(taskStatus.failureReason, "watchdog: no activity");
+  assert.equal(taskStatus.owner, "chuck");
+  void backlog;
+  await app.close();
+});
+
+test("MCP move_to_backlog: owner inherited from the idea", async () => {
+  const ctx = await makeApp();
+  const { app, services, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Move", "Move idea", "dylan");
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+  await q.update(ideas).set({ state: "icebox", spec, dependsOn: [] }).where(eq(ideas.id, ideaId));
+
+  const moved = mcpText(await mcpCall(app, "move_to_backlog", { idea_ids: [ideaId] }));
+  assert.equal(moved.tasks.length, 1);
+  assert.equal(moved.tasks[0].state, "backlog");
+  assert.equal(moved.tasks[0].owner, "dylan", "owner inherited from the idea");
+  assert.equal((await services.getIdea(ideaId))?.state, "moved");
+
   const notIcebox = await mcpCall(app, "move_to_backlog", { idea_ids: [999] });
   assert.equal(notIcebox.isError, true);
   assert.match(notIcebox.content[0].text, /not found/);
   await app.close();
 });
 
-// ---------------------------------------------------------------------------
-// Slice 3a: task detail page (live log, workspace, branch, usage)
-// ---------------------------------------------------------------------------
-
-/** Create a project + a task in the given state with log events + usage. */
-let taskFixtureSeq = 0;
-async function makeTaskFixture(
-  app: Awaited<ReturnType<typeof makeApp>>["app"],
-  db: Awaited<ReturnType<typeof makeApp>>["db"],
-  opts: { state: string; log?: boolean; usage?: boolean } = { state: "running" },
-) {
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  taskFixtureSeq += 1;
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({
-      name: `TaskProject ${taskFixtureSeq}`,
-      repoUrl: "https://github.com/chuck/taskproj",
-      defaultBranch: "main",
-      constraints: "no force-push",
-    }),
-  });
-  assert.equal(created.statusCode, 201);
-  const projectId = created.json().id;
-  const ideaId = await addIdea(app, projectId, "Build the task engine");
-  const now = Date.now();
-  const task = one(
-    await q
-      .insert(tasks)
-      .values({
-        ideaId,
-        projectId,
-        spec: { goal: "Build the task engine", steps: ["scaffold", "wire"], acceptance: ["tests green"], kind: "code" },
-        state: opts.state,
-        stateChangedAt: now,
-        createdAt: now,
-        branch: "task/1",
-        workspace: "/workspace/task-1",
-        lastCommit: "abc1234",
-      })
-      .returning(),
-    "task",
-  );
-  if (opts.log) {
-    await q.insert(taskEvents).values([
-      { taskId: task.id, ts: now, type: "state", payload: { from: "backlog", to: "running" } },
-      { taskId: task.id, ts: now + 1, type: "log", payload: { line: "[tool] bash: {\"command\":\"npm test\"}" } },
-      { taskId: task.id, ts: now + 2, type: "log", payload: { line: "[agent] scaffolding the engine" } },
-      { taskId: task.id, ts: now + 3, type: "heartbeat", payload: { commit: "abc1234" } },
-    ]);
-  }
-  if (opts.usage) {
-    await q.insert(usage).values([
-      { projectId, taskId: task.id, ts: now, role: "task", model: "m", thinking: "medium", tokensIn: 100, tokensOut: 50, cost: 1.5 },
-      { projectId, taskId: task.id, ts: now, role: "qa", model: "m", thinking: "xhigh", tokensIn: 10, tokensOut: 5, cost: 0.25 },
-    ]);
-  }
-  return { projectId, task };
-}
-
-test("GET /tasks/<id> renders the task detail with log tail, workspace, branch, usage", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "running", log: true, usage: true });
-
-  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers["content-type"] ?? "", /text\/html/);
-  const html = res.payload;
-  assert.ok(html.includes(`Task #${task.id}`), "task heading");
-  assert.ok(html.includes("Build the task engine"), "idea text");
-  assert.ok(html.includes("state-running"), "state badge");
-  assert.ok(html.includes("/workspace/task-1"), "workspace path");
-  assert.ok(html.includes("task/1"), "branch");
-  assert.ok(html.includes("abc1234"), "last commit");
-  assert.ok(html.includes("Build the task engine"), "spec goal");
-  assert.ok(html.includes("tests green"), "acceptance criterion");
-  assert.ok(html.includes("$1.75"), "usage so far (1.50 + 0.25)");
-  assert.ok(html.includes("task $1.50"), "usage by role: task");
-  assert.ok(html.includes("qa $0.25"), "usage by role: qa");
-  assert.ok(html.includes("[tool] bash: {&quot;command&quot;:&quot;npm test&quot;}"), "log tail: tool line");
-  assert.ok(html.includes("[agent] scaffolding the engine"), "log tail: agent line");
-  assert.ok(html.includes("commit abc1234"), "log tail: heartbeat");
-  assert.ok(html.includes("state: backlog → running"), "log tail: state event");
-  assert.ok(html.includes('id="task-log"'), "log container");
-  assert.ok(html.includes(`hx-get="/tasks/${task.id}/log"`), "HTMX log refresh");
-  assert.ok(html.includes('hx-trigger="every 2s"'), "2s auto-refresh while running");
-  assert.ok(html.includes('hx-swap="innerHTML"'), "fragment swap");
-  assert.ok(html.includes('<!doctype html>'), "full page for plain navigation");
-  assert.ok(html.includes('id="task-panel"'), "layout carries the #task-panel dialog");
-  await app.close();
-});
-
-test("GET /tasks/<id> with HX-Request returns the bare slide-over fragment", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "running", log: true, usage: true });
-
-  const res = await app.inject({
-    method: "GET",
-    url: `/tasks/${task.id}`,
-    headers: { "hx-request": "true" },
-  });
-  assert.equal(res.statusCode, 200);
-  const html = res.payload;
-  assert.ok(!html.includes("<!doctype html>"), "bare fragment, not a full page");
-  assert.ok(html.includes(`Task #${task.id}`), "task heading");
-  assert.ok(html.includes('id="task-log"'), "log container in the fragment");
-  assert.ok(html.includes(`hx-get="/tasks/${task.id}/log"`), "live log refresh preserved");
-  assert.ok(html.includes("panel-close"), "close button in the panel");
-  await app.close();
-});
-
-test("GET /tasks/<id> without live refresh for non-running tasks; 404 unknown", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "backlog" });
-
-  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.equal(res.statusCode, 200);
-  assert.ok(!res.payload.includes('hx-trigger="every 2s"'), "no 2s refresh while not running");
-  assert.ok(res.payload.includes("no log lines yet"), "empty log placeholder");
-
-  const missing = await app.inject({ method: "GET", url: "/tasks/999" });
-  assert.equal(missing.statusCode, 404);
-
-  const bad = await app.inject({ method: "GET", url: "/tasks/abc" });
-  assert.ok(bad.payload.includes("invalid task id"));
-  await app.close();
-});
-
-test("GET /tasks/<id>/log returns the log tail fragment", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "running", log: true });
-
-  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}/log` });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers["content-type"] ?? "", /text\/html/);
-  assert.ok(res.payload.includes("<div class=\"log\">"), "fragment root");
-  assert.ok(res.payload.includes("[agent] scaffolding the engine"), "log line in fragment");
-  assert.ok(res.payload.includes("state: backlog → running"), "state event rendered");
-
-  const missing = await app.inject({ method: "GET", url: "/tasks/999/log" });
-  assert.equal(missing.statusCode, 404);
-  await app.close();
-});
-
-test("needs-attention task shows the what-happened panel + resolution dialog", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(app, db, { state: "needs_attention", log: true });
-  const now = Date.now();
-  await q.insert(taskEvents).values([
-    {
-      taskId: task.id,
-      ts: now,
-      type: "state",
-      payload: { from: "running", to: "needs_attention", reason: "mock session crashed" },
-    },
-    { taskId: task.id, ts: now + 1, type: "qa", payload: { round: 2, pass: false, feedback: "QA said: missing tests" } },
-  ]);
-
-  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.equal(res.statusCode, 200);
-  assert.ok(res.payload.includes("What happened"), "what-happened panel");
-  assert.ok(res.payload.includes("mock session crashed"), "failure reason shown");
-  assert.ok(res.payload.includes("QA said: missing tests"), "QA feedback shown");
-  assert.ok(res.payload.includes("Resolution dialog"), "resolution dialog section");
-  assert.ok(res.payload.includes(`/tasks/${task.id}/resolve/messages`), "chat form posts to resolve/messages");
-  assert.ok(res.payload.includes(`/tasks/${task.id}/resolve/accept`), "accept form posts to resolve/accept");
-  assert.ok(res.payload.includes("state-needs_attention"), "state badge");
-  await app.close();
-});
-
-test("non-needs-attention task does not show the resolution dialog", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "running", log: true });
-  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.equal(res.statusCode, 200);
-  assert.ok(!res.payload.includes("Resolution dialog"), "no dialog while running");
-  assert.ok(!res.payload.includes("What happened"), "no what-happened panel");
-  await app.close();
-});
-
-test("POST /tasks/<id>/resolve/messages: chat turn fragment + audit event", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(app, db, { state: "needs_attention", log: true });
-
-  const res = await app.inject({
-    method: "POST",
-    url: `/tasks/${task.id}/resolve/messages`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "message=what+went+wrong?",
-  });
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers["content-type"] ?? "", /text\/html/);
-  assert.ok(res.payload.includes("msg assistant"), "assistant message fragment");
-  assert.ok(res.payload.includes("mock resolution reply"), "mock reply text");
-
-  // Audit event + usage (role resolve) recorded.
-  const events = await q.select().from(taskEvents).where(eq(taskEvents.taskId, task.id));
-  assert.ok(events.some((e) => e.type === "resolve" && e.payload!.text === "what went wrong?"), "resolve event");
-
-  // Guards: empty message → 400 fragment; unknown task → 404-ish error fragment.
-  const empty = await app.inject({
-    method: "POST",
-    url: `/tasks/${task.id}/resolve/messages`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "message=   ",
-  });
-  assert.equal(empty.statusCode, 400);
-  assert.ok(empty.payload.includes("message is required"));
-  await app.close();
-});
-
-test("POST /tasks/<id>/resolve/accept: plan → backlog (JSON + form redirect)", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(app, db, { state: "needs_attention", log: true });
-
-  // JSON accept.
-  const res = await app.inject({
-    method: "POST",
-    url: `/tasks/${task.id}/resolve/accept`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({}),
-  });
-  assert.equal(res.statusCode, 200);
-  const body = res.json();
-  assert.equal(body.state, "backlog", "task back in the backlog");
-  assert.equal(body.qaRounds, 0, "QA rounds reset");
-  assert.ok(body.resolution, "plan captured");
-  assert.ok(body.resolution.includes("what went wrong"), "plan content from the mock session");
-
-  // Guards: a backlog task cannot be accepted again.
-  const again = await app.inject({
-    method: "POST",
-    url: `/tasks/${task.id}/resolve/accept`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({}),
-  });
-  assert.equal(again.statusCode, 409);
-
-  // Form accept → 302 redirect to the task page.
-  const { task: t2 } = await makeTaskFixture(app, db, { state: "needs_attention" });
-  const form = await app.inject({
-    method: "POST",
-    url: `/tasks/${t2.id}/resolve/accept`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(form.statusCode, 302);
-  assert.equal(form.headers.location, `/tasks/${t2.id}`);
-  await app.close();
-});
-
-test("POST /tasks/<id>/retry-deploy: re-runs only the deploy step", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(app, db, { state: "needs_attention" });
-  const now = Date.now();
-  await q.insert(taskEvents).values({
-    taskId: task.id,
-    ts: now,
-    type: "state",
-    payload: { from: "deploy", to: "needs_attention", reason: "deploy failed: push failed: auth" },
-  });
-
-  const res = await app.inject({
-    method: "POST",
-    url: `/tasks/${task.id}/retry-deploy`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({}),
-  });
-  assert.equal(res.statusCode, 200);
-  const body = res.json();
-  assert.equal(body.state, "done", "deploy re-run succeeds → done");
-  const events = await q.select().from(taskEvents).where(eq(taskEvents.taskId, task.id));
-  const deployEvent = events.filter((e) => e.type === "deploy").pop()!;
-  assert.equal(deployEvent.payload!.status, "ok");
-
-  // Guards: a running task is not deployable.
-  const { task: t2 } = await makeTaskFixture(app, db, { state: "running" });
-  const guard = await app.inject({
-    method: "POST",
-    url: `/tasks/${t2.id}/retry-deploy`,
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({}),
-  });
-  assert.equal(guard.statusCode, 409);
-  assert.match(guard.json().error, /not deployable/);
-  await app.close();
-});
-
-test("board cards link to the task detail page", async () => {
-  const { app, db } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "backlog" });
-
-  const res = await app.inject({ method: "GET", url: "/" });
-  assert.equal(res.statusCode, 200);
-  assert.ok(res.payload.includes(`href="/tasks/${task.id}"`), "board card links to /tasks/<id>");
-  await app.close();
-});
-
-// ---------------------------------------------------------------------------
-// Slice 3c: MCP task control tools (start_task, retry_deploy, restart_task,
-// task_status)
-// ---------------------------------------------------------------------------
-
 test("MCP tools: start_task / task_status / restart_task / retry_deploy", async () => {
-  const { app, db, orchestrator } = await makeApp();
+  const ctx = await makeApp();
+  const { app, db, orchestrator } = ctx;
   const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(app, db, { state: "backlog", log: true, usage: true });
+  const { task } = await makeTaskFixture(ctx, { state: "backlog", log: true, usage: true });
 
   // task_status: state + log tail + usage, no failure reason yet.
   let status = mcpText(await mcpCall(app, "task_status", { task_id: task.id }));
@@ -1302,7 +873,7 @@ test("MCP tools: start_task / task_status / restart_task / retry_deploy", async 
   assert.equal(status.state, "done", "pipeline settled to done");
 
   // restart_task: needs_attention → backlog with a resolution note.
-  const { task: t2 } = await makeTaskFixture(app, db, { state: "needs_attention", log: true });
+  const { task: t2 } = await makeTaskFixture(ctx, { state: "needs_attention", log: true });
   await q.insert(taskEvents).values({
     taskId: t2.id,
     ts: Date.now(),
@@ -1318,7 +889,7 @@ test("MCP tools: start_task / task_status / restart_task / retry_deploy", async 
   assert.equal(status.resolution, "fix auth, re-run");
 
   // retry_deploy: deploy failure → needs_attention → retry → done.
-  const { task: t3 } = await makeTaskFixture(app, db, { state: "needs_attention" });
+  const { task: t3 } = await makeTaskFixture(ctx, { state: "needs_attention" });
   await q.insert(taskEvents).values({
     taskId: t3.id,
     ts: Date.now(),
@@ -1328,8 +899,8 @@ test("MCP tools: start_task / task_status / restart_task / retry_deploy", async 
   const redeployed = mcpText(await mcpCall(app, "retry_deploy", { task_id: t3.id }));
   assert.equal(redeployed.state, "done", "deploy re-run → done");
 
-  // retry_deploy refuses QA-exhausted tasks (resolution dialog first).
-  const { task: t4 } = await makeTaskFixture(app, db, { state: "needs_attention" });
+  // retry_deploy refuses QA-exhausted tasks (resolution via restart_task first).
+  const { task: t4 } = await makeTaskFixture(ctx, { state: "needs_attention" });
   await q.insert(taskEvents).values({
     taskId: t4.id,
     ts: Date.now(),
@@ -1347,86 +918,10 @@ test("MCP tools: start_task / task_status / restart_task / retry_deploy", async 
   await app.close();
 });
 
-// ---------------------------------------------------------------------------
-// Slice 5: resilience — pause/resume/stop (REST + MCP), GUI controls
-// ---------------------------------------------------------------------------
-
-test("POST /tasks/<id>/pause|resume|stop: manual control (JSON + form redirect)", async () => {
-  const { app, db, orchestrator, taskRunner } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "backlog" });
-  const json = { "content-type": "application/json" };
-
-  // Hold the run open so the task is deterministically running.
-  taskRunner.behavior.set(task.id, "hang");
-  await orchestrator.startTask(task.id);
-
-  // stop (JSON) → paused flag, state stays running.
-  let res = await app.inject({ method: "POST", url: `/tasks/${task.id}/stop`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().paused, true);
-  assert.equal(res.json().state, "running");
-  assert.ok(taskRunner.aborted.includes(task.id), "session aborted");
-
-  // stop/pause again → 409 (already paused).
-  res = await app.inject({ method: "POST", url: `/tasks/${task.id}/stop`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 409);
-  res = await app.inject({ method: "POST", url: `/tasks/${task.id}/pause`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 409);
-
-  // resume (JSON) → un-paused; the resumed run re-launches and completes
-  // (behavior cleared).
-  taskRunner.behavior.delete(task.id);
-  const runsBefore = taskRunner.runs.length;
-  res = await app.inject({ method: "POST", url: `/tasks/${task.id}/resume`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().paused, false);
-  await orchestrator.settled();
-  assert.equal(res.json().state, "running");
-  assert.equal(taskRunner.runs.length, runsBefore + 1, "resumed run re-launched");
-
-  // resume on a non-paused task → 409.
-  res = await app.inject({ method: "POST", url: `/tasks/${task.id}/resume`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 409);
-  assert.match(res.json().error, /not paused/);
-
-  // pause/stop on a done task → 409 (not running).
-  const { task: t2 } = await makeTaskFixture(app, db, { state: "backlog" });
-  await orchestrator.startTask(t2.id);
-  await orchestrator.settled();
-  res = await app.inject({ method: "POST", url: `/tasks/${t2.id}/pause`, headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 409);
-  assert.match(res.json().error, /not running/);
-
-  // Form posts redirect to the task page (GUI buttons).
-  const { task: t3 } = await makeTaskFixture(app, db, { state: "backlog" });
-  taskRunner.behavior.set(t3.id, "hang");
-  await orchestrator.startTask(t3.id);
-  res = await app.inject({
-    method: "POST",
-    url: `/tasks/${t3.id}/stop`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, `/tasks/${t3.id}`);
-  res = await app.inject({
-    method: "POST",
-    url: `/tasks/${t3.id}/resume`,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    payload: "",
-  });
-  assert.equal(res.statusCode, 302);
-  assert.equal(res.headers.location, `/tasks/${t3.id}`);
-
-  // Invalid id → 400.
-  res = await app.inject({ method: "POST", url: "/tasks/abc/pause", headers: json, payload: "{}" });
-  assert.equal(res.statusCode, 400);
-  await app.close();
-});
-
 test("MCP tools: pause_task / resume_task / stop_task", async () => {
-  const { app, db, orchestrator, taskRunner } = await makeApp();
-  const { task } = await makeTaskFixture(app, db, { state: "backlog" });
+  const ctx = await makeApp();
+  const { app, db, orchestrator, taskRunner } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "backlog" });
   taskRunner.behavior.set(task.id, "hang");
   await orchestrator.startTask(task.id);
 
@@ -1440,8 +935,7 @@ test("MCP tools: pause_task / resume_task / stop_task", async () => {
   assert.equal(refused.isError, true);
   assert.match(refused.content[0].text, /already paused/);
 
-  // resume_task → un-paused; the resumed run re-launches and completes
-  // (behavior cleared).
+  // resume_task → un-paused; the resumed run re-launches and completes.
   taskRunner.behavior.delete(task.id);
   const runsBefore = taskRunner.runs.length;
   const resumed = mcpText(await mcpCall(app, "resume_task", { task_id: task.id }));
@@ -1456,269 +950,27 @@ test("MCP tools: pause_task / resume_task / stop_task", async () => {
   await app.close();
 });
 
-test("task page shows control buttons (Stop/Resume/Retry deploy) + last activity", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-
-  // Running (not paused) → Stop button + last-activity row.
-  const { task } = await makeTaskFixture(app, db, { state: "running", log: true });
-  let res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.equal(res.statusCode, 200);
-  assert.ok(res.payload.includes(`hx-post="/tasks/${task.id}/stop"`), "Stop button while running");
-  assert.ok(!res.payload.includes(`hx-post="/tasks/${task.id}/resume"`), "no Resume while running");
-  assert.ok(res.payload.includes("Last activity"), "last activity row (watchdog visibility)");
-
-  // Running + paused → Resume button (orthogonal paused flag).
-  await q.update(tasks).set({ paused: true }).where(eq(tasks.id, task.id));
-  res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
-  assert.ok(res.payload.includes(`hx-post="/tasks/${task.id}/resume"`), "Resume button while paused");
-  assert.ok(!res.payload.includes(`hx-post="/tasks/${task.id}/stop"`), "no Stop while paused");
-  assert.ok(res.payload.includes("paused"), "paused badge");
-
-  // Needs Attention → Retry deploy button.
-  const { task: t2 } = await makeTaskFixture(app, db, { state: "needs_attention", log: true });
-  res = await app.inject({ method: "GET", url: `/tasks/${t2.id}` });
-  assert.ok(res.payload.includes(`hx-post="/tasks/${t2.id}/retry-deploy"`), "Retry deploy button");
-
-  // Backlog → no control buttons.
-  const { task: t3 } = await makeTaskFixture(app, db, { state: "backlog" });
-  res = await app.inject({ method: "GET", url: `/tasks/${t3.id}` });
-  assert.ok(!res.payload.includes(`hx-post="/tasks/${t3.id}/stop"`), "no Stop in backlog");
-  assert.ok(!res.payload.includes(`hx-post="/tasks/${t3.id}/resume"`), "no Resume in backlog");
-  assert.ok(!res.payload.includes(`hx-post="/tasks/${t3.id}/retry-deploy"`), "no Retry deploy in backlog");
-  await app.close();
-});
-
-// ---------------------------------------------------------------------------
-// Slice 4: reports & history
-// ---------------------------------------------------------------------------
-
-/** Seed a project + task + usage rows with timestamps in controlled months. */
-async function seedSpend(
-  app: Awaited<ReturnType<typeof makeApp>>["app"],
-  db: Awaited<ReturnType<typeof makeApp>>["db"],
-  opts: {
-    projectName: string;
-    ideaText: string;
-    taskState: string;
-    /** Offset from the start of the current month (ms); negative = earlier. */
-    tsOffset: number;
-    cost: number;
-    role?: string;
-  },
-): Promise<{ projectId: number; taskId: number }> {
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: opts.projectName }),
-  });
-  assert.equal(created.statusCode, 201);
-  const projectId = created.json().id;
-  const ideaId = await addIdea(app, projectId, opts.ideaText);
-  const now = Date.now();
-  const curStart = monthWindow(now)[monthWindow(now).length - 1]!.start;
-  const ts = curStart + opts.tsOffset;
-  const task = one(
-    await q
-      .insert(tasks)
-      .values({
-        ideaId,
-        projectId,
-        spec: { goal: "g", steps: [], acceptance: [], kind: "code" },
-        state: opts.taskState,
-        stateChangedAt: ts,
-        createdAt: now,
-      })
-      .returning(),
-    "task",
-  );
-  await q.insert(usage).values([
-    {
-      projectId,
-      taskId: task.id,
-      ts,
-      role: opts.role ?? "task",
-      model: "m",
-      thinking: "medium",
-      tokensIn: 100,
-      tokensOut: 40,
-      cost: opts.cost,
-    },
-  ]);
-  return { projectId, taskId: task.id };
-}
-
-test("GET /reports renders spend chart, total callout, per-project stats, and per-task table", async () => {
-  const { app, db } = await makeApp();
-  const a = await seedSpend(app, db, {
-    projectName: "Alpha",
-    ideaText: "Alpha widget",
-    taskState: "done",
-    tsOffset: 3600_000,
-    cost: 2.5,
-  });
-  await seedSpend(app, db, {
-    projectName: "Beta",
-    ideaText: "Beta gadget",
-    taskState: "running",
-    tsOffset: 2 * 3600_000,
-    cost: 1.5,
-  });
-
-  const res = await app.inject({ method: "GET", url: "/reports" });
-  assert.equal(res.statusCode, 200);
-  const html = res.payload;
-  assert.ok(html.includes('href="/reports" class="active"'), "reports nav active");
-  assert.ok(html.includes("Spend — rolling 12 months"), "spend section");
-  assert.ok(html.includes("Total spend (12 mo)"), "total callout label");
-  assert.ok(html.includes("$4.00"), "total spend value (2.5 + 1.5)");
-  assert.ok(html.includes("Per project — rolling 12 months"), "per-project section");
-  assert.ok(html.includes("Alpha"), "per-project table: Alpha");
-  assert.ok(html.includes("Beta"), "per-project table: Beta");
-  assert.ok(html.includes("Per-task usage"), "per-task section");
-  assert.ok(html.includes("Alpha widget"), "per-task table: task title");
-  assert.ok(html.includes("Beta gadget"), "per-task table: task title");
-  assert.ok(html.includes(`<a href="/tasks/${a.taskId}">#${a.taskId}</a>`), "task link");
-  // Two server-rendered SVG charts (monthly bars + per-project bars).
-  assert.equal(html.match(/<svg /g)?.length, 2, "two SVG charts");
-  assert.ok(html.includes("<rect "), "bars rendered as rects");
-  // Filter form (GET /reports with project/state/role/q).
-  assert.ok(html.includes('<form class="filters" method="get" action="/reports">'), "filter form");
-  for (const name of ["project", "state", "role", "q"]) {
-    assert.ok(html.includes(`name="${name}"`), `filter input ${name}`);
-  }
-  await app.close();
-});
-
-test("GET /reports filters the per-task table by project / state / role / q", async () => {
-  const { app, db } = await makeApp();
-  const a = await seedSpend(app, db, {
-    projectName: "Alpha",
-    ideaText: "Alpha widget",
-    taskState: "done",
-    tsOffset: 3600_000,
-    cost: 2.5,
-  });
-  const b = await seedSpend(app, db, {
-    projectName: "Beta",
-    ideaText: "Beta gadget",
-    taskState: "running",
-    tsOffset: 2 * 3600_000,
-    cost: 1.5,
-  });
-
-  // Project filter.
-  let res = await app.inject({ method: "GET", url: `/reports?project=${a.projectId}` });
-  assert.ok(res.payload.includes("Alpha widget"), "alpha task shown");
-  assert.ok(!res.payload.includes("Beta gadget"), "beta task filtered out");
-  // State filter.
-  res = await app.inject({ method: "GET", url: "/reports?state=running" });
-  assert.ok(res.payload.includes("Beta gadget"), "running task shown");
-  assert.ok(!res.payload.includes("Alpha widget"), "done task filtered out");
-  // Role filter (both seeded rows use role `task`).
-  res = await app.inject({ method: "GET", url: "/reports?role=task" });
-  assert.ok(res.payload.includes("Alpha widget") && res.payload.includes("Beta gadget"), "role=task keeps both");
-  res = await app.inject({ method: "GET", url: "/reports?role=qa" });
-  assert.ok(res.payload.includes("No task usage recorded for the current filters"), "role=qa matches none");
-  // Text filter.
-  res = await app.inject({ method: "GET", url: "/reports?q=beta" });
-  assert.ok(res.payload.includes("Beta gadget"), "q=beta matches");
-  assert.ok(!res.payload.includes("Alpha widget"), "q=beta excludes alpha");
-  // Invalid filter values are ignored (treated as unfiltered).
-  res = await app.inject({ method: "GET", url: "/reports?state=bogus&role=bogus" });
-  assert.ok(res.payload.includes("Alpha widget") && res.payload.includes("Beta gadget"), "invalid filters ignored");
-  void b;
-  await app.close();
-});
-
-test("GET /projects/<id> shows the completed list (hidden by default) with pagination", async () => {
-  const { app, db } = await makeApp();
-  const q = db.db as unknown as BetterSQLite3Database<any>;
-  const created = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Alpha" }),
-  });
-  const id = created.json().id;
-
-  // 11 done tasks with distinct completion times (newest first in the list).
-  for (let i = 0; i < 11; i++) {
-    const ideaId = await addIdea(app, id, `Done item ${i}`);
-    await q.insert(tasks).values({
-      ideaId,
-      projectId: id,
-      spec: { goal: "g", steps: [], acceptance: [], kind: "code" },
-      state: "done",
-      stateChangedAt: Date.now() - i * 3600_000, // item 0 is newest
-      createdAt: Date.now(),
-    });
-  }
-
-  const res = await app.inject({ method: "GET", url: `/projects/${id}` });
-  const html = res.payload;
-  // Hidden by default: the list lives inside a collapsed <details>.
-  assert.ok(html.includes('<details class="completed">'), "completed list in <details> (hidden by default)");
-  assert.ok(!html.includes("<details class=\"completed\" open"), "not open by default");
-  assert.ok(html.includes("Completed items (11)"), "completed count");
-  // The ideas also appear in the Idea column (state `idea`), so match the
-  // completed-list table cells specifically: <td>Done item N</td>.
-  assert.ok(html.includes("<td>Done item 0</td>"), "newest item on page 1");
-  assert.ok(!html.includes("<td>Done item 10</td>"), "oldest item not on page 1");
-  assert.ok(html.includes("page 1 of 2"), "pagination label");
-  assert.ok(html.includes(`/projects/${id}?page=2`), "next-page link");
-
-  const res2 = await app.inject({ method: "GET", url: `/projects/${id}?page=2` });
-  assert.ok(res2.payload.includes("<td>Done item 10</td>"), "oldest item on page 2");
-  assert.ok(!res2.payload.includes("<td>Done item 0</td>"), "newest item not on page 2");
-  assert.ok(res2.payload.includes("page 2 of 2"), "pagination label page 2");
-  assert.ok(res2.payload.includes(`<a href="/projects/${id}">← prev</a>`), "prev link on page 2");
-
-  // No completed tasks → empty state.
-  const empty = await app.inject({
-    method: "POST",
-    url: "/projects",
-    headers: { "content-type": "application/json" },
-    payload: JSON.stringify({ name: "Empty" }),
-  });
-  const emptyId = empty.json().id;
-  const res3 = await app.inject({ method: "GET", url: `/projects/${emptyId}` });
-  assert.ok(res3.payload.includes("Completed items (0)"), "zero completed");
-  assert.ok(res3.payload.includes("No completed items yet."), "empty state");
-  await app.close();
-});
-
 test("MCP project_status: state summary + icebox listing + task counts", async () => {
-  const { app, db } = await makeApp();
+  const ctx = await makeApp();
+  const { app, db } = ctx;
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const project = mcpText(await mcpCall(app, "create_project", { name: "Alpha", goal: "ship it" }));
   const projectId = project.id;
 
   // LLM-maintained state summary (normally written by the summary session).
-  await q
-    .update(projects)
-    .set({ stateSummary: "Widget API is live; dark mode deployed." })
-    .where(eq(projects.id, projectId));
+  await q.update(projects).set({ stateSummary: "Widget API is live; dark mode deployed." }).where(eq(projects.id, projectId));
 
   // Two icebox items (one depends on the other) + one idea outside the icebox.
-  const idea1 = await addIdea(app, projectId, "Icebox item one");
-  const idea2 = await addIdea(app, projectId, "Icebox item two");
-  await addIdea(app, projectId, "Still a raw idea");
+  const idea1 = (await ctx.services.addIdea(projectId, "Icebox item one")).id;
+  const idea2 = (await ctx.services.addIdea(projectId, "Icebox item two")).id;
+  await ctx.services.addIdea(projectId, "Still a raw idea");
   const spec1 = { goal: "Build the widget API", steps: ["scaffold"], acceptance: ["tests green"], kind: "code" as const };
   const spec2 = { goal: "Dark mode", steps: ["theme"], acceptance: ["dark"], kind: "blog" as const };
-  await q
-    .update(ideas)
-    .set({ state: "icebox", spec: spec1, dependsOn: [] })
-    .where(eq(ideas.id, idea1));
-  await q
-    .update(ideas)
-    .set({ state: "icebox", spec: spec2, dependsOn: [idea1] })
-    .where(eq(ideas.id, idea2));
+  await q.update(ideas).set({ state: "icebox", spec: spec1, dependsOn: [] }).where(eq(ideas.id, idea1));
+  await q.update(ideas).set({ state: "icebox", spec: spec2, dependsOn: [idea1] }).where(eq(ideas.id, idea2));
 
   // Board tasks: one done, one running.
-  const idea3 = await addIdea(app, projectId, "Done item");
+  const idea3 = (await ctx.services.addIdea(projectId, "Done item")).id;
   await q.insert(tasks).values({
     ideaId: idea3,
     projectId,
@@ -1727,7 +979,7 @@ test("MCP project_status: state summary + icebox listing + task counts", async (
     stateChangedAt: Date.now(),
     createdAt: Date.now(),
   });
-  const idea4 = await addIdea(app, projectId, "Running item");
+  const idea4 = (await ctx.services.addIdea(projectId, "Running item")).id;
   await q.insert(tasks).values({
     ideaId: idea4,
     projectId,
@@ -1758,10 +1010,186 @@ test("MCP project_status: state summary + icebox listing + task counts", async (
 });
 
 // ---------------------------------------------------------------------------
+// Task detail page (read-only) + grooming transcript viewer + reports
+// ---------------------------------------------------------------------------
+
+test("GET /tasks/<id> renders the read-only task detail with log tail, usage, owner", async () => {
+  const ctx = await makeApp();
+  const { app, db } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "running", log: true, usage: true, owner: "chuck" });
+
+  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers["content-type"] ?? "", /text\/html/);
+  const html = res.payload;
+  assert.ok(html.includes(`Task #${task.id}`), "task heading");
+  assert.ok(html.includes("Build the task engine"), "idea text");
+  assert.ok(html.includes("state-running"), "state badge");
+  assert.ok(html.includes("/workspace/task-1"), "workspace path");
+  assert.ok(html.includes("task/1"), "branch");
+  assert.ok(html.includes("abc1234"), "last commit");
+  assert.ok(html.includes("tests green"), "acceptance criterion");
+  assert.ok(html.includes("$1.75"), "usage so far (1.50 + 0.25)");
+  assert.ok(html.includes("task $1.50"), "usage by role: task");
+  assert.ok(html.includes("qa $0.25"), "usage by role: qa");
+  assert.ok(html.includes("[tool] bash: {&quot;command&quot;:&quot;npm test&quot;}"), "log tail: tool line");
+  assert.ok(html.includes("[agent] scaffolding the engine"), "log tail: agent line");
+  assert.ok(html.includes("commit abc1234"), "log tail: heartbeat");
+  assert.ok(html.includes("state: backlog → running"), "log tail: state event");
+  assert.ok(html.includes('id="task-log"'), "log container");
+  assert.ok(html.includes(`hx-get="/tasks/${task.id}/log"`), "HTMX log refresh");
+  assert.ok(html.includes('hx-trigger="every 2s"'), "2s auto-refresh while running");
+  assert.ok(html.includes('<!doctype html>'), "full page for plain navigation");
+  assert.ok(html.includes('id="task-panel"'), "layout carries the #task-panel dialog");
+  assert.ok(html.includes("chuck"), "owner shown");
+  // Read-only: no control buttons, no resolution dialog, no forms.
+  assert.ok(!html.includes("<form"), "no forms on the task page");
+  assert.ok(!html.includes("Stop (pause)"), "no stop control");
+  assert.ok(!html.includes("Retry deploy"), "no retry-deploy control");
+  assert.ok(!html.includes("Resolution dialog"), "no resolution dialog");
+  await app.close();
+});
+
+test("GET /tasks/<id> with HX-Request returns the bare slide-over fragment", async () => {
+  const ctx = await makeApp();
+  const { app, db } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "running", log: true, usage: true });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/tasks/${task.id}`,
+    headers: { "hx-request": "true" },
+  });
+  assert.equal(res.statusCode, 200);
+  const html = res.payload;
+  assert.ok(!html.includes("<!doctype html>"), "bare fragment, not a full page");
+  assert.ok(html.includes(`Task #${task.id}`), "task heading");
+  assert.ok(html.includes('id="task-log"'), "log container in the fragment");
+  assert.ok(html.includes(`hx-get="/tasks/${task.id}/log"`), "live log refresh preserved");
+  assert.ok(html.includes("panel-close"), "close button in the panel");
+  await app.close();
+});
+
+test("GET /tasks/<id> without live refresh for non-running tasks; 404 unknown", async () => {
+  const ctx = await makeApp();
+  const { app } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "backlog" });
+
+  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
+  assert.equal(res.statusCode, 200);
+  assert.ok(!res.payload.includes('hx-trigger="every 2s"'), "no 2s refresh while not running");
+  assert.ok(res.payload.includes("no log lines yet"), "empty log placeholder");
+
+  const missing = await app.inject({ method: "GET", url: "/tasks/999" });
+  assert.equal(missing.statusCode, 404);
+
+  const bad = await app.inject({ method: "GET", url: "/tasks/abc" });
+  assert.ok(bad.payload.includes("invalid task id"));
+  await app.close();
+});
+
+test("needs-attention task shows the what-happened panel + MCP resolution pointer", async () => {
+  const ctx = await makeApp();
+  const { app, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const { task } = await makeTaskFixture(ctx, { state: "needs_attention", log: true });
+  const now = Date.now();
+  await q.insert(taskEvents).values([
+    {
+      taskId: task.id,
+      ts: now,
+      type: "state",
+      payload: { from: "running", to: "needs_attention", reason: "mock session crashed" },
+    },
+    { taskId: task.id, ts: now + 1, type: "qa", payload: { round: 2, pass: false, feedback: "QA said: missing tests" } },
+  ]);
+
+  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.payload.includes("What happened"), "what-happened panel");
+  assert.ok(res.payload.includes("mock session crashed"), "failure reason shown");
+  assert.ok(res.payload.includes("QA said: missing tests"), "QA feedback shown");
+  assert.ok(res.payload.includes(`restart_task(${task.id}`), "MCP resolution pointer");
+  assert.ok(res.payload.includes("state-needs_attention"), "state badge");
+  assert.ok(!res.payload.includes("Resolution dialog"), "no dialog — resolution is via MCP");
+  await app.close();
+});
+
+test("non-needs-attention task does not show the what-happened panel", async () => {
+  const ctx = await makeApp();
+  const { app } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "running", log: true });
+  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}` });
+  assert.equal(res.statusCode, 200);
+  assert.ok(!res.payload.includes("What happened"), "no what-happened panel");
+  await app.close();
+});
+
+test("GET /tasks/<id>/log returns the log tail fragment", async () => {
+  const ctx = await makeApp();
+  const { app } = ctx;
+  const { task } = await makeTaskFixture(ctx, { state: "running", log: true });
+
+  const res = await app.inject({ method: "GET", url: `/tasks/${task.id}/log` });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers["content-type"] ?? "", /text\/html/);
+  assert.ok(res.payload.includes("<div class=\"log\">"), "fragment root");
+  assert.ok(res.payload.includes("[agent] scaffolding the engine"), "log line in fragment");
+  assert.ok(res.payload.includes("state: backlog → running"), "state event rendered");
+
+  const missing = await app.inject({ method: "GET", url: "/tasks/999/log" });
+  assert.equal(missing.statusCode, 404);
+  await app.close();
+});
+
+test("groom page is a read-only transcript viewer", async () => {
+  const ctx = await makeApp();
+  const { app, services } = ctx;
+  const { projectId, ideaId } = await makeProjectAndIdea(ctx, "Viewer", "Viewer idea", "chuck");
+
+  // Not groomed yet: the viewer points at the MCP start_grooming tool.
+  let res = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.payload.includes("start_grooming"), "points at MCP start_grooming");
+  assert.ok(!res.payload.includes("<form"), "no forms");
+
+  // Groom via MCP, then the viewer shows the transcript.
+  await mcpCall(app, "start_grooming", { idea_id: ideaId });
+  await mcpCall(app, "groom_message", { idea_id: ideaId, text: "My question?" });
+  res = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.payload.includes("My question?"), "user message in transcript");
+  assert.ok(res.payload.includes("groom_message"), "points at MCP grooming tools");
+  assert.ok(!res.payload.includes("<form"), "no chat input");
+  assert.ok(!res.payload.includes(">Accept<"), "no accept button");
+
+  // Iceboxed idea: the viewer notes it is no longer grooming.
+  await mcpCall(app, "groom_accept", { idea_id: ideaId });
+  await groomSettled(app, ideaId);
+  assert.equal((await services.getIdea(ideaId))?.state, "icebox");
+  res = await app.inject({ method: "GET", url: `/ideas/${ideaId}/groom` });
+  assert.ok(res.payload.includes("no longer in grooming"), "post-grooming note");
+
+  const missing = await app.inject({ method: "GET", url: "/ideas/999/groom" });
+  assert.equal(missing.statusCode, 404);
+  await app.close();
+});
+
+test("GET /reports renders the read-only reports page", async () => {
+  const { app } = await makeApp();
+  const res = await app.inject({ method: "GET", url: "/reports" });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.payload.includes("Reports"), "reports heading");
+  assert.ok(!res.payload.includes('method="post"'), "no mutation forms (the filter form is GET)");
+  await app.close();
+});
+
+// ---------------------------------------------------------------------------
 // MCP per-key capability scoping (guardrails for multi-user keys)
 // ---------------------------------------------------------------------------
 
 const READ_TOOLS = [
+  "board_status",
   "get_project",
   "list_ideas",
   "list_projects",
@@ -1788,11 +1216,12 @@ test("MCP: unknown key is rejected with a clear error (401)", async () => {
 });
 
 test("MCP: scoped key (read) sees only read tools and cannot call control tools", async () => {
-  const { app, db } = await makeApp({
+  const ctx = await makeApp({
     mcpKeyCapabilities: new Map([
       ["abc123", new Set(["read"])],
     ]),
   });
+  const { app, db } = ctx;
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const now = Date.now();
   const project = await q
@@ -1814,7 +1243,7 @@ test("MCP: scoped key (read) sees only read tools and cannot call control tools"
       payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     });
 
-  // tools/list → only the read set
+  // tools/list → only the read set (incl. board_status).
   const list = await call("tools/list", {});
   const rpc = parseRpc(list.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
@@ -1846,6 +1275,6 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
     payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const rpc = parseRpc(res.payload);
-  assert.equal(rpc.result.tools.length, 16, "kanban key sees all 16 tools");
+  assert.equal(rpc.result.tools.length, 23, "kanban key sees all 23 tools");
   await app.close();
 });

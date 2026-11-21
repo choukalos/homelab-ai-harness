@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { KanbanConfig } from "../config.js";
 import { initDb } from "../db/index.js";
-import { ideas, tasks, usage } from "../db/schema.js";
+import { ideas, taskEvents, tasks, usage } from "../db/schema.js";
 import { createKanbanServices, ServiceError, type KanbanServices } from "./index.js";
 
 function testCfg(sqlitePath: string): KanbanConfig {
@@ -100,7 +100,8 @@ test("listProjects / getProject", async () => {
     ["Alpha", "Zeta"],
     "ordered by name",
   );
-  assert.deepEqual(Object.keys(list[0]!).sort(), ["description", "id", "name"], "summary shape");
+  assert.deepEqual(Object.keys(list[0]!).sort(), ["description", "id", "name", "owner"], "summary shape");
+  assert.equal(list[0]!.owner, "", "no owner stamped → '' (unattributed)");
 
   const alpha = list.find((p) => p.name === "Alpha")!;
   const got = await services.getProject(alpha.id);
@@ -173,6 +174,103 @@ test("addIdea / listIdeas", async () => {
     services.addIdea(999, "orphan"),
     (err: unknown) => err instanceof ServiceError && err.status === 404,
   );
+});
+
+test("owner attribution: createProject / addIdea stamp the caller; tasks inherit", async () => {
+  const { services, q } = await setup();
+  const p = await services.createProject({ name: "Alpha" }, "chuck");
+  assert.equal(p.owner, "chuck");
+  const p2 = await services.createProject({ name: "Beta" });
+  assert.equal(p2.owner, "", "no owner arg → ''");
+
+  const i1 = await services.addIdea(p.id, "chuck's idea", "chuck");
+  assert.equal(i1.owner, "chuck");
+  const i2 = await services.addIdea(p.id, "dylan's idea", "dylan");
+  assert.equal(i2.owner, "dylan");
+
+  // Tasks inherit the idea's owner at move-to-backlog — even when a
+  // different caller pushes the move.
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+  for (const i of [i1, i2]) {
+    await q.update(ideas).set({ state: "icebox", spec, dependsOn: [] }).where(eq(ideas.id, i.id));
+  }
+  const result = await services.moveIceboxToBacklog([i1.id, i2.id]);
+  assert.equal(result.tasks[0]!.owner, "chuck");
+  assert.equal(result.tasks[1]!.owner, "dylan");
+  const t1 = (await q.select().from(tasks).where(eq(tasks.ideaId, i1.id)))[0]!;
+  assert.equal(t1.owner, "chuck");
+
+  // The board + boardStatus carry the owner through.
+  const board = await services.board();
+  const card = board.columns.flatMap((c) => c.cards).find((c) => c.taskId === t1.id)!;
+  assert.equal(card.owner, "chuck");
+  const status = await services.boardStatus();
+  assert.equal(status.counts.backlog, 2);
+  assert.deepEqual(status.running, []);
+  assert.deepEqual(status.needsAttention, []);
+  const filtered = await services.boardStatus({ owner: "dylan" });
+  assert.equal(filtered.counts.backlog, 1);
+  assert.equal(filtered.running.length, 0);
+});
+
+test("boardStatus: needs-attention summary (reason, last activity, resolution) + running + filters", async () => {
+  const { services, q } = await setup();
+  const now = Date.now();
+  const p = await services.createProject({ name: "Alpha" }, "chuck");
+  const d = await services.createProject({ name: "Beta" }, "dylan");
+  const spec = { goal: "g", steps: [], acceptance: [], kind: "code" as const };
+
+  const mkTask = async (projectId: number, text: string, state: string, owner: string) => {
+    const idea = await services.addIdea(projectId, text, owner);
+    const t = one(
+      await q
+        .insert(tasks)
+        .values({ ideaId: idea.id, projectId, spec, state, stateChangedAt: now, createdAt: now, owner })
+        .returning(),
+      "task",
+    );
+    return t;
+  };
+
+  const stuck = await mkTask(p.id, "Stuck task", "needs_attention", "chuck");
+  const running = await mkTask(p.id, "Running task", "running", "dylan");
+  const done = await mkTask(d.id, "Done task", "done", "dylan");
+
+  await q.insert(taskEvents).values([
+    { taskId: stuck.id, ts: now - 60000, type: "state", payload: { from: "running", to: "needs_attention", reason: "watchdog: no activity for 10m" } },
+    { taskId: stuck.id, ts: now - 30000, type: "log", payload: { line: "last line before silence" } },
+    { taskId: running.id, ts: now - 1000, type: "heartbeat", payload: { kind: "watchdog" } },
+  ]);
+  await q.insert(usage).values([
+    { projectId: p.id, taskId: running.id, ts: now, role: "task", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 0.42 },
+  ]);
+
+  const status = await services.boardStatus();
+  assert.deepEqual(status.counts, { backlog: 0, running: 1, deploy: 0, done: 1, needs_attention: 1 });
+  assert.equal(status.needsAttention.length, 1);
+  const na = status.needsAttention[0]!;
+  assert.equal(na.taskId, stuck.id);
+  assert.equal(na.title, "Stuck task");
+  assert.equal(na.project, "Alpha");
+  assert.equal(na.owner, "chuck");
+  assert.equal(na.reason, "watchdog: no activity for 10m");
+  assert.equal(na.lastActivityAt, now - 30000, "last task_event ts");
+  assert.equal(na.resolution, null);
+  assert.equal(status.running.length, 1);
+  assert.equal(status.running[0]!.taskId, running.id);
+  assert.equal(status.running[0]!.owner, "dylan");
+  assert.equal(status.running[0]!.cost, 0.42);
+  assert.equal(status.running[0]!.paused, false);
+
+  // Project filter: only Beta's tasks.
+  const beta = await services.boardStatus({ projectId: d.id });
+  assert.equal(beta.counts.done, 1);
+  assert.deepEqual(beta.needsAttention, []);
+  // Owner filter: only dylan's tasks.
+  const dylan = await services.boardStatus({ owner: "dylan" });
+  assert.equal(dylan.counts.running, 1);
+  assert.equal(dylan.counts.done, 1);
+  assert.deepEqual(dylan.needsAttention, []);
 });
 
 test("board: columns, usage, dependency status, month stats", async () => {

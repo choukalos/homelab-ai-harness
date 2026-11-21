@@ -321,7 +321,14 @@ test("sqlite: initDb runs migrations and creates all tables", () =>
     for (const name of EXPECTED_TABLES) {
       assert.ok(tables.has(name), `missing table ${name}`);
     }
-    assert.deepEqual(appliedSqliteVersions(raw), ["0001_init"]);
+    assert.deepEqual(appliedSqliteVersions(raw), ["0001_init", "0002_owner"]);
+    // 0002_owner: owner columns on projects / ideas / tasks.
+    for (const table of ["projects", "ideas", "tasks"]) {
+      const cols = raw
+        .prepare(`PRAGMA table_info(${table})`)
+        .all() as Array<{ name: string }>;
+      assert.ok(cols.some((c) => c.name === "owner"), `${table}.owner column exists`);
+    }
   }));
 
 test("sqlite: migrations are idempotent and preserve data", () =>
@@ -329,7 +336,7 @@ test("sqlite: migrations are idempotent and preserve data", () =>
     await handle.db.insert(kv).values({ key: "x", value: "y" });
     // second run on the same DB: no-op, no error
     migrateSqlite(handle.db.$client);
-    assert.deepEqual(appliedSqliteVersions(handle.db.$client), ["0001_init"]);
+    assert.deepEqual(appliedSqliteVersions(handle.db.$client), ["0001_init", "0002_owner"]);
     const rows = await handle.db.select().from(kv).where(eq(kv.key, "x"));
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.value, "y");
@@ -435,7 +442,7 @@ test("mysql: migrations + schema round-trip", { concurrency: 1 }, async (t) => {
   await t.test("migrations are idempotent and preserve data", async () => {
     await pool.query("INSERT INTO `kv` (`key`, `value`) VALUES ('x', 'y')");
     await migrateMysql(pool); // second run: no-op
-    assert.deepEqual(await appliedMysqlVersions(pool), ["0001_init"]);
+    assert.deepEqual(await appliedMysqlVersions(pool), ["0001_init", "0002_owner"]);
     const [rows] = await pool.query("SELECT value FROM `kv` WHERE `key` = 'x'");
     assert.equal((rows as Array<{ value: string }>).length, 1);
     await pool.query("DELETE FROM `kv`");

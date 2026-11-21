@@ -2,8 +2,8 @@
 
 - slug: tier2-mcp-kanban-mcp-first
 - date: 2026-11-21
-- status: accepted (2026-11-21: decisions locked by chuck in pi session;
-  apply = implement + deploy per Rollout below)
+- status: implemented (2026-11-21: code + tests green, committed; deploy +
+  E2E pending — see Rollout/Status)
 - tier: 2
 - target user: chuck
 - source: pi session 2026-11-21 (UX review of `thor.local:3000`); extends
@@ -104,10 +104,10 @@ already has the full state machine: `startGrooming`, `sendGroomMessage`
 |---|---|---|
 | `start_grooming` | `idea_id` | idea → grooming; runs the seed turn (LLM researches with its session tools, states assumptions, asks questions); returns the idea + the assistant's seed message (the client relays it to the user) |
 | `groom_message` | `idea_id, text` | one blocking turn; returns the assistant reply (client relays to user). Turn watchdog (`GROOM_TURN_STALL_MINUTES`) aborts stalled turns → tool error |
-| `groom_status` | `idea_id` | `{ state, turn_active, last_messages (tail 5), spec (if icebox) }` — the polling tool; needs a per-idea "turn in flight" flag exposed from `withTurnLock` |
-| `groom_accept` | `idea_id` | kicks off the finalize turn **in the background** (same as the old UI path — xhigh finalize can take minutes); returns immediately `{ state: "grooming", finalizing: true }`; client polls `groom_status` until `state=icebox` (spec present) |
+| `groom_status` | `idea_id` | `{ ideaId, state, turn: {active, since, label}, messages (tail 5), spec (if icebox) }` — the polling tool; the per-idea "turn in flight" flag comes from `GroomingManager.turnStatus` |
+| `groom_accept` | `idea_id` | kicks off the finalize turn **in the background** (same as the old UI path — xhigh finalize can take minutes); returns the idea (state still `grooming`); client polls `groom_status` until `state=icebox` (spec present) |
 | `groom_cancel` | `idea_id` | back to idea, chat discarded |
-| `groom_re_groom` | `idea_id` | fresh session (re-seeded) |
+| `groom_re_groom` | `idea_id` | grooming → grooming: fresh session, re-seeded with the idea (awaited re-seed) — for when the conversation went off the rails |
 
 The one-shot `groom_idea` tool and its `groomIdeaOneShot` service path are
 **removed** (chuck, 2026-11-21): grooming is interactive by design — the
@@ -120,16 +120,16 @@ is prepped for execution.
 
 ```json
 {
-  "counts": { "backlog": 2, "running": 1, "qa": 0, "deploy": 0,
+  "counts": { "backlog": 2, "running": 1, "deploy": 0,
               "done": 5, "needs_attention": 2 },
-  "needs_attention": [
-    { "task_id": 12, "title": "...", "project_id": 1, "project": "homelab",
+  "needsAttention": [
+    { "taskId": 12, "title": "...", "projectId": 1, "project": "homelab",
       "owner": "dylan", "reason": "watchdog: no activity for 10m",
-      "last_activity_at": 1763827200000, "resolution": null }
+      "lastActivityAt": 1763827200000, "resolution": null }
   ],
   "running": [
-    { "task_id": 13, "title": "...", "project": "homelab", "owner": "chuck",
-      "paused": false, "cost": 0.42 }
+    { "taskId": 13, "title": "...", "projectId": 1, "project": "homelab",
+      "owner": "chuck", "paused": false, "cost": 0.42 }
   ]
 }
 ```
@@ -164,13 +164,16 @@ state `discarded`).
   owner** at `move_to_backlog` (the person who asked for the work owns it,
   regardless of who pushed it forward).
 - **Threading:** `src/mcp/http.ts` resolves the owner per request (new
-  `resolveMcpOwner(bearer, kanbanKey, map)` in `src/config.ts`, mirroring
-  `resolveMcpCapabilities`); `createKanbanMcpServer(services,
+  `resolveMcpOwner(bearer, kanbanKey, map)` in `src/mcp/server.ts`,
+  mirroring `resolveMcpCapabilities`); `createKanbanMcpServer(services,
   allowedTools, owner)` passes it into the mutation tool handlers;
   `services.createProject` / `services.addIdea` gain an optional `owner`
   param (default `''`).
 - **Display:** owner tag on board cards, project-page idea lists, and task
   detail (board service + templates).
+- **Listing:** `list_ideas` (service + MCP tool) excludes `discarded`
+  ideas — the soft-delete "disappears from every view" semantics now hold
+  for the MCP surface too (state kept for the audit trail).
 
 ### Capability matrix (before → after)
 
@@ -198,16 +201,18 @@ App (`mcp/servers/kanban/`):
 - `src/db/migrations.ts` (+`0002_owner`), `src/db/schema.ts`
 - `src/config.ts` (owner map + resolution)
 - `src/mcp/http.ts` (per-request owner), `src/mcp/server.ts` (8 new tools,
-  owner param, capability sets, tool descriptions)
-- `src/services/index.ts` (owner params; `boardStatus`), `src/services/
+  owner param, capability sets, tool descriptions)- `src/services/index.ts` (owner params; `boardStatus`), `src/services/
   board.ts` (owner on cards; board_status data), `src/services/projects.ts`,
   `src/services/ideas.ts`, `src/services/tasks.ts` (owner inheritance)
-- `src/agent/grooming.ts` (expose per-idea turn-active flag)
+- `src/agent/grooming.ts` (one-shot `groomIdeaOneShot` + `postGroomMessage`
+  removed; `turnStatus` drives the live indicators + `groom_status`)
 - `src/http/app.ts` (mutation endpoints removed; groom page read-only),
   `src/http/templates.ts` (forms stripped; owner tags)
 - delete `src/agent/resolve.ts`, `src/agent/resolve.test.ts`
-- tests: new `src/mcp/server.test.ts`; update `src/http/http.test.ts`,
-  `src/db/db.test.ts`, `src/services/services.test.ts`
+- tests: update `src/http/http.test.ts` (MCP surface covered end-to-end
+  there: tool list, auth/scoping, interactive grooming, board_status,
+  owner stamping, read-only UI), `src/db/db.test.ts`,
+  `src/services/services.test.ts`, `src/agent/grooming.test.ts`
 - `README.md`, `.env.example`
 
 Homelab:
@@ -263,9 +268,11 @@ Homelab:
 
 ## Status
 
-- [ ] Implement (slices: schema+owner → MCP tools → read-only UI → docs)
-- [ ] `npm test` green
-- [ ] Commit
+- [x] Implement (slices: schema+owner → MCP tools → read-only UI → docs)
+      (2026-11-21: all slices done; `groom_idea` one-shot path removed per
+      locked decision 2)
+- [x] `npm test` green (172 tests: 171 pass, 1 skip = MySQL w/o test server)
+- [x] Commit
 - [ ] Deploy on thor + verify (migration, UI, E2E via proxy)
-- [ ] Docs updated (READMEs, .env.example, todo pointer)
+- [ ] Docs updated (READMEs, .env.example, todo pointer) — in progress
 - [ ] Mark applied

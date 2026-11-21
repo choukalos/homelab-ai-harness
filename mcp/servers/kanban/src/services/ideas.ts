@@ -5,7 +5,7 @@
  * src/agent/grooming.ts (state machine over the same ideas table) and
  * src/services/icebox.ts (Move to Backlog).
  */
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { ideas, projects, type IdeaRow } from "../db/schema.js";
 import { ServiceError, type Db } from "./common.js";
 
@@ -13,7 +13,8 @@ export type Idea = IdeaRow & { projectName: string };
 
 /**
  * List ideas (with their project name), optionally filtered by project.
- * Ordered by id (drop order).
+ * Ordered by id (drop order). Discarded ideas are excluded (soft-deleted:
+ * they disappear from every view — the state is kept for the audit trail).
  */
 export async function listIdeas(db: Db, projectId?: number): Promise<Idea[]> {
   const base = db
@@ -22,8 +23,10 @@ export async function listIdeas(db: Db, projectId?: number): Promise<Idea[]> {
     .innerJoin(projects, eq(ideas.projectId, projects.id));
   const rows =
     projectId !== undefined
-      ? await base.where(eq(ideas.projectId, projectId)).orderBy(asc(ideas.id))
-      : await base.orderBy(asc(ideas.id));
+      ? await base
+          .where(and(ne(ideas.state, "discarded"), eq(ideas.projectId, projectId)))
+          .orderBy(asc(ideas.id))
+      : await base.where(ne(ideas.state, "discarded")).orderBy(asc(ideas.id));
   return rows.map((r) => ({ ...r.idea, projectName: r.projectName }));
 }
 

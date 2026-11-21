@@ -300,7 +300,7 @@ services:
       # LiteLLM proxy (models + MCP tools) — internal ai-net URL.
       - LITELLM_BASE_URL=http://litellm-proxy:4000/v1
       # Service key: outbound LLM calls AND the "kanban key" (full MCP set).
-      # Phase 2: per-user key threading (todo_mcp_kanban.md Q2).
+      # Owner attribution: the kanban key stamps items with owner "kanban".
       - LITELLM_API_KEY=${LITELLM_API_KEY}
       # Model + concurrency: .env-tunable (KANBAN_MODEL / KANBAN_CONCURRENT_TASKS).
       - MODEL=${KANBAN_MODEL:-matrix-coder}
@@ -319,8 +319,10 @@ services:
       - TASK_THINKING=medium
       - QA_THINKING=xhigh
       - SUMMARY_THINKING=medium
-      # Caller-key scoping (tails of LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
+      # Caller-key scoping + owner attribution (tails of
+      # LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
       - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
+      - MCP_KEY_OWNERS=${KANBAN_MCP_KEY_OWNERS}
     # LAN-only web UI (presenton pattern: LAN-IP bind, not 0.0.0.0).
     ports:
       - "${THOR_IP:-192.168.4.54}:3000:3000"

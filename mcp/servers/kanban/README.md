@@ -1,6 +1,6 @@
 # mcp_kanban
 
-A single Docker container that keeps LLM/GPU time productively used: drop ideas, groom them with an LLM, promote groomed ideas to a backlog, and have them executed to completion. Results are published per project or per task (GitHub, blog paths, media files). Lightweight GUI, visible only on the homelab network — plus an MCP surface for full remote control.
+A single Docker container that keeps LLM/GPU time productively used: drop ideas, groom them with an LLM, promote groomed ideas to a backlog, and have them executed to completion. Results are published per project or per task (GitHub, blog paths, media files). **MCP is the only mutation interface** (drop ideas, interactive grooming, task control — driven by conversation from any LLM client); the web GUI is a **read-only status view**, visible only on the homelab network.
 
 This is the 14th MCP server in the homelab (`mcp/servers/kanban/`, container
 `mcp_kanban`, `ai-net`). Unlike the thin-client servers (search, knowledge,
@@ -16,18 +16,18 @@ One container, one Node process (Fastify):
 ```
 ┌──────────────────────── mcp_kanban container ───────────────────────┐
 │  Node process (Fastify)                                             │
-│  ├─ HTTP: HTMX GUI (LAN-only) + REST API + MCP endpoint (POST /mcp) │
+│  ├─ HTTP: HTMX GUI (read-only, LAN-only) + MCP endpoint (POST /mcp) │
 │  ├─ service layer (board/projects/ideas/tasks/usage) — shared       │
 │  ├─ orchestrator (queue, slots, dependencies, watchdog, cleanup)    │
-│  ├─ Pi SDK — in-process sessions (task / grooming / QA /            │
-│  │    resolution / summary); session files in /data/sessions        │
+│  ├─ Pi SDK — in-process sessions (task / grooming / QA / summary);  │
+│  │    session files in /data/sessions                               │
 │  └─ DB layer (SQLite or MySQL)                                      │
 └──────────┬──────────────────────────────────────────┬───────────────┘
            /data (persistent)                         /workspace (read-write)
            /home/chuck/data/ai-kanban                 host /home/chuck/workspace/
 ```
 
-- **Workflow:** per project — **Idea → Grooming (interactive LLM chat) → Icebox** (LLM-identified dependencies); global board — **Backlog → Running → QA → Deploy → Done**, plus **Needs Attention** (resolution dialog → Backlog).
+- **Workflow:** per project — **Idea → Grooming (interactive LLM chat via MCP) → Icebox** (LLM-identified dependencies); global board — **Backlog → Running → QA → Deploy → Done**, plus **Needs Attention** (resolve via MCP: `task_status` → dialog → `restart_task` with a resolution note → Backlog).
 - **Models:** one model via the LiteLLM proxy (`MODEL`, validated at startup — fail fast); per-role thinking levels (groom `xhigh`, task `medium`, QA `xhigh`, summary `medium`).
 - **MCP:** the container's MCP endpoint is registered with the LiteLLM proxy (`mcp_kanban` under `mcp_servers:`, `transport: http`), so any LLM client holding an authorized LiteLLM key — including clients outside the homelab — can drive the board by conversation. Tool names are exposed as `mcp_kanban-<tool>`.
 - **Skills:** the homelab-ai-harness repo is cloned/pulled into `/data/harness` at startup; all sessions get all of its skills. Refresh = restart/rebuild (auto-pull at startup).
@@ -35,7 +35,7 @@ One container, one Node process (Fastify):
 
 ## Resilience (Slice 5)
 
-- **Pause / resume / stop** — `paused` is an orthogonal flag on running tasks (stop ─► paused ──one-click──► running). REST: `POST /tasks/<id>/pause`, `POST /tasks/<id>/resume`, `POST /tasks/<id>/stop`; GUI buttons on the task detail page (Stop while running, Resume while paused, Retry deploy for deploy/needs-attention tasks); MCP: `pause_task`, `resume_task`, `stop_task`. Pause/stop aborts the session and keeps the `running` state; resume re-runs from `last_commit` with the mission brief + progress summary re-injected.
+- **Pause / resume / stop** — `paused` is an orthogonal flag on running tasks (stop ─► paused ──one-click──► running). MCP: `pause_task`, `resume_task`, `stop_task` (the web UI is read-only — no control buttons). Pause/stop aborts the session and keeps the `running` state; resume re-runs from `last_commit` with the mission brief + progress summary re-injected.
 - **Watchdog** — per-task heartbeat (default 60s) written while a task's session is alive and producing activity (log lines, commits, usage); 10 minutes of silence moves the task to **Needs Attention** (reason `watchdog: no activity for …`) and aborts the session. The task detail page shows the last-activity timestamp, and the board card shows the paused/watchdog state via the Needs Attention column.
 - **Auto-resume on container start** — any task left in `running` (not paused) when the container stopped is rehydrated at startup: re-clone/checkout `last_commit`, restore the Pi session file (`SessionManager.open` on the stable `task-<id>.jsonl` path), re-inject the mission brief + progress summary, continue. Paused tasks stay paused until explicitly resumed.
 - **7-day workspace cleanup** — a background job (at startup + daily) deletes `/workspace/task-<id>` dirs older than 7 days. Only app-managed dirs (the `task-<id>` naming convention) are touched, and in-flight workspaces (running/deploy tasks) are kept. Durable results are pushed by the deploy stage before a task leaves the deploy state.
@@ -72,11 +72,12 @@ Copy `.env.example` to `.env` and fill in. Real environment variables override t
 | `GROOM_THINKING` | `xhigh` | grooming chat thinking level |
 | `GROOM_TURN_STALL_MINUTES` | per level (5/10/15/20/30) | grooming turn watchdog: abort a turn with no streaming activity after this many minutes. Defaults scale with `GROOM_THINKING` (`GROOM_STALL_MS_BY_LEVEL`: off/minimal 5, low 10, medium 15, high 20, xhigh/max 30 — deep xhigh turns can be legitimately quiet 10+ min); this env var overrides for all levels |
 | `TASK_THINKING` | `medium` | task execution thinking level |
-| `QA_THINKING` | `xhigh` | QA thinking level (also used by the resolution dialog) |
+| `QA_THINKING` | `xhigh` | QA thinking level |
 | `SUMMARY_THINKING` | `medium` | project state-summary thinking level |
 | `CONCURRENT_TASKS` | `1` | max tasks running at once |
 | `BIND_ADDR` / `PORT` | `0.0.0.0` / `3000` | GUI/API bind (homelab interface only; no auth — LAN-only) |
 | `MCP_KEY_CAPABILITIES` | `faxfoUszvw:admin;JAS3o6tu0A:control` (homelab) | MCP guardrails for multi-user keys: `key-suffix:cap1,cap2;...` (key-suffix = the TAIL of a Bearer key; caps = `read` / `control` / `admin` or individual tool names). The kanban key (`LITELLM_API_KEY`) always gets the full tool set; other keys must match an entry or the MCP endpoint rejects them with a clear error. Homelab: chuck's + dylan's LiteLLM key tails → `admin` / `control` (update the suffixes on key rotation). |
+| `MCP_KEY_OWNERS` | `chuck:faxfoUszvw;dylan:JAS3o6tu0A` (homelab) | Owner attribution: `name:key-suffix;...` (same tail-matching). The caller's owner is stamped on the projects/ideas they create (tasks inherit the idea's owner); the kanban key → `kanban`; an authorized key missing from the map → `unknown`. |
 | `AI_KANBAN_DATA_DIR` | `/data` | data dir root (DB, sessions, agent dir, harness); override for local dev — use a **persistent** dir, not `/tmp` (macOS purges `/tmp` while the server runs) |
 | `AI_KANBAN_WORKSPACE_DIR` | `/workspace` | agent scratch root (task-<id> / groom-<idea> dirs); override for local dev |
 
@@ -154,15 +155,22 @@ The container exposes its tools as an MCP server over streamable HTTP at
 proxy's MCP gateway; the proxy forwards the caller's LiteLLM key, and the
 container scopes the tool set per key (see "Identity & keys").
 
-Tools (thin layer over the same service functions as the REST API):
+Tools (23; thin layer over the same service functions the read-only web UI
+uses for its status views):
 
 | Group | Tools |
 |---|---|
-| Ideas | `list_ideas`, `add_idea`, `groom_idea` (autonomous one-shot) |
-| Icebox | `move_to_backlog` (one or more) |
+| Ideas | `list_ideas`, `add_idea`, `discard_idea` (soft delete) |
+| Grooming (interactive) | `start_grooming` (seed turn: the LLM researches, states assumptions, asks questions), `groom_message` (one blocking turn), `groom_status` (poll: state, turn-in-flight, transcript tail, spec), `groom_accept` (background finalize → icebox), `groom_cancel`, `groom_re_groom` (fresh session) |
+| Icebox | `move_to_backlog` (one or more; tasks inherit the idea's owner) |
 | Board | `start_task`, `pause_task`, `resume_task`, `stop_task`, `retry_deploy`, `restart_task` (needs-attention → Backlog, optional resolution note) |
-| Status | `task_status` (state, log tail, usage, failure reason), `project_status` (incl. LLM state summary + icebox listing) |
+| Status | `board_status` (counts + needs-attention summaries + running), `task_status` (state, log tail, usage, failure reason), `project_status` (incl. LLM state summary + icebox listing) |
 | Projects | `list_projects`, `get_project`, `create_project`, `update_project` |
+
+**Owner attribution:** the web UI is read-only, so every mutation is
+authenticated (a LiteLLM key) and stamped with the caller's owner
+(`MCP_KEY_OWNERS`, key tail → user name; the kanban key → `kanban`).
+Projects/ideas are stamped at creation; tasks inherit the idea's owner.
 
 Example client config (direct to the container on the LAN; via the proxy,
 use the proxy's MCP gateway URL — the proxy forwards your LiteLLM key):
@@ -200,5 +208,5 @@ mcp/servers/kanban/
     ├── mcp/               # MCP tool layer over services
     ├── orchestrator.ts    # queue, slots, dependency gating, watchdog, cleanup
     ├── skills.ts          # harness clone/pull at startup
-    └── agent/             # Pi session lifecycle (task / grooming / QA / resolve / summary)
+    └── agent/             # Pi session lifecycle (task / grooming / QA / summary)
 ```

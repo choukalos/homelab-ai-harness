@@ -292,19 +292,44 @@ value; containers reach it the same way `mcp_mysql` does).
 - **LiteLLM restart severs active proxy sessions** — the config swap is an
   explicit operator step (like the 2026-11-21 studio-gemma4 flag reload).
 
-## MCP-first cutover (2026-11-21) — plan: `proposals/2026-11-21-tier2-mcp-kanban-mcp-first.md`
+## MCP-first cutover (2026-11-21) — IMPLEMENTED (deploy + E2E pending)
 
-Decisions locked 2026-11-21 (chuck): web UI (thor.local:3000) becomes
-**read-only**; MCP is the only mutation interface. New MCP tools:
+Plan: `proposals/2026-11-21-tier2-mcp-kanban-mcp-first.md` (status:
+implemented). Decisions locked 2026-11-21 (chuck): web UI (thor.local:3000)
+becomes **read-only**; MCP is the only mutation interface. New MCP tools:
 interactive grooming (start_grooming / groom_message / groom_status /
 groom_accept / groom_cancel / groom_re_groom — the LLM asks questions and
 the user steers from their client of choice), `discard_idea`,
 `board_status` (needs-attention counts + per-job summary for in-dialog
-resolution via task_status → restart_task). **Owner attribution** (key →
-user name via `KANBAN_KEY_OWNERS`) on projects/ideas/tasks, shown as a tag
+resolution via task_status → restart_task). The one-shot `groom_idea` tool
+is **removed** (grooming is interactive by design). **Owner attribution**
+(key → user name via `KANBAN_MCP_KEY_OWNERS` in the repo `.env`, passed to
+the container as `MCP_KEY_OWNERS`) on projects/ideas/tasks, shown as a tag
 on the board/web view. Note: this **pulls owner capture forward from
 Phase 2** — the `owner` columns are the attribution data Phase 2's spend
 work uses.
+
+Implementation (2026-11-21, committed):
+- [x] Migration `0002_owner` (owner columns on projects/ideas/tasks,
+      both drivers) + Drizzle schema
+- [x] MCP: 16 → 23 tools (chuck 23 / dylan 21); `groom_idea` removed;
+      interactive grooming + `discard_idea` + `board_status` added
+- [x] Owner threading: `resolveMcpOwner` (kanban key → `kanban`, tail
+      match, else `unknown`); `create_project`/`add_idea` stamp the caller;
+      tasks inherit the idea's owner at `move_to_backlog`
+- [x] Read-only UI: all mutation endpoints/forms removed (REST 404);
+      groom page = read-only transcript viewer; owner tags on board/
+      project/task views; `list_ideas` excludes discarded ideas
+- [x] Dead code deleted: `src/agent/resolve.ts` (+ mock + test) — the MCP
+      resolution loop (task_status → restart_task) replaces it
+- [x] `npm test` green (172 tests: 171 pass, 1 skip = MySQL w/o test server)
+- [ ] Deploy on thor: `docker compose -f compose/compose.mcp.yml up -d
+      --build mcp_kanban` (compose now passes `MCP_KEY_OWNERS`;
+      `.env` has `KANBAN_MCP_KEY_OWNERS=chuck:faxfoUszvw;dylan:JAS3o6tu0A`)
+- [ ] Verify post-deploy: migration `0002_owner` applied (owner column on
+      3 tables); UI read-only (no forms; owner tags); E2E via proxy —
+      23 new tools visible, **no bare-name collisions** against the other
+      proxy tools, chuck/dylan calls stamp the right owner, unknown key 401
 
 ## Phase 2 (follow-up, not in this change)
 

@@ -184,7 +184,7 @@ test("turnStatus: active during an in-flight background seed, idle after it sett
   assert.ok(during.since! > 0, "since timestamp set");
 
   // A chat message queued while the seed runs keeps the status active.
-  void manager.postGroomMessage(idea.id, "queued question");
+  void manager.sendGroomMessage(idea.id, "queued question");
   const queued = manager.turnStatus(idea.id);
   assert.equal(queued.active, true, "still active with a queued turn");
 
@@ -520,39 +520,6 @@ test("discard: soft-deletes the idea and discards the chat", async () => {
   const iceboxed = await h.services.addIdea(h.projectId, "Iceboxed");
   await toIcebox(h.q, iceboxed.id);
   await expectServiceError(h.manager.discardIdea(iceboxed.id), 409, /icebox/);
-  await h.manager.dispose();
-});
-
-test("groomIdeaOneShot: idea → icebox in one call; idempotent; resumes grooming", async () => {
-  const h = await setup();
-  const idea = await h.services.addIdea(h.projectId, "One-shot idea");
-
-  const result = await h.manager.groomIdeaOneShot(idea.id);
-  assert.equal(result.state, "icebox");
-  assert.equal(result.spec?.goal, "Mock goal");
-  assert.deepEqual(result.dependsOn, []);
-  // Seed + finalize in the one session.
-  assert.equal(h.mock.sessions.length, 1);
-  assert.equal(h.mock.sessions[0]!.prompts.length, 2);
-
-  // Idempotent: no new session, no new prompts.
-  const again = await h.manager.groomIdeaOneShot(idea.id);
-  assert.equal(again.state, "icebox");
-  assert.equal(h.mock.sessions.length, 1);
-  assert.equal(h.mock.sessions[0]!.prompts.length, 2);
-
-  // Continues an in-progress GUI grooming session.
-  const second = await h.services.addIdea(h.projectId, "In-progress idea");
-  await h.manager.startGrooming(second.id);
-  const done = await h.manager.groomIdeaOneShot(second.id);
-  assert.equal(done.state, "icebox");
-  assert.equal(h.mock.sessions[1]!.prompts.length, 2, "finalize on the existing session");
-
-  // Guards.
-  await expectServiceError(h.manager.groomIdeaOneShot(999), 404);
-  const discarded = await h.services.addIdea(h.projectId, "gone");
-  await h.manager.discardIdea(discarded.id);
-  await expectServiceError(h.manager.groomIdeaOneShot(discarded.id), 409);
   await h.manager.dispose();
 });
 

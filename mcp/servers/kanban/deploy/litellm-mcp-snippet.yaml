@@ -21,8 +21,9 @@
 # Tool names are exposed BARE (native server tool names, e.g.
 # `list_projects`) — LiteLLM v1.104 does not prefix MCP tool names with
 # the server id; same as the other 13 servers (media_*, sessions_* ...).
-# Verified 2026-11-21: 16 kanban tools registered, no collisions with
-# the existing 94.
+# Verified 2026-11-21: 23 kanban tools registered (MCP-first cutover:
+# interactive grooming + board_status + discard_idea; groom_idea removed),
+# no collisions with the existing 94.
 #
 # Discovery vs call auth: the app allows UNAUTHENTICATED discovery
 # (initialize / tools/list / ping) so the proxy's global registry

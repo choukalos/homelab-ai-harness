@@ -235,6 +235,7 @@ export function boardPage(data: BoardPageData): string {
     })
     .join("\n");
   return `<h1>Board</h1>
+<p class="muted">Read-only view — add ideas, groom, move to backlog, and control tasks via the MCP tools (the web UI shows where things are at).</p>
 <div class="stats">
   <div class="stat"><span class="stat-label">Spend this month</span><span class="stat-value">${fmtMoney(data.month.spend)}</span></div>
   <div class="stat"><span class="stat-label">Completed this month</span><span class="stat-value">${data.month.completed}</span></div>
@@ -474,6 +475,8 @@ export interface GroomPageData {
   projectId: number;
   projectName: string;
   ideaText: string;
+  /** Current idea state (idea / grooming / icebox / moved / discarded). */
+  state: string;
   messages: GroomMessageView[];
   /** Live turn status (is the assistant working right now?). */
   turn: { active: boolean; since: number | null; label: string | null };
@@ -512,32 +515,30 @@ ${body}
 }
 
 /**
- * Grooming chat page: message list, input (HTMX turn), and the
- * Accept / Cancel / Re-groom / Discard actions (one <form> each).
+ * Grooming transcript viewer (READ-ONLY): the grooming conversation happens
+ * via MCP (start_grooming / groom_message / groom_accept / groom_cancel /
+ * groom_re_groom); this page shows where the conversation is at. While the
+ * idea is in `grooming`, the transcript polls every 3s.
  */
 export function groomPage(data: GroomPageData): string {
+  if (data.state !== "grooming") {
+    const message =
+      data.state === "idea"
+        ? "Grooming has not started yet — start it via the MCP <code>start_grooming</code> tool (the grooming LLM will research the idea, state its assumptions, and ask questions)."
+        : `This idea is no longer in grooming (state: ${escapeHtml(data.state)}).`;
+    return `<h1>Grooming — ${escapeHtml(trunc(data.ideaText, 120))}</h1>
+<p class="muted">Project: <a href="/projects/${data.projectId}">${escapeHtml(data.projectName)}</a> · read-only view (grooming happens via MCP)</p>
+<div class="groom-note"><div>${message}</div></div>`;
+  }
   const banner = data.turn.active
     ? `<div class="groom-banner"><span class="dot"></span>
   <div><strong>The agent is working on this idea</strong>${data.turn.label ? ` — ${escapeHtml(data.turn.label)}` : ""} (since ${new Date(data.turn.since ?? Date.now()).toLocaleTimeString()}).
-  This can take several minutes — you can keep chatting; new messages will be queued.</div></div>`
+  This can take several minutes — new messages sent via MCP will be queued.</div></div>`
     : "";
-  const action = (action: string, label: string, cls = "") =>
-    `<form method="post" action="${action}"><button type="submit"${cls ? ` class="${cls}"` : ""}>${label}</button></form>`;
   return `<h1>Grooming — ${escapeHtml(trunc(data.ideaText, 120))}</h1>
 ${banner}
-<p class="muted">Project: <a href="/projects/${data.projectId}">${escapeHtml(data.projectName)}</a> · session persisted, tools + skills available (share URLs or images to analyze)</p>
-<div class="page-actions">
-  ${action(`/ideas/${data.ideaId}/groom/accept`, "Accept")}
-  ${action(`/ideas/${data.ideaId}/groom/cancel`, "Cancel", "secondary")}
-  ${action(`/ideas/${data.ideaId}/groom/re-groom`, "Re-groom", "secondary")}
-  ${action(`/ideas/${data.ideaId}/discard`, "Discard", "danger")}
-</div>
-${groomMessagesFragment(data.ideaId, data.messages, data.turn)}
-<form id="groom-chat" method="post" action="/ideas/${data.ideaId}/groom/messages"
-  hx-post="/ideas/${data.ideaId}/groom/messages" hx-target="#groom-messages" hx-swap="beforeend">
-  <textarea name="message" rows="2" required placeholder="Discuss the idea — ask questions, share links/images…"></textarea>
-  <button type="submit">Send</button>
-</form>`;
+<p class="muted">Project: <a href="/projects/${data.projectId}">${escapeHtml(data.projectName)}</a> · read-only view — chat, accept, and cancel via the MCP tools (<code>groom_message</code>, <code>groom_accept</code>, <code>groom_cancel</code>, <code>groom_re_groom</code>)</p>
+${groomMessagesFragment(data.ideaId, data.messages, data.turn)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +558,8 @@ export interface TaskPageData {
   paused: boolean;
   stateChangedAt: number;
   project: { id: number; name: string };
+  /** Owner (inherited from the idea); '' = unattributed (legacy). */
+  owner: string;
   kind: string;
   workspace: string | null;
   branch: string | null;
@@ -578,8 +581,6 @@ export interface TaskPageData {
   failureReason: string | null;
   /** Last QA feedback (what-happened panel). */
   qaFeedback: string | null;
-  /** Resolution dialog transcript (needs_attention only). */
-  resolveMessages: Array<{ role: "user" | "assistant"; text: string }>;
 }
 
 function fmtTs(ts: number): string {
@@ -599,11 +600,6 @@ export function taskLogFragment(lines: TaskLogLineView[]): string {
   return `<div class="log">${body}</div>`;
 }
 
-/** Resolution dialog message fragment (the HTMX swap unit for #resolve-messages). */
-export function resolveMessageFragment(role: "user" | "assistant", text: string): string {
-  return groomMessageFragment(role, text);
-}
-
 /**
  * Task detail (PLAN.md §5: slide-over panel, post-MVP): state + workspace +
  * branch + last commit, spec, usage so far, and the live log (2s HTMX
@@ -611,8 +607,11 @@ export function resolveMessageFragment(role: "user" | "assistant", text: string)
  *   - as the slide-over panel body (GET /tasks/<id>?panel=1, HTMX swap unit
  *     into #task-panel on the board page) — the normal path; and
  *   - as a full page (GET /tasks/<id>) for deep links / direct navigation.
+ * READ-ONLY: no manual control buttons — task control (pause/resume/stop,
+ * retry deploy) and Needs-Attention resolution happen via the MCP tools
+ * (pause_task / resume_task / stop_task / retry_deploy / restart_task).
  * Needs Attention tasks show a what-happened panel (failure reason, QA
- * feedback) + the resolution dialog (chat + Accept → Backlog).
+ * feedback) + a pointer at the MCP resolution loop.
  */
 export function taskPage(data: TaskPageData, opts: { panel?: boolean } = {}): string {
   const closeBtn = opts.panel
@@ -625,6 +624,7 @@ export function taskPage(data: TaskPageData, opts: { panel?: boolean } = {}): st
   const details: Array<[string, string]> = [
     ["State", `${data.state}${data.paused ? " (paused)" : ""} — since ${fmtTs(data.stateChangedAt)}`],
     ["Project", data.project.name],
+    ["Owner", data.owner],
     ["Workspace", data.workspace ?? "—"],
     ["Branch", data.branch ?? "—"],
     ["Last commit", data.lastCommit ?? "—"],
@@ -632,7 +632,7 @@ export function taskPage(data: TaskPageData, opts: { panel?: boolean } = {}): st
     ["QA rounds", String(data.qaRounds)],
     ["Waiting on", data.waitingOn.join(", ") || "—"],
   ];
-  const dl = details.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join("\n");
+  const dl = details.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v || "—")}</dd>`).join("\n");
   const steps =
     data.steps.length > 0 ? `<ol>${data.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : "";
   const acceptance =
@@ -642,54 +642,19 @@ export function taskPage(data: TaskPageData, opts: { panel?: boolean } = {}): st
   const resolution = data.resolution
     ? `<h2 style="margin-top:1rem">Accepted resolution plan</h2><pre class="resolution">${escapeHtml(data.resolution)}</pre>`
     : "";
-  // Manual control (Slice 5): Stop/Resume for running tasks (paused is an
-  // orthogonal flag), Retry deploy for deploy / needs_attention tasks.
-  const controls: string[] = [];
-  if (data.state === "running" && !data.paused) {
-    controls.push(
-      `<form hx-post="/tasks/${data.id}/stop" hx-target="body"><button type="submit">Stop (pause)</button></form>`,
-    );
-  }
-  if (data.state === "running" && data.paused) {
-    controls.push(
-      `<form hx-post="/tasks/${data.id}/resume" hx-target="body"><button type="submit">Resume</button></form>`,
-    );
-  }
-  if (data.state === "deploy" || data.state === "needs_attention") {
-    controls.push(
-      `<form hx-post="/tasks/${data.id}/retry-deploy" hx-target="body"><button type="submit">Retry deploy</button></form>`,
-    );
-  }
-  const controlsHtml = controls.length > 0 ? `<div class="page-actions">${controls.join(" ")}</div>` : "";
   const needsAttention = data.state === "needs_attention";
   const failed = needsAttention
     ? `<section class="settings"><h2>What happened</h2>
   <p style="white-space:pre-wrap">${escapeHtml(data.failureReason ?? "(no failure reason recorded)")}</p>
   ${data.qaFeedback ? `<p class="muted" style="white-space:pre-wrap"><strong>QA feedback:</strong> ${escapeHtml(data.qaFeedback)}</p>` : ""}
   <p class="muted" style="margin:0">See the log tail below for the last activity before the failure.</p>
-  </section>`
-    : "";
-  const resolveDialog = needsAttention
-    ? `<section class="settings">
-  <h2>Resolution dialog</h2>
-  <p class="muted">Chat with the resolution agent (it has the failure context${data.workspace ? ", the task spec, and workspace tools" : ", and the task spec"}). Accept to capture the plan and send the task back to the backlog — it resumes from the last commit with the plan injected and QA rounds reset.</p>
-  <div id="resolve-messages">
-${data.resolveMessages.length > 0 ? data.resolveMessages.map((m) => resolveMessageFragment(m.role, m.text)).join("\n") : `<span class="muted">No messages yet — ask the agent what went wrong.</span>`}
-  </div>
-  <form hx-post="/tasks/${data.id}/resolve/messages" hx-target="#resolve-messages" hx-swap="beforeend" style="display:flex;gap:0.5rem;margin-top:0.5rem">
-    <textarea name="message" rows="2" style="flex:1" placeholder="e.g. what do you think went wrong?" required></textarea>
-    <button type="submit">Send</button>
-  </form>
-  <form hx-post="/tasks/${data.id}/resolve/accept" hx-target="body" style="margin-top:0.5rem">
-    <button type="submit">Accept plan → Backlog</button>
-  </form>
+  <p class="muted" style="margin-top:0.75rem;margin-bottom:0">Resolve via MCP: <code>task_status(${data.id})</code> for the full failure context + log tail, dialog with the user, then <code>restart_task(${data.id}, resolution_note)</code> (resume from last commit, plan injected, QA rounds reset) — or <code>retry_deploy(${data.id})</code> for a deploy failure.</p>
   </section>`
     : "";
   return `${closeBtn}<h1>Task #${data.id} — ${escapeHtml(trunc(data.title, 120))} <span class="badge state-${escapeHtml(data.state)}">${escapeHtml(data.state)}</span>${
     data.paused ? ' <span class="badge">paused</span>' : ""
   }</h1>
-<p class="muted"><a href="/">← Board</a> · <a href="/projects/${data.project.id}">${escapeHtml(data.project.name)}</a> · kind ${escapeHtml(data.kind)}</p>
-${controlsHtml}
+<p class="muted"><a href="/">← Board</a> · <a href="/projects/${data.project.id}">${escapeHtml(data.project.name)}</a> · kind ${escapeHtml(data.kind)} · read-only view (task control via MCP)</p>
 <section class="settings">
   <h2>Details</h2>
   <dl>${dl}</dl>
@@ -700,7 +665,6 @@ ${controlsHtml}
   ${resolution}
 </section>
 ${failed}
-${resolveDialog}
 <div class="stats">
   <div class="stat"><span class="stat-label">Usage so far</span><span class="stat-value">${fmtMoney(data.usageTotal)}</span></div>
   <div class="stat"><span class="stat-label">By role</span><span class="stat-value" style="font-size:0.9rem">${usageRoles || "—"}</span></div>
