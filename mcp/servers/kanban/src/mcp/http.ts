@@ -7,9 +7,10 @@
  *   MCP_KEY_CAPABILITIES (key-suffix:read;key-suffix:control,...) — the
  *   guardrails for multi-user remote control (PLAN.md §5 "full remote
  *   control"). Unknown keys are rejected with a clear error.
- * - Owner attribution: the caller key resolves to a user name via
- *   MCP_KEY_OWNERS (same tail-matching) and is stamped on the items the
- *   caller creates (the kanban key → "kanban").
+ * - Owner attribution: the caller key resolves to a user name via USER_KEYS
+ *   (full-key match — the same map that picks the key profile for LLM
+ *   spend) and is stamped on the items the caller creates (the kanban key →
+ *   "kanban").
  * - **Unauthenticated discovery (2026-11-21):** the LiteLLM proxy's startup
  *   `tools/list` handshake carries no caller key, so `initialize` /
  *   `tools/list` / `ping` (+ notifications) are served WITHOUT a Bearer key
@@ -32,7 +33,6 @@ import {
   createKanbanMcpServer,
   MCP_TOOL_NAMES,
   parseMcpKeyCapabilities,
-  parseMcpKeyOwners,
   resolveMcpCapabilities,
   resolveMcpOwner,
   type KanbanServices,
@@ -68,19 +68,14 @@ export interface McpRouteDeps {
   services: KanbanServices;
   /**
    * Key-suffix → capability mapping (default: parsed from the
-   * MCP_KEY_CAPABILITIES env var at route registration).
+   * MCP_KEY_CAPABILITIES env var at route registration). Owner resolution
+   * uses `cfg.userKeys` (USER_KEYS) directly — no separate owner map.
    */
   keyCapabilities?: Map<string, Set<string>>;
-  /**
-   * Key-suffix → owner name mapping (default: parsed from the
-   * MCP_KEY_OWNERS env var at route registration).
-   */
-  keyOwners?: Map<string, string>;
 }
 
 export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteDeps): void {
   const mapping = deps.keyCapabilities ?? parseMcpKeyCapabilities(process.env.MCP_KEY_CAPABILITIES);
-  const owners = deps.keyOwners ?? parseMcpKeyOwners(process.env.MCP_KEY_OWNERS);
   app.post("/mcp", async (req: FastifyRequest, reply: FastifyReply) => {
     const auth = String(req.headers.authorization ?? "");
     const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
@@ -121,7 +116,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteDeps): voi
         return;
       }
       allowed = resolved;
-      owner = resolveMcpOwner(bearer, deps.cfg.litellm.apiKey, owners);
+      owner = resolveMcpOwner(bearer, deps.cfg.litellm.apiKey, deps.cfg.userKeys);
     }
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     const server = createKanbanMcpServer(deps.services, allowed, owner);

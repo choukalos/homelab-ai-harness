@@ -42,6 +42,7 @@ function testCfg(sqlitePath: string, concurrentTasks = 1): KanbanConfig {
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     concurrentTasks,
+    workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
 }

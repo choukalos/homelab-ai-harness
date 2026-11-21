@@ -36,6 +36,7 @@ const cfg: KanbanConfig = {
   harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
   thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
   concurrentTasks: 1,
+  workspaceCleanupDays: 7,
   server: { bindAddr: "127.0.0.1", port: 3000 },
 };
 

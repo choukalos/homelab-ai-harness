@@ -35,8 +35,11 @@
  *   (SessionManager.open via the stable session path), re-inject the mission
  *   brief + progress summary, continue.
  * - 7-day workspace cleanup: background job deletes /workspace/task-<id>
- *   dirs older than 7 days (only app-managed dirs; durable results are
- *   pushed by the deploy stage before a task leaves `deploy`).
+ *   + /workspace/groom-<id> scratch dirs older than WORKSPACE_CLEANUP_DAYS
+ *   (default 7; only app-managed dirs, never in-flight work). The workspace
+ *   is transitory — durable results are pushed by the deploy stage (or
+ *   published) before a task leaves `deploy`, and a missing task workspace
+ *   is re-materialized on restart (fresh clone + checkout last_commit).
  */
 import path from "node:path";
 import { readdir, rm, stat } from "node:fs/promises";
@@ -67,6 +70,16 @@ import {
 import { QaGate, qaFeedbackPrompt, type QaRunContext, type QaVerdict } from "./agent/qa.js";
 import { SummaryUpdater, type SummaryUpdateContext } from "./agent/summary.js";
 import { DeployRunner, type DeployContext, type DeployResult } from "./deploy/index.js";
+
+/** True when `dir` exists and is a directory (stat-based, async). */
+async function dirExists(dir: string): Promise<boolean> {
+  try {
+    const st = await stat(dir);
+    return st.isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /** QA gate as driven by the orchestrator (QaGate or a mock in tests). */
 export interface QaGateLike {
@@ -472,10 +485,15 @@ export class Orchestrator {
 
   /**
    * 7-day workspace cleanup (PLAN.md §4 "Cleanup"): delete `/workspace/task-<id>`
-   * dirs older than `cleanupAgeMs`. Only app-managed dirs (the `task-<id>`
-   * naming convention) are touched, and dirs of in-flight tasks (running /
-   * deploy) are kept — durable results are pushed by the deploy stage before
-   * a task leaves the deploy state. Returns what was deleted/kept (tests).
+   * and `/workspace/groom-<id>` scratch dirs older than `cleanupAgeMs`.
+   * Only app-managed dirs (the `task-<id>` / `groom-<id>` naming convention)
+   * are touched. Task dirs of in-flight tasks (running / deploy) are kept;
+   * groom dirs of actively-grooming ideas are kept. Everything else is
+   * transitory: durable results are pushed by the deploy stage before a task
+   * leaves the deploy state, a missing task workspace is re-materialized on
+   * restart (fresh clone + checkout last_commit), and the grooming
+   * transcript persists in /data/sessions/groom-<id>.jsonl. Returns what was
+   * deleted/kept (tests).
    */
   async cleanupWorkspaces(): Promise<{ deleted: string[]; skipped: string[] }> {
     const deleted: string[] = [];
@@ -488,8 +506,8 @@ export class Orchestrator {
     }
     const now = this.now();
     for (const name of entries) {
-      const m = /^task-(\d+)$/.exec(name);
-      if (!m) continue; // only app-managed task dirs
+      const m = /^(task|groom)-(\d+)$/.exec(name);
+      if (!m) continue; // only app-managed scratch dirs
       const dir = path.join(this.workspaceRoot, name);
       let st: Stats;
       try {
@@ -502,24 +520,80 @@ export class Orchestrator {
         skipped.push(name); // too recent
         continue;
       }
-      const taskId = Number(m[1]);
-      const [task] = await this.db
-        .select({ state: tasks.state })
-        .from(tasks)
-        .where(eq(tasks.id, taskId))
-        .limit(1);
-      if (task && (task.state === "running" || task.state === "deploy")) {
-        skipped.push(name); // in-flight — never delete a live workspace
-        continue;
+      const id = Number(m[2]);
+      if (m[1] === "task") {
+        const [task] = await this.db
+          .select({ state: tasks.state })
+          .from(tasks)
+          .where(eq(tasks.id, id))
+          .limit(1);
+        if (task && (task.state === "running" || task.state === "deploy")) {
+          skipped.push(name); // in-flight — never delete a live workspace
+          continue;
+        }
+      } else {
+        // groom-<id>: keep while the idea is actively grooming (the session
+        // uses the scratch dir); otherwise it's disposable (the transcript
+        // persists in /data/sessions).
+        const [idea] = await this.db
+          .select({ state: ideas.state })
+          .from(ideas)
+          .where(eq(ideas.id, id))
+          .limit(1);
+        if (idea?.state === "grooming") {
+          skipped.push(name); // active grooming session
+          continue;
+        }
       }
       await rm(dir, { recursive: true, force: true });
       deleted.push(name);
       console.log(
-        `[orchestrator] cleanup: removed ${dir} (task ${taskId} ${task?.state ?? "missing"}, ` +
-          `age ${Math.round((now - st.mtimeMs) / 86_400_000)}d)`,
+        `[orchestrator] cleanup: removed ${dir} (${m[1]} ${id} age ` +
+          `${Math.round((now - st.mtimeMs) / 86_400_000)}d)`,
       );
     }
     return { deleted, skipped };
+  }
+
+  /**
+   * Immediate workspace cleanup for a deleted project (delete_project):
+   * remove the project's `task-<id>` / `groom-<id>` scratch dirs regardless
+   * of age — the project (and its task/idea rows) is going away, and the
+   * durable results of done work are already pushed/published. Returns the
+   * dirs removed (tests).
+   */
+  async cleanupProjectWorkspaces(projectId: number): Promise<string[]> {
+    const removed: string[] = [];
+    const [taskRows, ideaRows] = await Promise.all([
+      this.db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.projectId, projectId)),
+      this.db
+        .select({ id: ideas.id })
+        .from(ideas)
+        .where(eq(ideas.projectId, projectId)),
+    ]);
+    for (const t of taskRows) {
+      const dir = path.join(this.workspaceRoot, `task-${t.id}`);
+      if (await dirExists(dir)) {
+        await rm(dir, { recursive: true, force: true });
+        removed.push(dir);
+      }
+    }
+    for (const i of ideaRows) {
+      const dir = path.join(this.workspaceRoot, `groom-${i.id}`);
+      if (await dirExists(dir)) {
+        await rm(dir, { recursive: true, force: true });
+        removed.push(dir);
+      }
+    }
+    if (removed.length > 0) {
+      console.log(
+        `[orchestrator] cleanup: removed ${removed.length} workspace dir(s) for project ${projectId}`,
+      );
+    }
+    return removed;
   }
 
   // -------------------------------------------------------------------------

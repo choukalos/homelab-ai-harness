@@ -85,3 +85,30 @@ export async function addIdea(db: Db, projectId: number, text: string, owner = "
     .limit(1);
   return { ...row, projectName: projRow?.name ?? "" };
 }
+
+/**
+ * Edit an idea's text (MCP edit_idea) — fix typos / tweak scope before
+ * grooming. Only the `idea` state is editable: grooming → the spec is being
+ * generated from the text; icebox → the spec is final; moved → has a task;
+ * discarded → soft-deleted. Only `text` changes (spec/depends_on are
+ * LLM-generated at grooming). 404 unknown idea, 409 wrong state, 400
+ * empty text.
+ */
+export async function editIdea(db: Db, ideaId: number, text: string): Promise<Idea> {
+  const t = (text ?? "").trim();
+  if (t === "") throw new ServiceError(400, "idea text is required");
+  const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1);
+  if (!idea) throw new ServiceError(404, `idea ${ideaId} not found`);
+  if (idea.state !== "idea") {
+    throw new ServiceError(
+      409,
+      `idea ${ideaId} is in state "${idea.state}" — only ideas in the "idea" state can be edited ` +
+        `(grooming/icebox specs are generated from the text at grooming)`,
+    );
+  }
+  await db
+    .update(ideas)
+    .set({ text: t, updatedAt: Date.now() })
+    .where(eq(ideas.id, ideaId));
+  return (await getIdea(db, ideaId))!;
+}

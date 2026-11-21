@@ -4,16 +4,16 @@
  * transport-agnostic service functions the REST API uses.
  *
  * MCP-first (2026-11-21): the web UI is read-only; the MCP surface is the
- * only mutation interface. Tools: list_projects, get_project,
- * create_project, update_project, list_ideas, add_idea, board_status,
- * interactive grooming (start_grooming, groom_message, groom_status,
- * groom_accept, groom_cancel, groom_re_groom), discard_idea,
- * move_to_backlog, start_task, pause/resume/stop_task, retry_deploy,
- * restart_task, task_status, project_status.
+ * only mutation interface. Tools (25): list_projects, get_project,
+ * create_project, update_project, delete_project, list_ideas, add_idea,
+ * edit_idea, board_status, interactive grooming (start_grooming,
+ * groom_message, groom_status, groom_accept, groom_cancel, groom_re_groom),
+ * discard_idea, move_to_backlog, start_task, pause/resume/stop_task,
+ * retry_deploy, restart_task, task_status, project_status.
  *
- * Owner attribution: the caller's LiteLLM key resolves to a user name
- * (MCP_KEY_OWNERS); create_project / add_idea stamp it on the row, and
- * tasks inherit the idea's owner at move_to_backlog.
+ * Owner attribution: the caller's LiteLLM key resolves to a user name via
+ * USER_KEYS (full-key match); create_project / add_idea stamp it on the
+ * row, and tasks inherit the idea's owner at move_to_backlog.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -43,6 +43,7 @@ export const MCP_CAPABILITY_SETS = {
   control: [
     "read",
     "add_idea",
+    "edit_idea",
     "start_grooming",
     "groom_message",
     "groom_status",
@@ -59,7 +60,7 @@ export const MCP_CAPABILITY_SETS = {
     "restart_task",
   ],
   /** control + project administration. */
-  admin: ["control", "create_project", "update_project"],
+  admin: ["control", "create_project", "update_project", "delete_project"],
 } as const;
 
 export type McpCapability = keyof typeof MCP_CAPABILITY_SETS;
@@ -70,8 +71,10 @@ export const MCP_TOOL_NAMES: readonly string[] = [
   "get_project",
   "create_project",
   "update_project",
+  "delete_project",
   "list_ideas",
   "add_idea",
+  "edit_idea",
   "board_status",
   "start_grooming",
   "groom_message",
@@ -156,41 +159,22 @@ export function resolveMcpCapabilities(
 }
 
 /**
- * Parse the MCP_KEY_OWNERS env var: `name:key-suffix;...` where key-suffix
- * is the TAIL of a Bearer key (same tail-matching style as
- * MCP_KEY_CAPABILITIES — keys are secret, match on the last N chars).
- * Maps a caller key to the user name stamped on the items they create
- * (owner attribution). Unknown/malformed entries are dropped; an empty
- * mapping yields {} (non-kanban keys resolve to "unknown").
- */
-export function parseMcpKeyOwners(raw: string | undefined): Map<string, string> {
-  const out = new Map<string, string>();
-  if (!raw) return out;
-  for (const entry of raw.split(";")) {
-    const [name, suffix] = entry.split(":");
-    const n = (name ?? "").trim();
-    const s = (suffix ?? "").trim();
-    if (n && s) out.set(s, n);
-  }
-  return out;
-}
-
-/**
- * Resolve the owner name for a Bearer key:
+ * Resolve the owner name for a Bearer key (improvements batch: derived from
+ * USER_KEYS instead of the removed MCP_KEY_OWNERS suffix map — full-key
+ * match, no suffix ambiguity, one less env var to keep in sync on key
+ * rotation):
  * - the kanban key (LITELLM_API_KEY) → "kanban" (service-driven mutations);
- * - a key whose tail matches a MCP_KEY_OWNERS entry → that user name;
- * - anything else → "unknown" (authorized keys missing from the map).
+ * - a key equal to a USER_KEYS value (name = full key) → that user name;
+ * - anything else → "unknown" (authorized keys without spend attribution).
  */
 export function resolveMcpOwner(
   bearerKey: string,
   kanbanKey: string,
-  mapping: Map<string, string> = new Map(),
+  userKeys: Record<string, string> = {},
 ): string {
   if (bearerKey === kanbanKey) return "kanban";
-  for (const [suffix, name] of mapping) {
-    if (bearerKey.length >= suffix.length && bearerKey.endsWith(suffix)) {
-      return name;
-    }
+  for (const [name, key] of Object.entries(userKeys)) {
+    if (key !== "" && bearerKey === key) return name;
   }
   return "unknown";
 }
@@ -200,8 +184,8 @@ export function resolveMcpOwner(
  * is given (per-key capability scoping), only those tools are registered and
  * the rest are invisible to tools/list; calls to unknown tool names are
  * answered with a clear "not available for this key" error. `owner` is the
- * caller's user name (key → user via MCP_KEY_OWNERS) stamped on the items
- * the caller creates.
+ * caller's user name (key → user via USER_KEYS) stamped on the items the
+ * caller creates.
  */
 export function createKanbanMcpServer(
   services: KanbanServices,
@@ -381,6 +365,20 @@ export function registerMcpTools(
   );
 
   reg(
+    "delete_project",
+    {
+      description:
+        "Delete a project (admin). Its ideas/tasks/usage rows are removed " +
+        "(cascade) and the project's workspace scratch dirs are removed " +
+        "immediately (the workspace is transitory — durable results of done " +
+        "work are already pushed/published). Refused (409) while any task is " +
+        "running/deploy — pause/stop it first.",
+      inputSchema: { project_id: z.number().int().positive() },
+    },
+    ({ project_id }) => run(async () => ok(await services.deleteProject(project_id))),
+  );
+
+  reg(
     "list_ideas",
     {
       description:
@@ -402,6 +400,21 @@ export function registerMcpTools(
       },
     },
     ({ project_id, text }) => run(async () => ok(await services.addIdea(project_id, text, owner))),
+  );
+
+  reg(
+    "edit_idea",
+    {
+      description:
+        "Edit an idea's text before grooming (typos, scope tweaks). Only " +
+        "ideas in the 'idea' state are editable — grooming/icebox specs are " +
+        "generated from the text at grooming. Returns the updated idea.",
+      inputSchema: {
+        idea_id: z.number().int().positive(),
+        text: z.string().min(1),
+      },
+    },
+    ({ idea_id, text }) => run(async () => ok(await services.editIdea(idea_id, text))),
   );
 
   reg(

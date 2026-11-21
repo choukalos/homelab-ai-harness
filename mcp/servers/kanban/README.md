@@ -38,7 +38,7 @@ One container, one Node process (Fastify):
 - **Pause / resume / stop** — `paused` is an orthogonal flag on running tasks (stop ─► paused ──one-click──► running). MCP: `pause_task`, `resume_task`, `stop_task` (the web UI is read-only — no control buttons). Pause/stop aborts the session and keeps the `running` state; resume re-runs from `last_commit` with the mission brief + progress summary re-injected.
 - **Watchdog** — per-task heartbeat (default 60s) written while a task's session is alive and producing activity (log lines, commits, usage); 10 minutes of silence moves the task to **Needs Attention** (reason `watchdog: no activity for …`) and aborts the session. The task detail page shows the last-activity timestamp, and the board card shows the paused/watchdog state via the Needs Attention column.
 - **Auto-resume on container start** — any task left in `running` (not paused) when the container stopped is rehydrated at startup: re-clone/checkout `last_commit`, restore the Pi session file (`SessionManager.open` on the stable `task-<id>.jsonl` path), re-inject the mission brief + progress summary, continue. Paused tasks stay paused until explicitly resumed.
-- **7-day workspace cleanup** — a background job (at startup + daily) deletes `/workspace/task-<id>` dirs older than 7 days. Only app-managed dirs (the `task-<id>` naming convention) are touched, and in-flight workspaces (running/deploy tasks) are kept. Durable results are pushed by the deploy stage before a task leaves the deploy state.
+- **7-day workspace cleanup** — a background job (at startup + daily) deletes `/workspace/task-<id>` and `/workspace/groom-<id>` dirs older than 7 days (`WORKSPACE_CLEANUP_DAYS`, default 7). Only app-managed dirs (the `task-<id>` / `groom-<id>` naming convention) are touched; in-flight workspaces (running/deploy tasks, actively-grooming ideas) are kept. `delete_project` also removes the project's workspace dirs immediately. Durable results are pushed by the deploy stage before a task leaves the deploy state.
 - **Concurrency** — `CONCURRENT_TASKS > 1` runs multiple task sessions in parallel (one Pi session + workspace per task; slot count verified by tests).
 
 ## Toolchain
@@ -50,7 +50,7 @@ The image ships **node, python, go** — the supported task toolchain (extensibl
 | Mount | Persistence | Contents |
 |---|---|---|
 | `/data` | persistent (`/home/chuck/data/ai-kanban`) | SQLite DB (default driver), Pi session files, project specs, board/idea/task state + conversation logs, compaction summaries, usage records, app-owned agent dir (`/data/pi-agent`), homelab-ai-harness clone (`/data/harness`) |
-| `/workspace` | host's `/home/chuck/workspace/`, read-write | agent scratch space: one dir per running/recent task (`task-<id>`: fresh git clone, working files, build artifacts) + media build folders + grooming scratch (`groom-<idea>`). Durable results are pushed out; task dirs are cleaned up after 7 days. |
+| `/workspace` | host's `/home/chuck/workspace/`, read-write | agent scratch space: one dir per running/recent task (`task-<id>`: fresh git clone, working files, build artifacts) + media build folders + grooming scratch (`groom-<idea>`). Transitory by design — durable results are pushed out; task/groom dirs are swept after 7 days (or immediately on project delete). |
 
 ## Configuration (.env)
 
@@ -77,8 +77,8 @@ Copy `.env.example` to `.env` and fill in. Real environment variables override t
 | `CONCURRENT_TASKS` | `1` | max tasks running at once |
 | `BIND_ADDR` / `PORT` | `0.0.0.0` / `3000` | GUI/API bind (homelab interface only; no auth — LAN-only) |
 | `MCP_KEY_CAPABILITIES` | `faxfoUszvw:admin;JAS3o6tu0A:control` (homelab) | MCP guardrails for multi-user keys: `key-suffix:cap1,cap2;...` (key-suffix = the TAIL of a Bearer key; caps = `read` / `control` / `admin` or individual tool names). The kanban key (`LITELLM_API_KEY`) always gets the full tool set; other keys must match an entry or the MCP endpoint rejects them with a clear error. Homelab: chuck's + dylan's LiteLLM key tails → `admin` / `control` (update the suffixes on key rotation). |
-| `MCP_KEY_OWNERS` | `chuck:faxfoUszvw;dylan:JAS3o6tu0A` (homelab) | Owner attribution: `name:key-suffix;...` (same tail-matching). The caller's owner is stamped on the projects/ideas they create (tasks inherit the idea's owner); the kanban key → `kanban`; an authorized key missing from the map → `unknown`. |
-| `USER_KEYS` | — (unset) | Per-user LLM spend attribution (Phase 2): comma-separated `name=full-LiteLLM-key` pairs (names match `MCP_KEY_OWNERS`). Sessions for work owned by a user (grooming/task/QA/summary) run against the proxy with that user's key, so LiteLLM bills the spend to the user's key/budget; usage rows carry the owner (per-user spend trend on `/reports`). Unset, or an owner without an entry → the work bills to the service key. Each key is validated against the proxy at boot (fail fast). Homelab: compose interpolates `USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}`. |
+| `USER_KEYS` | — (unset) | Per-user LLM spend attribution (Phase 2): comma-separated `name=full-LiteLLM-key` pairs. Sessions for work owned by a user (grooming/task/QA/summary) run against the proxy with that user's key, so LiteLLM bills the spend to the user's key/budget; usage rows carry the owner (per-user spend trend on `/reports`). Unset, or an owner without an entry → the work bills to the service key. Each key is validated against the proxy at boot (fail fast). Homelab: compose interpolates `USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}`. **Also drives MCP owner attribution** (improvements batch): the caller's key is matched in full against these values — a match stamps that user name on the items they create (the kanban key → `kanban`; an authorized key with no entry → `unknown`). One map, no separate owner env var. |
+| `WORKSPACE_CLEANUP_DAYS` | `7` | Age (days) after which idle `/workspace/task-<id>` / `groom-<id>` scratch dirs are swept (startup + daily). In-flight workspaces are never touched; `delete_project` removes the project's dirs immediately. |
 | `AI_KANBAN_DATA_DIR` | `/data` | data dir root (DB, sessions, agent dir, harness); override for local dev — use a **persistent** dir, not `/tmp` (macOS purges `/tmp` while the server runs) |
 | `AI_KANBAN_WORKSPACE_DIR` | `/workspace` | agent scratch root (task-<id> / groom-<idea> dirs); override for local dev |
 
@@ -169,17 +169,17 @@ uses for its status views):
 
 | Group | Tools |
 |---|---|
-| Ideas | `list_ideas`, `add_idea`, `discard_idea` (soft delete) |
+| Ideas | `list_ideas`, `add_idea`, `edit_idea` (state `idea` only), `discard_idea` (soft delete) |
 | Grooming (interactive) | `start_grooming` (seed turn: the LLM researches, states assumptions, asks questions), `groom_message` (one blocking turn), `groom_status` (poll: state, turn-in-flight, transcript tail, spec), `groom_accept` (background finalize → icebox), `groom_cancel`, `groom_re_groom` (fresh session) |
 | Icebox | `move_to_backlog` (one or more; tasks inherit the idea's owner) |
 | Board | `start_task`, `pause_task`, `resume_task`, `stop_task`, `retry_deploy`, `restart_task` (needs-attention → Backlog, optional resolution note) |
-| Status | `board_status` (counts + needs-attention summaries + running), `task_status` (state, log tail, usage, failure reason), `project_status` (incl. LLM state summary + icebox listing) |
-| Projects | `list_projects`, `get_project`, `create_project`, `update_project` |
+| Status | `board_status` (task counts + idea pipeline counts `ideaCounts` + needs-attention summaries + running), `task_status` (state, log tail, usage, failure reason), `project_status` (incl. LLM state summary + icebox listing) |
+| Projects | `list_projects`, `get_project`, `create_project`, `update_project`, `delete_project` (admin; 409 while a task is running/deploy) |
 
 **Owner attribution:** the web UI is read-only, so every mutation is
-authenticated (a LiteLLM key) and stamped with the caller's owner
-(`MCP_KEY_OWNERS`, key tail → user name; the kanban key → `kanban`).
-Projects/ideas are stamped at creation; tasks inherit the idea's owner.
+authenticated (a LiteLLM key) and stamped with the caller's owner (full-key
+match against `USER_KEYS`; the kanban key → `kanban`). Projects/ideas are
+stamped at creation; tasks inherit the idea's owner.
 
 Example client config (direct to the container on the LAN; via the proxy,
 use the proxy's MCP gateway URL — the proxy forwards your LiteLLM key):

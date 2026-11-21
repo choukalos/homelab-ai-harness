@@ -8,7 +8,7 @@
  * - create: optional fields default to "" / null.
  * - update: only provided fields change; an empty string clears a field.
  */
-import { asc, desc, eq, and, ne } from "drizzle-orm";
+import { asc, desc, eq, and, inArray, ne } from "drizzle-orm";
 import { type IdeaSpec, type ProjectRow } from "../db/schema.js";
 import { ideas, projects, tasks } from "../db/tables.js";
 import { isUniqueViolation, ServiceError, type Db } from "./common.js";
@@ -215,6 +215,52 @@ export async function getProjectStatus(db: Db, id: number): Promise<ProjectStatu
     stateSummary: project.stateSummary,
     icebox: iceboxRows.map((i) => ({ id: i.id, text: i.text, spec: i.spec, dependsOn: i.dependsOn })),
     taskCounts,
+  };
+}
+
+/** Result of a project deletion (MCP delete_project). */
+export interface DeleteProjectResult {
+  /** The deleted project (summary shape). */
+  project: ProjectSummary;
+  /** Workspace scratch dirs removed (task-<id> / groom-<id>). */
+  removedDirs: string[];
+}
+
+/**
+ * Delete a project (MCP delete_project, admin). FK cascades remove the
+ * project's ideas/tasks/task_events/usage rows. Refused (409) while any
+ * task is running/deploy — pause/stop first. The project's workspace
+ * scratch dirs are removed immediately (the workspace is transitory —
+ * durable results of done work are already pushed/published; the callback
+ * runs BEFORE the cascade so it can still read the task/idea ids).
+ */
+export async function deleteProject(
+  db: Db,
+  projectId: number,
+  cleanupWorkspaces?: (projectId: number) => Promise<string[]>,
+): Promise<DeleteProjectResult> {
+  const [project] = await db
+    .select({ id: projects.id, name: projects.name, description: projects.description, owner: projects.owner })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) throw new ServiceError(404, `project ${projectId} not found`);
+  const [live] = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, projectId), inArray(tasks.state, ["running", "deploy"])))
+    .limit(1);
+  if (live) {
+    throw new ServiceError(
+      409,
+      `project ${projectId} has a live task (${live.id}) — pause/stop it before deleting the project`,
+    );
+  }
+  const removedDirs = (await cleanupWorkspaces?.(projectId)) ?? [];
+  await db.delete(projects).where(eq(projects.id, projectId));
+  return {
+    project: { id: project.id, name: project.name, description: project.description, owner: project.owner },
+    removedDirs,
   };
 }
 

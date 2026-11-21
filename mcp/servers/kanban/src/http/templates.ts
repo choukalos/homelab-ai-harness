@@ -696,6 +696,8 @@ export interface ReportsPageData {
    * `byMonth` is keyed by the `months[].key` values (absent = $0).
    */
   owners: Array<{ owner: string; byMonth: Record<string, number>; total: number }>;
+  /** $ spend per usage role, rolling 12 months (groom/task/qa/summary/resolve). */
+  roleSpend: Array<{ role: string; total: number; tokensIn: number; tokensOut: number }>;
   projects: Array<{ id: number; name: string; completed: number; spend: number }>;
   tasks: Array<{
     taskId: number;
@@ -735,6 +737,19 @@ export function reportsPage(data: ReportsPageData): string {
   const ownerHead = data.months.map((m) => `<th class="num">${escapeHtml(m.short)}</th>`).join("");
   const ownerChart = svgHBarChart(
     data.owners.map((o) => ({ label: ownerLabel(o.owner), value: o.total })),
+    { formatValue: (n) => `$${n.toFixed(2)}` },
+  );
+  const roleRows =
+    data.roleSpend.length > 0
+      ? data.roleSpend
+          .map(
+            (r) =>
+              `<tr><td>${escapeHtml(r.role)}</td><td class="num">${r.tokensIn}</td><td class="num">${r.tokensOut}</td><td class="num"><strong>${fmtMoney(r.total)}</strong></td></tr>`,
+          )
+          .join("\n")
+      : `<tr><td colspan="4" class="muted">No usage recorded in the window yet.</td></tr>`;
+  const roleChart = svgHBarChart(
+    data.roleSpend.map((r) => ({ label: r.role, value: r.total })),
     { formatValue: (n) => `$${n.toFixed(2)}` },
   );
   const projectChart = svgHBarChart(
@@ -793,6 +808,15 @@ export function reportsPage(data: ReportsPageData): string {
 ${ownerRows}
 </table>
   <div class="chart">${ownerChart}</div>
+</section>
+<section class="settings">
+  <h2>By role — rolling 12 months</h2>
+  <p class="muted">Where the money goes: LLM spend per agent role (groom / task / qa / summary / resolve).</p>
+  <table class="usage-table">
+<tr><th>Role</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th></tr>
+${roleRows}
+</table>
+  <div class="chart">${roleChart}</div>
 </section>
 <section class="settings">
   <h2>Per project — rolling 12 months</h2>

@@ -31,6 +31,7 @@ function testCfg(sqlitePath: string, userKeys: Record<string, string> = {}): Kan
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     concurrentTasks: 1,
+    workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
 }
@@ -99,7 +100,6 @@ class FixedSummaryUpdater implements SummaryUpdaterLike {
 async function makeApp(opts: {
   groomSlowMs?: number;
   mcpKeyCapabilities?: Map<string, Set<string>>;
-  mcpKeyOwners?: Map<string, string>;
   userKeys?: Record<string, string>;
 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-http-"));
@@ -137,7 +137,6 @@ async function makeApp(opts: {
     orchestrator,
     grooming,
     mcpKeyCapabilities: opts.mcpKeyCapabilities,
-    mcpKeyOwners: opts.mcpKeyOwners,
   });
   return { app, db, cfg, services, grooming, mock, orchestrator, taskRunner, deploy };
 }
@@ -536,7 +535,7 @@ test("POST /mcp auth: actions require a key; discovery is open (proxy registry)"
   assert.equal(noAuthList.statusCode, 200);
   const rpc = parseRpc(noAuthList.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  assert.equal(names.length, 23, `expected the full 23-tool set, got ${names.length}`);
+  assert.equal(names.length, 25, `expected the full 25-tool set, got ${names.length}`);
   // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
@@ -573,7 +572,7 @@ test("POST /mcp answers the initialize handshake", async () => {
   await app.close();
 });
 
-test("POST /mcp tools/list returns the 23-tool set", async () => {
+test("POST /mcp tools/list returns the 25-tool set", async () => {
   const { app } = await makeApp();
   const res = await app.inject({
     method: "POST",
@@ -588,7 +587,9 @@ test("POST /mcp tools/list returns the 23-tool set", async () => {
     "add_idea",
     "board_status",
     "create_project",
+    "delete_project",
     "discard_idea",
+    "edit_idea",
     "get_project",
     "groom_accept",
     "groom_cancel",
@@ -1212,6 +1213,12 @@ test("GET /reports renders the per-user spend section (owner + unattributed)", a
   assert.ok(html.includes("$2.50"), "chuck spend rendered");
   assert.ok(html.includes("$4.00"), "dylan spend rendered");
   assert.ok(html.includes("$1.25"), "unattributed spend rendered");
+
+  // By-role section: task (4.0 + 1.25) > groom (2.5).
+  assert.ok(html.includes("By role — rolling 12 months"), "by-role section heading");
+  assert.ok(html.includes(">task<"), "task role row");
+  assert.ok(html.includes(">groom<"), "groom role row");
+  assert.ok(html.includes("$5.25"), "task role total rendered");
   // Per-project + total sections still span all keys (chuck+dylan+unattributed).
   assert.ok(html.includes("Per project — rolling 12 months"), "per-project section present");
   assert.ok(html.includes("$7.75"), "total spend includes all keys (2.5 + 4.0 + 1.25)");
@@ -1309,6 +1316,102 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
     payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const rpc = parseRpc(res.payload);
-  assert.equal(rpc.result.tools.length, 23, "kanban key sees all 23 tools");
+  assert.equal(rpc.result.tools.length, 25, "kanban key sees all 25 tools");
+  await app.close();
+});
+
+test("MCP: edit_idea + delete_project round-trip", async () => {
+  const ctx = await makeApp();
+  const { app, services, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+
+  const project = mcpText(await mcpCall(app, "create_project", { name: "Delete Me" }));
+  const idea1 = mcpText(await mcpCall(app, "add_idea", { project_id: project.id, text: "first idea" }));
+  mcpText(await mcpCall(app, "add_idea", { project_id: project.id, text: "second idea" }));
+
+  // edit_idea: text update in state 'idea'.
+  const edited = mcpText(await mcpCall(app, "edit_idea", { idea_id: idea1.id, text: "first idea (edited)" }));
+  assert.equal(edited.text, "first idea (edited)");
+  assert.equal(edited.state, "idea");
+
+  // edit_idea: rejected outside state 'idea'.
+  await q.update(ideas).set({ state: "icebox" }).where(eq(ideas.id, idea1.id));
+  const bad = await mcpCall(app, "edit_idea", { idea_id: idea1.id, text: "nope" });
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /only ideas in the "idea" state/);
+
+  // delete_project: cascades ideas/tasks + cleans the project's workspace dirs.
+  const deleted = mcpText(await mcpCall(app, "delete_project", { project_id: project.id }));
+  assert.equal(deleted.project.name, "Delete Me");
+  assert.deepEqual(deleted.removedDirs, [], "no workspace dirs existed");
+
+  const gone = await mcpCall(app, "get_project", { project_id: project.id });
+  assert.equal(gone.isError, true, "project is gone");
+  assert.equal((await services.listIdeas(project.id)).length, 0, "ideas cascade-deleted");
+  await app.close();
+});
+
+test("MCP: delete_project refuses (409) while a task is running", async () => {
+  const ctx = await makeApp();
+  const { app } = ctx;
+  const { projectId } = await makeTaskFixture(ctx, { state: "running" });
+  const res = await mcpCall(app, "delete_project", { project_id: projectId });
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /live task/);
+  const still = mcpText(await mcpCall(app, "get_project", { project_id: projectId }));
+  assert.equal(still.id, projectId, "project still exists");
+  await app.close();
+});
+
+test("MCP: board_status includes idea pipeline counts (ideaCounts)", async () => {
+  const ctx = await makeApp();
+  const { app, services, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+
+  const p = await services.createProject({ name: "Pipeline" });
+  const i1 = await services.addIdea(p.id, "raw idea"); // idea
+  const i2 = await services.addIdea(p.id, "grooming idea"); // → grooming
+  const i3 = await services.addIdea(p.id, "icebox idea"); // → icebox
+  const i4 = await services.addIdea(p.id, "discarded idea"); // → discarded
+  await q.update(ideas).set({ state: "grooming" }).where(eq(ideas.id, i2.id));
+  await q.update(ideas).set({ state: "icebox" }).where(eq(ideas.id, i3.id));
+  await q.update(ideas).set({ state: "discarded" }).where(eq(ideas.id, i4.id));
+
+  const board = mcpText(await mcpCall(app, "board_status", {}));
+  assert.deepEqual(board.ideaCounts, { idea: 1, grooming: 1, icebox: 1 }, "visible pipeline states only");
+
+  // Scoped to the project (same filters as the task counts).
+  const scoped = mcpText(await mcpCall(app, "board_status", { project_id: p.id }));
+  assert.deepEqual(scoped.ideaCounts, { idea: 1, grooming: 1, icebox: 1 });
+  await app.close();
+});
+
+test("MCP: owner attribution resolves from USER_KEYS (full-key match)", async () => {
+  const ctx = await makeApp({
+    userKeys: { chuck: "sk-chuck-full-key" },
+    mcpKeyCapabilities: new Map([["full-key", new Set(["admin"])]]),
+  });
+  const { app } = ctx;
+  const headers = {
+    "content-type": "application/json",
+    accept: "application/json, text/event-stream",
+    authorization: "Bearer sk-chuck-full-key",
+  };
+  const call = (method: string, params: Record<string, unknown>) =>
+    app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers,
+      payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+
+  // Full-key match → owner 'chuck' stamped on the created project.
+  const init = await call("initialize", {});
+  assert.equal(init.statusCode, 200, "authorized key passes discovery");
+  const created = parseRpc(
+    (await call("tools/call", { name: "create_project", arguments: { name: "Chuck's Project" } })).payload,
+  );
+  const project = JSON.parse(created.result.content[0].text);
+  assert.equal(project.owner, "chuck", "USER_KEYS full-key match → owner name");
   await app.close();
 });

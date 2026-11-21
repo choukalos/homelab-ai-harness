@@ -65,14 +65,10 @@ export interface AppDeps {
   grooming: GroomingManager;
   /**
    * MCP key-suffix → capability mapping (guardrails for multi-user keys).
-   * Default: parsed from the MCP_KEY_CAPABILITIES env var.
+   * Default: parsed from the MCP_KEY_CAPABILITIES env var. Owner resolution
+   * uses cfg.userKeys (USER_KEYS) directly — no separate owner map.
    */
   mcpKeyCapabilities?: Map<string, Set<string>>;
-  /**
-   * MCP key-suffix → owner name mapping (owner attribution).
-   * Default: parsed from the MCP_KEY_OWNERS env var.
-   */
-  mcpKeyOwners?: Map<string, string>;
 }
 
 const BOARD_COLUMN_TITLES: Record<TaskState, string> = {
@@ -359,6 +355,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       months: data.spend.months.map((m) => ({ key: m.key, label: m.label, short: m.short, spend: m.spend })),
       total: data.spend.total,
       owners: data.owners,
+      roleSpend: data.roles,
       projects: data.projects,
       tasks: data.tasks,
       filters: {
@@ -378,7 +375,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     cfg: deps.cfg,
     services: deps.services,
     keyCapabilities: deps.mcpKeyCapabilities,
-    keyOwners: deps.mcpKeyOwners,
   });
 
   return app;

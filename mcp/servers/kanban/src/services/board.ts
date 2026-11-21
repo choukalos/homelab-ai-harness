@@ -9,7 +9,7 @@
  * `depends_on` (idea ids); a dep is satisfied when the referenced idea has
  * a `done` task. Unsatisfied deps are reported as `waitingOn`.
  */
-import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { TASK_STATES, type TaskState } from "../db/schema.js";
 import { ideas, projects, taskEvents, tasks, usage } from "../db/tables.js";
 import type { Db } from "./common.js";
@@ -142,6 +142,12 @@ export interface BoardStatusRunning {
 export interface BoardStatus {
   /** Task counts per board state (all five states always present). */
   counts: Record<string, number>;
+  /**
+   * Idea pipeline counts (idea/grooming/icebox — the visible states, same
+   * visibility as list_ideas: moved/discarded excluded), honoring the same
+   * project_id/owner filters. All three states always present.
+   */
+  ideaCounts: Record<string, number>;
   /** Needs-attention tasks with failure context (the dialog entry point). */
   needsAttention: BoardStatusNeedsAttention[];
   /** Running tasks (paused flag + cost so far). */
@@ -157,12 +163,21 @@ export async function boardStatus(db: Db, filters: BoardStatusFilters = {}): Pro
     filters.projectId !== undefined ? eq(tasks.projectId, filters.projectId) : undefined,
     filters.owner !== undefined && filters.owner !== "" ? eq(tasks.owner, filters.owner) : undefined,
   );
-  const [taskRows, projectRows, ideaRows, eventRows, usageRows] = await Promise.all([
+  const ideaWhere = and(
+    ne(ideas.state, "discarded"),
+    ne(ideas.state, "moved"),
+    filters.projectId !== undefined ? eq(ideas.projectId, filters.projectId) : undefined,
+    filters.owner !== undefined && filters.owner !== "" ? eq(ideas.owner, filters.owner) : undefined,
+  );
+  const [taskRows, projectRows, ideaRows, ideaCountRows, eventRows, usageRows] = await Promise.all([
     where === undefined
       ? db.select().from(tasks)
       : db.select().from(tasks).where(where),
     db.select({ id: projects.id, name: projects.name }).from(projects),
     db.select({ id: ideas.id, text: ideas.text }).from(ideas),
+    ideaWhere === undefined
+      ? db.select({ state: ideas.state }).from(ideas)
+      : db.select({ state: ideas.state }).from(ideas).where(ideaWhere),
     db.select().from(taskEvents),
     db
       .select({
@@ -191,6 +206,10 @@ export async function boardStatus(db: Db, filters: BoardStatusFilters = {}): Pro
 
   const counts: Record<string, number> = {};
   for (const s of TASK_STATES) counts[s] = 0;
+  const ideaCounts: Record<string, number> = { idea: 0, grooming: 0, icebox: 0 };
+  for (const r of ideaCountRows) {
+    ideaCounts[r.state] = (ideaCounts[r.state] ?? 0) + 1;
+  }
   const needsAttention: BoardStatusNeedsAttention[] = [];
   const running: BoardStatusRunning[] = [];
   for (const t of taskRows) {
@@ -215,5 +234,5 @@ export async function boardStatus(db: Db, filters: BoardStatusFilters = {}): Pro
   }
   needsAttention.sort((a, b) => a.taskId - b.taskId);
   running.sort((a, b) => a.taskId - b.taskId);
-  return { counts, needsAttention, running };
+  return { counts, ideaCounts, needsAttention, running };
 }

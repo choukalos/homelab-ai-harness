@@ -41,6 +41,7 @@ function testCfg(sqlitePath: string): KanbanConfig {
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     concurrentTasks: 1,
+    workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
 }
@@ -400,7 +401,7 @@ test("auto-resume: paused running tasks stay paused (user resumes explicitly)", 
 // 7-day workspace cleanup
 // ---------------------------------------------------------------------------
 
-test("cleanup: deletes old task-<id> dirs only (app-managed, not in-flight, > 7 days)", async () => {
+test("cleanup: sweeps old task-<id> and groom-<id> dirs (app-managed, not in-flight, > 7 days)", async () => {
   const { q, services, orch, workspaceRoot, advance } = await setup();
   const p = await services.createProject({ name: "Alpha" });
   const t1 = await makeBacklogTask(q, services, p.id, "Old done task"); // id 1
@@ -414,8 +415,9 @@ test("cleanup: deletes old task-<id> dirs only (app-managed, not in-flight, > 7 
   await q.update(tasks).set({ state: "running", stateChangedAt: now }).where(eq(tasks.id, t2.task.id));
   await q.update(tasks).set({ state: "done", stateChangedAt: now }).where(eq(tasks.id, t3.task.id));
 
-  // Workspace dirs: task-1..task-4 (app-managed) + groom-1 + media-build
-  // (not app-managed). Old mtimes via utimes (8 days), except task-3.
+  // Workspace dirs: task-1..task-4 (app-managed) + groom-1 (idea 1 not in
+  // the DB → not grooming → swept) + media-build (not app-managed).
+  // Old mtimes via utimes (8 days), except task-3.
   const old = new Date(now - 8 * DAY);
   for (const name of ["task-1", "task-2", "task-3", "task-4", "groom-1", "media-build"]) {
     mkdirSync(path.join(workspaceRoot, name), { recursive: true });
@@ -425,23 +427,59 @@ test("cleanup: deletes old task-<id> dirs only (app-managed, not in-flight, > 7 
   }
 
   const result = await orch.cleanupWorkspaces();
-  assert.deepEqual(result.deleted.sort(), ["task-1", "task-4"], "only old app-managed dirs deleted");
+  assert.deepEqual(result.deleted.sort(), ["groom-1", "task-1", "task-4"], "old app-managed dirs swept");
   assert.ok(result.skipped.includes("task-2"), "running task's workspace kept");
   assert.ok(result.skipped.includes("task-3"), "fresh workspace kept");
-  assert.ok(!result.deleted.includes("groom-1"), "groom-<idea> dirs untouched");
   assert.ok(!result.deleted.includes("media-build"), "media build folders untouched");
 
   assert.ok(!existsSync(path.join(workspaceRoot, "task-1")), "task-1 removed");
   assert.ok(!existsSync(path.join(workspaceRoot, "task-4")), "task-4 (no DB row) removed");
+  assert.ok(!existsSync(path.join(workspaceRoot, "groom-1")), "groom-1 (idea not grooming) removed");
   assert.ok(existsSync(path.join(workspaceRoot, "task-2")), "task-2 (running) kept");
   assert.ok(existsSync(path.join(workspaceRoot, "task-3")), "task-3 (fresh) kept");
-  assert.ok(existsSync(path.join(workspaceRoot, "groom-1")), "groom-1 kept");
   assert.ok(existsSync(path.join(workspaceRoot, "media-build")), "media-build kept");
 
   // A second pass is a no-op (deleted dirs are gone).
   advance(0);
   const again = await orch.cleanupWorkspaces();
   assert.deepEqual(again.deleted, []);
+  await orch.stop();
+});
+
+test("cleanup: keeps groom-<id> while its idea is actively grooming", async () => {
+  const { q, services, orch, workspaceRoot } = await setup();
+  const p = await services.createProject({ name: "Alpha" });
+  const now = Date.now();
+  // Idea 1 is in grooming (old groom dir → kept); idea 2 is icebox (old groom
+  // dir → swept).
+  await q.insert(ideas).values([
+    {
+      id: 1,
+      projectId: p.id,
+      text: "grooming idea",
+      state: "grooming",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 2,
+      projectId: p.id,
+      text: "icebox idea",
+      state: "icebox",
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  const old = new Date(now - 8 * DAY);
+  for (const name of ["groom-1", "groom-2"]) {
+    mkdirSync(path.join(workspaceRoot, name), { recursive: true });
+    utimesSync(path.join(workspaceRoot, name), old, old);
+  }
+  const result = await orch.cleanupWorkspaces();
+  assert.deepEqual(result.deleted, ["groom-2"], "only the non-grooming idea's dir swept");
+  assert.ok(result.skipped.includes("groom-1"), "active grooming workspace kept");
+  assert.ok(existsSync(path.join(workspaceRoot, "groom-1")), "groom-1 kept on disk");
+  assert.ok(!existsSync(path.join(workspaceRoot, "groom-2")), "groom-2 removed");
   await orch.stop();
 });
 

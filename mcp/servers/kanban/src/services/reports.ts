@@ -6,7 +6,7 @@
  * Aggregation runs in JS over the usage/tasks/ideas/projects rows (same
  * style as board()) so the queries stay identical across both DB drivers.
  */
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { type TaskState } from "../db/schema.js";
 import { ideas, projects, tasks, usage } from "../db/tables.js";
 import type { Db } from "./common.js";
@@ -134,6 +134,40 @@ export async function spendByOwner(db: Db, now: number = Date.now()): Promise<Ow
     (a, b) =>
       Number(a.owner === "") - Number(b.owner === "") || b.total - a.total || a.owner.localeCompare(b.owner),
   );
+}
+
+/**
+ * $ spend per usage role (groom/task/qa/summary/resolve), rolling 12
+ * months. All projects; rows sorted by total (desc). "Where the money
+ * goes" — the per-role cost mix of the board's LLM work.
+ */
+export interface RoleSpendRow {
+  /** Usage role (groom/task/qa/summary/resolve). */
+  role: string;
+  /** Total $ spend across the rolling window. */
+  total: number;
+  /** Total tokens in/out across the rolling window. */
+  tokensIn: number;
+  tokensOut: number;
+}
+
+export async function spendByRole(db: Db, now: number = Date.now()): Promise<RoleSpendRow[]> {
+  const months = monthWindow(now);
+  const start = months[0]!.start;
+  const end = months[months.length - 1]!.end;
+  const rows = await db
+    .select({
+      role: usage.role,
+      cost: sql<number>`coalesce(sum(${usage.cost}), 0)`,
+      tokensIn: sql<number>`coalesce(sum(${usage.tokensIn}), 0)`,
+      tokensOut: sql<number>`coalesce(sum(${usage.tokensOut}), 0)`,
+    })
+    .from(usage)
+    .where(and(gte(usage.ts, start), lt(usage.ts, end)))
+    .groupBy(usage.role);
+  return rows
+    .map((r) => ({ role: r.role, total: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut }))
+    .sort((a, b) => b.total - a.total || a.role.localeCompare(b.role));
 }
 
 /** Per-project completed-item count + $ spend, rolling 12 months. */

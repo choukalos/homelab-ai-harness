@@ -15,7 +15,9 @@ async function main(): Promise<void> {
   const cfg = await loadConfig();
   console.log(
     `[config] model=${cfg.model} db=${cfg.db.driver} ` +
-      `workspace=${cfg.workspace.dir} concurrentTasks=${cfg.concurrentTasks}`,
+      `workspace=${cfg.workspace.dir} concurrentTasks=${cfg.concurrentTasks} ` +
+      `cleanupDays=${cfg.workspaceCleanupDays}` +
+      (Object.keys(cfg.userKeys).length > 0 ? ` userKeys=${Object.keys(cfg.userKeys).join(",")}` : ""),
   );
 
   const db = await initDb(cfg);
@@ -37,6 +39,7 @@ async function main(): Promise<void> {
     agent,
     tasks: taskRunner,
     workspaceRoot: cfg.workspace.dir,
+    cleanupAgeMs: cfg.workspaceCleanupDays * 86_400_000,
   });
   const services = createKanbanServices(db, { grooming, orchestrator });
   await orchestrator.start();

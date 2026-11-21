@@ -319,14 +319,16 @@ services:
       - TASK_THINKING=medium
       - QA_THINKING=xhigh
       - SUMMARY_THINKING=medium
-      # Caller-key scoping + owner attribution (tails of
-      # LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
+      # Caller-key scoping (tails of LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
+      # Owner attribution is derived from USER_KEYS below (full-key match).
       - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
-      - MCP_KEY_OWNERS=${KANBAN_MCP_KEY_OWNERS}
       # Per-user LLM spend attribution (Phase 2): sessions for work owned by
       # a user run against the proxy with that user's key (LiteLLM bills the
       # spend to the user's key/budget). Full keys, interpolated from .env.
+      # USER_KEYS also drives MCP owner attribution (full-key match).
       - USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}
+      # Workspace scratch sweep age (task-<id> / groom-<id> dirs; default 7).
+      - WORKSPACE_CLEANUP_DAYS=7
     # LAN-only web UI (presenton pattern: LAN-IP bind, not 0.0.0.0).
     ports:
       - "${THOR_IP:-192.168.4.54}:3000:3000"

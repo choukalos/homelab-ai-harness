@@ -11,13 +11,15 @@ import type { IdeaRow, TaskRow } from "../db/schema.js";
 import type { GroomMessage, GroomingManager } from "../agent/grooming.js";
 import type { Orchestrator } from "../orchestrator.js";
 import { ServiceError, type Db } from "./common.js";
-import { addIdea, getIdea, listIdeas, type Idea } from "./ideas.js";
+import { addIdea, editIdea, getIdea, listIdeas, type Idea } from "./ideas.js";
 import { moveIceboxToBacklog, type IceboxMoveResult } from "./icebox.js";
 import {
   createProject,
+  deleteProject,
   getProject,
   listProjects,
   updateProject,
+  type DeleteProjectResult,
   type Project,
   type ProjectInput,
   type ProjectSummary,
@@ -29,10 +31,12 @@ import {
   projectStats,
   spendByMonth,
   spendByOwner,
+  spendByRole,
   taskUsageTable,
   type CompletedPage,
   type OwnerSpendRow,
   type ProjectReportRow,
+  type RoleSpendRow,
   type SpendReport,
   type TaskUsageFilters,
   type TaskUsageRow,
@@ -51,6 +55,7 @@ export type {
   MonthBucket,
   ProjectReportRow,
   OwnerSpendRow,
+  RoleSpendRow,
   TaskUsageFilters,
   TaskUsageRow,
   CompletedItem,
@@ -67,6 +72,10 @@ export interface KanbanServices {
   getIdea(id: number): Promise<Idea | undefined>;
   /** Drop an idea; `owner` = caller identity of the creating mutation (MCP key → user). */
   addIdea(projectId: number, text: string, owner?: string): Promise<Idea>;
+  /** Edit an idea's text (state `idea` only — pre-grooming). */
+  editIdea(ideaId: number, text: string): Promise<Idea>;
+  /** Delete a project (admin; 409 while a task is running/deploy) + workspace cleanup. */
+  deleteProject(projectId: number): Promise<DeleteProjectResult>;
   board(): Promise<BoardData>;
   /** Board status for MCP board_status (counts + needs-attention + running). */
   boardStatus(filters?: BoardStatusFilters): Promise<BoardStatus>;
@@ -144,6 +153,8 @@ export interface ReportsData {
   spend: SpendReport;
   /** Per-user $ spend per month, rolling 12 months (Phase 2; '' = unattributed). */
   owners: OwnerSpendRow[];
+  /** $ spend per usage role, rolling 12 months (groom/task/qa/summary/resolve). */
+  roles: RoleSpendRow[];
   projects: ProjectReportRow[];
   tasks: TaskUsageRow[];
   /** Normalized filters (echoed into the filter form). */
@@ -182,6 +193,11 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     listIdeas: (projectId) => listIdeas(db, projectId),
     getIdea: (id) => getIdea(db, id),
     addIdea: (projectId, text, owner) => addIdea(db, projectId, text, owner),
+    editIdea: (ideaId, text) => editIdea(db, ideaId, text),
+    deleteProject: (projectId) =>
+      orchestrator().then(
+        (o) => deleteProject(db, projectId, (pid) => o.cleanupProjectWorkspaces(pid)),
+      ),
     board: () => board(db),
     boardStatus: (filters) => boardStatus(db, filters),
     getTask: (id) => getTaskDetail(db, id),
@@ -232,9 +248,10 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     groomTranscript: (ideaId) => grooming().then((g) => g.transcript(ideaId)),
 
     reports: async (filters = {}) => {
-      const [spend, owners, projects, tasks, projectOptions] = await Promise.all([
+      const [spend, owners, roles, projects, tasks, projectOptions] = await Promise.all([
         spendByMonth(db),
         spendByOwner(db),
+        spendByRole(db),
         projectStats(db),
         taskUsageTable(db, filters),
         listProjects(db),
@@ -242,6 +259,7 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
       return {
         spend,
         owners,
+        roles,
         projects,
         tasks,
         filters,

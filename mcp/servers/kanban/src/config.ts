@@ -151,6 +151,12 @@ const envSchema = z
       .int("CONCURRENT_TASKS must be an integer")
       .min(1, "CONCURRENT_TASKS must be >= 1")
       .default(1),
+    WORKSPACE_CLEANUP_DAYS: z.coerce
+      .number()
+      .int("WORKSPACE_CLEANUP_DAYS must be an integer")
+      .min(1, "WORKSPACE_CLEANUP_DAYS must be >= 1")
+      .default(7)
+      .describe("age before /workspace/task-<id> + groom-<id> scratch dirs are swept (transitory — durable results are pushed/published)"),
     BIND_ADDR: z.string().min(1).default(DEFAULTS.BIND_ADDR),
     PORT: z.coerce
       .number()
@@ -206,6 +212,8 @@ export interface KanbanConfig {
     summary: ThinkingLevel;
   };
   concurrentTasks: number;
+  /** Age (days) before workspace scratch dirs are swept (default 7). */
+  workspaceCleanupDays: number;
   server: { bindAddr: string; port: number };
 }
 
@@ -258,6 +266,7 @@ export function parseConfig(
       summary: v.SUMMARY_THINKING,
     },
     concurrentTasks: v.CONCURRENT_TASKS,
+    workspaceCleanupDays: v.WORKSPACE_CLEANUP_DAYS,
     server: { bindAddr: v.BIND_ADDR, port: v.PORT },
   };
 }

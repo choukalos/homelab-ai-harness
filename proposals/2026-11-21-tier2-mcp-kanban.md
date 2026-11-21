@@ -8,10 +8,13 @@
   MySQL migrations ran (7 tables), proxy registration + E2E verified,
   `KANBAN_GITHUB_TOKEN` set + verified. All chuck action items done.)
 - superseded by: `2026-11-21-tier2-mcp-kanban-mcp-first.md` (read-only web
-  UI, interactive grooming, 23 tools) and
+  UI, interactive grooming, 23 tools),
   `2026-11-21-tier2-mcp-kanban-phase2-user-spend.md` (per-user spend
-  attribution) — both applied 2026-11-21. Tool counts and the mutable web
-  UI described below reflect the Phase 1 state.
+  attribution), and
+  `2026-11-21-tier2-mcp-kanban-improvements.md` (25 tools: delete_project,
+  edit_idea, board_status ideaCounts, spend-by-role, USER_KEYS owner
+  attribution, 7-day workspace sweep) — all applied 2026-11-21. Tool counts
+  and the mutable web UI described below reflect the Phase 1 state.
 - tier: 2
 - target user: chuck
 - source: workspace/ai-kanban (existing app, 46 TS files); decisions locked

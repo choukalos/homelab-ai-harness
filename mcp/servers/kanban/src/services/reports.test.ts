@@ -21,6 +21,7 @@ import {
   projectStats,
   spendByMonth,
   spendByOwner,
+  spendByRole,
   taskUsageTable,
 } from "./reports.js";
 
@@ -36,6 +37,7 @@ function testCfg(sqlitePath: string): KanbanConfig {
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     concurrentTasks: 1,
+    workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
 }
@@ -207,6 +209,30 @@ test("spendByOwner: per-user × per-month, window-only, unattributed last", asyn
 
   // All owners' totals sum to the window total (all keys, no filtering).
   closeTo(rows.reduce((s, r) => s + r.total, 0), 7.9, "owner totals sum to window total");
+});
+
+test("spendByRole: per-role $ + token totals, window-only, sorted by total desc", async () => {
+  const { db, q } = await setup();
+  const now = Date.now();
+  void await seed(q, now);
+
+  const rows = await spendByRole(db, now);
+  // Order: task (7.25) > qa (0.5) > groom (0.1) > summary (0.05).
+  assert.deepEqual(rows.map((r) => r.role), ["task", "qa", "groom", "summary"]);
+  const byRole = new Map(rows.map((r) => [r.role, r]));
+
+  // task: 2.0 (cur) + 4.0 (prev) + 1.25 (cur); the 9.99 out-of-window row
+  // is excluded.
+  const task = byRole.get("task")!;
+  closeTo(task.total, 7.25, "task total");
+  assert.equal(task.tokensIn, 3300, "task tokens in");
+  assert.equal(task.tokensOut, 1400, "task tokens out");
+  closeTo(byRole.get("qa")!.total, 0.5, "qa total");
+  closeTo(byRole.get("groom")!.total, 0.1, "groom total");
+  closeTo(byRole.get("summary")!.total, 0.05, "summary total");
+
+  // Role totals sum to the window total (all roles, no filtering).
+  closeTo(rows.reduce((s, r) => s + r.total, 0), 7.9, "role totals sum to window total");
 });
 
 test("projectStats: completed counts (in-window done only) + $ spend per project", async () => {
