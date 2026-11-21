@@ -1067,3 +1067,53 @@ servers / **94 tools**, `mcp_media` 25 → 27 + M1–M5 note), `README.md`
 (94 tools ×2), `docs/thor_ai_inventory.md` (live-count line),
 `mcp/README.md` (media row description — was stale "Media asset lookup
 (LAN-only)").
+
+---
+
+## Validation Entry — 2026-11-21 (part 13): mcp_kanban proxy registration + E2E (14th MCP server)
+
+**Context:** `mcp_kanban` (LLM task queue + grooming + execution —
+stateful self-contained service: Fastify board UI LAN-only at
+`thor.local:3000`, streamable-HTTP MCP at `POST /mcp`, in-process Pi
+agent sessions, orchestrator, MySQL `ai_kanban` on Thor) was deployed
+and board-level verified earlier the same day (commit `8a2f212`).
+This entry covers the LiteLLM proxy integration: chuck swapped
+`litellm/config.yml` to the proposed config (adds the `mcp_kanban`
+entry, `transport: http` — the only non-SSE MCP entry) and restarted
+the proxy manually (restart severs active proxy sessions).
+
+**Registration:** the proxy's global tool-registry handshake failed at
+first — `401 unauthorized: expected Bearer <access key>` — because the
+kanban app required a key on every request, including `tools/list`
+(unlike `mcp_sessions`, which allows unauthenticated discovery and
+enforces auth at call time). Fixed in the app: discovery methods
+(`initialize`, `tools/list`, `ping`, `notifications/*`) now answer
+unauthenticated with the full tool set; `tools/call` and every
+mutating operation still require a valid Bearer key (unknown key →
+401). Rebuilt + redeployed; 192/192 tests green.
+
+**Access group:** per-key MCP access is default-deny and
+group-granted — the `family-mcp-full` access group
+(`07c1acf8-ffb6-4dbc-918d-9c7199f76fa1`, assigned to the chuck + dylan
+keys) had to be extended with `mcp_kanban` (same step as the
+`mcp_sessions` addition 2026-11-21; `PUT
+/v1/unified_access_group/<id>`; description updated to "all 14 MCP
+servers").
+
+| Check | Result |
+|---|---|
+| Proxy `/mcp-rest/tools/list` (LITELLM_API_KEY): 110 tools (was 94); 16 kanban tools present, bare names (no `mcp_kanban-` prefix — LiteLLM v1.104 exposes native tool names, same as the other 13 servers), no collisions with the existing 94 | ✅ |
+| E2E `tools/call` through the proxy (the real agent path): chuck `list_projects` → `[]` (fresh board); dylan `list_projects` → OK (read ⊂ control); dylan `create_project` → refused "tool create_project is not available for this key (MCP_KEY_CAPABILITIES)" (control < admin — correct); chuck `create_project` → project id 1 created, row persisted in MySQL (verified via `list_projects` round-trip; test row removed); unknown key → 401 | ✅ |
+| `mcp_kanban` container health: `{"ok":true,"model":"matrix-coder","db":"mysql","concurrentTasks":1}`; board UI HTTP 200 at `thor.local:3000` | ✅ |
+
+**Docs updated:** `docs/thor_mcp_architecture.md` (current state: 14
+servers / **110 tools** + kanban note; rules section), `README.md`
+(14 deployed / 110 tools ×2 + table row), `docs/thor_ai_inventory.md`
+(live-count line), `docs/thor_public_access_model.md` (13 → 14 servers
+×4 + group note), `mcp/servers/kanban/deploy/litellm-mcp-snippet.yaml`
+(tool-naming + discovery-auth notes), `proposals/2026-11-21-tier2-mcp-kanban.md`
++ `todo_mcp_kanban.md` (action items done, E2E results).
+
+**Open items:** `KANBAN_GITHUB_TOKEN` still empty in `.env` — the board
+runs without it; only the kanban deploy stage's git push fails until
+it is set.

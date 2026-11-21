@@ -17,8 +17,19 @@
 #
 # NOTE: LiteLLM v1.104.0 supports `transport: http` (verified in the
 # running image: litellm.types.mcp.MCPTransport = {sse, http, stdio}).
-# Tool names are exposed to clients as `mcp_kanban-<tool>` (server-name
-# prefix + "-" separator), e.g. `mcp_kanban-list_projects`.
+#
+# Tool names are exposed BARE (native server tool names, e.g.
+# `list_projects`) — LiteLLM v1.104 does not prefix MCP tool names with
+# the server id; same as the other 13 servers (media_*, sessions_* ...).
+# Verified 2026-11-21: 16 kanban tools registered, no collisions with
+# the existing 94.
+#
+# Discovery vs call auth: the app allows UNAUTHENTICATED discovery
+# (initialize / tools/list / ping) so the proxy's global registry
+# handshake works without a key; `tools/call` and every mutating
+# operation still require a valid Bearer key (unknown key -> 401).
+# Per-key tool scoping (MCP_KEY_CAPABILITIES) is enforced at call time,
+# inside the app.
 
 mcp_servers:
   mcp_kanban:

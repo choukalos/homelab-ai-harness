@@ -24,7 +24,8 @@ Plus (from the original design, unchanged):
   sessions, orchestrator) — not a thin client.
 - MCP transport: `transport: http` (streamable HTTP) at `POST /mcp`.
   Verified LiteLLM v1.104.0 supports `MCPTransport.http` + `extra_headers`
-  forwarding. Tool names exposed as `mcp_kanban-<tool>`.
+  forwarding. Tool names exposed BARE (native names, no server prefix —
+  LiteLLM v1.104 does not prefix; verified 2026-11-21).
 - LiteLLM entry: `mcp_kanban: {transport: http, url:
   http://mcp_kanban:3000/mcp, extra_headers: [Authorization], timeout: 7200}`.
 - Web UI: `ports: ["${THOR_IP:-192.168.4.54}:3000:3000"]` (presenton pattern).
@@ -172,9 +173,26 @@ value; containers reach it the same way `mcp_mysql` does).
       (presenton pattern); dedicated MySQL DB/user (AI_DB_* convention)
 
 ### Pending
-1. **E2E through proxy** (after chuck swaps the litellm config):
-   `mcp_kanban-list_projects` visible in the proxy tool list; call with
-   chuck's key (full set) and dylan's key (control set); unknown key → 401
+1. ~~**E2E through proxy** (after chuck swaps the litellm config): kanban
+   tools visible in the proxy tool list; call with chuck's key (full set)
+   and dylan's key (control set); unknown key → 401~~
+   **DONE 2026-11-21** — proxy swap applied (chuck, manual restart) +
+   `family-mcp-full` access group extended with `mcp_kanban` (default-deny
+   per-key MCP access; same step as mcp_sessions). Verified: 110 proxy
+   tools (94 + 16 kanban, bare names, no collisions); chuck `list_projects`
+   OK; dylan `list_projects` OK (read ⊂ control); dylan `create_project`
+   refused (control < admin — correct); chuck `create_project` OK (MySQL
+   row persisted; test row removed); unknown key → 401.
+
+### Done (2026-11-21, post-deploy)
+- Proxy registration: `mcp_kanban` in the live `litellm/config.yml` +
+  running proxy (14th MCP server; `transport: http`)
+- App fix: unauthenticated discovery (initialize/tools/list/ping) allowed
+  so the proxy's global registry handshake works; `tools/call` still
+  requires a valid Bearer key (192/192 tests green)
+- `family-mcp-full` access group: +mcp_kanban (14 servers; description
+  updated) via `PUT /v1/unified_access_group/07c1acf8-...`
+- E2E through proxy (see Pending item 1 above)
 
 ### Draft compose entry (for step 1)
 

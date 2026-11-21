@@ -1,3 +1,9 @@
+# APPLIED 2026-11-21 — mcp_kanban registration (proposals/2026-11-21-tier2-mcp-kanban.md).
+# The `mcp_kanban` entry under mcp_servers (14th server; transport: http —
+# streamable HTTP, unlike the SSE servers) is live; proxy restarted manually
+# 2026-11-21 (restart severs active proxy sessions). Verified: 110 proxy
+# tools (94 + 16 kanban) + E2E tools/call with chuck/dylan/unknown keys.
+#
 # LIVE since 2026-11-19 — tier1-litellm-model-config-pass (proposals/2026-11-19-tier1-litellm-model-config-pass.md)
 # 2026-11-21: studio-gemma4-26b capability flags verified against the reloaded
 # OMLX upstream (see model_info comment) — supports_function_calling/response_schema
@@ -225,6 +231,25 @@ mcp_servers:
   mcp_skills:
     transport: sse
     url: http://mcp_skills:8000/sse
+    extra_headers:
+      - Authorization
+    timeout: 7200
+
+  # mcp_kanban — LLM task queue + grooming + execution (14th server,
+  # 2026-11-21). Streamable HTTP (transport: http) at POST /mcp — the only
+  # non-SSE MCP entry; verified supported in LiteLLM v1.104.0
+  # (MCPTransport = {sse, http, stdio}). Caller key forwarded via
+  # Authorization for per-key tool scoping (MCP_KEY_CAPABILITIES in the
+  # container: chuck=admin, dylan=control). Tools surface BARE (native
+  # names, e.g. list_projects — no server prefix; same as the other 13
+  # servers). Discovery (initialize/tools/list/ping) is unauthenticated
+  # so the proxy's registry handshake works; tools/call requires a valid
+  # Bearer key. NOTE: the family-mcp-full access group (07c1acf8-...) must
+  # include mcp_kanban for the chuck/dylan keys (default-deny per-key MCP
+  # access) — updated 2026-11-21.
+  mcp_kanban:
+    transport: http
+    url: http://mcp_kanban:3000/mcp
     extra_headers:
       - Authorization
     timeout: 7200

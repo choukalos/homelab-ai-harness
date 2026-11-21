@@ -529,15 +529,38 @@ test("board shows task cards with tag, usage, deps, and month stats", async () =
   await app.close();
 });
 
-test("POST /mcp rejects missing/wrong auth with 401", async () => {
+test("POST /mcp auth: actions require a key; discovery is open (proxy registry)", async () => {
   const { app } = await makeApp();
-  const noAuth = await app.inject({
+  // Unauthenticated ACTION (tools/call) → 401.
+  const noAuthCall = await app.inject({
     method: "POST",
     url: "/mcp",
     headers: { "content-type": "application/json" },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_projects", arguments: {} } }),
+  });
+  assert.equal(noAuthCall.statusCode, 401);
+  // Unauthenticated DISCOVERY (initialize) → 200: the LiteLLM proxy's
+  // startup tools/list handshake carries no caller key.
+  const noAuthInit = await app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
     payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
   });
-  assert.equal(noAuth.statusCode, 401);
+  assert.equal(noAuthInit.statusCode, 200);
+  // Unauthenticated tools/list → the FULL tool set (the proxy builds one
+  // global registry from it; per-key scoping is enforced at call time).
+  const noAuthList = await app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+  });
+  assert.equal(noAuthList.statusCode, 200);
+  const rpc = parseRpc(noAuthList.payload);
+  const names = rpc.result.tools.map((t: any) => t.name).sort();
+  assert.equal(names.length, 16, `expected the full 16-tool set, got ${names.length}`);
+  // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
     url: "/mcp",

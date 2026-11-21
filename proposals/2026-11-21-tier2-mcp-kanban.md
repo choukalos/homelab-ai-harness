@@ -17,7 +17,8 @@ Transform the `workspace/ai-kanban` code into `mcp_kanban` — a stateful
 self-contained Docker container (not a thin client) that:
 
 - Exposes the kanban tools via the LiteLLM proxy's MCP tool listings
-  (streamable HTTP at `POST /mcp`; tools surface as `mcp_kanban-<tool>`).
+  (streamable HTTP at `POST /mcp`; tools surface BARE — native names
+  like `list_projects`, no server prefix, same as the other 13 servers).
   Per-caller-key tool scoping: chuck `admin` (16 tools incl. project
   create/update), dylan `control` (14 tools — queue/groom/start/stop, no
   project admin), unknown keys 401.
@@ -82,14 +83,25 @@ LAN-bound) web UI and outbound LLM spend via the service key.
 ## Chuck action items (in order)
 1. **GitHub token**: set `KANBAN_GITHUB_TOKEN` in `.env` (repo scope — the
    deploy stage pushes task branches / blog posts / media). The board runs
-   without it; only the deploy stage's git push fails.
+   without it; only the deploy stage's git push fails. *(still open)*
 2. **LiteLLM swap**: replace `litellm/config.yml` with
    `litellm/config.yml.proposed-mcp-kanban` and restart
    (`docker compose -f compose/compose.ai-core.yml up -d litellm`).
    Restart severs active proxy sessions — pick a quiet moment.
-3. **E2E through proxy** (after the swap): `mcp_kanban-list_projects`
-   visible in `/mcp-rest/tools/list`; call with chuck's key (16-tool admin
-   set) and dylan's key (14-tool control set).
+   **DONE 2026-11-21** (chuck, manual restart).
+3. **E2E through proxy** (after the swap): kanban tools visible in
+   `/mcp-rest/tools/list`; call with chuck's key (full set) and dylan's
+   key (control set).
+   **DONE 2026-11-21** — required one extra fix: the `family-mcp-full`
+   access group (`07c1acf8-...`) had to be extended with `mcp_kanban`
+   (per-key MCP access is group-granted, default-deny — same step as the
+   `mcp_sessions` addition 2026-11-21; updated via
+   `PUT /v1/unified_access_group/<id>`). Results: 110 proxy tools
+   (94 + 16 kanban, bare names, no collisions); chuck `list_projects`
+   OK; dylan `list_projects` OK; dylan `create_project` refused
+   (control < admin, correct); chuck `create_project` OK (row persisted
+   in MySQL, test row removed); unknown key → 401.
 
 ---
 _Drafted 2026-11-21 (pi, thor). Review with `cli/proposals.sh`; applying is a human decision._
+_Applied 2026-11-21: board deployed + verified (8a2f212); proxy swap + access group + E2E same day._

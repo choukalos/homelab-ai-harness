@@ -2,7 +2,7 @@
 
 > Phase 4.5 — Define the MCP server architecture for the new platform.
 > Date: 2026-07-03
-> Status: **Implemented** — all 13 servers below are live in LiteLLM (SSE transport,
+> Status: **Implemented** — all 14 servers below are live in LiteLLM (SSE transport,
 > `ai-net`, 71 tools as of 2026-09-20 — 64 + 5 new `mcp_knowledge` digest tools
 > (kb_digest, kb_get_pages, kb_digest_store, kb_digest_get, kb_digest_list) + 2
 > `mcp_memory` tools; `mcp_memory` added 2026-09-02 with the memory project;
@@ -10,14 +10,20 @@
 > baseline; the "Current state" notes reflect the live system.
 
 **Current state (2026-11-21)**
-- 13 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
+- 14 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
   `mcp_media` (27), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3) — **94 tools total**
-  (verified live 2026-11-21: LiteLLM `/mcp-rest/tools/list` + per-server
-  `tools/list`). `mcp_sessions` added 2026-11-21 (mcp_sessions Phase 1 —
-  remote session ingest + owner-scoped read-back; `sessions_ingest`,
-  `sessions_list`, `sessions_get`). `mcp_media` 25 → 27 with the M1–M5
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (16)
+  — **110 tools total** (verified live 2026-11-21: LiteLLM
+  `/mcp-rest/tools/list` + per-server `tools/list`). `mcp_sessions` added
+  2026-11-21 (mcp_sessions Phase 1 — remote session ingest + owner-scoped
+  read-back; `sessions_ingest`, `sessions_list`, `sessions_get`).
+  `mcp_kanban` added 2026-11-21 (LLM task queue + grooming + execution;
+  stateful self-contained service — Fastify board UI LAN-only at
+  `thor.local:3000`, streamable-HTTP MCP at `POST /mcp` — the only
+  non-SSE MCP entry; tools surface bare, no server prefix; per-key tool
+  scoping chuck=admin / dylan=control via `MCP_KEY_CAPABILITIES`; MySQL
+  `ai_kanban` on Thor). `mcp_media` 25 → 27 with the M1–M5
   client layer (2026-11-19 pipeline, deployed 2026-11-21): `media_kill_job`
   (queued-only kill, frees the FIFO slot) + `media_queue_status` (queue
   summary + feature list); `media_job_result` now surfaces in-flight
@@ -366,8 +372,9 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 13 servers run as containers on `ai-net` (SSE transport,
-  path `/sse`, port 8000)
+- **Implemented.** All 14 servers run as containers on `ai-net` (13 on SSE
+  transport, path `/sse`, port 8000; `mcp_kanban` is the exception —
+  streamable HTTP at `POST /mcp`, port 3000, `transport: http`)
   and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`).
   **MCP key access — superseded 2026-11-15 (security Phase 2):** the
   2026-08-25 `allow_all_keys: true` decision (every valid key may call every
