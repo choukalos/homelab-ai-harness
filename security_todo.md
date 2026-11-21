@@ -47,7 +47,7 @@
 
 | key_alias | user_id | scope | budget | rpm/tpm | notes |
 |---|---|---|---|---|---|
-| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b: no rate limits, decided 2026-11-15) | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
+| `chuck` | chuck | all models | none (family decision: no cap) | none (D2b: no rate limits, decided 2026-11-15) | public (llm + siri routes); MCP: all 13 via `family-mcp-full` group |
 | `dylan` | dylan | all models | none | none | public (llm + siri routes); MCP: all 12 via `family-mcp-full` group |
 | *(no alias)* | — | models: matrix-coder, homelab-embedding-v1 | none | none | internal (skill-runner mem0, `MEMORY_LITELLM_KEY`); MCP: **none** (default-deny, Phase 2) |
 | *(no alias, `sk-...sOsg`)* | default_user_id | all models | $1 | none | **DELETED 2026-11-15** — F5 orphan; blocked same day, then deleted (observation window waived — already expired 2026-10-05, zero spend). (The other 2 F5 orphans, created 07-15 / 08-15, were already deleted before 2026-11-15.) |

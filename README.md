@@ -452,7 +452,7 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **SSE** transport (`GET /sse`).
 
-**Twelve MCP servers are currently deployed** via `compose.mcp.yml` (89 tools total, verified 2026-11-20).
+**Thirteen MCP servers are currently deployed** via `compose.mcp.yml` (92 tools total, verified 2026-11-21).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -468,6 +468,7 @@ MCP (Model Context Protocol) servers are **standalone containers**, each with it
 | `mcp_skills` | Skill-runner gateway (list/run/get skill jobs) | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_memory` | Long-term memory (mem0/Qdrant, hybrid BM25+dense search since 2026-11-14) — memory_search, memory_list, memory_remember | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_datahub` | Data-Hub ingest/ETL API (health, ingest_file, load_log, category review loop, dataset registry) — 10 tools | ✅ Implemented | ✅ Container on `ai-net` |
+| `mcp_sessions` | Skill-runner scoped session endpoints — `sessions_ingest` (verbatim transcript, server-side ≤2 MiB split), `sessions_list`, `sessions_get` (owner-only read-back + citation) — 3 tools | ✅ Implemented | ✅ Container on `ai-net` |
 | `mcp_stocks` | External APIs | 📋 Planned (README stub) | 🔲 Not yet |
 | `mcp_home` | Homebridge (Lego) | 📋 Planned (README stub) | 🔲 Not yet |
 
@@ -600,7 +601,7 @@ Connected to LiteLLM.
 | Service | Purpose | Status |
 |---|---|---|
 | LiteLLM | Model gateway + MCP gateway | ✅ Running |
-| MCP servers | Reusable tool providers (standalone containers) | ✅ 12 deployed (89 tools) |
+| MCP servers | Reusable tool providers (standalone containers) | ✅ 13 deployed (92 tools) |
 | Skill runner | Agentic workflow orchestration + chat gateway + scheduler | ✅ Running (:8091) |
 | AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ✅ Decommissioned 2026-08-25 (replaced by skill runner) |
 | Open Web UI | Family/local AI chat interface | ✅ Removed 2026-11-15 (unused; data backed up) |

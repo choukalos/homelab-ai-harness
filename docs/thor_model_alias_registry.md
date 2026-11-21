@@ -11,7 +11,7 @@
 |---|---|---|---|
 | `matrix-coder` | `openai/qwen38-27b` via vLLM (`matrix:8000`) | Main model — chat, skills, extraction LLM | "One model rule" in practice; `fallbacks: [studio-gemma4-26b]` (2026-11-19) |
 | `matrix-coder-fast` | same Qwen3 backend | Fast path — thinking OFF baked in (`enable_thinking: false`) | Added 2026-11-19 (tier1-litellm-model-config-pass); 0 reasoning tokens vs 52–53 baseline |
-| `studio-gemma4-26b` | OMLX (`macstudio:8000`) | Backup LLM for the `matrix-coder` fallback | Supersedes `studio-gemma4-4b` (LMStudio); capability tags UNVERIFIED 2026-11-19 — upstream was down (see `tier1-macstudio-omlx-restart`) |
+| `studio-gemma4-26b` | OMLX (`macstudio:8000`) | Backup LLM for the `matrix-coder` fallback | Supersedes `studio-gemma4-4b` (LMStudio); capability tags **VERIFIED 2026-11-21** against the reloaded upstream — tool calling + JSON schema work, no vision (text-only MLX), 262144 max_model_len (`tier1-macstudio-omlx-restart` applied; upstream was down 2026-11-17→21) |
 | `embeddings` | `ollama/nomic-embed-text` (`matrix:11434`) | KB path (legacy name) | 768-dim; `mode: embedding` (misclassification fixed 2026-11-19) |
 | `homelab-embedding-v1` | same nomic backend | **Memory path** (versioned alias) | Added 2026-08-26 (memory Phase 1); migration runbook in `docs/memory/embedding-migration.md` — never silently repoint v1 |
 
