@@ -28,8 +28,10 @@ import {
   projectCompleted,
   projectStats,
   spendByMonth,
+  spendByOwner,
   taskUsageTable,
   type CompletedPage,
+  type OwnerSpendRow,
   type ProjectReportRow,
   type SpendReport,
   type TaskUsageFilters,
@@ -48,6 +50,7 @@ export type {
   SpendReport,
   MonthBucket,
   ProjectReportRow,
+  OwnerSpendRow,
   TaskUsageFilters,
   TaskUsageRow,
   CompletedItem,
@@ -139,6 +142,8 @@ export interface GroomStatusView {
 /** Reports page payload (GET /reports, requirements §9/§11). */
 export interface ReportsData {
   spend: SpendReport;
+  /** Per-user $ spend per month, rolling 12 months (Phase 2; '' = unattributed). */
+  owners: OwnerSpendRow[];
   projects: ProjectReportRow[];
   tasks: TaskUsageRow[];
   /** Normalized filters (echoed into the filter form). */
@@ -227,14 +232,16 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     groomTranscript: (ideaId) => grooming().then((g) => g.transcript(ideaId)),
 
     reports: async (filters = {}) => {
-      const [spend, projects, tasks, projectOptions] = await Promise.all([
+      const [spend, owners, projects, tasks, projectOptions] = await Promise.all([
         spendByMonth(db),
+        spendByOwner(db),
         projectStats(db),
         taskUsageTable(db, filters),
         listProjects(db),
       ]);
       return {
         spend,
+        owners,
         projects,
         tasks,
         filters,

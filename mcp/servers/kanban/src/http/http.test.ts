@@ -19,12 +19,13 @@ import { buildApp } from "./app.js";
 import { createKanbanServices } from "../services/index.js";
 import { MCP_SERVER_INFO } from "../mcp/server.js";
 
-function testCfg(sqlitePath: string): KanbanConfig {
+function testCfg(sqlitePath: string, userKeys: Record<string, string> = {}): KanbanConfig {
   return {
     litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-test" },
     model: "test-model",
     modelCost: undefined,
     githubToken: undefined,
+    userKeys,
     db: { driver: "sqlite", sqlitePath, mysql: undefined },
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
@@ -99,9 +100,10 @@ async function makeApp(opts: {
   groomSlowMs?: number;
   mcpKeyCapabilities?: Map<string, Set<string>>;
   mcpKeyOwners?: Map<string, string>;
+  userKeys?: Record<string, string>;
 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-http-"));
-  const cfg = testCfg(path.join(dir, "kanban.db"));
+  const cfg = testCfg(path.join(dir, "kanban.db"), opts.userKeys);
   const db = await initDb(cfg);
   const mock: MockGrooming = createMockGrooming(undefined, { slowMs: opts.groomSlowMs });
   const grooming = new GroomingManager({
@@ -256,14 +258,15 @@ async function makeTaskFixture(
 // Read-only web UI
 // ---------------------------------------------------------------------------
 
-test("GET /health returns ok with model + db driver", async () => {
-  const { app } = await makeApp();
+test("GET /health returns ok with model + db driver + user key profiles", async () => {
+  const { app } = await makeApp({ userKeys: { chuck: "sk-chuck", dylan: "sk-dylan" } });
   const res = await app.inject({ method: "GET", url: "/health" });
   assert.equal(res.statusCode, 200);
   const body = res.json();
   assert.equal(body.ok, true);
   assert.equal(body.model, "test-model");
   assert.equal(body.db, "sqlite");
+  assert.deepEqual(body.userKeys.sort(), ["chuck", "dylan"], "USER_KEYS profile names exposed");
   await app.close();
 });
 
@@ -1176,11 +1179,42 @@ test("groom page is a read-only transcript viewer", async () => {
 });
 
 test("GET /reports renders the read-only reports page", async () => {
-  const { app } = await makeApp();
+  const { app, db, services } = await makeApp();
   const res = await app.inject({ method: "GET", url: "/reports" });
   assert.equal(res.statusCode, 200);
   assert.ok(res.payload.includes("Reports"), "reports heading");
   assert.ok(!res.payload.includes('method="post"'), "no mutation forms (the filter form is GET)");
+  await app.close();
+});
+
+test("GET /reports renders the per-user spend section (owner + unattributed)", async () => {
+  const { app, db, services } = await makeApp();
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const p = await services.createProject({ name: "Spend Project" });
+  const now = Date.now();
+  const cur = new Date();
+  const curStart = new Date(cur.getFullYear(), cur.getMonth(), 1).getTime();
+  const prevStart = new Date(cur.getFullYear(), cur.getMonth() - 1, 1).getTime();
+  await q
+    .insert(usage)
+    .values([
+      { projectId: p.id, taskId: null, ts: curStart + 1000, role: "groom", model: "m", thinking: "xhigh", tokensIn: 10, tokensOut: 5, cost: 2.5, owner: "chuck" },
+      { projectId: p.id, taskId: null, ts: prevStart + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 4.0, owner: "dylan" },
+      { projectId: p.id, taskId: null, ts: curStart + 2000, role: "task", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 1.25, owner: "" },
+    ]);
+  const res = await app.inject({ method: "GET", url: "/reports" });
+  assert.equal(res.statusCode, 200);
+  const html = res.payload;
+  assert.ok(html.includes("Per user — rolling 12 months"), "per-user section heading");
+  assert.ok(html.includes(">chuck<"), "chuck row");
+  assert.ok(html.includes(">dylan<"), "dylan row");
+  assert.ok(html.includes(">unattributed<"), "unattributed row for owner ''");
+  assert.ok(html.includes("$2.50"), "chuck spend rendered");
+  assert.ok(html.includes("$4.00"), "dylan spend rendered");
+  assert.ok(html.includes("$1.25"), "unattributed spend rendered");
+  // Per-project + total sections still span all keys (chuck+dylan+unattributed).
+  assert.ok(html.includes("Per project — rolling 12 months"), "per-project section present");
+  assert.ok(html.includes("$7.75"), "total spend includes all keys (2.5 + 4.0 + 1.25)");
   await app.close();
 });
 

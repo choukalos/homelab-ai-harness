@@ -12,7 +12,9 @@ import {
   loadEnvFileVars,
   parseConfig,
   parseDotEnv,
+  parseUserKeys,
   validateModelAtBoot,
+  validateUserKeysAtBoot,
   type FetchLike,
 } from "./config.js";
 
@@ -241,6 +243,55 @@ test("validateModelAtBoot fails on invalid JSON", async () => {
     validateModelAtBoot(bootCfg, mockFetch({ text: "<html>oops</html>" })),
     /invalid JSON/,
   );
+});
+
+test("parseUserKeys: name=key pairs (trimmed, order kept)", () => {
+  assert.deepEqual(parseUserKeys(undefined), {});
+  assert.deepEqual(parseUserKeys(""), {});
+  assert.deepEqual(parseUserKeys("  "), {});
+  assert.deepEqual(parseUserKeys("chuck=sk-chuck,dylan=sk-dylan"), {
+    chuck: "sk-chuck",
+    dylan: "sk-dylan",
+  });
+  assert.deepEqual(parseUserKeys(" chuck = sk-chuck , , dylan=sk-dylan "), {
+    chuck: "sk-chuck",
+    dylan: "sk-dylan",
+  });
+});
+
+test("parseUserKeys: malformed entries fail fast", () => {
+  assert.throws(() => parseUserKeys("sk-no-name"), /malformed/);
+  assert.throws(() => parseUserKeys("chuck="), /empty key/);
+  assert.throws(() => parseUserKeys("=sk-no-name"), /malformed|empty name/);
+  assert.throws(() => parseUserKeys("chuck=sk-1,chuck=sk-2"), /duplicate name/);
+});
+
+test("parseConfig: USER_KEYS lands in cfg.userKeys (absent → {})", () => {
+  const withKeys = parseConfig({ ...baseEnv, USER_KEYS: "chuck=sk-chuck,dylan=sk-dylan" });
+  assert.deepEqual(withKeys.userKeys, { chuck: "sk-chuck", dylan: "sk-dylan" });
+  assert.deepEqual(parseConfig({ ...baseEnv }).userKeys, {});
+});
+
+test("validateUserKeysAtBoot: accepts keys the proxy serves, fails on rejection", async () => {
+  const cfg = {
+    litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-service" },
+    userKeys: { chuck: "sk-chuck", dylan: "sk-dylan" },
+  };
+  // Both keys accepted (200).
+  await validateUserKeysAtBoot(cfg, mockFetch({ body: { data: [{ id: "m" }] } }));
+  // One key rejected (403) → ConfigError naming the user.
+  const failing: FetchLike = (async (_input, init) => {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const auth = headers.Authorization ?? "";
+    const rejected = auth === "Bearer sk-dylan";
+    return new Response(rejected ? "" : JSON.stringify({ data: [{ id: "m" }] }), {
+      status: rejected ? 403 : 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as FetchLike;
+  await assert.rejects(() => validateUserKeysAtBoot(cfg, failing), /USER_KEYS entry dylan/);
+  // No user keys → no-op.
+  await validateUserKeysAtBoot({ litellm: cfg.litellm, userKeys: {} }, mockFetch({}));
 });
 
 test("loadConfig reads .env and skips model validation when told", async () => {

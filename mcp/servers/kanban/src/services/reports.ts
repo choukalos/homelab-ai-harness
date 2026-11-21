@@ -94,6 +94,47 @@ export interface ProjectReportRow {
   spend: number;
 }
 
+/**
+ * Per-user $ spend, rolling 12 months (Phase 2). One row per owner present
+ * in the window's usage rows; `owner` '' = unattributed (service key / legacy
+ * rows). `byMonth` is keyed by the same month keys as `monthWindow` (the
+ * template aligns columns against the total-spend buckets).
+ */
+export interface OwnerSpendRow {
+  /** Owner name ('' = unattributed). */
+  owner: string;
+  /** $ spend per month key (only months with spend; absent = 0). */
+  byMonth: Record<string, number>;
+  /** Total $ spend across the rolling window. */
+  total: number;
+}
+
+/**
+ * Per-user $ spend per month, rolling 12 months. All roles, all projects;
+ * rows sorted by total (desc), unattributed last.
+ */
+export async function spendByOwner(db: Db, now: number = Date.now()): Promise<OwnerSpendRow[]> {
+  const months = monthWindow(now);
+  const start = months[0]!.start;
+  const end = months[months.length - 1]!.end;
+  const rows = await db
+    .select({ ts: usage.ts, cost: usage.cost, owner: usage.owner })
+    .from(usage)
+    .where(and(gte(usage.ts, start), lt(usage.ts, end)));
+  const byOwner = new Map<string, OwnerSpendRow>();
+  for (const r of rows) {
+    const row = byOwner.get(r.owner) ?? { owner: r.owner, byMonth: {}, total: 0 };
+    const key = keyOf(r.ts);
+    row.byMonth[key] = (row.byMonth[key] ?? 0) + r.cost;
+    row.total += r.cost;
+    byOwner.set(r.owner, row);
+  }
+  return [...byOwner.values()].sort(
+    (a, b) =>
+      Number(a.owner === "") - Number(b.owner === "") || b.total - a.total || a.owner.localeCompare(b.owner),
+  );
+}
+
 /** Per-project completed-item count + $ spend, rolling 12 months. */
 export async function projectStats(db: Db, now: number = Date.now()): Promise<ProjectReportRow[]> {
   const months = monthWindow(now);

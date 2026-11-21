@@ -72,6 +72,8 @@ export interface QaSessionCreateOptions {
   /** Workspace the QA session works in (same as the task workspace). */
   cwd: string;
   systemPrompt: string;
+  /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
+  owner?: string;
   onUsage?: (usage: UsageSample) => void;
 }
 
@@ -90,6 +92,8 @@ export interface QaRunContext {
   completionSummary: string;
   /** 1-based QA round number. */
   round: number;
+  /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
+  owner?: string;
   onLog?: (line: string) => void;
   onUsage?: (usage: UsageSample) => void;
 }
@@ -192,6 +196,7 @@ export class QaGate {
             role: "qa",
             cwd: o.cwd,
             systemPrompt: o.systemPrompt,
+            owner: o.owner, // Phase 2: bill to the task owner's key (else service key)
             onUsage: o.onUsage,
           })
           .then((h: AgentSessionHandle) => h.session as unknown as QaSessionLike);
@@ -213,6 +218,7 @@ export class QaGate {
     const session = await this.factory({
       cwd: ctx.workspace,
       systemPrompt: QA_SYSTEM_PROMPT,
+      owner: ctx.owner, // Phase 2: bill to the task owner's key (else service key)
       onUsage: ctx.onUsage,
     });
     const unsubscribe = session.subscribe((event) => {

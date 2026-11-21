@@ -78,6 +78,7 @@ Copy `.env.example` to `.env` and fill in. Real environment variables override t
 | `BIND_ADDR` / `PORT` | `0.0.0.0` / `3000` | GUI/API bind (homelab interface only; no auth — LAN-only) |
 | `MCP_KEY_CAPABILITIES` | `faxfoUszvw:admin;JAS3o6tu0A:control` (homelab) | MCP guardrails for multi-user keys: `key-suffix:cap1,cap2;...` (key-suffix = the TAIL of a Bearer key; caps = `read` / `control` / `admin` or individual tool names). The kanban key (`LITELLM_API_KEY`) always gets the full tool set; other keys must match an entry or the MCP endpoint rejects them with a clear error. Homelab: chuck's + dylan's LiteLLM key tails → `admin` / `control` (update the suffixes on key rotation). |
 | `MCP_KEY_OWNERS` | `chuck:faxfoUszvw;dylan:JAS3o6tu0A` (homelab) | Owner attribution: `name:key-suffix;...` (same tail-matching). The caller's owner is stamped on the projects/ideas they create (tasks inherit the idea's owner); the kanban key → `kanban`; an authorized key missing from the map → `unknown`. |
+| `USER_KEYS` | — (unset) | Per-user LLM spend attribution (Phase 2): comma-separated `name=full-LiteLLM-key` pairs (names match `MCP_KEY_OWNERS`). Sessions for work owned by a user (grooming/task/QA/summary) run against the proxy with that user's key, so LiteLLM bills the spend to the user's key/budget; usage rows carry the owner (per-user spend trend on `/reports`). Unset, or an owner without an entry → the work bills to the service key. Each key is validated against the proxy at boot (fail fast). Homelab: compose interpolates `USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}`. |
 | `AI_KANBAN_DATA_DIR` | `/data` | data dir root (DB, sessions, agent dir, harness); override for local dev — use a **persistent** dir, not `/tmp` (macOS purges `/tmp` while the server runs) |
 | `AI_KANBAN_WORKSPACE_DIR` | `/workspace` | agent scratch root (task-<id> / groom-<idea> dirs); override for local dev |
 
@@ -143,6 +144,14 @@ not a client over skill-runner):
 - **Dual key role** — the container's `LITELLM_API_KEY` (the homelab
   service key) is used both for outbound LLM calls (groom/task/QA/summary)
   and as the "kanban key" that always gets the full tool set on `/mcp`.
+- **Per-user spend attribution (Phase 2)** — `USER_KEYS` maps owner names to
+  full LiteLLM keys. Every agent session (grooming/task/QA/summary) picks a
+  *key profile* by the work item's owner: a mapped owner runs on a
+  per-user agent dir (`/data/pi-agent-<name>`, own `auth.json` +
+  `ModelRuntime`) so LiteLLM bills the spend to the user's key/budget;
+  no owner or an unmapped owner falls back to the service key. Usage rows
+  carry the owner, which the reports page renders as a per-user spend trend
+  (rolling 12 months; per-project and total span all keys).
 
 The web UI has no auth by design (LAN-only, bound to the LAN IP). The
 `/mcp` endpoint is key-gated even on the LAN port.

@@ -584,8 +584,9 @@ export class Orchestrator {
           spec: ctx.spec,
           completionSummary: result.summary,
           round,
+          owner: task.owner, // Phase 2: bill the QA session to the owner's key
           onLog: (line) => void this.appendEvent(taskId, "log", { line }),
-          onUsage: (u) => this.recordUsageFor(taskId, task.projectId, "qa", u),
+          onUsage: (u) => this.recordUsageFor(taskId, task.projectId, "qa", u, task.owner),
         });
         await this.appendEvent(taskId, "qa", { round, pass: verdict.pass, feedback: verdict.feedback });
 
@@ -645,12 +646,18 @@ export class Orchestrator {
     };
     ctx.onUsage = (u: UsageSample) => {
       this.activityAt.set(taskId, this.now());
-      this.recordUsageFor(taskId, projectId, "task", u);
+      this.recordUsageFor(taskId, projectId, "task", u, ctx.owner);
     };
   }
 
   /** One usage row (role `task`/`qa`/`summary`); taskId null for summary. */
-  private recordUsageFor(taskId: number | null, projectId: number, role: UsageRole, u: UsageSample): void {
+  private recordUsageFor(
+    taskId: number | null,
+    projectId: number,
+    role: UsageRole,
+    u: UsageSample,
+    owner: string,
+  ): void {
     void recordUsage(this.db, {
       projectId,
       taskId,
@@ -660,6 +667,7 @@ export class Orchestrator {
       tokensIn: u.input,
       tokensOut: u.output,
       cost: u.cost,
+      owner,
     }).catch((err) =>
       console.error(`[orchestrator] usage record failed (task ${taskId ?? "-"}, role ${role}):`, err),
     );
@@ -707,7 +715,8 @@ export class Orchestrator {
           projectGoal: project.goal,
           previousSummary: project.stateSummary ?? "",
           deployed: `task ${taskId} (${task.spec.kind}): ${result.published}`,
-          onUsage: (u) => this.recordUsageFor(null, project.id, "summary", u),
+          owner: task.owner, // Phase 2: bill the summary session to the owner's key
+          onUsage: (u) => this.recordUsageFor(null, project.id, "summary", u, task.owner),
         });
         if (next) {
           await this.db
@@ -807,6 +816,7 @@ export class Orchestrator {
       deps,
       resolution: task.resolution,
       progressSummary: resume ? await this.progressSummary(task) : null,
+      owner: task.owner, // Phase 2: sessions bill to the owner's key (else service key)
       project: {
         name: project.name,
         goal: project.goal,

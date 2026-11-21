@@ -30,6 +30,7 @@ const cfg: KanbanConfig = {
   model: "test-model",
     modelCost: undefined,
   githubToken: undefined,
+  userKeys: {},
   db: { driver: "sqlite", sqlitePath: "/tmp/test.db", mysql: undefined },
   workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
   harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
@@ -110,6 +111,58 @@ test("per-role thinking levels (resolve reuses QA)", async () => {
       assert.equal(rt.thinkingLevel("qa"), "xhigh");
       assert.equal(rt.thinkingLevel("summary"), "medium");
       assert.equal(rt.thinkingLevel("resolve"), "xhigh"); // QA level per PLAN.md §3
+    } finally {
+      rt.dispose();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("AgentRuntime key profiles: per-user agent dirs + auth.json; profileFor picks by owner", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-agent-"));
+  try {
+    const rt = await AgentRuntime.create(
+      { ...cfg, userKeys: { chuck: "sk-chuck", dylan: "sk-dylan" } },
+      { dataDir: dir },
+    );
+    try {
+      // Service profile keeps the historical path + the service key.
+      assert.equal(rt.agentDir, path.join(dir, "pi-agent"));
+      const serviceAuth = JSON.parse(await readFile(path.join(dir, "pi-agent", "auth.json"), "utf8")) as any;
+      assert.equal(serviceAuth[LITELLM_PROVIDER].key, "sk-test");
+
+      // One profile per USER_KEYS entry, with that user's key.
+      assert.deepEqual(rt.userProfileNames().sort(), ["chuck", "dylan"]);
+      for (const [name, key] of Object.entries({ chuck: "sk-chuck", dylan: "sk-dylan" })) {
+        const p = rt.profileFor(name);
+        assert.equal(p.name, name);
+        assert.equal(p.dir, path.join(dir, `pi-agent-${name}`));
+        const auth = JSON.parse(await readFile(path.join(p.dir, "auth.json"), "utf8")) as any;
+        assert.equal(auth[LITELLM_PROVIDER].key, key);
+        const models = JSON.parse(await readFile(path.join(p.dir, "models.json"), "utf8")) as any;
+        assert.equal(models.providers[LITELLM_PROVIDER].models[0].id, "test-model");
+      }
+
+      // Fallbacks: no owner / unmapped owner → the service profile.
+      assert.equal(rt.profileFor().name, "service");
+      assert.equal(rt.profileFor("").name, "service");
+      assert.equal(rt.profileFor("unknown-user").name, "service");
+    } finally {
+      rt.dispose();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("AgentRuntime without USER_KEYS: service profile only", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-agent-"));
+  try {
+    const rt = await AgentRuntime.create(cfg, { dataDir: dir });
+    try {
+      assert.deepEqual(rt.userProfileNames(), []);
+      assert.equal(rt.profileFor("chuck").name, "service");
     } finally {
       rt.dispose();
     }
@@ -217,6 +270,7 @@ function taskCtx(overrides: Partial<TaskRunContext> = {}): TaskRunContext {
     deps: [],
     resolution: null,
     progressSummary: null,
+    owner: "",
     project: {
       name: "Alpha",
       goal: "ship the widget platform",

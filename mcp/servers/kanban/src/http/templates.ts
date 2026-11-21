@@ -687,9 +687,15 @@ ${taskLogFragment(data.log)}
 
 export interface ReportsPageData {
   /** 12 month buckets, oldest → newest (chart data). */
-  months: Array<{ label: string; short: string; spend: number }>;
+  months: Array<{ key: string; label: string; short: string; spend: number }>;
   /** Total $ spend across the rolling 12 months (callout). */
   total: number;
+  /**
+   * Per-user $ spend, rolling 12 months (Phase 2). One row per owner present
+   * in the window; `owner` '' = unattributed (service key / legacy rows).
+   * `byMonth` is keyed by the `months[].key` values (absent = $0).
+   */
+  owners: Array<{ owner: string; byMonth: Record<string, number>; total: number }>;
   projects: Array<{ id: number; name: string; completed: number; spend: number }>;
   tasks: Array<{
     taskId: number;
@@ -712,6 +718,23 @@ export interface ReportsPageData {
 export function reportsPage(data: ReportsPageData): string {
   const barChart = svgBarChart(
     data.months.map((m) => ({ label: m.short, value: m.spend, sub: m.label })),
+    { formatValue: (n) => `$${n.toFixed(2)}` },
+  );
+  const ownerLabel = (owner: string) => (owner === "" ? "unattributed" : owner);
+  const ownerRows =
+    data.owners.length > 0
+      ? data.owners
+          .map((o) => {
+            const cells = data.months
+              .map((m) => `<td class="num">${fmtMoney(o.byMonth[m.key] ?? 0)}</td>`)
+              .join("");
+            return `<tr><td>${escapeHtml(ownerLabel(o.owner))}</td>${cells}<td class="num"><strong>${fmtMoney(o.total)}</strong></td></tr>`;
+          })
+          .join("\n")
+      : `<tr><td colspan="${data.months.length + 2}" class="muted">No usage recorded in the window yet.</td></tr>`;
+  const ownerHead = data.months.map((m) => `<th class="num">${escapeHtml(m.short)}</th>`).join("");
+  const ownerChart = svgHBarChart(
+    data.owners.map((o) => ({ label: ownerLabel(o.owner), value: o.total })),
     { formatValue: (n) => `$${n.toFixed(2)}` },
   );
   const projectChart = svgHBarChart(
@@ -761,6 +784,15 @@ export function reportsPage(data: ReportsPageData): string {
     <div class="stat"><span class="stat-label">Total spend (12 mo)</span><span class="stat-value">${fmtMoney(data.total)}</span></div>
   </div>
   <div class="chart">${barChart}</div>
+</section>
+<section class="settings">
+  <h2>Per user — rolling 12 months</h2>
+  <p class="muted">Spend by the key each LLM call billed to (per-user attribution); the per-project and total sections span all keys.</p>
+  <table class="usage-table">
+<tr><th>User</th>${ownerHead}<th class="num">Total</th></tr>
+${ownerRows}
+</table>
+  <div class="chart">${ownerChart}</div>
 </section>
 <section class="settings">
   <h2>Per project — rolling 12 months</h2>

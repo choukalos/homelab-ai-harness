@@ -20,6 +20,7 @@ import {
   projectCompleted,
   projectStats,
   spendByMonth,
+  spendByOwner,
   taskUsageTable,
 } from "./reports.js";
 
@@ -29,6 +30,7 @@ function testCfg(sqlitePath: string): KanbanConfig {
     model: "test-model",
     modelCost: undefined,
     githubToken: undefined,
+    userKeys: {},
     db: { driver: "sqlite", sqlitePath, mysql: undefined },
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
@@ -116,18 +118,18 @@ async function seed(q: BetterSQLite3Database<any>, now: number): Promise<Fixture
   const alphaOldDone = await mkTask(i4.id, alpha.id, "done", months[0]!.start - 86400_000);
 
   await q.insert(usage).values([
-    // Alpha done task: task + qa usage, current month.
-    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 1000, tokensOut: 500, cost: 2.0 },
-    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 2000, role: "qa", model: "m", thinking: "xhigh", tokensIn: 100, tokensOut: 50, cost: 0.5 },
-    // Alpha running task: task usage, previous month.
-    { projectId: alpha.id, taskId: alphaRunning.id, ts: prev.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 2000, tokensOut: 800, cost: 4.0 },
-    // Beta done task: task usage, current month.
-    { projectId: beta.id, taskId: betaDone.id, ts: cur.start + 3000, role: "task", model: "m", thinking: "medium", tokensIn: 300, tokensOut: 100, cost: 1.25 },
+    // Alpha done task: task + qa usage, current month (owner chuck).
+    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 1000, tokensOut: 500, cost: 2.0, owner: "chuck" },
+    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 2000, role: "qa", model: "m", thinking: "xhigh", tokensIn: 100, tokensOut: 50, cost: 0.5, owner: "chuck" },
+    // Alpha running task: task usage, previous month (owner dylan).
+    { projectId: alpha.id, taskId: alphaRunning.id, ts: prev.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 2000, tokensOut: 800, cost: 4.0, owner: "dylan" },
+    // Beta done task: task usage, current month (unattributed).
+    { projectId: beta.id, taskId: betaDone.id, ts: cur.start + 3000, role: "task", model: "m", thinking: "medium", tokensIn: 300, tokensOut: 100, cost: 1.25, owner: "" },
     // Out of window: the old done task (13 months ago).
-    { projectId: alpha.id, taskId: alphaOldDone.id, ts: months[0]!.start - 1000, role: "task", model: "m", thinking: "medium", tokensIn: 999, tokensOut: 999, cost: 9.99 },
+    { projectId: alpha.id, taskId: alphaOldDone.id, ts: months[0]!.start - 1000, role: "task", model: "m", thinking: "medium", tokensIn: 999, tokensOut: 999, cost: 9.99, owner: "chuck" },
     // Grooming/summary rows carry no task (must not appear in the task table).
-    { projectId: alpha.id, taskId: null, ts: cur.start + 4000, role: "groom", model: "m", thinking: "xhigh", tokensIn: 50, tokensOut: 20, cost: 0.1 },
-    { projectId: beta.id, taskId: null, ts: cur.start + 5000, role: "summary", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 0.05 },
+    { projectId: alpha.id, taskId: null, ts: cur.start + 4000, role: "groom", model: "m", thinking: "xhigh", tokensIn: 50, tokensOut: 20, cost: 0.1, owner: "dylan" },
+    { projectId: beta.id, taskId: null, ts: cur.start + 5000, role: "summary", model: "m", thinking: "medium", tokensIn: 10, tokensOut: 5, cost: 0.05, owner: "" },
   ]);
 
   return { alpha: alpha.id, beta: beta.id, alphaDone: alphaDone.id, alphaRunning: alphaRunning.id, betaDone: betaDone.id, alphaOldDone: alphaOldDone.id };
@@ -169,6 +171,42 @@ test("spendByMonth: buckets by month, excludes out-of-window rows, total sums in
   for (const m of report.months) {
     if (m !== cur && m !== prev) assert.equal(m.spend, 0, `month ${m.key} empty`);
   }
+});
+
+test("spendByOwner: per-user × per-month, window-only, unattributed last", async () => {
+  const { db, q } = await setup();
+  const now = Date.now();
+  void await seed(q, now);
+
+  const rows = await spendByOwner(db, now);
+  const months = monthWindow(now);
+  const cur = months[months.length - 1]!;
+  const prev = months[months.length - 2]!;
+  const byName = new Map(rows.map((r) => [r.owner, r]));
+
+  // Order: by total desc; the unattributed ('') row is last regardless.
+  assert.deepEqual(rows.map((r) => r.owner), ["dylan", "chuck", ""]);
+
+  // chuck: alpha done task (2.0) + qa (0.5), current month; the 9.99
+  // out-of-window row is excluded.
+  const chuck = byName.get("chuck")!;
+  closeTo(chuck.total, 2.5, "chuck total");
+  closeTo(chuck.byMonth[cur.key] ?? 0, 2.5, "chuck current month");
+  assert.equal(chuck.byMonth[prev.key], undefined, "chuck has no previous-month spend");
+
+  // dylan: alpha running task (4.0) previous month + groom (0.1) current.
+  const dylan = byName.get("dylan")!;
+  closeTo(dylan.total, 4.1, "dylan total");
+  closeTo(dylan.byMonth[cur.key] ?? 0, 0.1, "dylan current month");
+  closeTo(dylan.byMonth[prev.key] ?? 0, 4.0, "dylan previous month");
+
+  // unattributed: beta done (1.25) + summary (0.05), current month.
+  const unattr = byName.get("")!;
+  closeTo(unattr.total, 1.3, "unattributed total");
+  closeTo(unattr.byMonth[cur.key] ?? 0, 1.3, "unattributed current month");
+
+  // All owners' totals sum to the window total (all keys, no filtering).
+  closeTo(rows.reduce((s, r) => s + r.total, 0), 7.9, "owner totals sum to window total");
 });
 
 test("projectStats: completed counts (in-window done only) + $ spend per project", async () => {

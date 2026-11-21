@@ -342,9 +342,34 @@ Implementation (2026-11-21, committed):
       `board_status` OK, dylan `create_project` refused with the
       capability message
 
-## Phase 2 (follow-up, not in this change)
+## Phase 2 (2026-11-21) — IMPLEMENTED + deployed
 
-- Per-user/per-agent LLM spend attribution (Q2 design above): ~~`owner_user`
-  capture~~ (done in the MCP-first change: `owner` columns +
-  `KANBAN_KEY_OWNERS`) + per-user `ModelRuntime`/auth + `KANBAN_USER_KEYS` map.
-- Consider: per-project cost budgets / alerts once attribution lands.
+Plan: `proposals/2026-11-21-tier2-mcp-kanban-phase2-user-spend.md`
+
+Per-user LLM spend attribution using the owner columns (Q2 design above):
+
+- [x] `USER_KEYS` env (container; compose interpolates
+      `chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}` from the repo
+      `.env`) → `cfg.userKeys`; boot validation of every user key against
+      the proxy (fail fast, like the model check).
+- [x] `AgentRuntime` key profiles: `service` (the historical
+      `/data/pi-agent`) + one per user (`/data/pi-agent-<name>` — own
+      `auth.json` + `ModelRuntime`); `createSession({ owner })` picks the
+      profile (mapped owner → user key; else service key + log note).
+- [x] Owner threading: groom (idea owner) / task / QA / summary (task
+      owner) sessions + usage rows (migration `0003_usage_owner`,
+      `owner VARCHAR(64) NOT NULL DEFAULT ''` on `usage`).
+- [x] Reports: new "Per user — rolling 12 months" section on `/reports`
+      (per-user × per-month table + hbar chart; `''` shown as
+      *unattributed*). Per-project + total sections span **all keys**
+      (unchanged — chuck's call: they must include every key).
+- [x] `/health` exposes the `USER_KEYS` profile names.
+- [x] Tests: 180 (179 pass, 1 skip = MySQL w/o test server) — config
+      (parseUserKeys + boot validation), sessions (key profiles +
+      profileFor), db (0003), reports (spendByOwner), grooming +
+      orchestrator (owner into sessions + usage rows), http (per-user
+      section + health).
+- [x] Deploy + verify on thor (2026-11-21): migration applied; boot
+      validates both user keys; real grooming turn billed to the owner's
+      key (usage row stamped; proxy spend lands on the user's key);
+      /reports renders the per-user section.

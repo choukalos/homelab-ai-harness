@@ -1,6 +1,6 @@
 /**
  * Usage accounting (PLAN.md §2/§11): one row per LLM call, tagged by
- * task/project/role + thinking level. Reporting only — no limits.
+ * task/project/role + thinking level + owner. Reporting only — no limits.
  * `taskId` is nullable for grooming/summary calls.
  */
 import { usage, type UsageRole } from "../db/schema.js";
@@ -16,6 +16,12 @@ export interface UsageRecord {
   tokensIn: number;
   tokensOut: number;
   cost: number;
+  /**
+   * Owner whose key this LLM call billed to (Phase 2): the owner name when
+   * the session ran on a USER_KEYS profile, else '' (service key / unmapped
+   * owner / legacy rows).
+   */
+  owner?: string;
 }
 
 /** Insert one usage row. */
@@ -30,5 +36,6 @@ export async function recordUsage(db: Db, rec: UsageRecord): Promise<void> {
     tokensIn: rec.tokensIn,
     tokensOut: rec.tokensOut,
     cost: rec.cost,
+    owner: rec.owner ?? "",
   });
 }

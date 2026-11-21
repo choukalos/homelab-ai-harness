@@ -106,6 +106,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     model: deps.cfg.model,
     db: deps.db.driver,
     concurrentTasks: deps.cfg.concurrentTasks,
+    /** Owner names with a dedicated LLM key profile (USER_KEYS; Phase 2). */
+    userKeys: Object.keys(deps.cfg.userKeys),
   }));
 
   // ------------------------------------------------------------------
@@ -354,8 +356,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       ...(text !== "" ? { q: text } : {}),
     });
     const view: ReportsPageData = {
-      months: data.spend.months.map((m) => ({ label: m.label, short: m.short, spend: m.spend })),
+      months: data.spend.months.map((m) => ({ key: m.key, label: m.label, short: m.short, spend: m.spend })),
       total: data.spend.total,
+      owners: data.owners,
       projects: data.projects,
       tasks: data.tasks,
       filters: {

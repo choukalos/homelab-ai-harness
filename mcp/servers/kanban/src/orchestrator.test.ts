@@ -36,6 +36,7 @@ function testCfg(sqlitePath: string, concurrentTasks = 1): KanbanConfig {
     model: "test-model",
     modelCost: undefined,
     githubToken: undefined,
+    userKeys: {},
     db: { driver: "sqlite", sqlitePath, mysql: undefined },
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
@@ -159,8 +160,9 @@ async function makeBacklogTask(
   projectId: number,
   text: string,
   deps: number[] = [],
+  owner = "",
 ) {
-  const idea = await services.addIdea(projectId, text);
+  const idea = await services.addIdea(projectId, text, owner);
   await q
     .update(ideas)
     .set({ state: "moved", spec: SPEC, dependsOn: deps })
@@ -169,7 +171,7 @@ async function makeBacklogTask(
   const task = one(
     await q
       .insert(tasks)
-      .values({ ideaId: idea.id, projectId, spec: SPEC, state: "backlog", stateChangedAt: now, createdAt: now })
+      .values({ ideaId: idea.id, projectId, spec: SPEC, state: "backlog", stateChangedAt: now, createdAt: now, owner })
       .returning(),
     "task",
   );
@@ -187,9 +189,9 @@ async function eventsFor(q: BetterSQLite3Database<any>, taskId: number) {
 }
 
 test("tick: backlog → running → deploy with branch, workspace, events, usage", async () => {
-  const { q, services, runner, orch, workspaceRoot } = await setup();
+  const { q, services, runner, qa, summary, orch, workspaceRoot } = await setup();
   const p = await services.createProject({ name: "Alpha", repoUrl: "https://github.com/x/y", defaultBranch: "main" });
-  const { task } = await makeBacklogTask(q, services, p.id, "First task");
+  const { task } = await makeBacklogTask(q, services, p.id, "First task", [], "chuck");
   const before = (await getTask(q, task.id)).stateChangedAt;
 
   await orch.start();
@@ -230,13 +232,19 @@ test("tick: backlog → running → deploy with branch, workspace, events, usage
   const heartbeat = events.find((e) => e.type === "heartbeat")!;
   assert.equal(heartbeat.payload!.commit, "c0ffee");
 
-  // Usage captured (role `task`, tagged by task + project).
+  // Usage captured (role `task`, tagged by task + project, owner stamped).
   const usageRows = (await q.select().from(usage).where(eq(usage.taskId, task.id))).filter(
     (u) => u.role === "task",
   );
   assert.equal(usageRows.length, 1);
   assert.equal(usageRows[0]!.projectId, p.id);
   assert.equal(usageRows[0]!.cost, 0.01);
+  assert.equal(usageRows[0]!.owner, "chuck", "Phase 2: usage row stamped with the task owner");
+
+  // Phase 2: the owner is threaded into the task/QA/summary sessions.
+  assert.equal(runner.runs[0]!.owner, "chuck", "task context carries the owner");
+  assert.equal(qa.runs[0]!.owner, "chuck", "QA context carries the owner");
+  assert.equal(summary.calls[0]!.owner, "chuck", "summary context carries the owner");
 
   // The runner got the task context (project spec + task spec).
   assert.equal(runner.runs.length, 1);

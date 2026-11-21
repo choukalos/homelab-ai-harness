@@ -221,4 +221,17 @@ ALTER TABLE \`ideas\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
 ALTER TABLE \`tasks\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
 `,
   },
+  {
+    version: "0003_usage_owner",
+    description:
+      "Per-user spend attribution (Phase 2): owner column on usage — the owner " +
+      "whose key the LLM call billed to (denormalized at capture; grooming/summary " +
+      "rows have no task to join through). Additive-only; legacy rows stay '' (unattributed).",
+    sqlite: `
+ALTER TABLE "usage" ADD COLUMN "owner" TEXT NOT NULL DEFAULT '';
+`,
+    mysql: `
+ALTER TABLE \`usage\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
+`,
+  },
 ];

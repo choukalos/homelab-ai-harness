@@ -25,6 +25,8 @@ export interface SummarySessionLike {
 
 export interface SummarySessionCreateOptions {
   systemPrompt: string;
+  /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
+  owner?: string;
   onUsage?: (usage: UsageSample) => void;
 }
 
@@ -38,6 +40,8 @@ export interface SummaryUpdateContext {
   previousSummary: string;
   /** What was just deployed (one line, e.g. "task 7 (code): pushed branch task/7"). */
   deployed: string;
+  /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
+  owner?: string;
   onUsage?: (usage: UsageSample) => void;
 }
 
@@ -90,6 +94,7 @@ export class SummaryUpdater {
             role: "summary",
             cwd: process.cwd(),
             systemPrompt: o.systemPrompt,
+            owner: o.owner, // Phase 2: bill to the task owner's key (else service key)
             onUsage: o.onUsage,
           })
           .then((h: AgentSessionHandle) => h.session as unknown as SummarySessionLike);
@@ -106,6 +111,7 @@ export class SummaryUpdater {
   async update(ctx: SummaryUpdateContext): Promise<string> {
     const session = await this.factory({
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
+      owner: ctx.owner, // Phase 2: bill to the task owner's key (else service key)
       onUsage: ctx.onUsage,
     });
     try {

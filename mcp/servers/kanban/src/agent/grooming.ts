@@ -89,6 +89,11 @@ export interface GroomSessionCreateOptions {
    * SessionManager.open semantics: resume if the file exists, create if not.
    */
   sessionFile: string;
+  /**
+   * Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2):
+   * the idea's owner; ''/unmapped → the service key.
+   */
+  owner?: string;
   /** Called with usage for each completed assistant message. */
   onUsage?: (usage: UsageSample) => void;
   /**
@@ -314,6 +319,7 @@ export class GroomingManager {
             cwd: o.cwd,
             systemPrompt: o.systemPrompt,
             sessionFile: o.sessionFile, // SessionManager.open semantics (stable path)
+            owner: o.owner, // Phase 2: bill to the idea owner's key (else service key)
             onUsage: o.onUsage,
           })
           .then((h: AgentSessionHandle) => {
@@ -563,7 +569,8 @@ export class GroomingManager {
         cwd: this.scratchDir(idea.id),
         systemPrompt: await this.buildSystemPrompt(idea),
         sessionFile: this.sessionFile(idea.id),
-        onUsage: (u) => this.recordUsage(idea.projectId, u),
+        owner: idea.owner, // Phase 2: bill the grooming turns to the idea owner's key
+        onUsage: (u) => this.recordUsage(idea.projectId, idea.owner, u),
         onActivity: () => this.lastActivity.set(idea.id, Date.now()),
       });
       this.active.set(idea.id, session);
@@ -758,7 +765,7 @@ export class GroomingManager {
     this.lastActivity.delete(ideaId);
   }
 
-  private recordUsage(projectId: number, u: UsageSample): void {
+  private recordUsage(projectId: number, owner: string, u: UsageSample): void {
     void recordUsage(this.db, {
       projectId,
       taskId: null,
@@ -768,6 +775,7 @@ export class GroomingManager {
       tokensIn: u.input,
       tokensOut: u.output,
       cost: u.cost,
+      owner,
     }).catch((err) => console.error("[grooming] usage record failed:", err));
   }
 

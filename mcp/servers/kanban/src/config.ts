@@ -83,6 +83,17 @@ const envSchema = z
       .describe("model ID in the LiteLLM config"),
     GITHUB_TOKEN: optionalNonEmpty().describe("git push auth (deploy stage)"),
 
+    // Per-user LLM spend attribution (Phase 2): name=full-key pairs.
+    USER_KEYS: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "per-user spend attribution: comma-separated name=full-LiteLLM-key pairs " +
+          "(e.g. chuck=sk-...,dylan=sk-...); sessions for work owned by a user run " +
+          "against the proxy with that user's key",
+      ),
+
     // Database
     DB_DRIVER: z
       .enum(["sqlite", "mysql"])
@@ -168,6 +179,13 @@ export interface KanbanConfig {
   /** Catalog rates in $/M tokens from the proxy's /model/info (undefined → $0 cost estimates). */
   modelCost: ModelCostRates | undefined;
   githubToken: string | undefined;
+  /**
+   * Per-user LLM spend attribution (Phase 2): owner name → full LiteLLM key.
+   * Sessions for work owned by a user run against the proxy with that user's
+   * key (LiteLLM bills spend to the user's key/budget). Empty = all work
+   * bills to the service key (LITELLM_API_KEY).
+   */
+  userKeys: Record<string, string>;
   db: {
     driver: "sqlite" | "mysql";
     sqlitePath: string;
@@ -216,6 +234,7 @@ export function parseConfig(
     model: v.MODEL,
     modelCost: undefined, // populated by loadConfig from the proxy's /model/info
     githubToken: v.GITHUB_TOKEN,
+    userKeys: parseUserKeys(v.USER_KEYS),
     db: {
       driver: v.DB_DRIVER,
       sqlitePath: v.SQLITE_PATH,
@@ -244,6 +263,31 @@ export function parseConfig(
 }
 
 const ENV_LINE_RE = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
+
+/**
+ * Parse USER_KEYS (`name=full-key,name2=full-key2`, comma-separated).
+ * Names are trimmed, must be non-empty and unique; keys must be non-empty.
+ * Malformed entries throw a ConfigError (fail fast, PLAN.md §1).
+ */
+export function parseUserKeys(value: string | undefined): Record<string, string> {
+  if (!value || value.trim() === "") return {};
+  const out: Record<string, string> = {};
+  for (const part of value.split(",")) {
+    const entry = part.trim();
+    if (entry === "") continue;
+    const eq = entry.indexOf("=");
+    if (eq <= 0) {
+      throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} is malformed (expected name=full-key)`);
+    }
+    const name = entry.slice(0, eq).trim();
+    const key = entry.slice(eq + 1).trim();
+    if (name === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty name`);
+    if (key === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty key`);
+    if (name in out) throw new ConfigError(`USER_KEYS has duplicate name ${JSON.stringify(name)}`);
+    out[name] = key;
+  }
+  return out;
+}
 
 /**
  * Parse a .env file body: KEY=VALUE lines, `#` comments, optional `export`
@@ -345,6 +389,41 @@ export async function validateModelAtBoot(
     );
   }
   return ids;
+}
+
+/**
+ * Validate the per-user keys (USER_KEYS) against the LiteLLM proxy at boot
+ * (fail fast, like validateModelAtBoot): a rejected user key aborts startup
+ * with a clear error (catches rotated/expired keys before any work bills
+ * to the wrong place).
+ */
+export async function validateUserKeysAtBoot(
+  cfg: Pick<KanbanConfig, "litellm" | "userKeys">,
+  fetchImpl: FetchLike = fetch,
+): Promise<void> {
+  for (const [name, key] of Object.entries(cfg.userKeys)) {
+    const url = `${cfg.litellm.baseUrl}/models`;
+    let res: Response;
+    try {
+      res = await fetchImpl(url, {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (err) {
+      throw new ConfigError(
+        `cannot validate USER_KEYS entry ${name} against the LiteLLM proxy at ${url}: ` +
+          `${(err as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new ConfigError(
+        `USER_KEYS entry ${name} was rejected by the LiteLLM proxy ` +
+          `(HTTP ${res.status} ${res.statusText}) — the user's key is missing/rotated: ` +
+          `${body.slice(0, 300) || "(no body)"}`,
+      );
+    }
+  }
 }
 
 function extractModelIds(payload: unknown): string[] {
@@ -464,6 +543,7 @@ export async function loadConfig(opts: LoadConfigOptions = {}): Promise<KanbanCo
   if (opts.validateModel !== false) {
     await validateModelAtBoot(cfg, opts.fetchImpl);
     cfg.modelCost = await fetchModelCostRates(cfg, opts.fetchImpl);
+    await validateUserKeysAtBoot(cfg, opts.fetchImpl);
   }
   return cfg;
 }

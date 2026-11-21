@@ -170,6 +170,8 @@ export const usage = sqliteTable(
     tokensIn: integer("tokens_in").notNull().default(0),
     tokensOut: integer("tokens_out").notNull().default(0),
     cost: real("cost").notNull().default(0),
+    /** Owner whose key this LLM call billed to (Phase 2); '' = service key / unattributed (legacy). */
+    owner: text("owner").notNull().default(""),
   },
   (t) => [
     index("usage_project_id_ts_idx").on(t.projectId, t.ts),
@@ -294,6 +296,8 @@ export const mysqlUsage = mysqlTable(
     tokensIn: int("tokens_in").notNull().default(0),
     tokensOut: int("tokens_out").notNull().default(0),
     cost: double("cost").notNull().default(0),
+    /** Owner whose key this LLM call billed to (Phase 2); '' = service key / unattributed (legacy). */
+    owner: varchar("owner", { length: 64 }).notNull().default(""),
   },
   (t) => [
     mysqlIndex("usage_project_id_ts_idx").on(t.projectId, t.ts),

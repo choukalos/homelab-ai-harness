@@ -323,6 +323,10 @@ services:
       # LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
       - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
       - MCP_KEY_OWNERS=${KANBAN_MCP_KEY_OWNERS}
+      # Per-user LLM spend attribution (Phase 2): sessions for work owned by
+      # a user run against the proxy with that user's key (LiteLLM bills the
+      # spend to the user's key/budget). Full keys, interpolated from .env.
+      - USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}
     # LAN-only web UI (presenton pattern: LAN-IP bind, not 0.0.0.0).
     ports:
       - "${THOR_IP:-192.168.4.54}:3000:3000"

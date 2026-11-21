@@ -37,6 +37,7 @@ function testCfg(sqlitePath: string): KanbanConfig {
     model: "test-model",
     modelCost: undefined,
     githubToken: undefined,
+    userKeys: {},
     db: { driver: "sqlite", sqlitePath, mysql: undefined },
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
@@ -364,7 +365,8 @@ test("accept: finalizes spec + LLM deps → icebox, session disposed, usage reco
   const h = await setup();
   const dep = await h.services.addIdea(h.projectId, "Foundation work");
   await toIcebox(h.q, dep.id);
-  const idea = await h.services.addIdea(h.projectId, "Dependent idea");
+  // Phase 2: the idea's owner is threaded into the session + usage rows.
+  const idea = await h.services.addIdea(h.projectId, "Dependent idea", "chuck");
   await h.manager.startGrooming(idea.id);
 
   h.mock.setResponder((prompt) => {
@@ -406,10 +408,13 @@ test("accept: finalizes spec + LLM deps → icebox, session disposed, usage reco
   assert.equal(session.disposed, true);
   assert.ok(existsSync(session.sessionFile), "session file kept under /data");
 
-  // Usage recorded (role groom, taskId null, project tagged).
+  // Usage recorded (role groom, taskId null, project tagged, owner stamped).
   const rows = await h.q.select().from(usage).where(eq(usage.role, "groom"));
   assert.ok(rows.length >= 2, "seed + finalize usage rows");
   assert.ok(rows.every((r) => r.taskId === null && r.projectId === h.projectId));
+  // Phase 2: the session factory got the idea's owner; usage rows carry it.
+  assert.equal(h.mock.created[0]!.owner, "chuck", "factory options carry the idea owner");
+  assert.ok(rows.every((r) => r.owner === "chuck"), "usage rows stamped with the owner");
 
   // Accept again → 409 (no longer grooming).
   await expectServiceError(h.manager.acceptGrooming(idea.id), 409, /icebox/);

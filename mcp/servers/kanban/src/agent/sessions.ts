@@ -94,6 +94,12 @@ export interface CreateSessionOptions {
   tools?: string[];
   /** Resume an existing persisted session file instead of starting fresh. */
   sessionFile?: string;
+  /**
+   * Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2):
+   * a mapped owner runs on that user's key profile; no owner / unmapped
+   * owner → the service key profile (default).
+   */
+  owner?: string;
   /** Called with usage for each completed assistant message. */
   onUsage?: (usage: UsageSample) => void;
 }
@@ -101,6 +107,21 @@ export interface CreateSessionOptions {
 export interface AgentRuntimeOptions {
   /** Data dir root (default: AI_KANBAN_DATA_DIR env, else /data). */
   dataDir?: string;
+}
+
+/**
+ * A key profile: one app-owned agent dir (models.json + auth.json +
+ * models-store.json) with its own ModelRuntime. The `service` profile holds
+ * LITELLM_API_KEY; each USER_KEYS entry gets a per-user profile so sessions
+ * for that owner bill LLM spend to the user's key (Phase 2).
+ */
+export interface KeyProfile {
+  /** Profile name: "service" or a USER_KEYS owner name. */
+  name: string;
+  /** App-owned agent dir for this profile. */
+  dir: string;
+  modelRuntime: ModelRuntime;
+  model: Model<any>;
 }
 
 /** models.json for the LiteLLM provider (SDK_NOTES.md §1 shape). */
@@ -131,6 +152,7 @@ export function buildModelsJson(cfg: KanbanConfig): Record<string, unknown> {
 
 export class AgentRuntime {
   readonly dataDir: string;
+  /** Service (default) profile's agent dir — the historical path. */
   readonly agentDir: string;
   readonly sessionsDir: string;
   readonly skillsPath: string;
@@ -138,20 +160,20 @@ export class AgentRuntime {
   readonly litellmMcpUrl: string;
 
   private readonly cfg: KanbanConfig;
-  private readonly modelRuntime: ModelRuntime;
-  private readonly model: Model<any>;
+  private readonly serviceProfile: KeyProfile;
+  private readonly profiles = new Map<string, KeyProfile>();
   private readonly sessions = new Set<AgentSessionHandle>();
 
   private constructor(
     cfg: KanbanConfig,
-    modelRuntime: ModelRuntime,
-    model: Model<any>,
+    serviceProfile: KeyProfile,
+    profiles: Map<string, KeyProfile>,
     dirs: { dataDir: string; agentDir: string; sessionsDir: string; skillsPath: string },
     litellmMcpUrl: string,
   ) {
     this.cfg = cfg;
-    this.modelRuntime = modelRuntime;
-    this.model = model;
+    this.serviceProfile = serviceProfile;
+    this.profiles = profiles;
     this.dataDir = dirs.dataDir;
     this.agentDir = dirs.agentDir;
     this.sessionsDir = dirs.sessionsDir;
@@ -160,42 +182,79 @@ export class AgentRuntime {
   }
 
   /**
-   * Materialize the app-owned agent dir (models.json + auth.json from env
-   * config) and create the model runtime. No network access
-   * (refreshOnCreate: false).
+   * Materialize the app-owned agent dirs (one key profile each: models.json
+   * + auth.json) and create the model runtimes. No network access
+   * (refreshOnCreate: false). Profiles: `service` (LITELLM_API_KEY, the
+   * default) + one per USER_KEYS entry (per-user spend attribution).
    */
   static async create(cfg: KanbanConfig, opts: AgentRuntimeOptions = {}): Promise<AgentRuntime> {
     const dataDir = opts.dataDir ?? process.env.AI_KANBAN_DATA_DIR ?? "/data";
-    const agentDir = path.join(dataDir, "pi-agent");
     const sessionsDir = path.join(dataDir, "sessions");
     const skillsPath = path.join(dataDir, "harness", cfg.harness.skillsPath);
-    mkdirSync(agentDir, { recursive: true });
     mkdirSync(sessionsDir, { recursive: true });
 
-    writeFileSync(path.join(agentDir, "models.json"), JSON.stringify(buildModelsJson(cfg), null, 2) + "\n");
-    writeFileSync(
-      path.join(agentDir, "auth.json"),
-      JSON.stringify({ [LITELLM_PROVIDER]: { type: "api_key", key: cfg.litellm.apiKey } }, null, 2) + "\n",
-    );
-
-    const modelRuntime = await ModelRuntime.create({
-      authPath: path.join(agentDir, "auth.json"),
-      modelsPath: path.join(agentDir, "models.json"),
-      modelsStorePath: path.join(agentDir, "models-store.json"),
-      refreshOnCreate: false, // static models, no network refresh at boot
-    });
-    const model = modelRuntime.getModel(LITELLM_PROVIDER, cfg.model);
-    if (!model) {
-      throw new Error(
-        `model ${cfg.model} not available in the ${LITELLM_PROVIDER} provider config ` +
-          `(see ${path.join(agentDir, "models.json")})`,
+    const buildProfile = async (name: string, apiKey: string): Promise<KeyProfile> => {
+      const dir =
+        name === "service" ? path.join(dataDir, "pi-agent") : path.join(dataDir, `pi-agent-${name}`);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "models.json"), JSON.stringify(buildModelsJson(cfg), null, 2) + "\n");
+      writeFileSync(
+        path.join(dir, "auth.json"),
+        JSON.stringify({ [LITELLM_PROVIDER]: { type: "api_key", key: apiKey } }, null, 2) + "\n",
       );
+      const modelRuntime = await ModelRuntime.create({
+        authPath: path.join(dir, "auth.json"),
+        modelsPath: path.join(dir, "models.json"),
+        modelsStorePath: path.join(dir, "models-store.json"),
+        refreshOnCreate: false, // static models, no network refresh at boot
+      });
+      const model = modelRuntime.getModel(LITELLM_PROVIDER, cfg.model);
+      if (!model) {
+        throw new Error(
+          `model ${cfg.model} not available in the ${LITELLM_PROVIDER} provider config ` +
+            `(see ${path.join(dir, "models.json")})`,
+        );
+      }
+      return { name, dir, modelRuntime, model };
+    };
+
+    const service = await buildProfile("service", cfg.litellm.apiKey);
+    const profiles = new Map<string, KeyProfile>([["service", service]]);
+    for (const [name, key] of Object.entries(cfg.userKeys)) {
+      profiles.set(name, await buildProfile(name, key));
     }
 
     const u = new URL(cfg.litellm.baseUrl);
     u.pathname = "/mcp";
 
-    return new AgentRuntime(cfg, modelRuntime, model, { dataDir, agentDir, sessionsDir, skillsPath }, u.toString());
+    return new AgentRuntime(
+      cfg,
+      service,
+      profiles,
+      { dataDir, agentDir: service.dir, sessionsDir, skillsPath },
+      u.toString(),
+    );
+  }
+
+  /**
+   * Pick the key profile for a session (Phase 2): a mapped owner name runs
+   * on that user's key; no owner or an unmapped owner falls back to the
+   * service key (with a log note in the latter case).
+   */
+  profileFor(owner?: string): KeyProfile {
+    if (owner && this.profiles.has(owner)) return this.profiles.get(owner)!;
+    if (owner) {
+      console.warn(
+        `[agent] no USER_KEYS entry for owner ${JSON.stringify(owner)} — ` +
+          `the session bills to the service key`,
+      );
+    }
+    return this.serviceProfile;
+  }
+
+  /** Owner names with a dedicated key profile (USER_KEYS entries). */
+  userProfileNames(): string[] {
+    return [...this.profiles.keys()].filter((n) => n !== "service");
   }
 
   /** Per-role thinking level (PLAN.md §3); resolve reuses the QA level. */
@@ -220,10 +279,11 @@ export class AgentRuntime {
    */
   async createSession(opts: CreateSessionOptions): Promise<AgentSessionHandle> {
     const thinking = this.thinkingLevel(opts.role);
+    const profile = this.profileFor(opts.owner);
     const loader = new DefaultResourceLoader({
       cwd: opts.cwd,
-      agentDir: this.agentDir,
-      settingsManager: SettingsManager.create(opts.cwd, this.agentDir),
+      agentDir: profile.dir,
+      settingsManager: SettingsManager.create(opts.cwd, profile.dir),
       noExtensions: true, // app controls extensions itself
       additionalSkillPaths: [this.skillsPath],
       extensionFactories: [createMcpExtension({ loadConfig: () => this.litellmMcpConfig() })],
@@ -238,8 +298,8 @@ export class AgentRuntime {
 
     const { session } = await createAgentSession({
       cwd: opts.cwd,
-      modelRuntime: this.modelRuntime,
-      model: this.model,
+      modelRuntime: profile.modelRuntime,
+      model: profile.model,
       thinkingLevel: thinking,
       ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
       resourceLoader: loader,
@@ -258,7 +318,7 @@ export class AgentRuntime {
         // were unavailable the catalog is all-zero and the SDK's estimate
         // is $0 — recompute only when rates are actually configured.
         const rates = modelCostRates(this.cfg);
-        if (rates.input > 0 || rates.output > 0) calculateCost(this.model, msg.usage);
+        if (rates.input > 0 || rates.output > 0) calculateCost(profile.model, msg.usage);
         onUsage({
           role: opts.role,
           model: msg.model,
@@ -388,6 +448,8 @@ export interface TaskSessionCreateOptions {
   systemPrompt: string;
   /** Stable session file path (<sessions>/task-<id>.jsonl). */
   sessionFile: string;
+  /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
+  owner?: string;
   /** Called with usage for each completed assistant message. */
   onUsage?: (usage: UsageSample) => void;
 }
@@ -570,6 +632,11 @@ export interface TaskRunContext {
   };
   /** Resume from this commit (checkout instead of a fresh clone). */
   resumeCommit: string | null;
+  /**
+   * Owner (inherited from the idea at task creation) whose key the session's
+   * LLM calls bill to (Phase 2); '' → the service key.
+   */
+  owner: string;
   /**
    * Custom kickoff prompt (e.g. QA feedback on a re-run after a failed QA
    * round). Defaults to TASK_KICKOFF_PROMPT.
@@ -786,6 +853,7 @@ export class TaskSessionRunner implements TaskRunner {
             cwd: o.cwd,
             systemPrompt: o.systemPrompt,
             sessionFile: o.sessionFile, // SessionManager.open semantics (stable path)
+            owner: o.owner, // Phase 2: bill to the task owner's key (else service key)
             onUsage: o.onUsage,
           })
           .then((h) => h.session as unknown as TaskSessionLike);
@@ -838,6 +906,7 @@ export class TaskSessionRunner implements TaskRunner {
       cwd: workspace,
       systemPrompt: missionBrief,
       sessionFile: this.sessionFile(ctx.taskId),
+      owner: ctx.owner, // Phase 2: bill to the task owner's key (else service key)
       onUsage: ctx.onUsage,
     });
     const entry = { session, aborted: false };

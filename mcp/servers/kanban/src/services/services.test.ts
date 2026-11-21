@@ -21,6 +21,7 @@ function testCfg(sqlitePath: string): KanbanConfig {
     model: "test-model",
     modelCost: undefined,
     githubToken: undefined,
+    userKeys: {},
     db: { driver: "sqlite", sqlitePath, mysql: undefined },
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
