@@ -55,11 +55,12 @@ Tier is a priority bucket, not a reflection-pipeline tier (the
 "Tier 1 propose-only / Tier 2 human applies" language in older footers
 refers to the reflection pipeline's own roles).
 
-## Current state (2026-11-20)
+## Current state (2026-11-21)
 
-- **tier1:** macstudio-omlx-restart (open — host-side on the Mac Studio;
-  OMLX upstream verified down 2026-11-19, `matrix-coder` has no live
-  fallback until this lands)
+- **tier1:** (none open — macstudio-omlx-restart applied 2026-11-21: OMLX
+  reloaded on the Mac Studio, `/v1/models` + proxy chat completion verified
+  200; capability probes run and `litellm/config.yml` flags updated to match,
+  staged pending a litellm-proxy restart)
 - **tier2:** mcp-sessions-remote-ingest (open) ·
   pi-subagents-timeout-handling (open — source repo not on thor; locate
   first) · matrix-media-pipeline-improvements (in progress — parked on
@@ -75,4 +76,4 @@ refers to the reflection pipeline's own roles).
   media-film-tool-names, media-film-production-lessons (all applied) +
   cloudflare-524-read-timeout (dismissed — no CF Enterprise plan) +
   2026-11-20: recent-activity-slow-run-optimization, memory-dedupe-supersede
-  (both applied)
+  (both applied) + 2026-11-21: macstudio-omlx-restart (applied)

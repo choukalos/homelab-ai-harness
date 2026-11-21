@@ -1,28 +1,26 @@
-# STAGED 2026-11-19 — tier1-litellm-model-config-pass (proposals/2026-11-19-tier1-litellm-model-config-pass.md)
-# Not live yet. Apply with: mv config.yml.new config.yml  (after backing up current)
-# then: docker compose -f compose/compose.ai-core.yml up -d litellm
-#   (up -d, not restart — the paired compose change drops HF_TOKEN from the
-#   container env; restart would not pick that up.)
-# Rollback: restore config.yml.bak + git checkout compose/compose.ai-core.yml
-#   + docker compose -f compose/compose.ai-core.yml up -d litellm
+# LIVE since 2026-11-19 — tier1-litellm-model-config-pass (proposals/2026-11-19-tier1-litellm-model-config-pass.md)
+# 2026-11-21: studio-gemma4-26b capability flags verified against the reloaded
+# OMLX upstream (see model_info comment) — supports_function_calling/response_schema
+# raised to true. Requires `docker compose -f compose/compose.ai-core.yml up -d litellm`
+# to take effect (restart severs active proxy sessions — needs explicit approval).
 model_list:
   # -- Gemma-4 via OMLX on Mac Studio M1 (Backup LLM) -----------------------
   - model_name: studio-gemma4-26b
     model_info:
       mode: chat
-      # ⚠️ UNVERIFIED 2026-11-19 — the OMLX upstream (macstudio:8000) is down
-      # (connection refused), so these are documented values for the Gemma 3/4
-      # 27B class. Verify after the OMLX restart (upstream /v1/models + the
-      # probes listed below) and correct if wrong.
+      # VERIFIED 2026-11-21 against the reloaded OMLX upstream
+      # (macstudio:8000, /v1/models → 262144 max_model_len):
+      #   - tool calling: WORKS (finish_reason tool_calls, well-formed call)
+      #   - response_format json_schema: WORKS (schema-conformant JSON)
+      #   - image_url content: 500 from OMLX (text-only MLX model) → no vision
+      #   - context: 128k input + 16k output = 144384 < 262144 (conservative,
+      #     valid; upstream headroom left for prompt+completion safety)
       max_input_tokens: 128000
       max_output_tokens: 16384
-      # Conservative defaults until probed (a wrong `true` makes the proxy
-      # strip/alter params). Probe after OMLX is back: tool call, image_url
-      # content, response_format json_schema.
-      supports_function_calling: false
-      supports_vision: false
+      supports_function_calling: true   # probed 2026-11-21
+      supports_vision: false            # probed 2026-11-21 (500, text-only)
       supports_reasoning: false       # Gemma has no native reasoning tokens
-      supports_response_schema: false
+      supports_response_schema: true    # probed 2026-11-21
       input_cost_per_token: 0.00000025
       output_cost_per_token: 0.000002
       cache_creation_input_token_cost: 0.000000025

@@ -2,7 +2,7 @@
 
 - slug: tier1-macstudio-omlx-restart
 - date: 2026-11-19
-- status: open
+- status: applied (2026-11-21 — Chuck reloaded the model on the Mac Studio; verified: `GET /v1/models` → 200 with both Gemma-4 models, chat completion through the LiteLLM proxy → 200 in ~4 s ("OMLX OK"). Capability probes run same day: tool calling WORKS, response_format json_schema WORKS, image_url → 500 (text-only) — `litellm/config.yml` flags updated to match (needs a litellm-proxy restart to take effect; staged 2026-11-21).)
 - tier: 1
 - target user: chuck
 - source: workspace/ideas/2026-11-17-litellm-model-info-and-uptime.md (Group 5b)
