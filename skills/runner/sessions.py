@@ -300,6 +300,146 @@ def list_ingests(
 
 
 # ---------------------------------------------------------------------------
+# Read-back (mcp_sessions Phase 1): locate + slice transcripts
+# ---------------------------------------------------------------------------
+# The ingest path stores {user_id}/{YYYY-MM-DD}/{session_id}.jsonl (UTC day of
+# ingest) and, for split sessions, {session_id}.partN.jsonl (the session_id
+# passed to ingest already carries the .partN suffix). Read-back therefore
+# scans the user dirs; the day directory is an implementation detail.
+
+def _part_number(filename: str, session_id: str) -> Optional[int]:
+    """'{sid}.part3.jsonl' -> 3 for base session_id sid; None otherwise."""
+    if not filename.endswith(".jsonl"):
+        return None
+    stem = filename[: -len(".jsonl")]
+    prefix = f"{session_id}."
+    if not stem.startswith(prefix):
+        return None
+    rest = stem[len(prefix):]
+    if not rest.startswith("part") or not rest[4:].isdigit():
+        return None
+    return int(rest[4:])
+
+
+def locate_transcript(
+    session_id: str,
+) -> Tuple[Optional[str], List[Tuple[int, Path]]]:
+    """Find the stored transcript for session_id under SESSIONS_ROOT.
+
+    Scans every user dir (SESSIONS_ROOT/*/). Returns ``(user_id, parts)``
+    where parts is a list of ``(part_number, path)`` sorted by part number:
+
+      - single-file transcript: ``[(0, path)]``  ({session_id}.jsonl)
+      - split transcript:       ``[(1, p1), (2, p2), ...]`` ({session_id}.partN.jsonl)
+
+    If BOTH a single file and part files exist, the parts win (the split
+    convention is canonical for long sessions). Returns ``(None, [])`` when
+    nothing is stored. The scan is bounded: user dirs hold one subdir per
+    UTC day, each with a handful of files.
+    """
+    if not SESSIONS_ROOT.is_dir():
+        return None, []
+    found_user: Optional[str] = None
+    single: Optional[Path] = None
+    parts: Dict[int, Path] = {}
+    for user_dir in sorted(SESSIONS_ROOT.iterdir()):
+        if not user_dir.is_dir():
+            continue
+        for day_dir in user_dir.iterdir():
+            if not day_dir.is_dir():
+                continue
+            for f in day_dir.iterdir():
+                name = f.name
+                if name.endswith(".jsonl"):
+                    if name == f"{session_id}.jsonl":
+                        single = f
+                    else:
+                        n = _part_number(name, session_id)
+                        if n is not None:
+                            parts[n] = f
+        if single is not None or parts:
+            found_user = user_dir.name
+            break
+    if parts:
+        return found_user, [(n, parts[n]) for n in sorted(parts)]
+    if single is not None:
+        return found_user, [(0, single)]
+    return None, []
+
+
+def read_transcript(
+    session_id: str,
+    line_start: Optional[int] = None,
+    line_end: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Read a stored transcript, or a 1-based inclusive line slice of the
+    concatenated part stream (parts concatenated in part order).
+
+    Returns None when the session is not stored. Raises ValueError for
+    invalid line params (line_start < 1, line_end < line_start) and when
+    line_start is past the end of the transcript (the route maps that to
+    404). ``line_end`` beyond the end is clamped to the total.
+
+    Result keys:
+      user_id            owning user dir
+      parts              [(part, path, sha256, bytes)] in part order
+      part               part containing the FIRST line of the returned
+                         range (0 for a single-file transcript)
+      line_range         [start, end] actually returned (1-based, inclusive)
+      total_lines        lines in the concatenated transcript
+      sha256_prefix      first 16 hex chars of the sha256 of the `part`
+                         file (verifiable against the session_ingests row
+                         for session_id / session_id.partN)
+      content            the returned lines, verbatim (original line endings)
+    """
+    owner, parts = locate_transcript(session_id)
+    if owner is None or not parts:
+        return None
+    if line_start is not None and int(line_start) < 1:
+        raise ValueError("line_start must be >= 1")
+    if line_end is not None and line_start is not None and int(line_end) < int(line_start):
+        raise ValueError("line_end must be >= line_start")
+
+    part_meta: List[Tuple[int, Path, str, int]] = []
+    line_counts: List[Tuple[int, int]] = []  # (part, line count)
+    all_lines: List[str] = []
+    for part, path in parts:
+        raw = path.read_bytes()
+        lines = raw.decode("utf-8").splitlines(keepends=True)
+        part_meta.append((part, path, sha256_hex(raw), len(raw)))
+        line_counts.append((part, len(lines)))
+        all_lines.extend(lines)
+    total = len(all_lines)
+    start = int(line_start) if line_start is not None else 1
+    end = int(line_end) if line_end is not None else total
+    if start > total:
+        raise ValueError("line_start is past the end of the transcript")
+    end = min(end, total)
+
+    # Which part holds the first returned line (cumulative line counts)?
+    first_part = line_counts[-1][0]
+    offset = 0
+    for part, n_lines in line_counts:
+        if offset + n_lines >= start:
+            first_part = part
+            break
+        offset += n_lines
+
+    content = "".join(all_lines[start - 1 : end])
+    return {
+        "user_id": owner,
+        "parts": [(p, path, sha, n) for p, path, sha, n in part_meta],
+        "part": first_part,
+        "line_range": [start, end],
+        "total_lines": total,
+        "sha256_prefix": next(
+            sha for p, _path, sha, _n in part_meta if p == first_part
+        )[:16],
+        "content": content,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Metrics (dependency-free Prometheus text, like memory/metrics.py)
 # ---------------------------------------------------------------------------
 

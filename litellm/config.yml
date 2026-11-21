@@ -215,6 +215,13 @@ mcp_servers:
     url: http://mcp_memory:8000/sse
     timeout: 7200
 
+  mcp_sessions:
+    transport: sse
+    url: http://mcp_sessions:8000/sse
+    extra_headers:
+      - Authorization
+    timeout: 7200
+
   mcp_skills:
     transport: sse
     url: http://mcp_skills:8000/sse

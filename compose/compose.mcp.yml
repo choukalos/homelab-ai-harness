@@ -255,6 +255,32 @@ services:
     networks:
       - ai-net
 
+  # --- Sessions (mcp_sessions Phase 1): remote session ingest + read-back --
+  # Thin client over skill-runner's scoped session endpoints (POST
+  # /api/sessions/ingest, GET /api/sessions/ingests, GET
+  # /api/sessions/{session_id}). Identity: caller's LiteLLM key forwarded
+  # via Authorization (when routed through LiteLLM), else SESSIONS_USER_KEY.
+  # SESSIONS_USER_KEY MUST be a SINGLE key in skill-runner's
+  # SKILL_RUNNER_API_KEY allow-list (exact-match semantics). Cross-user
+  # isolation is enforced server-side by skill-runner's IdentityResolver
+  # (owner-only read-back; admin key rejected on both routes).
+  mcp_sessions:
+    build:
+      context: ../mcp/servers/sessions
+    container_name: mcp_sessions
+    environment:
+      - SKILL_RUNNER_URL=http://skill-runner:8091
+      # Fallback identity when the caller sends no Authorization header.
+      # Serves Chuck's pi (Mac) deployment: resolves to user_id=chuck only.
+      - SESSIONS_USER_KEY=${LITELLM_KEY_CHUCK}
+      # ~30 ingests/user/hour (rolling window, in-memory per caller key).
+      - SESSIONS_RATE_LIMIT=30
+    # No host port mapping (MCP rule: LiteLLM-only surface). LiteLLM
+    # reaches it via ai-net DNS (mcp_sessions:8000).
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   # --- Future MCP servers ---------------------------------------------------
   # mcp_presentation:
   #   build:

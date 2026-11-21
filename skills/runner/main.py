@@ -1671,6 +1671,91 @@ def sessions_list_ingests(
     return {"user_id": user_id, "count": len(rows), "ingests": rows}
 
 
+@app.get("/api/sessions/ingests")
+def sessions_ingests_mine(
+    since: Optional[str] = None,
+    limit: int = 100,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """List the CALLER's own ingested sessions (user-scoped; metadata only —
+    no transcript bodies). Same auth as ``/api/sessions/ingest``: the
+    caller's LiteLLM key -> user_id; the admin key is NOT accepted (this is
+    a user-scoped path). ``since`` filters on ``ingested_at >= since``
+    (ISO-8601 UTC). Declared BEFORE ``/api/sessions/{session_id}`` so the
+    literal path wins route matching.
+    """
+    user_id = _resolve_ingest_user(x_api_key)
+    try:
+        rows = sessions.list_ingests(user_id, since=since, limit=limit)
+    except sessions.SessionIndexUnavailable:
+        raise HTTPException(status_code=503, detail="Session index unavailable (MySQL)")
+    except Exception as exc:  # noqa: BLE001 - surface the failure, don't leak internals
+        raise HTTPException(status_code=502, detail=f"Session index query failed: {exc}")
+    return {"user_id": user_id, "count": len(rows), "ingests": rows}
+
+
+@app.get("/api/sessions/{session_id}")
+def sessions_get(
+    session_id: str,
+    line_start: Optional[int] = None,
+    line_end: Optional[int] = None,
+    x_api_key: Optional[str] = Header(None),
+) -> dict:
+    """Read back the CALLER's own ingested transcript (mcp_sessions Phase 1).
+
+    Auth: same IdentityResolver as ``/api/sessions/ingest`` — the caller's
+    LiteLLM key -> user_id; unknown key -> 401; the admin key is NOT
+    accepted (user-scoped path). OWNER-ONLY: the stored transcript must
+    belong to the caller's user_id; a mismatch is a plain 404 (existence of
+    another user's session is never revealed).
+
+    ``line_start``/``line_end`` select a 1-based inclusive line slice of the
+    concatenated transcript (split sessions: parts concatenated in part
+    order); ``line_end`` beyond the end is clamped. The response carries a
+    citation header for downstream verification:
+
+      citation        session:{user_id}/{session_id}#L{start}-L{end}
+                      (single file) or #p{N}L{start}-L{end} (split — N is
+                      the part holding the first returned line; line numbers
+                      are over the concatenated stream)
+      sha256_prefix   first 16 hex chars of the sha256 of that part file
+                      (matches the session_ingests row for session_id /
+                      session_id.partN)
+
+    Read-only: the 0600 files never leave the volume except through this
+    owner-scoped route.
+    """
+    user_id = _resolve_ingest_user(x_api_key)
+    if not sessions.validate_session_id(session_id):
+        raise HTTPException(
+            status_code=400,
+            detail="session_id must match [A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+        )
+    try:
+        result = sessions.read_transcript(session_id, line_start, line_end)
+    except ValueError as exc:
+        msg = str(exc)
+        if "past the end" in msg:
+            raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=400, detail=msg)
+    if result is None or result["user_id"] != user_id:
+        # Not stored, or stored under another user: identical 404 (no leak).
+        raise HTTPException(status_code=404, detail="Session not found")
+    start, end = result["line_range"]
+    anchor = f"#L{start}-L{end}" if result["part"] == 0 else f"#p{result['part']}L{start}-L{end}"
+    return {
+        "user_id": user_id,
+        "session_id": session_id,
+        "citation": f"session:{user_id}/{session_id}{anchor}",
+        "part": result["part"],
+        "line_range": result["line_range"],
+        "total_lines": result["total_lines"],
+        "sha256_prefix": result["sha256_prefix"],
+        "bytes": len(result["content"].encode("utf-8")),
+        "content": result["content"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Harness change proposals (Phase 3) — admin-key protected
 # ---------------------------------------------------------------------------
