@@ -12,12 +12,16 @@
 **Current state (2026-11-21)**
 - 13 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
-  `mcp_media` (25), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3) — **92 tools total**
+  `mcp_media` (27), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3) — **94 tools total**
   (verified live 2026-11-21: LiteLLM `/mcp-rest/tools/list` + per-server
   `tools/list`). `mcp_sessions` added 2026-11-21 (mcp_sessions Phase 1 —
   remote session ingest + owner-scoped read-back; `sessions_ingest`,
-  `sessions_list`, `sessions_get`).
+  `sessions_list`, `sessions_get`). `mcp_media` 25 → 27 with the M1–M5
+  client layer (2026-11-19 pipeline, deployed 2026-11-21): `media_kill_job`
+  (queued-only kill, frees the FIFO slot) + `media_queue_status` (queue
+  summary + feature list); `media_job_result` now surfaces in-flight
+  `progress`, `media_list_jobs` status filter gains `queued|killed`.
 - **SSE transport (2026-09-20):** all servers now run FastMCP over the SSE
   transport (`GET /sse`; the streamable-http `/mcp` endpoint is gone). LiteLLM
   connects with `transport: sse`. The skill runner's direct streamable-http MCP

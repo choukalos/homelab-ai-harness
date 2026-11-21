@@ -453,7 +453,7 @@ Clients talk to LiteLLM instead of directly to Ollama.
 
 MCP (Model Context Protocol) servers are **standalone containers**, each with its own isolated Python environment. They run on the `ai-net` Docker network and communicate with the Skill Runner (and LiteLLM) over **SSE** transport (`GET /sse`).
 
-**Thirteen MCP servers are currently deployed** via `compose.mcp.yml` (92 tools total, verified 2026-11-21).
+**Thirteen MCP servers are currently deployed** via `compose.mcp.yml` (94 tools total, verified 2026-11-21 — `mcp_media` 25 → 27 with `media_kill_job` + `media_queue_status`, M1–M5 client layer).
 
 | Server | Backend | Status | Deployed |
 |---|---|---|---|
@@ -602,7 +602,7 @@ Connected to LiteLLM.
 | Service | Purpose | Status |
 |---|---|---|
 | LiteLLM | Model gateway + MCP gateway | ✅ Running |
-| MCP servers | Reusable tool providers (standalone containers) | ✅ 13 deployed (92 tools) |
+| MCP servers | Reusable tool providers (standalone containers) | ✅ 13 deployed (94 tools) |
 | Skill runner | Agentic workflow orchestration + chat gateway + scheduler | ✅ Running (:8091) |
 | AI Harness (legacy) | Siri/CarPlay gateway, Celery workers | ✅ Decommissioned 2026-08-25 (replaced by skill runner) |
 | Open Web UI | Family/local AI chat interface | ✅ Removed 2026-11-15 (unused; data backed up) |

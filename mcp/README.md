@@ -12,7 +12,7 @@ MCP (Model Context Protocol) servers provide reusable, read-mostly tools that sk
 | [filesystem_readonly](servers/filesystem_readonly/) | | Safe file/directory reading on allowed paths |
 | [stocks](servers/stocks/) | | Financial data, market lookups |
 | [homelab_status](servers/homelab_status/) | | Homelab infrastructure health and metrics |
-| [media](servers/media/) | | Media asset lookup (LAN-only) |
+| [media](servers/media/) | | Media operations via the GPU-host media-pipeline on Matrix (27 tools — generation, edit, assemble, voice, transcribe, job queue mgmt) |
 | [sessions](servers/sessions/) | | Session transcript ingest + owner-scoped read-back (mcp_sessions Phase 1, 2026-11-21) |
 | [home](servers/home/) | | Home automation/status (LAN-only) |
 

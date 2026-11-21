@@ -1036,3 +1036,34 @@ semitones, 5 samples across the note's duration (onset→offset).
   `SOLO_BEND_RISE` / `SOLO_VIB_DEV` if the contract differs.
 - Back in Black: published tab now has verified lyrics; the ASR
   stage itself still fails on this dense mix (pipeline-side item).
+
+---
+
+## Validation Entry — 2026-11-21 (part 12): mcp_media M1–M5 client layer deployed + accepted
+
+**Context:** Matrix shipped the pipeline side of M1–M5 on 2026-11-19
+(`media-pipeline/qa_m1_m5.py` accepted on the GPU host) and pushed the
+mcp_media client layer (commit `7f2d0d3`): `media_kill_job` +
+`media_queue_status` MCP tools, `MediaPipelineClient.kill_job` /
+`queue_status` client methods, updated tool docs (M1 `duration` now
+enforced, M5 `progress` surfaced by `media_job_result`,
+`media_list_jobs` status filter gains `queued|killed`), and the live
+acceptance test `test_m1m5_client.py`.
+
+**Deployment:** `mcp_media` rebuilt + restarted from the repo
+(`docker compose -f compose/compose.mcp.yml -p ai-mcp up -d --build
+mcp_media`) — the running container pre-dated the push (14 h stale).
+
+| Check | Result |
+|---|---|
+| Pipeline `/health` advertises all four features (`assemble-duration-hold`, `job-kill`, `queue-summary`, `job-progress`) | ✅ |
+| `test_m1m5_client.py` live acceptance (run from thor; keyframe pulled via `/files/` — no SSH to Matrix): idle queue shape, A running + B queued (synchronized), running kill → 409, queued kill → slot freed, re-kill idempotent no-op, tag mismatch → 403, matching tag kills, unknown id → 404, killed rows in durable ledger, A completes with video output | ✅ 24/24 |
+| mcp_media container `tools/list` (SSE): 27 tools incl. `media_kill_job` + `media_queue_status` | ✅ |
+| Proxy `/mcp-rest/tools/list` (LITELLM_API_KEY): 94 tools (was 92) | ✅ |
+| MCP-level E2E through the proxy (`/mcp-rest/tools/call`, the real agent path): `media_generate_shot` non-blocking ×2 (A `02b8912b9861`, B `3788984a3e1a`, tag `m1m5-mcp-test`) → `media_queue_status` shows B queued (FIFO details + `waited_s`) → `media_kill_job` kills B (`killed: true`, `queue_position_freed: 0`) → re-kill idempotent no-op → A `done` with video output (no collateral damage) | ✅ |
+
+**Docs updated:** `docs/thor_mcp_architecture.md` (current state: 13
+servers / **94 tools**, `mcp_media` 25 → 27 + M1–M5 note), `README.md`
+(94 tools ×2), `docs/thor_ai_inventory.md` (live-count line),
+`mcp/README.md` (media row description — was stale "Media asset lookup
+(LAN-only)").
