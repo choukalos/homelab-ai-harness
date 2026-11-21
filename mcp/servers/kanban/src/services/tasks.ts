@@ -6,16 +6,12 @@
  */
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
-  ideas,
-  projects,
-  taskEvents,
-  tasks,
-  usage,
   type EventPayload,
   type TaskEventRow,
   type TaskEventType,
   type TaskRow,
 } from "../db/schema.js";
+import { ideas, projects, taskEvents, tasks, usage } from "../db/tables.js";
 import { type Db } from "./common.js";
 
 /** Append one task_event row (log tail + audit trail, PLAN.md §2). */

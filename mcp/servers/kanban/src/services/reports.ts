@@ -7,7 +7,8 @@
  * style as board()) so the queries stay identical across both DB drivers.
  */
 import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
-import { ideas, projects, tasks, usage, type TaskState } from "../db/schema.js";
+import { type TaskState } from "../db/schema.js";
+import { ideas, projects, tasks, usage } from "../db/tables.js";
 import type { Db } from "./common.js";
 
 export const ROLLING_MONTHS = 12;

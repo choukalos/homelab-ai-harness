@@ -9,7 +9,8 @@
  * - update: only provided fields change; an empty string clears a field.
  */
 import { asc, desc, eq, and, ne } from "drizzle-orm";
-import { ideas, projects, tasks, type IdeaSpec, type ProjectRow } from "../db/schema.js";
+import { type IdeaSpec, type ProjectRow } from "../db/schema.js";
+import { ideas, projects, tasks } from "../db/tables.js";
 import { isUniqueViolation, ServiceError, type Db } from "./common.js";
 
 export type Project = ProjectRow;

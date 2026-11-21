@@ -6,7 +6,8 @@
  * dependency order.
  */
 import { and, eq, inArray } from "drizzle-orm";
-import { ideas, projects, tasks, type IdeaSpec } from "../db/schema.js";
+import { type IdeaSpec } from "../db/schema.js";
+import { ideas, projects, tasks } from "../db/tables.js";
 import { ServiceError, type Db } from "./common.js";
 import { type Idea } from "./ideas.js";
 

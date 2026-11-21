@@ -45,16 +45,13 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { KanbanConfig } from "./config.js";
 import type { DbHandle } from "./db/index.js";
 import {
-  ideas,
-  projects,
-  taskEvents,
-  tasks,
   type EventPayload,
   type TaskEventType,
   type TaskRow,
   type TaskState,
   type UsageRole,
 } from "./db/schema.js";
+import { ideas, projects, taskEvents, tasks } from "./db/tables.js";
 import type { Db } from "./services/common.js";
 import { ServiceError } from "./services/common.js";
 import { appendTaskEvent, taskDependencyStatus } from "./services/tasks.js";

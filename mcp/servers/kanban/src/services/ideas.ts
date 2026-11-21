@@ -6,7 +6,8 @@
  * src/services/icebox.ts (Move to Backlog).
  */
 import { and, asc, desc, eq, ne } from "drizzle-orm";
-import { ideas, projects, type IdeaRow } from "../db/schema.js";
+import { type IdeaRow } from "../db/schema.js";
+import { ideas, projects } from "../db/tables.js";
 import { ServiceError, type Db } from "./common.js";
 
 export type Idea = IdeaRow & { projectName: string };

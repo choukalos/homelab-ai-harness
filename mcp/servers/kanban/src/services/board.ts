@@ -10,7 +10,8 @@
  * a `done` task. Unsatisfied deps are reported as `waitingOn`.
  */
 import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
-import { ideas, projects, taskEvents, tasks, usage, TASK_STATES, type TaskState } from "../db/schema.js";
+import { TASK_STATES, type TaskState } from "../db/schema.js";
+import { ideas, projects, taskEvents, tasks, usage } from "../db/tables.js";
 import type { Db } from "./common.js";
 
 export interface BoardCard {

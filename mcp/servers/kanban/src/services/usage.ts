@@ -3,7 +3,8 @@
  * task/project/role + thinking level + owner. Reporting only — no limits.
  * `taskId` is nullable for grooming/summary calls.
  */
-import { usage, type UsageRole } from "../db/schema.js";
+import { type UsageRole } from "../db/schema.js";
+import { usage } from "../db/tables.js";
 import type { Db } from "./common.js";
 
 export interface UsageRecord {
