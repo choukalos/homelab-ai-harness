@@ -40,9 +40,9 @@ endpoints are on `matrix:8189` (LAN-only).
 | Tool | Purpose | Key params | Returns |
 |---|---|---|---|
 | `media_storyboard` | LLM shot list | `brief, n_shots=5, aspect="16:9"` | `{shots:[{id,visual,vo}]}` |
-| `media_generate_image` | keyframe (Qwen-Image 2.1) | `prompt, width=1280, height=720, seed=42, steps=25, model="qwen21"\|"legacy"` | `{path, location}` |
+| `media_generate_image` | keyframe (Qwen-Image 2.1 — best keyframe model, vision-verified 2026-11-22) | `prompt, width=1280, height=720, seed=42, steps=25, model="qwen21"\|"legacy" (legacy = 2512 Q4_0 default; Q6_K staged as a marginal upgrade)` | `{path, location}` |
 | `media_edit_image` | compose keyframe w/ identity refs | `image, prompt, references≤9 (qwen21), seed, steps` | `{path}` |
-| `media_generate_shot` | I2V clip | `keyframe, prompt, model="wan14b"\|"ltxv2b" (omit=server default), width/height/frames/fps (omit=model defaults), seed=42, strength=0.7 (ltxv2b only)` | `{path}` |
+| `media_generate_shot` | I2V clip | `keyframe, prompt, model="wan14b"\|"ltxv2b" (omit=server default), width/height/frames/fps (omit=model defaults — ltxv2b 1280×720 drafts supported → 1280×704 out; wan14b 81f recommended, 129f experimental), seed=42, strength=0.7 (ltxv2b only)` | `{path}` |
 | `media_text_to_speech` | VO | `text, voice="trailer"\|library name\|ref wav path` | `{path}` |
 | `media_generate_music` | ACE-Step | `prompt, lyrics="", duration=30, seed=42` | `{path}` |
 | `media_sfx` | MMAudio SFX bed | `video, description, duration=8.0` | `{path}` |
@@ -63,10 +63,10 @@ endpoints are on `matrix:8189` (LAN-only).
 
 | Model | Flow | Specs | Speed |
 |---|---|---|---|
-| `wan14b` | I2V (default) | Wan 2.2 14B Q8_0 GGUF (promoted 2026-11-22 — was Q5_K_M), **832×480 (~10–12 min/clip) or 1280×720 (~55 min/clip — CPU offload)** (2026-11-22 Q8_0 720p peak 19,577 MiB on the 24 GB card), 81f (4n+1), 16fps, ~5 s clip | ~10–12 min (480p) / ~55 min (720p) |
-| `ltxv2b` | I2V (draft) | LTXV 2B, 768×512, 97f, 25fps, ~4 s clip; `strength=0.7` anchors the keyframe | ~8 s/clip |
+| `wan14b` | I2V (default) | Wan 2.2 14B Q8_0 GGUF (promoted 2026-11-22 — was Q5_K_M), **832×480 (~10–12 min/clip) or 1280×720 (~55 min/clip at 81f — CPU offload)** (2026-11-22 Q8_0 720p peak 19,577 MiB on the 24 GB card), 81f (4n+1) recommended — 129f (~8 s clip) experimental: fits (13.5 GB delta) but quality degrades vs 81f (vision 2026-11-22), ~115 min/720p clip, 16fps, ~5 s clip | ~10–12 min (480p) / ~55 min (720p/81f) |
+| `ltxv2b` | I2V (draft) | LTXV 2B, 768×512 default or **1280×720 for 720p-class drafts** (→ 1280×704 out — height snapped to ×32; 18 s/clip, peak 18,335 MiB, QA 2026-11-22), 97f, 25fps, ~4 s clip; `strength=0.7` anchors the keyframe | ~8 s/clip (512p) / ~18 s (720p) |
 | `qwen21` | keyframes (default) | Qwen-Image-2.1, 25 steps, steps clamped [10,50] | ~30–120 s @1280×720 |
-| `legacy` | keyframes (fast) | Qwen-Image-2512 GGUF + Lightning, steps=4 | seconds |
+| `legacy` | keyframes (fast) | Qwen-Image-2512 GGUF + Lightning, steps=4 — Q4_0 default (20,513 MiB @720p); Q6_K staged 2026-11-22 (21,601 MiB, marginal upgrade — qwen21 still ranks best) | seconds |
 
 > **VRAM gate note (2026-11-21):** the pipeline host is 2-GPU since 2026-11-14 —
 > the media pipeline runs on the dedicated **RTX PRO 4000 24GB** (GPU 1,

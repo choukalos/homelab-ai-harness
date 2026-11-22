@@ -414,7 +414,9 @@ class MediaPipelineClient:
         """Text -> image (keyframe). Returns GPU-host path of the PNG.
 
         model: 'qwen21' (default; Qwen-Image-2.1 — 25 steps, ~30-120 s at
-        1280x720) | 'legacy' (Qwen-Image-2512 GGUF + Lightning; pass steps=4).
+        1280x720 — the best keyframe model, vision-verified 2026-11-22) |
+        'legacy' (Qwen-Image-2512 GGUF + Lightning — Q4_0 default, Q6_K
+        staged on the host as a marginal upgrade; pass steps=4).
         steps: the server clamps qwen21 steps to [10, 50] (no distilled LoRA
         at launch); the legacy path honors 4/8.
         non_blocking=True -> submit only; returns {"job_id"} immediately
@@ -466,10 +468,13 @@ class MediaPipelineClient:
                       non_blocking: bool = False, timeout: float = 3600) -> str | dict:
         """Keyframe (LOCAL path) + style prompt -> I2V clip. Returns host path.
 
-        model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512, 97f,
-        25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q8_0 —
-        832x480 ~10-12 min/clip or 1280x720 ~55 min/clip (CPU offload),
-        81f (4n+1), 16fps; other dims rejected with a 400). None = server
+        model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512
+        default 97f 25fps ~8s/clip, or 1280x720 for 720p-class drafts
+        ~18s/clip, output 1280x704) | 'wan14b' (quality; Wan 2.2 14B I2V
+        GGUF Q8_0 — 832x480 ~10-12 min/clip or 1280x720 ~55 min/clip at 81f
+        (CPU offload), 81f (4n+1) recommended — 129f (~8s clip) accepted but
+        experimental (quality degrades, ~115 min/720p clip), 16fps; other
+        dims rejected with a 400). None = server
         default (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted
         width/height/frames/fps -> the server applies the selected model's
         native defaults.

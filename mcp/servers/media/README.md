@@ -15,9 +15,9 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | Tool | Pipeline endpoint | Purpose |
 |---|---|---|
 | `media_storyboard` | `/storyboard` | Brief → shot list JSON (VLLM) |
-| `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
+| `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps — best keyframe model, vision-verified 2026-11-22; `model`: `qwen21` \| `legacy` old Qwen-Image-2512 — Q4_0 default, Q6_K staged as a marginal upgrade) |
 | `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
-| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B Q8_0 GGUF — promoted 2026-11-22, was Q5_K_M, ~5s clip, 832×480 ~10–12 min or 1280×720 ~55 min (CPU offload)) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
+| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B Q8_0 GGUF — promoted 2026-11-22, was Q5_K_M, ~5s clip at 81f, 832×480 ~10–12 min or 1280×720 ~55 min (CPU offload); frames 4k+1 — 81f recommended, 129f (~8s clip) experimental: quality degrades, ~115 min/720p clip) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, 768×512 ~8s or 1280×720 ~18s → 1280×704 out); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
 | `media_text_to_speech` | `/tts` | Script → voice-over wav (`voice` = library name — `trailer` default, `default`, `narrator_f`, `deep_m`, ... — or a reference wav path on the GPU host) |
 | `media_list_voices` | `/voices` (sync) | TTS voice library: name, description, gender, style, audition sample path |
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
@@ -235,6 +235,28 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-22: **Phase 7 media QoL — LTXV 720p drafts promoted, wan14b 129f
+experimental, Qwen-Image-2512 Q6_K staged** (matrix add_card_plan Phase 7 —
+`phase7_qol_todo.md`; all three §4.3 QoL items QA'd on the 24 GB GPU 1 with
+vision-subagent compares). **(1) `ltxv2b` at 1280×720 promoted**: any dims
+were already API-legal; measured 18 s/clip, peak 18,335 MiB (fits); output
+1280×704 (LTXV snaps height to ×32); vision: sharper than the 768×512 draft,
+no new artifacts → documented as a supported 720p-class draft option (768×512
+stays the default). **(2) wan14b 129f (~8.1 s) rejected as recommended,
+documented as experimental**: 129f is 4k+1-legal (no cap added); QA
+(`qa_wan_phase1.py 720 WAN_QA_LENGTH=129`, Q8_0): 115.1 min, peak 14,720 MiB
+/ 13,457 delta — *lower* than the 81f 19,577 (ComfyUI offloads more on the
+longer latent); vision compare vs the 81f baseline (same keyframe/prompt/seed,
+2 montage frames): quality degrades (softer detail, texture noise, dark-bg
+banding) → 81f stays the recommended max. **(3) Qwen-Image-2512 Q6_K staged**:
+17.95 GB GGUF (unsloth) on the host; `QWEN_IMAGE_2512_MODEL` env override
+(defaults = shipped Q4_0 pair). 3-way keyframe QA @1280×720 (same
+prompt/seed): qwen21 48 s / 16,929 MiB, 2512-Q4 28 s / 20,513, 2512-Q6 22 s /
+21,601 — all fit; vision ranking **qwen21 > Q6_K > Q4_0** → qwen21 stays the
+production keyframe default (`MEDIA_IMAGE_MODEL` unchanged); Q6_K is a
+marginal legacy upgrade via the env. Tool descriptions + media-film contract
+updated to match.
 
 2026-11-22: **wan14b quant promoted: Q5_K_M → Q8_0** (matrix add_card_plan
 Phase 6 quant decision — `phase6_quant_todo.md`). All three 720p candidates
