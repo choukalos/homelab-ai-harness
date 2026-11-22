@@ -35,6 +35,11 @@ status; he gives decisions, priorities, and feedback.
 what published, synthesizes insights, and routes them back to PM / Strategist /
 Content Marketer / Coding Team to iterate and improve.
 
+**Decomposition (2026-11-22):** the plan is **4 related but decoupled
+workstreams** — (1) engagement/usage instrumentation (Plausible), (2) skills
+(this doc), (3) the agentic framework (not yet planned), (4) the agents (one per
+role, not yet planned). See the workstreams section.
+
 ## Org model
 
 ```
@@ -431,12 +436,50 @@ wins to fold into existing skills: G5, G6, G7, G12.
 
 ---
 
-## Development plan & phases
+## Workstreams (decomposed 2026-11-22)
+
+The plan decomposes into **4 related but decoupled workstreams**. This doc owns
+workstream 2 (skills) in full; workstreams 1, 3, and 4 get their own TODO docs
+when their planning starts.
+
+| # | Workstream | What | Status |
+|---|-----------|------|--------|
+| 1 | **Engagement/usage instrumentation** | Plausible on the 3 web properties (invest-hub, Homelab Blog, Bluebovine) → data-hub → report-hub/Grafana | Quick win (pre-Phase 0): get Plausible collecting. Deep parts (feed, dashboards) land with skills Phase 3 |
+| 2 | **Skills** | Role playbooks + step skills + shared library (this doc) | Planned (below) |
+| 3 | **Agentic framework** | The system for running role agents: identity/keys, goal model, projects, constraints, tasking, periodic review protocol, state/memory, scheduling, reporting, guardrails, spend | Not yet planned — needs its own TODO doc |
+| 4 | **Agents** | One standing agent per role: PM, BA, marketing strategist, content marketer, (+ maybe researcher) | Not yet planned — depends on WS3 |
+
+**Relationships.** Skills (2) are the playbooks the agents (4) follow; the
+framework (3) is the system that runs them; instrumentation (1) is the data they
+measure against. Decoupling: each can start/progress independently — skills
+don't need the framework, and instrumentation doesn't need skills.
+
+**Order (chuck's proposal 2026-11-22).** Skills first ↔ Plausible quick win
+(flexible on which is first) → agentic framework → agents.
+
+### WS1 quick win — pre-Phase 0 TODO: Plausible live
+
+Start the data clock before the skills build starts, so real historical
+engagement/usage data exists by the time skills Phase 3 (BA) lands.
+
+1. Decide: self-hosted Plausible (docker — ClickHouse/Postgres + Redis) vs. SaaS
+2. Install Plausible (host: thor or matrix — decide)
+3. Add the snippet to the 3 sites (per-site deploy): Homelab Blog (Hugo head),
+   Bluebovine (Astro head), invest-hub (app head)
+4. Verify: data flowing — per-site dashboards show sessions
+5. (Later — WS1 deep / skills Phase 3 prereq): feed Plausible into data-hub +
+   report-hub/Grafana dashboards (the G3 wiring)
+
+---
+
+## Development plan & phases (workstream 2 — skills)
 
 The 24 planned skills (P0–P3) build in **4 phases**. Phases are sequential
 (each phase's exit criteria must hold before the next starts); research runs in
 parallel within a phase. Priority (P0–P3) ≠ phase — cheap P2s get pulled forward
-when the first real tasks need them (S4/S5 in Phase 1).
+when the first real tasks need them (S4/S5 in Phase 1). Pre-Phase 0 (workstream
+1 quick win — Plausible live on the 3 sites) starts the data clock and runs
+independently of this plan.
 
 ### Phase 0 — Research kickoff
 
@@ -517,17 +560,17 @@ in agreed locations.
 **Goal:** close the loop — the BA measures shipped/published work against KPIs
 and routes insights back to every role.
 
-- **Build** (5 skills + the wiring, in this order):
-  1. **G3 wiring (prerequisite — engineering task)**: Plausible live on the 3 web
-     properties (invest-hub, Homelab Blog, Bluebovine) + feed into data-hub +
-     report-hub/Grafana dashboards (platform/service status, engineering-centric)
-  2. BA-1 `kpi-reporting` (P1) — the KPI set + reports on the decided surface
-  3. PM-6 `pm-analytics-review` (P2) — unblocks once data flows
-  4. S6 `security-review` (P3), S7 `spend-awareness` (P3), S8 `debugging` (P3 —
+- **Build** (5 skills, in this order):
+  1. BA-1 `kpi-reporting` (P1) — the KPI set + reports on the decided surface
+  2. PM-6 `pm-analytics-review` (P2) — unblocks once data flows
+  3. S6 `security-review` (P3), S7 `spend-awareness` (P3), S8 `debugging` (P3 —
      or fold into S3 per open question 3)
   + **G4** — the BA→role report contract (defined when the data lands)
 - **Research**: R10 (BA / exec reporting)
-- **Prereq**: the G3 wiring (BA-1/PM-6 are data-blocked until it lands)
+- **Prereq**: workstream 1's deep parts (the G3 wiring — Plausible → data-hub
+  feed + report-hub/Grafana dashboards). The quick win (Plausible collecting)
+  lands pre-Phase 0; the feed/dashboards are an instrumentation workstream task
+  that this phase depends on, not a skills task.
 - **Exit criteria**: Plausible feeding data-hub on all 3 properties; ≥1 KPI
   defined per business goal (definition, source, target, cadence); first periodic
   BA report produced with insights routed to at least one of each role (PM,
@@ -541,20 +584,80 @@ S1 ──▶ everything (board ops)
 R2 ──▶ S2        R3 ──▶ S3        R5 ──▶ S10        R6 ──▶ S11
 R8 ──▶ DEV-2 (Phase 1) ──▶ PM-4/PM-5 (Phase 2)
 MKT-1 ──▶ CM-1 (the brand check needs the strategy doc)
-G3 wiring ──▶ BA-1 ──▶ PM-6 ──▶ feedback loop closed
+WS1 quick win (Plausible live) ──▶ data clock starts (pre-Phase 0)
+WS1 deep (G3 wiring: feed + dashboards) ──▶ BA-1 ──▶ PM-6 ──▶ feedback loop closed
 S9: spec complete — buildable in any phase
 ```
 
 ### Deferred / out of scope (explicit)
 
-- **The "agents" concept** (separate keys/identities, goals + projects per
-  worker) — chuck, separate item (Q8); the role/step skills work regardless of
-  who runs them
+- **The agentic framework + agents** — now workstreams 3–4 (planned separately
+  in their own TODO doc); this doc's role/step skills work regardless of who
+  runs them
 - **Social media publishing** (G9) — later, separate item
-- **BA cadence / scheduling** (Q11) — tied to the agent work
+- **BA cadence / scheduling** (Q11) — resolves in the WS3/WS4 planning (the
+  periodic review protocol sets the cadence)
 - **Cost guardrails** — decided 2026-11-21: not for now
 - **G3 wiring specifics** (Plausible install details, data-hub feed design) —
-  scoped when the Phase 3 engineering task starts
+  scoped when the WS1 deep task starts
+
+---
+
+## Workstream 3 — Agentic framework (needs planning)
+
+Not yet discussed in depth — this is a stub of what we know so far. Planning
+happens in its own TODO doc (proposed: `todo_agentic_framework.md`, covering
+WS3 + WS4 together — the agents are the framework's first instances).
+
+**What we know so far (from the conversation):**
+
+- Agents are "kanban workers with separate keys/identities" — a per-agent
+  LiteLLM key (the `USER_KEYS` pattern already exists for users; extend it to
+  agents) → per-agent spend attribution
+- Per agent: **goals**, the **projects** they work on, **constraints**
+- **Goal ladder**: per-agent goals that ladder up to the org's goals — drive
+  behavior
+- **Periodic reviews with chuck**: agent presents upcoming plans → chuck gives
+  feedback/direction or TODOs → agent executes → agent reports what it
+  accomplished/learned
+
+**Open design questions (seed for the planning doc):**
+
+- Identity: per-agent LiteLLM keys — capability scoping (the read/control/admin
+  sets exist), per-agent spend visibility/budgets
+- Goal model: how goals are stored/versioned; how the ladder is enforced (org
+  goals → agent goals → task goals); who sets/updates them
+- Tasking: how work reaches an agent — kanban board (ideas/tasks), direct TODOs
+  from chuck, periodic self-generated plans?
+- Periodic review protocol: cadence, format (plan → feedback → execute →
+  report), where the record lives
+- State/memory: per-agent workspace, durable state across sessions (the memory
+  skills exist)
+- Scheduling: what triggers an agent run (cron? kanban events? chuck?)
+- Guardrails: what an agent can/can't do without chuck (deploy gates exist per
+  project; agent-level gates?)
+- Reporting: accomplishments/learnings → chuck + the board + the BA?
+
+## Workstream 4 — Agents (needs planning, depends on WS3)
+
+**Roster (chuck, 2026-11-22): one standing agent per role:**
+
+- PM agent
+- BA agent
+- Marketing strategist agent
+- Content marketer agent
+- (Maybe) researcher agent — "to feed the group" (market/competitive/deep
+  research → shared insights for the other agents)
+- Note: **no standing coding agent** — coding stays task-driven (specs from the
+  PM/chuck; kanban task workers), not a continuous role
+
+**Per agent (chuck's model):**
+
+- Goals (their own, laddered to the org's goals)
+- Projects they work on (kanban projects)
+- Constraints
+- Periodic reviews with chuck: present upcoming plans → take feedback/direction
+  or TODOs → execute → report accomplishments/learned
 
 ---
 
@@ -970,10 +1073,10 @@ grouped by the role whose build is next.
    makes the playbook explicit, *plus* a skill per workflow step. Steps can be
    added and the playbook updated as the role/agent evolves. (The doc is now
    structured this way: three layers.)
-8. ~~Who runs which role~~ — **deferred 2026-11-22**: chuck is building a new
-   concept ("agents") — kanban workers with separate keys/identities, tasked with
-   goals + projects. Out of scope for this doc; the role/step skills work
-   regardless of who runs them.
+8. ~~Who runs which role~~ — **moved to workstream 3–4 planning 2026-11-22**
+   (the agentic framework + agents: separate keys/identities, goals + projects
+   per agent). Out of scope for this doc; the role/step skills work regardless
+   of who runs them.
 9. ~~BA data sources~~ — **decided 2026-11-22 (wiring TBD, gap G3)**:
    **Plausible** = the data engine for product web/mobile apps (invest-hub, both
    blogs/websites); **data-hub/report-hub + Grafana** = the reporting/data
@@ -983,8 +1086,9 @@ grouped by the role whose build is next.
 10. ~~Content publish paths~~ — **answered 2026-11-22**: publish paths are
     **per project** (the project's own deploy flow — blog `deploy.sh`, etc.).
     Social media capability doesn't exist yet — separate item (G9, later).
-11. ~~BA cadence~~ — **deferred 2026-11-22**: tied to the agent work (Q8), a
-    separate item. Not a skills concern for now.
+11. ~~BA cadence~~ — **moved to workstream 3–4 planning 2026-11-22**: tied to
+    the agent work (the periodic review protocol sets the cadence). Not a skills
+    concern.
 
 ## Definition of done (per skill)
 
