@@ -335,10 +335,11 @@ services:
     volumes:
       - /home/chuck/data/ai-kanban:/data
       - /home/chuck/workspace:/workspace
-      # Media project (2026-11-21): NAS archive (lego `workspace` share,
-      # mounted on thor by scripts/setup-media-nas.sh) + the blog's public
-      # file drop (served at choukalos.com/files/).
-      - /home/chuck/data/media-nas:/media-store
+      # Media project (2026-11-21): NAS media store (lego `workspace` share,
+      # mounted on thor at /mnt/lego-media-store by scripts/setup-media-nas.sh;
+      # /mnt, not /home/chuck/data — the data dir is backup scope) + the
+      # blog's public file drop (served at choukalos.com/files/).
+      - /mnt/lego-media-store:/media-store
       - /home/chuck/data/media/public:/publish
     restart: unless-stopped
     networks:

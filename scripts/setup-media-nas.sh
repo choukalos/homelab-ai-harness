@@ -2,10 +2,14 @@
 # =====================================================================
 # setup-media-nas.sh — one-time setup for the Media project's NAS mount
 # =====================================================================
-# Mounts the lego `workspace` share (the media archive) at
-# /home/chuck/data/media-nas, following the backup share's proven pattern
+# Mounts the lego `workspace` share (the media store) at
+# /mnt/lego-media-store, following the backup share's proven pattern
 # (scripts/backup-setup.sh): fstab automount (vers=2.1,soft) + a scoped
 # sudoers rule so chuck can (re)mount without a password.
+#
+# /mnt (not /home/chuck/data): the data dir is backup scope — a NAS mount
+# there would make backup jobs recurse into the NAS. /mnt also matches the
+# existing /mnt/lego (backup share) convention.
 #
 # Run once (idempotent — safe to re-run):
 #   sudo ./scripts/setup-media-nas.sh
@@ -17,7 +21,7 @@ set -euo pipefail
 
 SERVER="lego.local"
 SHARE="workspace"
-MOUNT="/home/chuck/data/media-nas"
+MOUNT="/mnt/lego-media-store"
 CRED_FILE="/home/chuck/.smbcredentials"
 MARKER="# managed: media-nas (setup-media-nas.sh)"
 SUDOERS_FILE="/etc/sudoers.d/media-nas"
@@ -27,9 +31,8 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "must run as root:  sudo $0"
 [[ -f "$CRED_FILE" ]] || fail "credentials file $CRED_FILE missing (username=/password=)"
 
-# --- 1. mountpoint (chuck-owned so host-side tools work pre-mount) ---------
+# --- 1. mountpoint (standard /mnt location, root-owned like /mnt/lego) ------
 mkdir -p "$MOUNT"
-chown 1000:1000 "$MOUNT"
 chmod 755 "$MOUNT"
 echo "mountpoint: $MOUNT ready"
 
