@@ -55,27 +55,29 @@ Tier is a priority bucket, not a reflection-pipeline tier (the
 "Tier 1 propose-only / Tier 2 human applies" language in older footers
 refers to the reflection pipeline's own roles).
 
-## Current state (2026-11-21)
+## Current state (2026-11-22)
 
 - **tier1:** (none open — macstudio-omlx-restart applied 2026-11-21: OMLX
   reloaded on the Mac Studio, `/v1/models` + proxy chat completion verified
   200; capability probes run and `litellm/config.yml` flags updated to match,
   staged pending a litellm-proxy restart)
-- **tier2:** pi-subagents-timeout-handling (open — source repo not on thor; locate
-  first) · matrix-media-pipeline-improvements (in progress — parked on
-  matrix cooperation; ⚠️ work host: matrix, not thor; self-contained
-  handoff spec at `docs/matrix_media_pipeline_improvements_handoff.md`)
-  · mcp-sessions-remote-ingest (applied 2026-11-21 — Phase 1 live + E2E
-  verified through the proxy; see archive note)
+- **tier2:** (none open — all closed; see archive)
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
   applied 2026-11-20; H3 `/model/info` restriction open pending feature
-  check; H4 Dylan scoping deferred by design) ·
-  media-queue-mcp-tools (open — depends on the matrix proposal M2/M3)
+  check; H4 Dylan scoping deferred by design)
 - **archive:** 7 closed 2026-11-08 proposals (window guard, publish-file
   dedup, checkpoint, etc. — the reflection pipeline's first batch) +
   2026-11-19: litellm-model-config-pass, litellm-health-visibility,
   media-film-tool-names, media-film-production-lessons (all applied) +
   cloudflare-524-read-timeout (dismissed — no CF Enterprise plan) +
+  pi-subagents-timeout-handling (dismissed) +
   2026-11-20: recent-activity-slow-run-optimization, memory-dedupe-supersede
-  (both applied) + 2026-11-21: macstudio-omlx-restart (applied) +
-  mcp-sessions-remote-ingest (applied — Phase 1)
+  (both applied) + 2026-11-21: macstudio-omlx-restart (applied),
+  mcp-sessions-remote-ingest (applied — Phase 1),
+  matrix-media-pipeline-improvements (applied — M1–M5 landed on matrix,
+  thor client layer `7f2d0d3`), media-queue-mcp-tools (applied —
+  `media_kill_job` + `media_queue_status` live), and the mcp-kanban series —
+  tier2-mcp-kanban (original), tier2-mcp-kanban-mcp-first,
+  tier2-mcp-kanban-phase2-user-spend, tier2-mcp-kanban-improvements
+  (all applied + verified live; durable content in the kanban README + ops
+  docs)
