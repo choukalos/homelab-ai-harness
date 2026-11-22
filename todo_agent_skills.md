@@ -1,7 +1,9 @@
 # Todo — agent skills: the virtual team (roles) + shared skill library
 
 - date: 2026-11-22
-- status: open (draft for review)
+- status: open (draft for review) — **Phase 0 R1 done 2026-11-22** (skill-authoring
+  meta-skill built + registered; findings in its `references/`); Q2 answered (skills
+  for any pi agent). Next: Phase 1 build (S1 first).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -494,14 +496,23 @@ when the first real tasks need them (S4/S5 in Phase 1). Pre-Phase 0 (workstream
 1 quick win — Plausible live on the 3 sites) starts the data clock and runs
 independently of this plan.
 
-### Phase 0 — Research kickoff
+### Phase 0 — Research kickoff ✅ (R1 done 2026-11-22)
 
 - **Build**: nothing — research only
-- **Research**: **R1** (skill-authoring best practices — shapes how *all* skills
-  get written; run first) + R4 (public skill collections, light, optional)
-- **Exit criteria**: R1 findings captured in a `references/` note (authoring
-  conventions: description style, progressive disclosure, split/merge rules) that
-  every Phase 1+ build cites
+- **Research**: **R1 (DONE 2026-11-22)** (skill-authoring best practices — shapes how
+  *all* skills get written; ran first) + R4 (public skill collections, light, optional)
+- **R1 findings**: captured in `agents-skills/skill-authoring/` — the R1 research digest
+  (`references/authoring-best-practices.md`, verified against primary sources: Anthropic's
+  official best-practices doc, the Agent Skills open spec, the agentskills.io skill-creation
+  guides, the arXiv software-engineering treatment, the anthropics/skills repo) + the
+  `skill-authoring` meta-skill (authoring workflow + repo conventions + trigger-eval
+  protocol), built + registered per the DoD. Key findings that inform the plan:
+  (a) the description is the whole trigger — test it (trigger eval), don't vibes it;
+  (b) hard gates must be harness-enforced, not skill prose (see S11 note);
+  (c) evals-first authoring (baseline without the skill before writing it).
+- **Exit criteria (met)**: R1 findings captured in a `references/` note (authoring
+  conventions: description style, progressive disclosure, split/merge rules) that every
+  Phase 1+ build cites — `agents-skills/skill-authoring/references/authoring-best-practices.md`
 
 ### Phase 1 — Board + engineering foundation
 
@@ -961,6 +972,12 @@ protect against the **OWASP Top 10** (https://owasp.org/projects/top-ten).
   safe) + S10 `code-reviewer` (static quality — does it look right)**. Security is
   a hard gate; functionality gate vs. advisory is open (question 5); static review
   advisory.
+- **Guarantee placement (R1 finding, 2026-11-22)**: a standing instruction in skill
+  prose, however firmly worded, is something the model may read, defer, or skip —
+  skill prose cannot *guarantee* a gate. The gate's **enforcement** lives in the
+  harness (the kanban QA stage, project `constraints`, deploy gates); S11/S3/S10
+  teach the procedure and produce the evidence the harness checks. This is why the
+  QA-stage wiring (question 5) is the load-bearing piece of the gate, not the skill.
 - **Anti-hallucination**: every finding cites `file:line` + the vulnerable pattern
   + a concrete 1–2 line exploit scenario + the required fix; verify against the
   actual code (read the file, trace the data flow — is the tainted value actually
@@ -1021,8 +1038,9 @@ Status: not started.
 
 ## Existing skills by role (the 30)
 
-> Count as of 2026-11-22: **30 SKILL.md wrappers in `agents-skills/`** — the 18
-> pre-port + the 12 ported from the dev Mac (table below). `exec-problem-brief`
+> Count as of 2026-11-22: **31 SKILL.md wrappers in `agents-skills/`** — the 18
+> pre-port + the 12 ported from the dev Mac (table below) + `skill-authoring` (the R1
+> meta-skill, built 2026-11-22). `exec-problem-brief`
 > (S9) is spec-only (no SKILL.md yet) and is not counted. The original 2026-11-22
 > count (29) also included skill-runner-only skills without wrappers
 > (`code_review`, `repo_maintenance`, `ecommerce_platforms_brief`, …).
@@ -1035,7 +1053,7 @@ Status: not started.
 | Content Marketer | `content-writer` (drafts), `publish-file` (publishing), `media-film` (video production), `video-analyze` / `digest-media` (video analysis), `song-transcribe` (audio), digest layer (source material) |
 | Business Analyst | `business-analyst` (NL→SQL), `homelab-report`, `investment-brief`, `morning-brief`, `presentation-build` / `presentation-update`, digest layer (comprehension of source material) |
 | Exec-facing (any role) | S9 `exec-problem-brief`, `investment-brief`, `morning-brief`, `presentation-build` |
-| All roles (meta) | `session-memory` (session continuity), `memory-conventions` (memory/KB discipline), `session-sync` (reflection pipeline) |
+| All roles (meta) | `session-memory` (session continuity), `memory-conventions` (memory/KB discipline), `session-sync` (reflection pipeline), `skill-authoring` (authoring/registering/testing skills — built from R1, 2026-11-22) |
 
 ### Ported from the dev Mac (2026-11-22, commit `03b64bf`)
 
@@ -1064,6 +1082,11 @@ all 30 were re-registered 2026-11-22). Digest-layer architecture: see
 
 ## Conventions (how skills get added)
 
+**Meta-skill (2026-11-22): `skill-authoring`** — the authoring workflow, repo
+conventions, and the trigger-eval protocol now live in `agents-skills/skill-authoring/`
+(built from R1 research; registered in the Skill Hub). Any agent creating or revising a
+skill follows that skill; the rules below are its short form.
+
 - Location: `agents-skills/<name>/SKILL.md` (pi-native workflow guide — the agent
   reads it and does the work; distinct from skill-runner `skill.yml` one-shot jobs
   in `skills/`)
@@ -1088,7 +1111,7 @@ all 30 were re-registered 2026-11-22). Digest-layer architecture: see
 
 | # | Question | Feeds | Suggested skill |
 |---|----------|-------|-----------------|
-| R1 | Agent skill authoring best practices — description quality, progressive disclosure, when to split vs. merge skills, common failure modes | All | `deep-research` (Anthropic skill-authoring guidance + ecosystem patterns) |
+| R1 | Agent skill authoring best practices — description quality, progressive disclosure, when to split vs. merge skills, common failure modes | All | `deep-research` (Anthropic skill-authoring guidance + ecosystem patterns) — **DONE 2026-11-22**: findings in `agents-skills/skill-authoring/references/authoring-best-practices.md` (primary sources fetched + verified directly; the `deep_research` job pass returned only empty KB entries and declared the source gap) |
 | R2 | How SWE agents orient in unfamiliar repos — repo-map generation, recon artifacts that help downstream, time-boxing | S2, DEV-1/2 | `deep-research` |
 | R3 | Agent self-verification practices — self-check loops, evidence-based completion, avoiding confident-but-wrong claims, debugging loops | S3, S8, CM-1 | `deep-research` |
 | R4 | Public agent-skill collections worth mining for patterns (not copying) | All | `research-brief` (light) |
@@ -1107,9 +1130,11 @@ grouped by the role whose build is next.
 1. **Priorities** — with the role framing: which role do we stand up first?
    (Coding Team skills are exercised immediately by the first real tasks —
    Bluebovine, Invest Hub; PM/BA have no board traffic yet.)
-2. **Scope of "workers"** — just the kanban workers, or should the playbooks be
-   written for *any* pi agent (they'd live in `agents-skills/` and be usable by
-   family pi sessions too)?
+2. **Scope of "workers"** — **answered 2026-11-22 (chuck)**: the playbooks are written
+   for **any pi agent** (not just kanban workers) — they live in `agents-skills/` and
+   are usable by family pi sessions too. Consequence: skills are written for the
+   general agent (tools available via the LiteLLM gateway), with kanban-specific
+   behaviour (board ops, deploy gates) as an explicit section rather than an assumption.
 3. **S8** — standalone `debugging` skill or fold into `qa-verify` (S3)?
 4. **Per-project depth** — S1 teaches the *pattern* of deploy gates; the specifics
    live in project `constraints`. Right split, or do you want a per-project

@@ -1,6 +1,6 @@
 ---
 name: publish-file
-description: Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped.
+description: "Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped. Idempotent: republishing identical content is a no-op success (report.duplicate=true); different content fails unless overwrite=true."
 ---
 
 # Publish File

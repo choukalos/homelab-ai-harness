@@ -40,6 +40,15 @@ fi
 : "${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY not set (export it or run on thor where .env lives)}"
 BASE_URL="${LITELLM_BASE_URL:-http://localhost:4000}"
 BASE_URL="${BASE_URL%/}"
+# The LiteLLM port is published on THOR_IP (192.168.4.54), not 127.0.0.1 —
+# on thor the localhost default is unreachable. Fall back to the LAN IP.
+if ! curl -sf --max-time 3 -o /dev/null "${BASE_URL}/health/liveliness" 2>/dev/null; then
+    ALT="http://192.168.4.54:4000"
+    if [[ "$BASE_URL" != "$ALT" ]] && curl -sf --max-time 3 -o /dev/null "${ALT}/health/liveliness" 2>/dev/null; then
+        echo "note: ${BASE_URL} unreachable — using ${ALT}" >&2
+        BASE_URL="$ALT"
+    fi
+fi
 REPO_URL="https://github.com/choukalos/homelab-ai-harness.git"
 SKILLS_DIR="agents-skills"
 
