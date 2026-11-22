@@ -66,26 +66,22 @@ lsmod | grep -q '^cifs ' || modprobe cifs || echo "WARNING: could not load cifs 
 
 # --- 5. automount unit + initial mount ----------------------------------------
 # Start the automount unit so the mount self-heals on access after Lego
-# kills the (idle) CIFS session — the same pattern as /mnt/lego. A direct
-# `mount` leaves the automount unit dead, so nothing re-triggers the mount
-# after a session kill. The unit name escapes the mountpoint's dashes
-# (systemd's path->unit mapping is unambiguous only with \x2d).
+# kills the (idle) CIFS session — the same pattern as /mnt/lego. The unit
+# refuses to start while the path is already a (direct) mount point ("Path
+# ... is already a mount point, refusing start"), so lazy-unmount a direct
+# mount first. The unit name escapes the mountpoint's dashes (systemd's
+# path->unit mapping is unambiguous only with \x2d).
 UNIT="mnt-lego\x2dmedia\x2dstore.automount"
-if ! systemctl start "$UNIT"; then
-  echo "WARNING: could not start $UNIT — run: sudo systemctl start '$UNIT'"
-fi
-# Trigger the initial mount through the automount (lazy) and verify.
-if timeout 15 ls "$MOUNT" >/dev/null 2>&1; then
-  echo "$MOUNT already mounted and responsive"
-else
-  echo "$MOUNT not mounted — triggering via automount"
-  timeout 30 umount -l "$MOUNT" 2>/dev/null || true
+if grep -qE "^[^ ]+ $MOUNT " /proc/mounts && ! systemctl is-active --quiet "$UNIT"; then
+  echo "direct mount active but automount unit inactive — lazy-unmounting so the automount can take over"
+  timeout 30 umount -l "$MOUNT" || fail "umount -l failed"
   sleep 1
-  if grep -qE "^[^ ]+ $MOUNT " /proc/mounts; then
-    fail "stale mount of $MOUNT still attached (umount -l timed out) — wedged CIFS state, reboot the host to clear it"
-  fi
-  timeout 600 ls "$MOUNT" >/dev/null 2>&1 || fail "mount failed via automount — is $SERVER up? (ping $SERVER)"
+  grep -qE "^[^ ]+ $MOUNT " /proc/mounts && fail "stale mount of $MOUNT still attached (umount -l timed out) — wedged CIFS state, reboot the host to clear it"
 fi
+systemctl start "$UNIT" || echo "WARNING: could not start $UNIT — run: sudo systemctl start '$UNIT'"
+# Trigger the initial mount through the automount (lazy) and verify.
+# timeout 600 covers Lego's post-churn login rate-limit (same as backup-setup.sh).
+timeout 600 ls "$MOUNT" >/dev/null 2>&1 || fail "mount failed via automount — is $SERVER up? (ping $SERVER)"
 timeout 15 ls "$MOUNT" >/dev/null 2>&1 || fail "mounted but probe failed after mount — check $SERVER"
 echo "mount: $MOUNT healthy (automount unit active — self-heals on access)"
 echo
