@@ -63,7 +63,7 @@ endpoints are on `matrix:8189` (LAN-only).
 
 | Model | Flow | Specs | Speed |
 |---|---|---|---|
-| `wan14b` | I2V (default) | Wan 2.2 14B, **832×480 (~10–12 min/clip) or 1280×720 (~55 min/clip — CPU offload)** (2026-11-21 Phase 6 gate: 720p peak 19.6 GB on the 24 GB card), 81f (4n+1), 16fps, ~5 s clip | ~10–12 min (480p) / ~55 min (720p) |
+| `wan14b` | I2V (default) | Wan 2.2 14B Q8_0 GGUF (promoted 2026-11-22 — was Q5_K_M), **832×480 (~10–12 min/clip) or 1280×720 (~55 min/clip — CPU offload)** (2026-11-22 Q8_0 720p peak 19,577 MiB on the 24 GB card), 81f (4n+1), 16fps, ~5 s clip | ~10–12 min (480p) / ~55 min (720p) |
 | `ltxv2b` | I2V (draft) | LTXV 2B, 768×512, 97f, 25fps, ~4 s clip; `strength=0.7` anchors the keyframe | ~8 s/clip |
 | `qwen21` | keyframes (default) | Qwen-Image-2.1, 25 steps, steps clamped [10,50] | ~30–120 s @1280×720 |
 | `legacy` | keyframes (fast) | Qwen-Image-2512 GGUF + Lightning, steps=4 | seconds |

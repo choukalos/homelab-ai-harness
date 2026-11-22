@@ -467,7 +467,7 @@ class MediaPipelineClient:
         """Keyframe (LOCAL path) + style prompt -> I2V clip. Returns host path.
 
         model: 'ltxv2b' (fast draft; LTXV 2B 0.9.6 distilled — 768x512, 97f,
-        25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q5 —
+        25fps, ~8s/clip) | 'wan14b' (quality; Wan 2.2 14B I2V GGUF Q8_0 —
         832x480 ~10-12 min/clip or 1280x720 ~55 min/clip (CPU offload),
         81f (4n+1), 16fps; other dims rejected with a 400). None = server
         default (MEDIA_SHOT_MODEL; wan14b as of 2026-10-31). Omitted

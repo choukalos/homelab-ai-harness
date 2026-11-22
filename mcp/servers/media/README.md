@@ -17,7 +17,7 @@ done (per-flow timeouts up to 2h; LiteLLM `timeout: 7200` set for this server).
 | `media_storyboard` | `/storyboard` | Brief → shot list JSON (VLLM) |
 | `media_generate_image` | `/images` | Text → keyframe image (Qwen-Image-2.1 default, 25 steps; `model`: `qwen21` \| `legacy` old Qwen-Image-2512) |
 | `media_edit_image` | `/images/edit` | Image + text → edited image (unified Qwen-Image-2.1 editing; `model` + `references` up to 9 identity/consistency images for cross-shot consistency) |
-| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B, ~5s clip, 832×480 ~10–12 min or 1280×720 ~55 min (CPU offload)) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
+| `media_generate_shot` | `/shots` | Keyframe → I2V clip (upload). `model`: `wan14b` (quality, Wan 2.2 14B Q8_0 GGUF — promoted 2026-11-22, was Q5_K_M, ~5s clip, 832×480 ~10–12 min or 1280×720 ~55 min (CPU offload)) \| `ltxv2b` (fast draft, LTXV 2B, ~4s clip, ~8s); omitted = server default (wan14b as of 2026-10-31). Dims/frames/fps omitted = model-native defaults. `strength` is ltxv2b-only (ignored for wan14b) |
 | `media_text_to_speech` | `/tts` | Script → voice-over wav (`voice` = library name — `trailer` default, `default`, `narrator_f`, `deep_m`, ... — or a reference wav path on the GPU host) |
 | `media_list_voices` | `/voices` (sync) | TTS voice library: name, description, gender, style, audition sample path |
 | `media_add_voice` | `/voices` (job) | Register a voice from a 3–15 s reference wav (QC'd, normalized 16 kHz mono, audition sample generated on the GPU) |
@@ -235,6 +235,18 @@ Verified end-to-end 2026-09-09: pipeline job payloads on Matrix now show
 `"user": "chuck", "client": "pi"` (e.g. `GET /jobs/{id}` → `payload.user`).
 
 ## History
+
+2026-11-22: **wan14b quant promoted: Q5_K_M → Q8_0** (matrix add_card_plan
+Phase 6 quant decision — `phase6_quant_todo.md`). All three 720p candidates
+passed the VRAM gate (Q6_K 19,769 MiB / Q8_0 19,577 MiB / FP8 17,579 MiB +
+fastest at 43.9 min); vision-subagent quality compare vs the Q5_K_M baseline
+had Q8_0 best (sharper face/fur, cleaner edges, no artifacts), Q6_K close
+behind, FP8 mixed (dark-bg banding) → Q8_0 promoted on quality. Pipeline-side:
+`WAN_HIGHNOISE_MODEL`/`WAN_LOWNOISE_MODEL` = Q8_0 GGUF pair +
+`WAN_METERING_LABEL=wan2.2-14b-i2v-gguf-q8` in `compose/comfyui.yml` (env-only,
+`media_pipeline` recreated). No API/param change — `media_generate_shot` is
+unchanged; only the client docstring + tool-table row note the new quant.
+Loser models (Q6_K/FP8) deleted post-decision; Q5_K_M kept as fallback.
 
 2026-11-21: **wan14b 720p cap lifted** (matrix add_card_plan Phase 6 — the
 720p VRAM gate passed on the dedicated 24 GB GPU 1 card: peak 19,641 MiB,
