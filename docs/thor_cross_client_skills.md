@@ -99,7 +99,7 @@ the direct `POST /claude-code/plugins` endpoint with the LiteLLM master key
 The 3 Phase-2 skills (`business-analyst`, `content-writer`,
 `marketing-strategy`) were registered this way on 2026-08-31.
 
-**Registration script (2026-12-01):** `scripts/skill-hub-register.sh`
+**Registration script (2026-11-22):** `scripts/skill-hub-register.sh`
 registers + enables **every** `agents-skills/<name>/` wrapper (idempotent —
 already-registered skills are skipped). Run on thor after `git pull` to sync
 the hub with the repo:
@@ -112,7 +112,7 @@ cd ~/homelab-ai-harness && git pull
 
 Requires `LITELLM_MASTER_KEY` (read from `.env` on thor) +
 `LITELLM_BASE_URL` (default `http://localhost:4000`). This is how the 12
-prompt-only skills ported from the local machine (2026-12-01: `digest`,
+prompt-only skills ported from the local machine (2026-11-22: `digest`,
 `digest-algo`, `digest-book`, `digest-media`, `digest-music`, `media-film`,
 `memory-conventions`, `session-memory`, `session-sync`, `song-transcribe`,
 `ttrpg`, `video-analyze`) get picked up by other clients — the SKILL.md
