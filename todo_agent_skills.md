@@ -431,6 +431,133 @@ wins to fold into existing skills: G5, G6, G7, G12.
 
 ---
 
+## Development plan & phases
+
+The 24 planned skills (P0–P3) build in **4 phases**. Phases are sequential
+(each phase's exit criteria must hold before the next starts); research runs in
+parallel within a phase. Priority (P0–P3) ≠ phase — cheap P2s get pulled forward
+when the first real tasks need them (S4/S5 in Phase 1).
+
+### Phase 0 — Research kickoff
+
+- **Build**: nothing — research only
+- **Research**: **R1** (skill-authoring best practices — shapes how *all* skills
+  get written; run first) + R4 (public skill collections, light, optional)
+- **Exit criteria**: R1 findings captured in a `references/` note (authoring
+  conventions: description style, progressive disclosure, split/merge rules) that
+  every Phase 1+ build cites
+
+### Phase 1 — Board + engineering foundation
+
+**Goal:** the first real tasks (Bluebovine, Invest Hub) run end-to-end with full
+discipline: recon → architecture → stories → code → QA (functionality + security
+gate + static review) → docs → deploy → post-deploy watch.
+
+- **Build** (9 skills):
+
+  | Skill | Note |
+  |-------|------|
+  | S1 `kanban-board` (P0) | foundation — every role touches the board; build first |
+  | S2 `codebase-recon` (P1) | |
+  | S3 `qa-verify` (P1) | + G5 (tests as story DoD) + G7 (post-deploy watch) |
+  | S4 `git-flow` (P2, pulled to Phase 1) | first tasks need branch discipline; no research needed |
+  | S5 `docs-housekeeping` (P2, pulled to Phase 1) | + G6 (ship-docs checklist); no research needed |
+  | S10 `code-reviewer` (P1) | needs R5 first |
+  | S11 `security-code-review` (P1) | needs R6 first; the hard gate |
+  | DEV-1 `architecture` (P1) | |
+  | DEV-2 `story-breakdown` (P1) | needs R8 (the story-breakdown half) |
+
+- **Research** (parallel): R2 (S2), R3 (S3), R5 (S10), R6 (S11), R8 (DEV-2 now,
+  PM-4/5 later)
+- **Prereq**: S1 first — everything else assumes board ops work
+- **Exit criteria**: one real task on Bluebovine or Invest Hub completes the full
+  loop — recon note → architecture (where needed) → story breakdown → code → QA
+  pass (functionality + security gate with 0 open blockers + static review) →
+  docs updated → deploy via the project's gate → post-deploy watch → verified
+  live. All 8 step skills exercised in that one task.
+
+### Phase 2 — PM + content production
+
+**Goal:** the org can ideate → prioritize → spec → pitch (PM side) and
+strategize → ask → draft → QA → publish (marketing side), with durable artifacts
+in agreed locations.
+
+- **Build** (10 skills + the artifact conventions):
+
+  | Skill | Note |
+  |-------|------|
+  | PM-4 `pm-ideation` (P1) | |
+  | PM-5 `pm-prioritization` (P1) | |
+  | PM-1 `pm-market-analysis` (P1) | |
+  | PM-2 `pm-product-requirements` (P1) | the PRD artifact |
+  | PM-3 `pm-exec-pitch` (P2) | |
+  | S9 `exec-problem-brief` (P1) | spec complete — buildable any time; lands here (PM deep-dive + exec-facing) |
+  | MKT-1 `brand-strategy` (P1) | + G8 (brand asset inventory as input) |
+  | S12 `content-marketing` (P2) | MKT-1's core artifact |
+  | CM-1 `content-qa` (P1) | |
+  | CM-2 `content-inventory` (P2) | |
+
+  + **G12** — artifact conventions (`docs/roles/<role>/` tree; board specs carry
+  PRDs; BA reports in the repo + the reporting surface)
+- **Research** (parallel): R7 (S12/MKT-1/CM-1), R9 (MKT-1/CM-1); R8 findings
+  reused for PM-4/5
+- **Prereq**: Phase 1 (PRDs groom on the board; content publishes via the
+  projects' deploy flows = S1/S4)
+- **Exit criteria**:
+  - PM: a real idea goes signal → ideation (dedupe-checked) → prioritized with
+    written rationale → groomed → PRD in `docs/roles/pm/`
+  - Strategist: strategy doc (voice/brand/pillars) + ≥2 briefed content asks on
+    the board
+  - CM: ≥1 piece of content published that passed content QA (factualness
+    verified via search) + content inventory updated
+  - Exec: ≥1 opportunity pitch delivered (PM-3; S9 for the deep-dive)
+
+### Phase 3 — Measurement / feedback loop
+
+**Goal:** close the loop — the BA measures shipped/published work against KPIs
+and routes insights back to every role.
+
+- **Build** (5 skills + the wiring, in this order):
+  1. **G3 wiring (prerequisite — engineering task)**: Plausible live on the 3 web
+     properties (invest-hub, Homelab Blog, Bluebovine) + feed into data-hub +
+     report-hub/Grafana dashboards (platform/service status, engineering-centric)
+  2. BA-1 `kpi-reporting` (P1) — the KPI set + reports on the decided surface
+  3. PM-6 `pm-analytics-review` (P2) — unblocks once data flows
+  4. S6 `security-review` (P3), S7 `spend-awareness` (P3), S8 `debugging` (P3 —
+     or fold into S3 per open question 3)
+  + **G4** — the BA→role report contract (defined when the data lands)
+- **Research**: R10 (BA / exec reporting)
+- **Prereq**: the G3 wiring (BA-1/PM-6 are data-blocked until it lands)
+- **Exit criteria**: Plausible feeding data-hub on all 3 properties; ≥1 KPI
+  defined per business goal (definition, source, target, cadence); first periodic
+  BA report produced with insights routed to at least one of each role (PM,
+  strategist, CM); exec status presentation delivered (board state + spend + KPIs)
+
+### Dependency map
+
+```
+R1 (authoring) ──▶ every skill build
+S1 ──▶ everything (board ops)
+R2 ──▶ S2        R3 ──▶ S3        R5 ──▶ S10        R6 ──▶ S11
+R8 ──▶ DEV-2 (Phase 1) ──▶ PM-4/PM-5 (Phase 2)
+MKT-1 ──▶ CM-1 (the brand check needs the strategy doc)
+G3 wiring ──▶ BA-1 ──▶ PM-6 ──▶ feedback loop closed
+S9: spec complete — buildable in any phase
+```
+
+### Deferred / out of scope (explicit)
+
+- **The "agents" concept** (separate keys/identities, goals + projects per
+  worker) — chuck, separate item (Q8); the role/step skills work regardless of
+  who runs them
+- **Social media publishing** (G9) — later, separate item
+- **BA cadence / scheduling** (Q11) — tied to the agent work
+- **Cost guardrails** — decided 2026-11-21: not for now
+- **G3 wiring specifics** (Plausible install details, data-hub feed design) —
+  scoped when the Phase 3 engineering task starts
+
+---
+
 ## Shared skill library (S1–S12)
 
 Playbooks any role can use. "Used by" maps each to the roles above.
