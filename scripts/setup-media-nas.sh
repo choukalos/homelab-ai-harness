@@ -64,22 +64,30 @@ echo "sudoers: $SUDO_USER_NAME can mount/remount $MOUNT without password"
 systemctl daemon-reload 2>/dev/null && echo "systemd: fstab units regenerated" || echo "WARNING: systemctl daemon-reload failed (units appear after reboot)"
 lsmod | grep -q '^cifs ' || modprobe cifs || echo "WARNING: could not load cifs module (try: sudo depmod -a && sudo modprobe cifs)"
 
-# --- 5. mount + verify -------------------------------------------------------
-# Self-heal, bounded (same as backup-setup.sh): a stale kernel mount blocks
-# the next mount until lazy-unmounted; Lego rate-limits logins after churn.
+# --- 5. automount unit + initial mount ----------------------------------------
+# Start the automount unit so the mount self-heals on access after Lego
+# kills the (idle) CIFS session — the same pattern as /mnt/lego. A direct
+# `mount` leaves the automount unit dead, so nothing re-triggers the mount
+# after a session kill. The unit name escapes the mountpoint's dashes
+# (systemd's path->unit mapping is unambiguous only with \x2d).
+UNIT="mnt-lego\x2dmedia\x2dstore.automount"
+if ! systemctl start "$UNIT"; then
+  echo "WARNING: could not start $UNIT — run: sudo systemctl start '$UNIT'"
+fi
+# Trigger the initial mount through the automount (lazy) and verify.
 if timeout 15 ls "$MOUNT" >/dev/null 2>&1; then
   echo "$MOUNT already mounted and responsive"
 else
-  echo "$MOUNT missing or unresponsive — (re)mounting"
+  echo "$MOUNT not mounted — triggering via automount"
   timeout 30 umount -l "$MOUNT" 2>/dev/null || true
   sleep 1
   if grep -qE "^[^ ]+ $MOUNT " /proc/mounts; then
     fail "stale mount of $MOUNT still attached (umount -l timed out) — wedged CIFS state, reboot the host to clear it"
   fi
-  timeout 600 mount "$MOUNT" || fail "mount failed — is $SERVER up? (ping $SERVER)"
+  timeout 600 ls "$MOUNT" >/dev/null 2>&1 || fail "mount failed via automount — is $SERVER up? (ping $SERVER)"
 fi
 timeout 15 ls "$MOUNT" >/dev/null 2>&1 || fail "mounted but probe failed after mount — check $SERVER"
-echo "mount: $MOUNT healthy"
+echo "mount: $MOUNT healthy (automount unit active — self-heals on access)"
 echo
 echo "Done. Re-run anytime (idempotent). The mcp_kanban container picks the"
 echo "mount up on its next (re)start: docker compose -f compose/compose.mcp.yml up -d mcp_kanban"
