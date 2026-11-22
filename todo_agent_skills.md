@@ -445,7 +445,7 @@ when their planning starts.
 
 | # | Workstream | What | Status |
 |---|-----------|------|--------|
-| 1 | **Engagement/usage instrumentation** | Plausible on the 3 web properties (invest-hub, Homelab Blog, Bluebovine) → data-hub → report-hub/Grafana | Quick win (pre-Phase 0): get Plausible collecting. Deep parts (feed, dashboards) land with skills Phase 3 |
+| 1 | **Engagement/usage instrumentation** | Plausible on the 3 web properties (invest-hub, Homelab Blog, Bluebovine) → data-hub → report-hub/Grafana | **Own plan: `todo_plausible.md`** (hard dependency for the measurement half). Current blocker: first-user bootstrap — ingest is broken until a user exists. Deep parts (feed, dashboards) land with skills Phase 3 |
 | 2 | **Skills** | Role playbooks + step skills + shared library (this doc) | Planned (below) |
 | 3 | **Agentic framework** | The system for running role agents: identity/keys, goal model, projects, constraints, tasking, periodic review protocol, state/memory, scheduling, reporting, guardrails, spend | Not yet planned — needs its own TODO doc |
 | 4 | **Agents** | One standing agent per role: PM, BA, marketing strategist, content marketer, (+ maybe researcher) | Not yet planned — depends on WS3 |
@@ -458,24 +458,28 @@ don't need the framework, and instrumentation doesn't need skills.
 **Order (chuck's proposal 2026-11-22).** Skills first ↔ Plausible quick win
 (flexible on which is first) → agentic framework → agents.
 
-### WS1 quick win — pre-Phase 0 TODO: Plausible live
+### WS1 quick win — pre-Phase 0: Plausible live
 
 Start the data clock before the skills build starts, so real historical
 engagement/usage data exists by the time skills Phase 3 (BA) lands.
 
-**Decided 2026-11-22:** **self-hosted** Plausible, hosted on **thor** (the same
-host invest-hub runs on — the snippet is served from the homelab, no
-third-party dependency).
+**Own plan: `todo_plausible.md`** (chuck's call 2026-11-22 — Plausible is its
+own plan that everything depends on). Decided: self-hosted (CE v3.2.0, tracker
+integrated) on **thor**; public = `plausible.choukalos.com` via Caddy (`/js/*`
++ `/api/event` only — admin UI LAN-only by design).
 
-1. ~~Decide: self-hosted vs. SaaS~~ → **self-hosted** (docker —
-   ClickHouse/Postgres + Redis)
-2. ~~Install Plausible (host: thor or matrix)~~ → **thor** (docker compose,
-   alongside the other thor services)
-3. Add the snippet to the 3 sites (per-site deploy), pointing at the
-   self-hosted Plausible endpoint: Homelab Blog (Hugo head), Bluebovine (Astro
-   head), invest-hub (app head)
-4. Verify: data flowing — per-site dashboards show sessions
-5. (Later — WS1 deep / skills Phase 3 prereq): feed Plausible into data-hub +
+**Status (diagnosed 2026-11-22):** installed + healthy, but in **first-user
+bootstrap mode** — no user account exists, so every route (including
+`/api/event` and the tracker script) 302-redirects to `/register`. Ingest is
+broken until the first user is created:
+
+1. **P1 — create the first user** (`http://192.168.4.54:8082/register`) ←
+   current blocker; unblocks ingest + script + admin UI
+2. P2 — create the 3 sites in the admin UI (choukalos.com, invest.choukalos.com,
+   Bluebovine)
+3. P3 — snippet into the 3 sites (Hugo head, invest-hub head, Astro head)
+4. P4 — end-to-end verification (test event + real visits in the dashboard)
+5. P5 — (later, skills Phase 3 prereq) feed Plausible into data-hub +
    report-hub/Grafana dashboards (the G3 wiring)
 
 ---
