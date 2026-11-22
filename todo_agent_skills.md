@@ -13,7 +13,8 @@
 
 The kanban board is the **coordination substrate** for a virtual team of agent
 roles. Each role is an agent that follows a **role skill** — a playbook for that
-job — built on a **shared skill library** (S1–S12 below + the 29 existing skills).
+job — built on a **shared skill library** (S1–S12 below + the 30 existing skills —
+see the existing-skills table near the end).
 The human **exec (chuck)** is the decision node: he receives pitches, strategy, and
 status; he gives decisions, priorities, and feedback.
 
@@ -28,7 +29,7 @@ status; he gives decisions, priorities, and feedback.
    concrete playbook for a single step: inputs, method, output artifact, quality
    bar. Reusable across roles where a step repeats (e.g. S3 `qa-verify` serves
    both code QA and content QA).
-3. **Shared skill library** — the S1–S12 playbooks + the 29 existing skills,
+3. **Shared skill library** — the S1–S12 playbooks + the 30 existing skills,
    reusable by any role/step.
 
 **The feedback loop is the point:** the Business Analyst measures what shipped and
@@ -644,7 +645,8 @@ WS3 + WS4 together — the agents are the framework's first instances).
 - Periodic review protocol: cadence, format (plan → feedback → execute →
   report), where the record lives
 - State/memory: per-agent workspace, durable state across sessions (the memory
-  skills exist)
+  skills exist — `memory-conventions`, `session-memory`, `session-sync`, ported
+  2026-11-22)
 - Scheduling: what triggers an agent run (cron? kanban events? chuck?)
 - Guardrails: what an agent can/can't do without chuck (deploy gates exist per
   project; agent-level gates?)
@@ -1017,16 +1019,48 @@ Status: not started.
 
 ---
 
-## Existing skills by role (the 29)
+## Existing skills by role (the 30)
+
+> Count as of 2026-11-22: **30 SKILL.md wrappers in `agents-skills/`** — the 18
+> pre-port + the 12 ported from the dev Mac (table below). `exec-problem-brief`
+> (S9) is spec-only (no SKILL.md yet) and is not counted. The original 2026-11-22
+> count (29) also included skill-runner-only skills without wrappers
+> (`code_review`, `repo_maintenance`, `ecommerce_platforms_brief`, …).
 
 | Role | Existing skills it leans on |
 |------|------------------------------|
-| Product Manager | `deep-research`, `market-research-brief`, `research-brief`, briefs (competitive/market analysis), `business-analyst` (analytics) |
-| Coding Team | the S-series above; `homelab-report` (infra context when a task touches the homelab) |
+| Product Manager | `deep-research`, `market-research-brief`, `research-brief`, briefs (competitive/market analysis), `business-analyst` (analytics), digest layer (comprehension of market/competitive docs) |
+| Coding Team | the S-series above; `homelab-report` (infra context when a task touches the homelab); `digest-algo` (whitepaper → implementation) |
 | Marketing Strategist | `marketing-strategy` (GTM/launch), `deep-research`, `market-research-brief`, `business-analyst` (analytics) |
-| Content Marketer | `content-writer` (drafts), `publish-file` (publishing), `media-film` / `video-analyze` / `song-transcribe` (video/audio content) |
+| Content Marketer | `content-writer` (drafts), `publish-file` (publishing), `media-film` (video production), `video-analyze` / `digest-media` (video analysis), `song-transcribe` (audio), digest layer (source material) |
 | Business Analyst | `business-analyst` (NL→SQL), `homelab-report`, `investment-brief`, `morning-brief`, `presentation-build` / `presentation-update`, digest layer (comprehension of source material) |
 | Exec-facing (any role) | S9 `exec-problem-brief`, `investment-brief`, `morning-brief`, `presentation-build` |
+| All roles (meta) | `session-memory` (session continuity), `memory-conventions` (memory/KB discipline), `session-sync` (reflection pipeline) |
+
+### Ported from the dev Mac (2026-11-22, commit `03b64bf`)
+
+12 prompt-only (pi-native) skills ported from chuck's dev Mac laptop into
+`agents-skills/` — the digest/comprehension layer, the media-pipeline skills,
+and the memory/session skills. All 30 wrappers are now **registered + enabled
+in the LiteLLM Skill Hub** via `scripts/skill-hub-register.sh` (idempotent —
+run after any `git pull` that adds skills; the hub had been reset to empty and
+all 30 were re-registered 2026-11-22). Digest-layer architecture: see
+`agents-skills/README.md`.
+
+| Skill | What it does | Org-model fit |
+|-------|--------------|---------------|
+| `digest` | Build a structured *model* (not a summary) of a document — classify, TOC-guided read (vision frames for media), fill template, verify load-bearing claims, store (file + KB) | Cross-role comprehension layer (PM/BA/CM) |
+| `digest-algo` | Implement an algorithm from a whitepaper digest against its invariants + verification checks | PM (whitepaper → implementation) → Coding Team |
+| `digest-book` | Plot summary, character arcs, thematic reading from a story digest | Content Marketer (source analysis); family |
+| `digest-media` | Film/TV/clip insight from 3 perspectives (cinematics / entertainment / art critics); builds a queryable media digest | Content Marketer |
+| `digest-music` | Answer music-theory questions / generate scales, chords, progressions from a music_theory digest (machine-checkable rules + reusable checker) | Content Marketer; family |
+| `media-film` | Orchestrate a multi-shot short film through the mcp_media GPU pipeline (keyframes → I2V → TTS/music/SFX → assembly → vision QC → publish); crash-proof via on-disk state + the durable job ledger | Content Marketer (video production) |
+| `memory-conventions` | When to search/remember via `mcp_memory` vs. the `mcp_knowledge` KB | All roles (meta — memory discipline; WS3 "state/memory" building block) |
+| `session-memory` | Fetch relevant long-term memory at session start; capture durable outcomes at session end | All roles (meta — session continuity) |
+| `session-sync` | Ship the pi session transcript to skill-runner for the reflection pipeline | All roles (meta — feeds harness reflection) |
+| `song-transcribe` | Song (URL/file) → guitar tab + timestamped lyrics via the GPU media pipeline (DSP + ASR + LLM polish) | Content Marketer (audio content) |
+| `ttrpg` | Run a TTRPG session from a game_system digest — deterministic dice/state scripts, no LLM-hallucinated rolls | Family (hobby) — outside the org model |
+| `video-analyze` | Keyframe extraction (ffmpeg scene detection, 3 strategies) + storyboard-style analysis | Content Marketer (feeds `digest-media`) |
 
 ## Conventions (how skills get added)
 
@@ -1039,6 +1073,12 @@ Status: not started.
   matches on — write it as "when to use this", not "what it is")
 - Role skills reference the shared library + existing skills at each workflow step
   (composition, not duplication)
+- **Skill Hub registration (2026-11-22)**: adding a skill to `agents-skills/` is
+  not enough — it must be registered + enabled in the LiteLLM Skill Hub
+  (`POST /claude-code/plugins`, master key) or it won't appear in
+  `marketplace.json` / the clients' system prompts. `scripts/skill-hub-register.sh`
+  does this idempotently for every wrapper (skips already-registered; `--list`
+  for hub state). Run it after any `git pull` that adds skills.
 - Research-first: R1–R10 below feed the skill designs; run them with the existing
   `deep-research` / `research-brief` skills before writing each skill
 
@@ -1108,7 +1148,8 @@ grouped by the role whose build is next.
 - `agents-skills/<name>/SKILL.md` (+ references/templates/tools as needed)
 - Description written as "when to use this"
 - Research findings (if any) cited in the skill's header or a `references/` note
-- Committed + pushed; picked up on next `mcp_kanban` container start
+- Committed + pushed; registered + enabled in the Skill Hub
+  (`scripts/skill-hub-register.sh`); picked up on next `mcp_kanban` container start
 - Smoke test: a kanban task (or local pi session) actually follows the playbook on
   a real board item
 - Role skills additionally: the smoke test is the role running its workflow
