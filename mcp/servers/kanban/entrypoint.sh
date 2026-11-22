@@ -23,6 +23,12 @@ DATA_DIR="${AI_KANBAN_DATA_DIR:-/data}"
 export AI_KANBAN_DATA_DIR="${DATA_DIR}"
 mkdir -p "${DATA_DIR}" /workspace
 
+# Git identity for machine commits: the kanban's own git ops pass
+# GIT_AUTHOR_*/GIT_COMMITTER_* per invocation, but scripts the agent runs
+# (e.g. homelab-blog's deploy.sh) read the global identity.
+git config --global user.name "ai-kanban"
+git config --global user.email "ai-kanban@local"
+
 # --- 2. harness skills -------------------------------------------------------
 HARNESS_REPO_URL="${HARNESS_REPO_URL:-https://github.com/choukalos/homelab-ai-harness}"
 HARNESS_DIR="${DATA_DIR}/harness"
@@ -77,6 +83,13 @@ node -e '
       process.exit(1);
     });
 '
+
+# --- 3b. Hugo (soft check — only the Homelab Blog project needs it) -----------
+if command -v hugo >/dev/null 2>&1; then
+  log "hugo $(hugo version | head -1) available (Homelab Blog builds)"
+else
+  warn "hugo not found — Homelab Blog build tasks will fail until the image is rebuilt with the Hugo step"
+fi
 
 # --- 4. start -----------------------------------------------------------------
 [ -f dist/main.js ] || die "app not built (dist/main.js missing) — rebuild the image"

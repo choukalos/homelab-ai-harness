@@ -43,7 +43,7 @@ One container, one Node process (Fastify):
 
 ## Toolchain
 
-The image ships **node, python, go** — the supported task toolchain (extensible). Media processing (ffmpeg/yt-dlp) is **not** baked in: agents use the media pipeline's MCP tools via the LiteLLM proxy, and the proxy's MCP tool set is dynamic (sessions pick up whatever the proxy exposes at session start).
+The image ships **node, python, go, hugo (extended, pinned)** — the supported task toolchain (extensible). Hugo enables the Homelab Blog project: tasks build the Hugo site and run `./deploy.sh` (pushes built output to the `deploy` branch; the portal git-sync publishes choukalos.com). Media processing (ffmpeg/yt-dlp) is **not** baked in: agents use the media pipeline's MCP tools via the LiteLLM proxy, and the proxy's MCP tool set is dynamic (sessions pick up whatever the proxy exposes at session start).
 
 ## Volumes
 

@@ -35,6 +35,26 @@ RUN set -eux; \
     rm /tmp/go.tgz
 ENV PATH=$PATH:/usr/local/go/bin
 
+# Hugo extended (pinned) for the Homelab Blog project: tasks build the Hugo
+# site and run ./deploy.sh (pushes built output to the deploy branch; the
+# portal git-sync publishes choukalos.com). The site requires >= 0.168.0
+# extended (homelab-blog README). The tarball extracts the binary directly.
+ARG HUGO_VERSION=0.170.1
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) hugoarch=amd64 ;; \
+      arm64) hugoarch=arm64 ;; \
+      *) echo "unsupported architecture for Hugo: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_checksums.txt" -o /tmp/hugo-checksums.txt; \
+    curl -fsSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-${hugoarch}.tar.gz" -o /tmp/hugo.tgz; \
+    expected=$(grep " hugo_extended_${HUGO_VERSION}_linux-${hugoarch}.tar.gz$" /tmp/hugo-checksums.txt | awk '{print $1}'); \
+    actual=$(sha256sum /tmp/hugo.tgz | awk '{print $1}'); \
+    [ -n "$expected" ] && [ "$expected" = "$actual" ] || { echo "Hugo tarball checksum mismatch (expected ${expected:-<none>}, got $actual)" >&2; exit 1; }; \
+    tar -C /usr/local/bin -xzf /tmp/hugo.tgz; \
+    rm -f /tmp/hugo.tgz /tmp/hugo-checksums.txt
+
 WORKDIR /app
 
 # Dependencies first (layer cache), then build the TypeScript app.
