@@ -300,8 +300,9 @@ loop — insights to the exec and to every role.
 
 **Data & reporting architecture (decided 2026-11-22):**
 
-- **Plausible** — the data engine for product web/mobile apps (invest-hub, both
-  blogs/websites: Homelab Blog, Bluebovine). Traffic, engagement, leads per site.
+- **Plausible (self-hosted on thor — decided 2026-11-22)** — the data engine for
+  product web/mobile apps (invest-hub, both blogs/websites: Homelab Blog,
+  Bluebovine). Traffic, engagement, leads per site.
 - **data-hub / report-hub + Grafana** — the reporting/data surface. Grafana:
   platform/service status, engineering-centric. report-hub: product/business KPIs
   (fed from Plausible + finance DB + kanban).
@@ -415,7 +416,7 @@ planned step skills). Gap register at the end.
 |----|-----|----------|------------|
 | G1 | No ideation step skill (frameworks, problem-first, dedupe, idea template) | High — PM step 3 uncovered | New step skill PM-4 `pm-ideation` (research: R8) |
 | G2 | No prioritization framework (value/effort/strategy fit; RICE/ICE/Kano) | High — PM step 4 uncovered | New step skill PM-5 `pm-prioritization` (R8) |
-| G3 | Product/content analytics not yet wired (blog traffic, invest-hub, leads, usage) | High — PM step 2, strategist impact, BA step 1, and the whole feedback loop | **Decided 2026-11-22**: Plausible = data engine for product web/mobile apps (invest-hub, both blogs/websites); data-hub/report-hub + Grafana = reporting surface (platform/service status, engineering-centric). Remaining: wire it up (Plausible install + feed into data-hub) — later |
+| G3 | Product/content analytics not yet wired (blog traffic, invest-hub, leads, usage) | High — PM step 2, strategist impact, BA step 1, and the whole feedback loop | **Decided 2026-11-22**: Plausible (**self-hosted on thor**) = data engine for product web/mobile apps (invest-hub, both blogs/websites); data-hub/report-hub + Grafana = reporting surface (platform/service status, engineering-centric). Remaining: wire it up (Plausible install + feed into data-hub) — later |
 | G4 | No BA→role analytics handoff contract (report format + location) | Medium | Defined together with G3 when the data lands |
 | G5 | No explicit test-writing step (acceptance criteria → tests during implementation) | Medium | Fold into DEV-2 (stories carry their tests) + S3 |
 | G6 | "Update documentation" under-specified — S5 covers repo hygiene, not feature docs | Medium | Extend S5 with a ship-docs checklist |
@@ -462,10 +463,17 @@ don't need the framework, and instrumentation doesn't need skills.
 Start the data clock before the skills build starts, so real historical
 engagement/usage data exists by the time skills Phase 3 (BA) lands.
 
-1. Decide: self-hosted Plausible (docker — ClickHouse/Postgres + Redis) vs. SaaS
-2. Install Plausible (host: thor or matrix — decide)
-3. Add the snippet to the 3 sites (per-site deploy): Homelab Blog (Hugo head),
-   Bluebovine (Astro head), invest-hub (app head)
+**Decided 2026-11-22:** **self-hosted** Plausible, hosted on **thor** (the same
+host invest-hub runs on — the snippet is served from the homelab, no
+third-party dependency).
+
+1. ~~Decide: self-hosted vs. SaaS~~ → **self-hosted** (docker —
+   ClickHouse/Postgres + Redis)
+2. ~~Install Plausible (host: thor or matrix)~~ → **thor** (docker compose,
+   alongside the other thor services)
+3. Add the snippet to the 3 sites (per-site deploy), pointing at the
+   self-hosted Plausible endpoint: Homelab Blog (Hugo head), Bluebovine (Astro
+   head), invest-hub (app head)
 4. Verify: data flowing — per-site dashboards show sessions
 5. (Later — WS1 deep / skills Phase 3 prereq): feed Plausible into data-hub +
    report-hub/Grafana dashboards (the G3 wiring)
@@ -1078,11 +1086,12 @@ grouped by the role whose build is next.
    per agent). Out of scope for this doc; the role/step skills work regardless
    of who runs them.
 9. ~~BA data sources~~ — **decided 2026-11-22 (wiring TBD, gap G3)**:
-   **Plausible** = the data engine for product web/mobile apps (invest-hub, both
-   blogs/websites); **data-hub/report-hub + Grafana** = the reporting/data
-   surface for platform/service status + engineering-centric data. Remaining work
-   (later): install Plausible on the sites + feed its data into data-hub. The
-   feedback loop (G13) is blocked on the wiring, not the decision.
+   **Plausible (self-hosted on thor)** = the data engine for product web/mobile
+   apps (invest-hub, both blogs/websites); **data-hub/report-hub + Grafana** =
+   the reporting/data surface for platform/service status + engineering-centric
+   data. Remaining work (later): install Plausible on thor + add the snippet to
+   the 3 sites + feed its data into data-hub. The feedback loop (G13) is blocked
+   on the wiring, not the decision.
 10. ~~Content publish paths~~ — **answered 2026-11-22**: publish paths are
     **per project** (the project's own deploy flow — blog `deploy.sh`, etc.).
     Social media capability doesn't exist yet — separate item (G9, later).
