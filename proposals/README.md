@@ -67,10 +67,12 @@ refers to the reflection pipeline's own roles).
   reloaded on the Mac Studio, `/v1/models` + proxy chat completion verified
   200; capability probes run and `litellm/config.yml` flags updated to match,
   staged pending a litellm-proxy restart)
-- **tier2:** kanban-remote-client-file-intake (open 2026-11-23 — durable
-  per-project file store + intake tool + spec-path preflight so remote
-  clients can author specs with client-local file paths; see
-  `2026-11-23-tier2-kanban-remote-client-file-intake.md`)
+- **tier2:** (none open — kanban-remote-client-file-intake applied 2026-11-23:
+  durable per-project file store `/home/chuck/data/ai-kanban-files` → `/files`
+  + `stage_file`/`stage_ref` intake (MCP + REST) + spec-path reachability
+  preflight at `move_to_backlog`/`start_task`, so remote clients can author
+  specs with client-local file paths; deployed + verified E2E 2026-11-23 —
+  see `archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`)
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
   applied 2026-11-20; H3 `/model/info` restriction open pending feature
   check; H4 Dylan scoping deferred by design)
@@ -92,4 +94,6 @@ refers to the reflection pipeline's own roles).
   docs) + 2026-11-23: pinned-reference-values,
   reference-json-overwrite-guard (both applied — `skills/market_research_brief/
   reference.py`; verified: 20 stdlib tests pass, both live reference datasets
-  pass the write guard, skill.py render path exercised end-to-end)
+  pass the write guard, skill.py render path exercised end-to-end) +
+  2026-11-23: kanban-remote-client-file-intake (applied — durable file store
+  + intake + preflight live on mcp_kanban; E2E round-trip + GC verified)
