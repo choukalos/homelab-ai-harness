@@ -746,7 +746,10 @@ Hub, future projects).
 Used by: Coding Team (every new repo; also DEV-1/DEV-2 grounding).
 Research needed: **R2** (how SWE agents orient in unfamiliar repos; repo-map
 patterns; what recon artifacts actually help downstream).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/codebase-recon/SKILL.md`; grounded in
+R2 — `docs/research/R2-swe-agent-recon.md`; recon note template + six-question stop
+rules + time-box; registered + enabled in the Skill Hub). Full DoD smoke (a real
+task following the playbook on a real repo) pending the first Phase 1 task.
 
 ### S3 — `qa-verify` (P1) — QA: make sure the generated code actually works
 
