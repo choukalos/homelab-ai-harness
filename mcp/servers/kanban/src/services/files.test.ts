@@ -287,17 +287,31 @@ test("sweepProjectFiles: removes only stale orphans — live projects and young 
   assert.deepEqual(again.deleted, []);
 });
 
-test("sweepOrphanProjectFiles: an orphan at exactly the TTL age is kept (strictly older is required)", async () => {
+test("sweepOrphanProjectFiles: TTL boundary — younger than TTL kept, strictly older deleted", async () => {
   const { q, services, filesRoot } = await setup();
   const p = await services.createProject({ name: "Alpha" });
   await stageFile(q, { root: filesRoot, projectId: p.id, path: "x.txt", content: Buffer.from("x") });
   await q.delete(projects).where(eq(projects.id, p.id));
   const fixedNow = Date.now();
-  const atTtl = new Date(fixedNow - TTL);
-  utimesSync(path.join(filesRoot, String(p.id)), atTtl, atTtl);
-  const result = await sweepOrphanProjectFiles(q, filesRoot, { ttlMs: TTL, now: () => fixedNow });
-  assert.deepEqual(result.deleted, [], "age == TTL is kept");
+  // 1s younger than the TTL → kept (strictly older is required). The margin
+  // keeps this deterministic on filesystems with coarse (second-granular)
+  // mtime precision — the exact-TTL boundary is not reliably representable.
+  utimesSync(
+    path.join(filesRoot, String(p.id)),
+    new Date(fixedNow - TTL + 1000),
+    new Date(fixedNow - TTL + 1000),
+  );
+  let result = await sweepOrphanProjectFiles(q, filesRoot, { ttlMs: TTL, now: () => fixedNow });
+  assert.deepEqual(result.deleted, [], "younger than TTL is kept");
   assert.deepEqual(result.skipped, [String(p.id)]);
+  // 1s older than the TTL → deleted.
+  utimesSync(
+    path.join(filesRoot, String(p.id)),
+    new Date(fixedNow - TTL - 1000),
+    new Date(fixedNow - TTL - 1000),
+  );
+  result = await sweepOrphanProjectFiles(q, filesRoot, { ttlMs: TTL, now: () => fixedNow });
+  assert.deepEqual(result.deleted, [String(p.id)], "strictly older than TTL is deleted");
 });
 
 test("sweepOrphanProjectFiles: missing store root is a no-op", async () => {
