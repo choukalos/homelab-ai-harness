@@ -1190,7 +1190,7 @@ skill follows that skill; the rules below are its short form.
 | R6 | OWASP Top 10 (2021) code-level detection patterns for an LLM reviewer — per-category code patterns to look for, common false positives, complementary checklists (OWASP ASVS, dependency/secret scanning) | S11 | `deep-research` — **DONE 2026-11-23**: `docs/research/R6-owasp-llm-detection.md` |
 | R7 | Content marketing & organic-traffic strategy best practices — content pillars, topic clusters, search-intent mapping, SEO for 2025–2026 (incl. AI search/answer engines), funnel mapping, measurement KPIs | S12, MKT-1, CM-1 | `deep-research` — **DONE 2026-11-23**: `docs/research/R7-content-marketing-organic-traffic.md` |
 | R8 | Product-management artifacts — PRD format, story breakdown / acceptance criteria / ready definition, dependency mapping, competitive-analysis frameworks, opportunity sizing, **ideation frameworks + prioritization (RICE/ICE/Kano)** | PM-1/2/3/4/5, DEV-2 | `deep-research` — **DONE 2026-11-23**: `docs/research/R8-pm-artifacts.md` |
-| R9 | Marketing strategy operating cadence — brand/voice frameworks, strategy-doc structure, content ops (ask → brief → draft → QA → publish), content impact measurement | MKT-1, CM-1 | `deep-research` |
+| R9 | Marketing strategy operating cadence — brand/voice frameworks, strategy-doc structure, content ops (ask → brief → draft → QA → publish), content impact measurement | MKT-1, CM-1 | `deep-research` — **DONE 2026-11-23**: `docs/research/R9-marketing-strategy-operating-cadence.md` |
 | R10 | BA / exec reporting — KPI definition, dashboard practices, periodic analysis cadence, exec status-report format, feedback routing | BA-1 | `deep-research` |
 
 Order: R1 first (it shapes how we write everything), then the rest in parallel,
