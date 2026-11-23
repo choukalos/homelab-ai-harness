@@ -131,6 +131,11 @@ Key decisions:
   status, issues JSON)`
 - `monthly_category_summary(year, month, category_id, amount_cents,
   txn_count)` — materialized, rebuilt after each ingest.
+- `trips(id, slug UNIQUE, name, description, window_start, window_end,
+  is_active)` + `trip_transactions(trip_id, transaction_id, tag_reason,
+  PK (trip_id, transaction_id))` (v3.3, migration 0003) — named expense
+  episodes (e.g. the 2026 Houston medical stay) with per-transaction tags;
+  AI-tagged via idempotent scripts in `scripts/trips/`; read by report-hub.
 
 ### 3.4 Ingest report (example, surfaced to chuck after each ingest)
 ```
@@ -194,6 +199,13 @@ locally (offline). No SPA build step. No auth. LAN only.
 5. **Data health** — load_log table, pending category suggestions (review
    list), MoM/YoY watch metrics with threshold highlighting (v1 stand-in
    for alerts; n8n push = v2).
+6. **Houston Medical 2026** (v3.3) — `/d/houston-medical-2026`: totals the
+   2026 Houston medical stay (MD Anderson treatment) separately from
+   normal spending via trip tags (`finance.trips`/`trip_transactions`);
+   KPIs (total / stay & travel / medical), group breakdown, monthly chart,
+   all-tagged + excluded-ambiguous tables. Tagging:
+   `data-hub/scripts/trips/tag_houston_medical_2026.sql` (re-run after each
+   ingest); design: `data-hub/docs/v3.3-trips.md`.
 
 ## 6. MySQL users & grants (one-time: `provision.sh`)
 
@@ -297,3 +309,4 @@ Run: `bash /home/chuck/homelab/data-hub/provision.sh` (renders SQL from
 | v3-b | report-hub dashboards over hub generic data | **done 2026-10-18** (`/d/datahub` + `/d/demo-weather`; per-dataset pattern documented; demo dataset via v2 pipeline) |
 | v3.1 | drill-downs: yearly → categories → transactions | **done 2026-10-19** (multi-picker nav + server-side row/chart link machinery; year-scoped `/d/categories`; new `/d/transactions`; 19/19 live checks + unit tests green) |
 | v3.2 | landing-page grouping + full-year forecast | **done 2026-10-19** (migration 0002 `dashboards.section`/`sort_order`; grouped index page — Finance/Data Hub/Demo; `/d/yearly` linear-trend full-year forecast + forecast-based YoY delta for the partial year; all 9 dashboards render, unit tests green) |
+| v3.3 | trip tagging + Houston Medical 2026 report | **done 2026-11-23** (migration 0003 `trips`/`trip_transactions` + idempotent tag script `scripts/trips/tag_houston_medical_2026.sql`; 94 txns tagged, $14,660.87 through 2026-11-13; report-hub `/d/houston-medical-2026` — KPIs/group table/monthly+pie charts/all-tagged+excluded tables; rendered values verified vs hand-computed totals; design + verification: `workspace/code/data-hub/docs/v3.3-trips.md`) |
