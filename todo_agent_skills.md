@@ -1024,7 +1024,14 @@ Used by: Coding Team (cyber security review step — the hard gate of the QA sta
 Research needed: **R6** (OWASP Top 10 2021 code-level detection patterns for LLM
 reviewers + complementary checklists — OWASP ASVS, dependency/secret scanning) +
 R5 (severity calibration, gate design).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/security-code-review/SKILL.md` +
+`references/owasp-top10-checklist.md`; grounded in R6 —
+`docs/research/R6-owasp-llm-detection.md`: per-category A01–A10 code-level
+pattern checklists + false-positive guardrails, BLOCKER/WARNING gate semantics,
+re-verification protocol (fixes re-scanned, sinks regression-checked),
+capability-boundary statement, LAN-trust-boundary awareness; the hard gate of
+the QA stage). Registered + enabled in the Skill Hub. Full DoD smoke pending
+the first Phase 1 task.
 
 ### S12 — `content-marketing` (P2) — content marketing / traffic strategy
 
