@@ -222,6 +222,16 @@ def _page(title: str, body: str) -> str:
     )
 
 
+def _files_href(rel: str, name: str, is_dir: bool) -> str:
+    """Public /files/ URL for an entry under ``rel``, with every path
+    segment percent-encoded (spaces, etc.). Browse hrefs are rendered as
+    unquoted attributes, so an unencoded space would terminate the
+    attribute at parse time and the link would 404 (2026-11-23: the
+    'Potato Wars Trilogy/' folder was unclickable in /files/video/)."""
+    parts = [p for p in (rel + "/" + name).split("/") if p]
+    return "/files/" + "/".join(urllib.parse.quote(p, safe="") for p in parts) + ("/" if is_dir else "")
+
+
 def render_browse(url_path: str, rel: str) -> str:
     """Render the themed directory listing for ``rel`` ("" = drop root)."""
     target = safe_join(FILES_ROOT, rel)
@@ -245,7 +255,7 @@ def render_browse(url_path: str, rel: str) -> str:
     segs = [s for s in rel.split("/") if s]
     crumbs = [('<a href=/files/>/files/</a>')]
     for i, seg in enumerate(segs):
-        href = "/files/" + "/".join(segs[: i + 1]) + "/"
+        href = "/files/" + "/".join(urllib.parse.quote(s, safe="") for s in segs[: i + 1]) + "/"
         if i == len(segs) - 1:
             crumbs.append(f'<span class=here>{html.escape(seg)}/</span>')
         else:
@@ -254,7 +264,7 @@ def render_browse(url_path: str, rel: str) -> str:
 
     rows = []
     for d in dirs:
-        href = f"/files/{rel}/{d.name}/".replace("//", "/") if rel else f"/files/{d.name}/"
+        href = _files_href(rel, d.name, True)
         rows.append(
             f'<tr><td><span class=ficon>▸</span>'
             f'<a class=fname href={html.escape(href, quote=True)}>{html.escape(d.name)}/</a></td>'
@@ -263,7 +273,7 @@ def render_browse(url_path: str, rel: str) -> str:
             f"{human_age(d.stat().st_mtime)}</td></tr>"
         )
     for f in files:
-        href = f"/files/{rel}/{f.name}".replace("//", "/") if rel else f"/files/{f.name}"
+        href = _files_href(rel, f.name, False)
         try:
             st = f.stat()
             size, mtime_str, mtime_ts = human_size(st.st_size), human_age(st.st_mtime), st.st_mtime
