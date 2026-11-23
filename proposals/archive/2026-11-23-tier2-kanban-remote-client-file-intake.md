@@ -2,7 +2,8 @@
 
 - slug: tier2-kanban-remote-client-file-intake
 - date: 2026-11-23
-- status: open
+- status: applied
+- applied: 2026-11-23 (pi, thor) — accepted 19:45 UTC; deployed + verified E2E 21:43–21:50 UTC: pushed `b494045` to origin/main; rebuilt + recreated `mcp_kanban` with the new `/home/chuck/data/ai-kanban-files:/files` mount (container healthy; orchestrator log `files=/files`); `project_files` table migrated (schema per design); `stage_file`/`stage_ref` live on the server (27 tools) and via the LiteLLM proxy (`mcp_kanban-stage_file`/`-stage_ref` — the remote-client path). E2E round-trip on a throwaway project (id 10, deleted after): `stage_file` content byte-identical on host + `project_files` row (`staged_by=chuck`); `stage_ref` URL 200 accepted / 404 rejected; NAS `/media-store` path validated under the mount, mount-escape rejected; `..`/absolute paths rejected; `delete_project` GC removed `/files/10` + all rows. 227 unit tests pass (incl. preflight warning/strict paths); preflight wired at `move_to_backlog`/`start_task` (advisory default, strict via `KANBAN_PREFLIGHT_STRICT`). Could not verify live: a preflight warning through a real `move_to_backlog` (would create + start a fake LLM task — covered by unit tests + wiring check).
 - tier: tier2 (new surface: MCP tool + storage mount + preflight + docs)
 - target user: chuck
 - target repo: `homelab` → `mcp/servers/kanban/` + `compose/compose.mcp.yml`
