@@ -1103,7 +1103,10 @@ The "what to write and why" layer — content marketing strategy for driving tra
   `mcp_search` research) or a pure pi-native skill — decide at build time
 
 Used by: Marketing Strategist (the core strategy artifact; MKT-1 wraps it).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/content-marketing/SKILL.md` +
+references/strategy-template.md; grounded in R7 —
+`docs/research/R7-content-marketing-organic-traffic.md`; registered in the
+Skill Hub).
 
 ---
 
