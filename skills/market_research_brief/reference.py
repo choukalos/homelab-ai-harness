@@ -513,6 +513,71 @@ def _extract_market(client: LiteLLMClient, profile: dict, ref: dict, findings_te
 
 
 # ---------------------------------------------------------------------------
+# Reference write guard (pre-write validation + atomic save)
+# ---------------------------------------------------------------------------
+
+#: Top-level keys every reference JSON must carry (see the Phase 4 assembly
+#: in build_reference). If the reference schema gains a required key, add it
+#: here — the guard is intentionally strict on shape so a wrong-shaped
+#: payload can never overwrite a verified dataset.
+REFERENCE_REQUIRED_KEYS = (
+    "market", "title", "built_at", "stale_after_days",
+    "market_size", "market_context", "share_indicators", "competitors",
+)
+
+
+class ReferencePayloadError(ValueError):
+    """Raised when a payload fails the reference write guard."""
+
+
+def validate_reference_payload(market: str, payload: Any) -> None:
+    """Pre-write guard for references/<market>.json.
+
+    Aborts (raises ReferencePayloadError) when the payload is not a
+    reference dataset. In particular it rejects PROFILE blocks — the
+    2026-10-13 incident: a script wrote the profile block returned by
+    load_profile over the reference JSON, destroying the verified data
+    (KeyError on 'competitors' + a full rebuild to recover).
+    """
+    if not isinstance(payload, dict):
+        raise ReferencePayloadError(
+            f"reference payload for '{market}' must be a JSON object, got {type(payload).__name__}"
+        )
+    missing = [k for k in REFERENCE_REQUIRED_KEYS if k not in payload]
+    if missing:
+        hint = ""
+        if "segments" in payload or "reference" in payload:
+            hint = (" — this looks like a PROFILE block (load_profile output), "
+                    "not reference data; refusing to overwrite the reference JSON")
+        raise ReferencePayloadError(
+            f"reference payload for '{market}' is missing top-level key(s) {missing}{hint}"
+        )
+    if str(payload.get("market")) != str(market):
+        raise ReferencePayloadError(
+            f"reference payload market mismatch: expected '{market}', got '{payload.get('market')}'"
+        )
+    for key in ("market_size", "market_context", "share_indicators", "competitors"):
+        if not isinstance(payload.get(key), list):
+            raise ReferencePayloadError(f"reference payload '{key}' must be a list")
+    for i, comp in enumerate(payload["competitors"]):
+        if not isinstance(comp, dict) or not str(comp.get("name") or "").strip():
+            raise ReferencePayloadError(
+                f"reference payload competitors[{i}] must be an object with a non-empty 'name'"
+            )
+
+
+def _save_reference(path: Path, market: str, reference: dict) -> None:
+    """The single write path for reference JSON: validate the payload, then
+    write atomically (temp file + rename) so a crash mid-write or a bad
+    payload can never leave a torn or overwritten dataset."""
+    validate_reference_payload(market, reference)
+    REFERENCES_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(reference, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------------------
 # Build orchestration
 # ---------------------------------------------------------------------------
 
@@ -679,15 +744,18 @@ def build_reference(market: str, force: bool = False) -> dict:
             "title": profile["title"],
             "built_at": today.strftime("%Y-%m-%d"),
             "stale_after_days": stale_days,
-            "market_size": market_data["market_size"],
-            "market_context": market_data["market_context"],
+            "market_size": _merge_market_size(
+                existing.get("market_size") or [], market_data["market_size"]
+            ),
+            "market_context": _merge_market_context(
+                existing.get("market_context") or [], market_data["market_context"]
+            ),
             "share_indicators": _merge_share_indicators(
                 existing.get("share_indicators") or [], market_data["share_indicators"]
             ),
             "competitors": competitor_entries,
         }
-        REFERENCES_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(reference, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        _save_reference(path, market, reference)
         logger.info("Reference saved: %s", path)
         return reference
 
@@ -1112,7 +1180,7 @@ def retry_competitors(market: str, names: list[str]) -> dict:
                 reference["competitors"].append(entry)
         except Exception as exc:  # noqa: BLE001
             logger.error("Re-extraction failed for %s: %s", name, exc)
-    path.write_text(json.dumps(reference, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _save_reference(path, market, reference)
     logger.info("Reference updated: %s", path)
     return reference
 
@@ -1138,6 +1206,59 @@ def _merge_share_indicators(old: list[dict], new: list[dict]) -> list[dict]:
     # Preserve the configured order first, then any extras.
     keys = {f"{i['competitor']}:{i.get('type') or 'other'}" for i in (new or []) + (old or []) if isinstance(i, dict) and i.get("competitor")}
     return [merged[k] for k in keys if k in merged]
+
+
+def _market_size_key(entry: dict) -> tuple:
+    """Stable identity for a market-size estimate: (publisher, base year).
+    The same estimate reappearing across runs is the same publisher + year."""
+    return (str(entry.get("source") or "").strip().lower(), str(entry.get("year") or ""))
+
+
+def _merge_market_size(old: list[dict], new: list[dict]) -> list[dict]:
+    """Merge market-size estimates by (source, year).
+
+    - ``pinned: true`` entries survive every fresh run (manual curation
+      wins — same semantics as share indicators);
+    - a fresh entry without a concrete number is never written;
+    - a fresh run with no usable estimates keeps the prior values (a
+      0-estimate rebuild must not wipe verified data — the 2026-10-13
+      incident).
+    """
+    old_valid = [s for s in (old or []) if isinstance(s, dict)]
+    new_valid = [
+        s for s in (new or [])
+        if isinstance(s, dict) and isinstance(s.get("estimate_usd_b"), (int, float))
+    ]
+    if not new_valid:
+        if old_valid:
+            logger.warning("Market phase returned no usable size estimates — keeping prior values")
+        return old_valid
+    merged: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for s in old_valid:
+        key = _market_size_key(s)
+        if key not in merged:
+            merged[key] = dict(s)
+            order.append(key)
+    for s in new_valid:
+        key = _market_size_key(s)
+        prev = merged.get(key)
+        if prev and prev.get("pinned"):
+            continue  # manually curated entry wins over fresh runs
+        if key not in merged:
+            order.append(key)
+        merged[key] = dict(s)
+    return [merged[k] for k in order]
+
+
+def _merge_market_context(old: list, new: list) -> list:
+    """Keep prior context bullets when a fresh run returns none (an empty
+    rebuild must not wipe verified bullets)."""
+    new_clean = [c for c in (new or []) if str(c).strip()]
+    if not new_clean and old:
+        logger.warning("Market phase returned no context bullets — keeping prior values")
+        return list(old)
+    return new_clean
 
 
 def retry_market(market: str) -> dict:
@@ -1186,12 +1307,16 @@ def retry_market(market: str) -> dict:
     findings_text = "\n".join(dict.fromkeys(findings)) or "(no web findings)"
     logger.info("Market findings: %d items", len(findings))
     market_data = _extract_market(client, profile, ref, findings_text)
-    reference["market_size"] = market_data["market_size"]
-    reference["market_context"] = market_data["market_context"]
+    reference["market_size"] = _merge_market_size(
+        reference.get("market_size") or [], market_data["market_size"]
+    )
+    reference["market_context"] = _merge_market_context(
+        reference.get("market_context") or [], market_data["market_context"]
+    )
     reference["share_indicators"] = _merge_share_indicators(
         reference.get("share_indicators") or [], market_data["share_indicators"]
     )
-    path.write_text(json.dumps(reference, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _save_reference(path, market, reference)
     logger.info("Reference market phase updated: %s", path)
     return reference
 

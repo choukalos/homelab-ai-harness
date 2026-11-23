@@ -187,10 +187,20 @@ publish:
   rows) — **Store Leads** (`storeleads.app/reports`, free) is the working
   install-base source for the ecommerce market.
 - **Search results are non-deterministic** — `share_indicators` merge by
-  (competitor, type) prefers the newest non-null entry; `pinned: true`
-  entries (verified SEC EDGAR revenue, eMarketer context figure) survive
-  rebuilds; `market_size` is replaced each run. `--retry-market` re-runs
-  just the market phase.
+  (competitor, type) and `market_size` merge by (source, year) prefer the
+  newest non-null entry; `pinned: true` entries (verified SEC EDGAR revenue,
+  eMarketer context figure) survive rebuilds on both; an empty market phase
+  (0 usable estimates / 0 context bullets) keeps the prior values instead of
+  wiping them (2026-10-13 incident: a full rebuild dropped market-size to 0
+  estimates). `--retry-market` re-runs just the market phase.
+- **Reference write guard** — every write to `references/<market>.json`
+  (`build_reference`, `retry_competitors`, `retry_market`) goes through
+  `validate_reference_payload` + an atomic temp-file rename: a payload
+  missing the required top-level keys — in particular a profile block from
+  `load_profile` — is refused before anything is written (2026-10-13
+  incident: a script overwrote the reference JSON with the profile block,
+  KeyError on `competitors`, forced a rebuild). If the reference schema
+  gains a required key, add it to `REFERENCE_REQUIRED_KEYS`.
 - **Engine load via importlib** — wrapper skills + the skill-runner load
   the engine with `importlib.util.spec_from_file_location`, so the engine
   dir is NOT on `sys.path`; `reference.py` is resolved via `_ref_module()`
@@ -213,6 +223,8 @@ python3 skill.py --market smarthome_homesecurity --publish
 
 - `skill.py` — engine (stdlib only; markdown→HTML renderer included)
 - `reference.py` — annual reference build + deterministic HTML/MD renderer
+- `test_reference.py` — merge + write-guard tests (stdlib unittest;
+  `python3 -m unittest test_reference -v`)
 - `skill.yml` — manifest
 - `profiles/` — market profiles (`reference:` block optional)
 - `references/<market>.json` — annual reference datasets (git-tracked;
