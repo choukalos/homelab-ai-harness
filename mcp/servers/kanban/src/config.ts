@@ -47,7 +47,8 @@ export const DEFAULTS = {
   TASK_THINKING: "medium",
   QA_THINKING: "xhigh",
   SUMMARY_THINKING: "medium",
-  CONCURRENT_TASKS: "1",
+  MEDIA_CONCURRENT_TASKS: "1",
+  NON_MEDIA_CONCURRENT_TASKS: "2",
   BIND_ADDR: "0.0.0.0",
   PORT: "3000",
 } as const;
@@ -145,12 +146,21 @@ const envSchema = z
     QA_THINKING: thinkingLevel.default(DEFAULTS.QA_THINKING),
     SUMMARY_THINKING: thinkingLevel.default(DEFAULTS.SUMMARY_THINKING),
 
-    // Orchestrator / server
-    CONCURRENT_TASKS: z.coerce
+    // Orchestrator / server — per-category task slots: media-kind tasks
+    // (spec.kind === "media") are GPU-heavy and serialized (1); everything
+    // else (code/blog/other) runs up to 2 in parallel.
+    MEDIA_CONCURRENT_TASKS: z.coerce
       .number()
-      .int("CONCURRENT_TASKS must be an integer")
-      .min(1, "CONCURRENT_TASKS must be >= 1")
-      .default(1),
+      .int("MEDIA_CONCURRENT_TASKS must be an integer")
+      .min(1, "MEDIA_CONCURRENT_TASKS must be >= 1")
+      .default(1)
+      .describe("max media-kind tasks running at once"),
+    NON_MEDIA_CONCURRENT_TASKS: z.coerce
+      .number()
+      .int("NON_MEDIA_CONCURRENT_TASKS must be an integer")
+      .min(1, "NON_MEDIA_CONCURRENT_TASKS must be >= 1")
+      .default(2)
+      .describe("max non-media tasks running at once"),
     WORKSPACE_CLEANUP_DAYS: z.coerce
       .number()
       .int("WORKSPACE_CLEANUP_DAYS must be an integer")
@@ -211,7 +221,10 @@ export interface KanbanConfig {
     qa: ThinkingLevel;
     summary: ThinkingLevel;
   };
-  concurrentTasks: number;
+  /** Max media-kind tasks (spec.kind === "media") running at once. */
+  mediaConcurrentTasks: number;
+  /** Max non-media tasks running at once. */
+  nonMediaConcurrentTasks: number;
   /** Age (days) before workspace scratch dirs are swept (default 7). */
   workspaceCleanupDays: number;
   server: { bindAddr: string; port: number };
@@ -265,7 +278,8 @@ export function parseConfig(
       qa: v.QA_THINKING,
       summary: v.SUMMARY_THINKING,
     },
-    concurrentTasks: v.CONCURRENT_TASKS,
+    mediaConcurrentTasks: v.MEDIA_CONCURRENT_TASKS,
+    nonMediaConcurrentTasks: v.NON_MEDIA_CONCURRENT_TASKS,
     workspaceCleanupDays: v.WORKSPACE_CLEANUP_DAYS,
     server: { bindAddr: v.BIND_ADDR, port: v.PORT },
   };

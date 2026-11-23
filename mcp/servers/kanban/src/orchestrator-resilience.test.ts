@@ -4,7 +4,7 @@
  * (rehydrate running tasks from last_commit + progress summary), and the
  * 7-day workspace cleanup — over a real temp sqlite db with a mocked task
  * runner + QA gate + deploy stage and an injectable clock (no network,
- * no model, no git). CONCURRENT_TASKS > 1 slot coverage lives in
+ * no model, no git). Per-category slot coverage lives in
  * orchestrator.test.ts; pause/resume/stop REST + MCP coverage lives in
  * http/http.test.ts.
  */
@@ -40,7 +40,8 @@ function testCfg(sqlitePath: string): KanbanConfig {
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
-    concurrentTasks: 1,
+    mediaConcurrentTasks: 1,
+    nonMediaConcurrentTasks: 1,
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };

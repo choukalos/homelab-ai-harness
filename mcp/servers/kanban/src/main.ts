@@ -15,7 +15,8 @@ async function main(): Promise<void> {
   const cfg = await loadConfig();
   console.log(
     `[config] model=${cfg.model} db=${cfg.db.driver} ` +
-      `workspace=${cfg.workspace.dir} concurrentTasks=${cfg.concurrentTasks} ` +
+      `workspace=${cfg.workspace.dir} mediaSlots=${cfg.mediaConcurrentTasks} ` +
+      `nonMediaSlots=${cfg.nonMediaConcurrentTasks} ` +
       `cleanupDays=${cfg.workspaceCleanupDays}` +
       (Object.keys(cfg.userKeys).length > 0 ? ` userKeys=${Object.keys(cfg.userKeys).join(",")}` : ""),
   );

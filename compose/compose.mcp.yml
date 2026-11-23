@@ -302,9 +302,12 @@ services:
       # Service key: outbound LLM calls AND the "kanban key" (full MCP set).
       # Owner attribution: the kanban key stamps items with owner "kanban".
       - LITELLM_API_KEY=${LITELLM_API_KEY}
-      # Model + concurrency: .env-tunable (KANBAN_MODEL / KANBAN_CONCURRENT_TASKS).
+      # Model + concurrency: .env-tunable (KANBAN_MODEL / KANBAN_MEDIA_CONCURRENT_TASKS /
+      # KANBAN_NON_MEDIA_CONCURRENT_TASKS — per-category slots: media serialized,
+      # non-media parallel).
       - MODEL=${KANBAN_MODEL:-matrix-coder}
-      - CONCURRENT_TASKS=${KANBAN_CONCURRENT_TASKS:-1}
+      - MEDIA_CONCURRENT_TASKS=${KANBAN_MEDIA_CONCURRENT_TASKS:-1}
+      - NON_MEDIA_CONCURRENT_TASKS=${KANBAN_NON_MEDIA_CONCURRENT_TASKS:-2}
       # git push auth (deploy stage) — unset until chuck provides it.
       - GITHUB_TOKEN=${KANBAN_GITHUB_TOKEN:-}
       # MySQL on Thor (DB pre-created; app runs migrations — tables only).

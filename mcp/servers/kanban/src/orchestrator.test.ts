@@ -1,9 +1,9 @@
 /**
- * Orchestrator tests (Slice 3a/3b): state machine, CONCURRENT_TASKS slots,
- * dependency gating, paused flag, state_changed_at + task_events — over a
- * real temp sqlite db with a mocked task runner + QA gate + deploy stage
- * (no network, no model, no git). The full QA/deploy/summary pipeline is
- * covered in orchestrator-deploy.test.ts.
+ * Orchestrator tests (Slice 3a/3b): state machine, per-category task slots
+ * (media vs non-media), dependency gating, paused flag, state_changed_at +
+ * task_events — over a real temp sqlite db with a mocked task runner + QA
+ * gate + deploy stage (no network, no model, no git). The full QA/deploy/
+ * summary pipeline is covered in orchestrator-deploy.test.ts.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +30,10 @@ import { taskDependencyStatus } from "./services/tasks.js";
 
 const SPEC = { goal: "g", steps: ["s1"], acceptance: ["a1"], kind: "code" as const };
 
-function testCfg(sqlitePath: string, concurrentTasks = 1): KanbanConfig {
+function testCfg(
+  sqlitePath: string,
+  slots: { media?: number; nonMedia?: number } = {},
+): KanbanConfig {
   return {
     litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-test" },
     model: "test-model",
@@ -41,7 +44,8 @@ function testCfg(sqlitePath: string, concurrentTasks = 1): KanbanConfig {
     workspace: { hostPath: "/tmp/workspace", dir: "/tmp/workspace" },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
-    concurrentTasks,
+    mediaConcurrentTasks: slots.media ?? 1,
+    nonMediaConcurrentTasks: slots.nonMedia ?? 2,
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -121,9 +125,12 @@ class FixedSummaryUpdater implements SummaryUpdaterLike {
   }
 }
 
-async function setup(opts: { concurrentTasks?: number; tickMs?: number; noTimer?: boolean } = {}) {
+async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; tickMs?: number; noTimer?: boolean } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-orch-"));
-  const cfg = testCfg(path.join(dir, "kanban.db"), opts.concurrentTasks ?? 1);
+  const cfg = testCfg(path.join(dir, "kanban.db"), {
+    media: opts.mediaSlots,
+    nonMedia: opts.nonMediaSlots,
+  });
   const db = await initDb(cfg);
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const services = createKanbanServices(db);
@@ -162,17 +169,19 @@ async function makeBacklogTask(
   text: string,
   deps: number[] = [],
   owner = "",
+  kind: "code" | "media" = "code",
 ) {
+  const spec = { ...SPEC, kind };
   const idea = await services.addIdea(projectId, text, owner);
   await q
     .update(ideas)
-    .set({ state: "moved", spec: SPEC, dependsOn: deps })
+    .set({ state: "moved", spec, dependsOn: deps })
     .where(eq(ideas.id, idea.id));
   const now = Date.now();
   const task = one(
     await q
       .insert(tasks)
-      .values({ ideaId: idea.id, projectId, spec: SPEC, state: "backlog", stateChangedAt: now, createdAt: now, owner })
+      .values({ ideaId: idea.id, projectId, spec, state: "backlog", stateChangedAt: now, createdAt: now, owner })
       .returning(),
     "task",
   );
@@ -182,6 +191,25 @@ async function makeBacklogTask(
 async function getTask(q: BetterSQLite3Database<any>, id: number): Promise<TaskRow> {
   const rows = await q.select().from(tasks).where(eq(tasks.id, id));
   return rows[0]!;
+}
+
+/**
+ * Wait until the mocked runner has been invoked for all given tasks — i.e.
+ * the fire-and-forget pipelines (launched by startTask/tick) have reached
+ * tasks.run and registered their hang resolvers. Aborting before that is a
+ * no-op and the task would hang forever (test-side race; production uses
+ * the watchdog instead).
+ */
+async function awaitRuns(runner: MockTaskRunner, taskIds: number[], timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const have = new Set(runner.runs.map((c) => c.taskId));
+    if (taskIds.every((id) => have.has(id))) return;
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for runs of ${taskIds} (have ${[...have].join(",")})`);
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
 async function eventsFor(q: BetterSQLite3Database<any>, taskId: number) {
@@ -289,8 +317,8 @@ test("dependency gating: task starts only when all dep ideas have done tasks", a
   assert.equal((await getTask(q, b.task.id)).state, "running");
   await orch.settled();
 });
-test("slots: CONCURRENT_TASKS limits parallel running tasks", async () => {
-  const { q, services, runner, orch } = await setup({ concurrentTasks: 1 });
+test("slots: non-media cap limits parallel running tasks", async () => {
+  const { q, services, runner, orch } = await setup({ nonMediaSlots: 1 });
   const p = await services.createProject({ name: "Alpha" });
   const t1 = await makeBacklogTask(q, services, p.id, "Task one");
   const t2 = await makeBacklogTask(q, services, p.id, "Task two");
@@ -301,10 +329,11 @@ test("slots: CONCURRENT_TASKS limits parallel running tasks", async () => {
   // One slot: only the oldest eligible task starts.
   await orch.start();
   await orch.tick();
+  await awaitRuns(runner, [t1.task.id]);
   assert.equal((await getTask(q, t1.task.id)).state, "running");
   assert.equal((await getTask(q, t2.task.id)).state, "backlog", "second task waits for a slot");
 
-  // Manual start is refused while the slot is full.
+  // Manual start is refused while the non-media slot is full.
   await assert.rejects(
     orch.startTask(t2.task.id),
     (err: unknown) => err instanceof Error && /no free task slots/.test(err.message),
@@ -318,8 +347,8 @@ test("slots: CONCURRENT_TASKS limits parallel running tasks", async () => {
   assert.equal((await getTask(q, t2.task.id)).state, "running");
   await orch.settled();
 });
-test("slots: CONCURRENT_TASKS=2 runs two tasks in parallel", async () => {
-  const { q, services, runner, orch } = await setup({ concurrentTasks: 2 });
+test("slots: non-media cap 2 runs two tasks in parallel", async () => {
+  const { q, services, runner, orch } = await setup({ nonMediaSlots: 2 });
   const p = await services.createProject({ name: "Alpha" });
   const t1 = await makeBacklogTask(q, services, p.id, "Task one");
   const t2 = await makeBacklogTask(q, services, p.id, "Task two");
@@ -329,6 +358,7 @@ test("slots: CONCURRENT_TASKS=2 runs two tasks in parallel", async () => {
 
   await orch.start();
   await orch.tick();
+  await awaitRuns(runner, [t1.task.id, t2.task.id]);
   assert.equal((await getTask(q, t1.task.id)).state, "running");
   assert.equal((await getTask(q, t2.task.id)).state, "running", "both slots used");
   runner.abort(t1.task.id);
@@ -336,6 +366,74 @@ test("slots: CONCURRENT_TASKS=2 runs two tasks in parallel", async () => {
   await orch.settled();
   assert.equal((await getTask(q, t1.task.id)).state, "done");
   assert.equal((await getTask(q, t2.task.id)).state, "done");
+});
+test("slots: media cap 1 — a second media task waits, non-media unaffected", async () => {
+  const { q, services, runner, orch } = await setup({ mediaSlots: 1, nonMediaSlots: 2 });
+  const p = await services.createProject({ name: "Alpha" });
+  const m1 = await makeBacklogTask(q, services, p.id, "Media one", [], "", "media");
+  const m2 = await makeBacklogTask(q, services, p.id, "Media two", [], "", "media");
+  const c1 = await makeBacklogTask(q, services, p.id, "Code one");
+
+  // Hold all in-flight tasks so the caps stay taken deterministically.
+  runner.behavior.set(m1.task.id, "hang");
+  runner.behavior.set(m2.task.id, "hang");
+  runner.behavior.set(c1.task.id, "hang");
+
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [m1.task.id, c1.task.id]);
+  assert.equal((await getTask(q, m1.task.id)).state, "running", "media slot 1/1 used");
+  assert.equal((await getTask(q, m2.task.id)).state, "backlog", "second media task waits for the media slot");
+  assert.equal((await getTask(q, c1.task.id)).state, "running", "non-media runs alongside the media job");
+
+  // Manual start of the second media task is refused with the media message.
+  await assert.rejects(
+    orch.startTask(m2.task.id),
+    (err: unknown) => err instanceof Error && /no free media task slots \(1\/1 media running\)/.test(err.message),
+  );
+
+  // Free both in-flight tasks → media slot frees → second media task starts.
+  runner.abort(m1.task.id);
+  runner.abort(c1.task.id);
+  await orch.settled();
+  assert.equal((await getTask(q, m1.task.id)).state, "done");
+  assert.equal((await getTask(q, c1.task.id)).state, "done");
+  await orch.tick();
+  await awaitRuns(runner, [m2.task.id]);
+  assert.equal((await getTask(q, m2.task.id)).state, "running");
+  runner.abort(m2.task.id);
+  await orch.settled();
+  assert.equal((await getTask(q, m2.task.id)).state, "done");
+});
+test("slots: mixed — 1 media + 2 non-media run, third non-media waits", async () => {
+  const { q, services, runner, orch } = await setup({ mediaSlots: 1, nonMediaSlots: 2 });
+  const p = await services.createProject({ name: "Alpha" });
+  const m1 = await makeBacklogTask(q, services, p.id, "Media one", [], "", "media");
+  const c1 = await makeBacklogTask(q, services, p.id, "Code one");
+  const c2 = await makeBacklogTask(q, services, p.id, "Code two");
+  const c3 = await makeBacklogTask(q, services, p.id, "Code three");
+
+  for (const t of [m1, c1, c2, c3]) runner.behavior.set(t.task.id, "hang");
+
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [m1.task.id, c1.task.id, c2.task.id]);
+  assert.equal((await getTask(q, m1.task.id)).state, "running");
+  assert.equal((await getTask(q, c1.task.id)).state, "running");
+  assert.equal((await getTask(q, c2.task.id)).state, "running", "non-media cap 2/2 used");
+  assert.equal((await getTask(q, c3.task.id)).state, "backlog", "third non-media task waits");
+
+  // Free the media + two non-media slots → the waiting non-media task
+  // (not a new media task) starts.
+  runner.abort(m1.task.id);
+  runner.abort(c1.task.id);
+  runner.abort(c2.task.id);
+  await orch.settled();
+  await orch.tick();
+  await awaitRuns(runner, [c3.task.id]);
+  assert.equal((await getTask(q, c3.task.id)).state, "running");
+  runner.abort(c3.task.id);
+  await orch.settled();
 });
 
 test("session failure → needs_attention with the failure reason", async () => {
@@ -480,7 +578,7 @@ test("startTask guards: wrong state, unknown task, failTask transition", async (
 });
 
 test("start/stop: the pickup timer picks up backlog tasks and stops cleanly", async () => {
-  const { q, services, orch } = await setup({ concurrentTasks: 1, tickMs: 50, noTimer: false });
+  const { q, services, orch } = await setup({ nonMediaSlots: 1, tickMs: 50, noTimer: false });
   const p = await services.createProject({ name: "Alpha" });
   const { task } = await makeBacklogTask(q, services, p.id, "Timed task");
 

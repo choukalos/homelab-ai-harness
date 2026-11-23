@@ -30,8 +30,9 @@ global board: backlog ─▶ running ─▶ QA ─▶ deploy ─▶ done
   researches (web/KB/memory via its session tools), states assumptions, asks
   questions; the user steers. There is no one-shot path (decided 2026-11-21).
 - **The orchestrator** picks backlog tasks up on a timer, gated by dependencies and
-  the `CONCURRENT_TASKS` slot. `start_task` bypasses the pickup timer only — the
-  gates still apply.
+  per-category slots (`MEDIA_CONCURRENT_TASKS` / `NON_MEDIA_CONCURRENT_TASKS` —
+  media-kind tasks serialized, non-media up to 2 in parallel). `start_task`
+  bypasses the pickup timer only — the gates still apply.
 - **QA** is a separate (xhigh) session after the task session completes. **Deploy**
   is automated after a QA pass, routed by task `kind` (code → GitHub push; blog →
   blog repo path; media → the project's public file directories; other → no-op).

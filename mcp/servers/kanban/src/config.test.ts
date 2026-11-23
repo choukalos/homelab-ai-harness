@@ -42,7 +42,8 @@ test("applies defaults for optional vars", () => {
     qa: "xhigh",
     summary: "medium",
   });
-  assert.equal(cfg.concurrentTasks, 1);
+  assert.equal(cfg.mediaConcurrentTasks, 1);
+  assert.equal(cfg.nonMediaConcurrentTasks, 2);
   assert.equal(cfg.server.bindAddr, DEFAULTS.BIND_ADDR);
   assert.equal(cfg.server.port, 3000);
 });
@@ -109,15 +110,22 @@ test("invalid thinking level fails", () => {
   );
 });
 
-test("CONCURRENT_TASKS must be a positive integer", () => {
+test("media/non-media concurrency must be positive integers", () => {
   for (const bad of ["0", "-1", "abc", "2.5"]) {
     assert.throws(
-      () => parseConfig({ ...baseEnv, CONCURRENT_TASKS: bad }),
-      /CONCURRENT_TASKS/,
-      `expected CONCURRENT_TASKS=${bad} to fail`,
+      () => parseConfig({ ...baseEnv, MEDIA_CONCURRENT_TASKS: bad }),
+      /MEDIA_CONCURRENT_TASKS/,
+      `expected MEDIA_CONCURRENT_TASKS=${bad} to fail`,
+    );
+    assert.throws(
+      () => parseConfig({ ...baseEnv, NON_MEDIA_CONCURRENT_TASKS: bad }),
+      /NON_MEDIA_CONCURRENT_TASKS/,
+      `expected NON_MEDIA_CONCURRENT_TASKS=${bad} to fail`,
     );
   }
-  assert.equal(parseConfig({ ...baseEnv, CONCURRENT_TASKS: "3" }).concurrentTasks, 3);
+  const cfg = parseConfig({ ...baseEnv, MEDIA_CONCURRENT_TASKS: "2", NON_MEDIA_CONCURRENT_TASKS: "3" });
+  assert.equal(cfg.mediaConcurrentTasks, 2);
+  assert.equal(cfg.nonMediaConcurrentTasks, 3);
 });
 
 test("PORT must be a valid port", () => {
@@ -296,7 +304,7 @@ test("validateUserKeysAtBoot: accepts keys the proxy serves, fails on rejection"
 
 test("loadConfig reads .env and skips model validation when told", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-cfg-"));
-  const keys = ["LITELLM_BASE_URL", "LITELLM_API_KEY", "MODEL", "CONCURRENT_TASKS", "PORT"];
+  const keys = ["LITELLM_BASE_URL", "LITELLM_API_KEY", "MODEL", "MEDIA_CONCURRENT_TASKS", "NON_MEDIA_CONCURRENT_TASKS", "PORT"];
   const saved: Record<string, string | undefined> = {};
   try {
     for (const k of keys) saved[k] = process.env[k];
@@ -307,14 +315,16 @@ test("loadConfig reads .env and skips model validation when told", async () => {
         "LITELLM_BASE_URL=https://llm.example.com/v1",
         "LITELLM_API_KEY=sk-file",
         "MODEL=file-model",
-        "CONCURRENT_TASKS=2",
+        "MEDIA_CONCURRENT_TASKS=1",
+        "NON_MEDIA_CONCURRENT_TASKS=2",
         "PORT=4567",
       ].join("\n"),
     );
     const cfg = await loadConfig({ envFile, validateModel: false });
     assert.equal(cfg.model, "file-model");
     assert.equal(cfg.litellm.apiKey, "sk-file");
-    assert.equal(cfg.concurrentTasks, 2);
+    assert.equal(cfg.mediaConcurrentTasks, 1);
+    assert.equal(cfg.nonMediaConcurrentTasks, 2);
     assert.equal(cfg.server.port, 4567);
   } finally {
     for (const k of keys) {

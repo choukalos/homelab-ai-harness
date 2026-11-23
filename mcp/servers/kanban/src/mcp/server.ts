@@ -559,7 +559,8 @@ export function registerMcpTools(
     {
       description:
         "Start a backlog task now (bypasses the pickup timer). Dependency and " +
-        "CONCURRENT_TASKS slot gates still apply.",
+        "per-category slot gates still apply (MEDIA_CONCURRENT_TASKS for " +
+        "media-kind tasks, NON_MEDIA_CONCURRENT_TASKS for everything else).",
       inputSchema: { task_id: z.number().int().positive() },
     },
     ({ task_id }) => run(async () => ok(await services.startTask(task_id))),

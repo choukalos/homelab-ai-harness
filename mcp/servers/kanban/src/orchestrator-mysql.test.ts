@@ -268,7 +268,8 @@ function makeOrch(pool: MockMysqlPool) {
     workspace: { hostPath: dir, dir },
     harness: { repoUrl: "https://example.com/harness", skillsPath: "agent-skills" },
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
-    concurrentTasks: 1,
+    mediaConcurrentTasks: 1,
+    nonMediaConcurrentTasks: 1,
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   } as unknown as KanbanConfig;

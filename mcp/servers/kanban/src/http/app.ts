@@ -101,7 +101,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     ok: true,
     model: deps.cfg.model,
     db: deps.db.driver,
-    concurrentTasks: deps.cfg.concurrentTasks,
+    mediaConcurrentTasks: deps.cfg.mediaConcurrentTasks,
+    nonMediaConcurrentTasks: deps.cfg.nonMediaConcurrentTasks,
     /** Owner names with a dedicated LLM key profile (USER_KEYS; Phase 2). */
     userKeys: Object.keys(deps.cfg.userKeys),
   }));

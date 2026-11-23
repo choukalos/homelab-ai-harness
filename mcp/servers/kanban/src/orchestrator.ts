@@ -1,9 +1,10 @@
 /**
- * Orchestrator (PLAN.md §4/§7, Slice 3a/3b): queue, CONCURRENT_TASKS slots,
- * dependency gating, and the task lifecycle state machine.
+ * Orchestrator (PLAN.md §4/§7, Slice 3a/3b): queue, per-category task slots
+ * (media vs non-media), dependency gating, and the task lifecycle state
+ * machine.
  *
  * State machine (PLAN.md §4):
- *   backlog ──slot free + all deps done──► running
+ *   backlog ──category slot free + all deps done──► running
  *   running ──QA pass──► deploy ──ok──► done (+ project summary update)
  *   running ──QA fail (≤2 rounds)──► running (feedback re-run)
  *   any failure (QA exhausted / deploy fail / stuck / crash) ─► needs_attention
@@ -79,6 +80,15 @@ async function dirExists(dir: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * True when a task holds a media slot: its spec snapshot (IdeaSpec, taken
+ * from the idea at task creation) has kind === "media". Tasks with a
+ * missing/unknown kind count as non-media (code/blog/other/legacy rows).
+ */
+function isMediaTask(task: { spec?: { kind?: string } | null }): boolean {
+  return task.spec?.kind === "media";
 }
 
 /** QA gate as driven by the orchestrator (QaGate or a mock in tests). */
@@ -184,7 +194,8 @@ export class Orchestrator {
     if (this.running) return;
     this.running = true;
     console.log(
-      `[orchestrator] started (concurrentTasks=${this.deps.cfg.concurrentTasks}, ` +
+      `[orchestrator] started (mediaSlots=${this.deps.cfg.mediaConcurrentTasks}, ` +
+        `nonMediaSlots=${this.deps.cfg.nonMediaConcurrentTasks}, ` +
         `workspace=${this.workspaceRoot})`,
     );
     if (!this.deps.noTimer) {
@@ -235,16 +246,25 @@ export class Orchestrator {
 
   /**
    * One pickup pass: fill free slots with eligible backlog tasks (deps
-   * satisfied, not paused), oldest first. Public so tests (and Slice 5's
+   * satisfied, not paused), oldest first. Slots are per-category: media-kind
+   * tasks (spec.kind === "media") count against mediaConcurrentTasks, every
+   * other kind against nonMediaConcurrentTasks — so a running media job never
+   * blocks non-media work (and vice versa). Public so tests (and Slice 5's
    * auto-resume) can drive it manually.
    */
   async tick(): Promise<void> {
     if (!this.running) return;
-    const free = Math.max(0, this.deps.cfg.concurrentTasks - (await this.countRunning()));
-    if (free === 0) return;
-    for (const task of await this.listEligibleBacklog(free)) {
+    const counts = await this.countRunningByKind();
+    let freeMedia = Math.max(0, this.deps.cfg.mediaConcurrentTasks - counts.media);
+    let freeNonMedia = Math.max(0, this.deps.cfg.nonMediaConcurrentTasks - counts.nonMedia);
+    if (freeMedia === 0 && freeNonMedia === 0) return;
+    for (const task of await this.listEligibleBacklog(freeMedia + freeNonMedia)) {
+      const isMedia = isMediaTask(task);
+      if (isMedia ? freeMedia === 0 : freeNonMedia === 0) continue; // category full
       try {
         await this.startTask(task.id);
+        if (isMedia) freeMedia--;
+        else freeNonMedia--;
       } catch (err) {
         // A concurrent tick may have taken the slot/state; log and move on.
         if (!(err instanceof ServiceError)) {
@@ -281,9 +301,15 @@ export class Orchestrator {
       const names = await this.ideaTexts(deps.waitingOn);
       throw new ServiceError(409, `task ${taskId} is waiting on: ${names.join(", ") || deps.waitingOn.join(", ")}`);
     }
-    const running = await this.countRunning();
-    if (running >= this.deps.cfg.concurrentTasks) {
-      throw new ServiceError(409, `no free task slots (${running}/${this.deps.cfg.concurrentTasks} running)`);
+    const counts = await this.countRunningByKind();
+    const isMedia = isMediaTask(task);
+    const cap = isMedia ? this.deps.cfg.mediaConcurrentTasks : this.deps.cfg.nonMediaConcurrentTasks;
+    const running = isMedia ? counts.media : counts.nonMedia;
+    if (running >= cap) {
+      throw new ServiceError(
+        409,
+        `no free ${isMedia ? "media " : ""}task slots (${running}/${cap} ${isMedia ? "media " : "non-media "}running)`,
+      );
     }
     await this.transition(taskId, "backlog", "running", {
       branch: `task/${taskId}`,
@@ -1012,13 +1038,19 @@ export class Orchestrator {
     );
   }
 
-  /** Running tasks that hold a slot (running and not paused). */
-  private async countRunning(): Promise<number> {
+  /**
+   * Running tasks that hold a slot (running and not paused), split by
+   * category: media-kind tasks (spec.kind === "media") vs everything else.
+   * Classification happens in JS (not SQL) so the query stays driver-
+   * agnostic — the spec is a JSON column with driver-specific accessors.
+   */
+  private async countRunningByKind(): Promise<{ media: number; nonMedia: number }> {
     const rows = await this.db
-      .select({ id: tasks.id })
+      .select({ spec: tasks.spec })
       .from(tasks)
       .where(and(eq(tasks.state, "running"), eq(tasks.paused, false)));
-    return rows.length;
+    const media = rows.filter((r) => isMediaTask({ spec: r.spec } as TaskRow)).length;
+    return { media, nonMedia: rows.length - media };
   }
 
   /** Backlog tasks (oldest first) that are not paused and have deps satisfied. */
