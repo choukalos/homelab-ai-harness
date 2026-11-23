@@ -956,7 +956,13 @@ adherence to the project's architectural conventions.
 
 Used by: Coding Team (code review step; static half of the QA stage).
 Research needed: **R5** (LLM code-review prompt design) + R1 polish.
-Status: not started — prompt to be written after R5.
+Status: **built 2026-11-23** (`agents-skills/code-reviewer/SKILL.md` +
+`references/finding-format.md`; grounded in R5 — `docs/research/R5-llm-code-review.md`:
+two-pass review (summary + per-file findings with context), severity-ranked
+findings (blocker/major/minor/nit) + verdict (approve / approve-with-notes /
+request-changes), anti-noise calibration + evidence rules, diff-scoping
+heuristics; the static, advisory half of the QA stage). Registered + enabled in
+the Skill Hub. Full DoD smoke pending the first Phase 1 task.
 
 ### S11 — `security-code-review` (P1, hard gate) — cyber security reviewer
 
