@@ -74,11 +74,10 @@ refers to the reflection pipeline's own roles).
   specs with client-local file paths; deployed + verified E2E 2026-11-23 —
   see `archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`)
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
-  applied 2026-11-20; H3 `/model/info` restriction: feature check done
-  2026-11-23 — v1.104.0 has no native per-endpoint key roles (any valid key
-  passes; only `litellm_settings.custom_auth` can do it, replacing the whole
-  auth flow), so the apply condition is unmet — decision pending: leave open
-  vs custom_auth implementation; H4 Dylan scoping deferred by design)
+  applied 2026-11-20; H3 `/model/info` restriction left open by chuck
+  2026-11-23 after the feature check (v1.104.0: no native per-endpoint key
+  roles; only `litellm_settings.custom_auth`, which replaces the whole auth
+  flow — options being researched); H4 Dylan scoping deferred by design)
 - **archive:** 7 closed 2026-11-08 proposals (window guard, publish-file
   dedup, checkpoint, etc. — the reflection pipeline's first batch) +
   2026-11-19: litellm-model-config-pass, litellm-health-visibility,
