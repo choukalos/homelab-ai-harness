@@ -338,6 +338,13 @@ services:
     volumes:
       - /home/chuck/data/ai-kanban:/data
       - /home/chuck/workspace:/workspace
+      # Durable per-project file store (2026-11-23, remote client file
+      # intake): client-staged task inputs (scripts, configs, ...) live here
+      # as /files/<project_id>/ — retention unit is the PROJECT (icebox
+      # items can wait months), so this is durable, NOT the transitory
+      # workspace. Sibling of the app-state dir: in the backup scope, but
+      # kept out of /data (migrations, kv, ...).
+      - /home/chuck/data/ai-kanban-files:/files
       # Media project (2026-11-21): NAS media store (lego `workspace` share,
       # mounted on thor at /mnt/lego-media-store by scripts/setup-media-nas.sh;
       # /mnt, not /home/chuck/data — the data dir is backup scope) + the

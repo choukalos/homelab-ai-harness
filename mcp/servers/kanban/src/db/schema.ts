@@ -184,7 +184,32 @@ export const kv = sqliteTable("kv", {
   value: text("value").notNull(),
 });
 
-export const sqliteSchema = { projects, ideas, tasks, taskEvents, usage, kv };
+/**
+ * Durable project file store audit (proposal:
+ * tier2-kanban-remote-client-file-intake). One row per staged file in
+ * /files/<project_id>/ — the retention unit is the PROJECT (icebox items
+ * can wait months), so rows live as long as the project (FK cascade on
+ * delete_project) and the orphan sweep only touches dirs of GONE projects.
+ */
+export const projectFiles = sqliteTable(
+  "project_files",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Project-store-relative path (validated: no `..`, no absolute). */
+    path: text("path").notNull(),
+    size: integer("size").notNull(),
+    /** Caller identity that staged the file; '' = unattributed. */
+    stagedBy: text("staged_by").notNull().default(""),
+    /** INTEGER epoch milliseconds. */
+    stagedAt: integer("staged_at").notNull(),
+  },
+  (t) => [index("project_files_project_id_idx").on(t.projectId)],
+);
+
+export const sqliteSchema = { projects, ideas, tasks, taskEvents, usage, kv, projectFiles };
 
 export type ProjectRow = typeof projects.$inferSelect;
 export type IdeaRow = typeof ideas.$inferSelect;
@@ -192,6 +217,7 @@ export type TaskRow = typeof tasks.$inferSelect;
 export type TaskEventRow = typeof taskEvents.$inferSelect;
 export type UsageRow = typeof usage.$inferSelect;
 export type KvRow = typeof kv.$inferSelect;
+export type ProjectFileRow = typeof projectFiles.$inferSelect;
 
 // ---------------------------------------------------------------------------
 // MySQL schema (DB pre-created; app creates tables only)
@@ -310,6 +336,21 @@ export const mysqlKv = mysqlTable("kv", {
   value: mediumtext("value").notNull(),
 });
 
+export const mysqlProjectFiles = mysqlTable(
+  "project_files",
+  {
+    id: int("id").primaryKey().autoincrement(),
+    projectId: int("project_id")
+      .notNull()
+      .references(() => mysqlProjects.id, { onDelete: "cascade" }),
+    path: varchar("path", { length: 512 }).notNull(),
+    size: bigint("size", { mode: "number" }).notNull(),
+    stagedBy: varchar("staged_by", { length: 64 }).notNull().default(""),
+    stagedAt: bigint("staged_at", { mode: "number" }).notNull(),
+  },
+  (t) => [mysqlIndex("project_files_project_id_idx").on(t.projectId)],
+);
+
 export const mysqlSchema = {
   projects: mysqlProjects,
   ideas: mysqlIdeas,
@@ -317,4 +358,5 @@ export const mysqlSchema = {
   taskEvents: mysqlTaskEvents,
   usage: mysqlUsage,
   kv: mysqlKv,
+  projectFiles: mysqlProjectFiles,
 };

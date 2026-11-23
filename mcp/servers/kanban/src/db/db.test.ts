@@ -22,11 +22,13 @@ import {
   kv,
   mysqlIdeas,
   mysqlKv,
+  mysqlProjectFiles,
   mysqlProjects,
   mysqlSchema,
   mysqlTaskEvents,
   mysqlTasks,
   mysqlUsage,
+  projectFiles,
   projects,
   taskEvents,
   tasks,
@@ -40,6 +42,7 @@ const EXPECTED_TABLES = [
   "task_events",
   "usage",
   "kv",
+  "project_files",
   "schema_migrations",
 ];
 
@@ -136,6 +139,7 @@ interface RoundTripTables {
   taskEvents: any;
   usage: any;
   kv: any;
+  projectFiles: any;
 }
 
 async function runRoundTrip(db: any, t: RoundTripTables): Promise<void> {
@@ -238,6 +242,14 @@ async function runRoundTrip(db: any, t: RoundTripTables): Promise<void> {
     .insert(t.kv)
     .values({ key: "orchestrator.state", value: JSON.stringify({ slots: 1 }) });
 
+  await db.insert(t.projectFiles).values({
+    projectId: proj.id,
+    path: "scripts/frozen.py",
+    size: 1234,
+    stagedBy: "chuck",
+    stagedAt: now,
+  });
+
   // --- read back -----------------------------------------------------------
 
   const [projBack] = await db
@@ -294,6 +306,16 @@ async function runRoundTrip(db: any, t: RoundTripTables): Promise<void> {
     .where(eq(t.kv.key, "orchestrator.state"));
   assert.deepEqual(JSON.parse(kvBack.value), { slots: 1 });
 
+  const fileRows = await db
+    .select()
+    .from(t.projectFiles)
+    .where(eq(t.projectFiles.projectId, proj.id));
+  assert.equal(fileRows.length, 1);
+  assert.equal(fileRows[0]!.path, "scripts/frozen.py");
+  assert.equal(fileRows[0]!.size, 1234);
+  assert.equal(fileRows[0]!.stagedBy, "chuck");
+  assert.equal(fileRows[0]!.stagedAt, now);
+
   // --- FK behavior: deleting the task cascades events, nulls usage ---------
 
   await db.delete(t.tasks).where(eq(t.tasks.id, task.id));
@@ -308,6 +330,11 @@ async function runRoundTrip(db: any, t: RoundTripTables): Promise<void> {
     .where(eq(t.usage.projectId, proj.id));
   assert.equal(usageAfter.length, 2);
   assert.ok(usageAfter.every((u: any) => u.taskId === null));
+
+  // Deleting the project cascades the staged-file audit rows too.
+  await db.delete(t.projects).where(eq(t.projects.id, proj.id));
+  const fileRowsAfter = await db.select().from(t.projectFiles).limit(10);
+  assert.equal(fileRowsAfter.length, 0, "project_files cascade on project delete");
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +351,12 @@ test("sqlite: initDb runs migrations and creates all tables", () =>
     for (const name of EXPECTED_TABLES) {
       assert.ok(tables.has(name), `missing table ${name}`);
     }
-    assert.deepEqual(appliedSqliteVersions(raw), ["0001_init", "0002_owner", "0003_usage_owner"]);
+    assert.deepEqual(appliedSqliteVersions(raw), [
+      "0001_init",
+      "0002_owner",
+      "0003_usage_owner",
+      "0004_project_files",
+    ]);
     // 0002_owner: owner columns on projects / ideas / tasks.
     for (const table of ["projects", "ideas", "tasks"]) {
       const cols = raw
@@ -335,6 +367,11 @@ test("sqlite: initDb runs migrations and creates all tables", () =>
     // 0003_usage_owner: owner column on usage (per-user spend attribution).
     const usageCols = raw.prepare("PRAGMA table_info(usage)").all() as Array<{ name: string }>;
     assert.ok(usageCols.some((c) => c.name === "owner"), "usage.owner column exists");
+    // 0004_project_files: audit table for the durable project file store.
+    const fileCols = raw.prepare("PRAGMA table_info(project_files)").all() as Array<{ name: string }>;
+    for (const col of ["id", "project_id", "path", "size", "staged_by", "staged_at"]) {
+      assert.ok(fileCols.some((c) => c.name === col), `project_files.${col} column exists`);
+    }
   }));
 
 test("sqlite: migrations are idempotent and preserve data", () =>
@@ -346,6 +383,7 @@ test("sqlite: migrations are idempotent and preserve data", () =>
       "0001_init",
       "0002_owner",
       "0003_usage_owner",
+      "0004_project_files",
     ]);
     const rows = await handle.db.select().from(kv).where(eq(kv.key, "x"));
     assert.equal(rows.length, 1);
@@ -367,6 +405,7 @@ test("sqlite: schema round-trip (JSON columns, defaults, FK behavior)", () =>
       taskEvents,
       usage,
       kv,
+      projectFiles,
     });
   }));
 
@@ -426,7 +465,7 @@ test("mysql: migrations + schema round-trip", { concurrency: 1 }, async (t) => {
   const dropAppTables = async () => {
     await pool.query("SET FOREIGN_KEY_CHECKS = 0");
     await pool.query(
-      "DROP TABLE IF EXISTS `usage`, `task_events`, `tasks`, `ideas`, `projects`, `kv`, `schema_migrations`",
+      "DROP TABLE IF EXISTS `usage`, `task_events`, `tasks`, `ideas`, `projects`, `kv`, `project_files`, `schema_migrations`",
     );
     await pool.query("SET FOREIGN_KEY_CHECKS = 1");
   };
@@ -456,6 +495,7 @@ test("mysql: migrations + schema round-trip", { concurrency: 1 }, async (t) => {
       "0001_init",
       "0002_owner",
       "0003_usage_owner",
+      "0004_project_files",
     ]);
     const [usageCols] = await pool.query("SHOW COLUMNS FROM `usage`");
     assert.ok(
@@ -478,6 +518,7 @@ test("mysql: migrations + schema round-trip", { concurrency: 1 }, async (t) => {
       taskEvents: mysqlTaskEvents,
       usage: mysqlUsage,
       kv: mysqlKv,
+      projectFiles: mysqlProjectFiles,
     });
   });
 

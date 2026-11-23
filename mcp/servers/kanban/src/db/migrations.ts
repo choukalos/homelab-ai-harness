@@ -234,4 +234,39 @@ ALTER TABLE "usage" ADD COLUMN "owner" TEXT NOT NULL DEFAULT '';
 ALTER TABLE \`usage\` ADD COLUMN \`owner\` VARCHAR(64) NOT NULL DEFAULT '';
 `,
   },
+  {
+    version: "0004_project_files",
+    description:
+      "Durable project file store audit (remote client file intake): " +
+      "project_files (project_id, path, size, staged_by, staged_at) — one row " +
+      "per file staged into /files/<project_id>/. Retention unit is the project " +
+      "(icebox items can wait months): FK cascade removes the rows with the " +
+      "project; the orphan sweep only touches dirs of projects already gone. " +
+      "Additive-only.",
+    sqlite: `
+CREATE TABLE IF NOT EXISTS "project_files" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "project_id" INTEGER NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "path" TEXT NOT NULL,
+  "size" INTEGER NOT NULL,
+  "staged_by" TEXT NOT NULL DEFAULT '',
+  "staged_at" INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "project_files_project_id_idx" ON "project_files" ("project_id");
+`,
+    mysql: `
+CREATE TABLE IF NOT EXISTS \`project_files\` (
+  \`id\` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`project_id\` INT UNSIGNED NOT NULL,
+  \`path\` VARCHAR(512) NOT NULL,
+  \`size\` BIGINT UNSIGNED NOT NULL,
+  \`staged_by\` VARCHAR(64) NOT NULL DEFAULT '',
+  \`staged_at\` BIGINT NOT NULL,
+  PRIMARY KEY (\`id\`),
+  KEY \`project_files_project_id_idx\` (\`project_id\`),
+  CONSTRAINT \`fk_project_files_project\` FOREIGN KEY (\`project_id\`) REFERENCES \`projects\` (\`id\`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`,
+  },
 ];

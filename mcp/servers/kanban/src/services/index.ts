@@ -195,8 +195,18 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     addIdea: (projectId, text, owner) => addIdea(db, projectId, text, owner),
     editIdea: (ideaId, text) => editIdea(db, ideaId, text),
     deleteProject: (projectId) =>
-      orchestrator().then(
-        (o) => deleteProject(db, projectId, (pid) => o.cleanupProjectWorkspaces(pid)),
+      orchestrator().then((o) =>
+        deleteProject(db, projectId, async (pid) => {
+          // Workspace scratch dirs (transitory) + the durable file store dir
+          // + its project_files rows — both BEFORE the project cascade so the
+          // task/idea ids are still readable. (The FK cascade would also drop
+          // the rows; the explicit delete is the audit/GC path.)
+          const [dirs, fileDirs] = await Promise.all([
+            o.cleanupProjectWorkspaces(pid),
+            o.cleanupProjectFiles(pid),
+          ]);
+          return [...dirs, ...fileDirs];
+        }),
       ),
     board: () => board(db),
     boardStatus: (filters) => boardStatus(db, filters),

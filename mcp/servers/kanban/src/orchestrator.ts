@@ -41,6 +41,18 @@
  *   is transitory — durable results are pushed by the deploy stage (or
  *   published) before a task leaves `deploy`, and a missing task workspace
  *   is re-materialized on restart (fresh clone + checkout last_commit).
+ *
+ * Durable project file store GC (proposal:
+ * tier2-kanban-remote-client-file-intake): staged client inputs live in
+ * /files/<project_id>/ with PROJECT-scoped retention (icebox items can wait
+ * months). Lifecycle GC only — never a time sweep of live inputs:
+ * - delete_project removes the project's /files/<project_id>/ dir + its
+ *   project_files rows immediately (cleanupProjectFiles).
+ * - Orphan sweep (background job, same pattern as cleanupWorkspaces): removes
+ *   only /files/<project_id>/ dirs whose project no longer exists in the
+ *   projects table AND that are older than the TTL (default 30 days) — a
+ *   safety valve for failed deletions, never for live projects
+ *   (sweepProjectFiles).
  */
 import path from "node:path";
 import { readdir, rm, stat } from "node:fs/promises";
@@ -60,6 +72,11 @@ import type { Db } from "./services/common.js";
 import { ServiceError } from "./services/common.js";
 import { appendTaskEvent, taskDependencyStatus } from "./services/tasks.js";
 import { recordUsage } from "./services/usage.js";
+import {
+  FILES_ORPHAN_TTL_DAYS,
+  removeProjectFiles,
+  sweepOrphanProjectFiles,
+} from "./services/files.js";
 import {
   createGitOps,
   TaskAbortedError,
@@ -121,6 +138,10 @@ export interface OrchestratorDeps {
   summary?: SummaryUpdaterLike;
   /** Workspace root for task dirs (default: AI_KANBAN_WORKSPACE_DIR env, else /workspace). */
   workspaceRoot?: string;
+  /** Durable project file store root (default: AI_KANBAN_FILES_DIR env, else /files). */
+  filesRoot?: string;
+  /** Age before orphaned /files/<project_id> dirs are swept (default 30 days). */
+  filesTtlMs?: number;
   /** Tick interval for the pickup loop (default 5000ms). */
   tickMs?: number;
   /** Don't start the interval timers (tests drive tick()/watchdogTick()/
@@ -158,6 +179,10 @@ export class Orchestrator {
   private readonly deployRunner: DeployRunnerLike;
   private readonly summaryUpdater: SummaryUpdaterLike;
   private readonly workspaceRoot: string;
+  /** Durable project file store root (/files in the container). */
+  private readonly filesRoot: string;
+  /** Age before orphaned project file dirs are swept (default 30 days). */
+  private readonly filesTtlMs: number;
   /** In-flight task pipelines, per task. */
   private readonly pipelines = new Map<number, Promise<void>>();
   private watchdogTimer: NodeJS.Timeout | undefined;
@@ -180,6 +205,8 @@ export class Orchestrator {
     this.deployRunner = deps.deploy ?? new DeployRunner({ token: deps.cfg.githubToken });
     this.summaryUpdater = deps.summary ?? new SummaryUpdater({ agent: deps.agent });
     this.workspaceRoot = deps.workspaceRoot ?? process.env.AI_KANBAN_WORKSPACE_DIR ?? "/workspace";
+    this.filesRoot = deps.filesRoot ?? process.env.AI_KANBAN_FILES_DIR ?? "/files";
+    this.filesTtlMs = deps.filesTtlMs ?? FILES_ORPHAN_TTL_DAYS * 86_400_000;
     this.heartbeatMs = deps.heartbeatMs ?? WATCHDOG_DEFAULTS.heartbeatMs;
     this.watchdogTimeoutMs = deps.watchdogTimeoutMs ?? WATCHDOG_DEFAULTS.timeoutMs;
     this.cleanupAgeMs = deps.cleanupAgeMs ?? WATCHDOG_DEFAULTS.cleanupAgeMs;
@@ -196,7 +223,7 @@ export class Orchestrator {
     console.log(
       `[orchestrator] started (mediaSlots=${this.deps.cfg.mediaConcurrentTasks}, ` +
         `nonMediaSlots=${this.deps.cfg.nonMediaConcurrentTasks}, ` +
-        `workspace=${this.workspaceRoot})`,
+        `workspace=${this.workspaceRoot}, files=${this.filesRoot})`,
     );
     if (!this.deps.noTimer) {
       const tickMs = this.deps.tickMs ?? 5000;
@@ -212,6 +239,7 @@ export class Orchestrator {
       const cleanupIntervalMs = this.deps.cleanupIntervalMs ?? WATCHDOG_DEFAULTS.cleanupIntervalMs;
       this.cleanupTimer = setInterval(() => {
         void this.cleanupWorkspaces().catch((err) => console.error("[orchestrator] workspace cleanup failed:", err));
+        void this.sweepProjectFiles().catch((err) => console.error("[orchestrator] project files sweep failed:", err));
       }, cleanupIntervalMs);
       this.cleanupTimer.unref?.();
     }
@@ -220,6 +248,7 @@ export class Orchestrator {
     if (!this.deps.noTimer) {
       await this.watchdogTick().catch((err) => console.error("[orchestrator] watchdog tick failed:", err));
       await this.cleanupWorkspaces().catch((err) => console.error("[orchestrator] workspace cleanup failed:", err));
+      await this.sweepProjectFiles().catch((err) => console.error("[orchestrator] project files sweep failed:", err));
     }
   }
 
@@ -620,6 +649,29 @@ export class Orchestrator {
       );
     }
     return removed;
+  }
+
+  /**
+   * Orphan sweep for the durable project file store (same pattern as
+   * cleanupWorkspaces): remove `/files/<project_id>` dirs whose project no
+   * longer exists in the `projects` table AND that are older than the TTL
+   * (default 30 days). A safety valve for failed deletions — never touches
+   * live projects (their staged inputs can sit in the icebox for months).
+   * Runs on the cleanup timer + once at startup. Returns what was
+   * deleted/kept (tests).
+   */
+  async sweepProjectFiles(): Promise<{ deleted: string[]; skipped: string[] }> {
+    return sweepOrphanProjectFiles(this.db, this.filesRoot, { ttlMs: this.filesTtlMs, now: this.now });
+  }
+
+  /**
+   * Immediate file-store cleanup for a deleted project (delete_project):
+   * remove the project's `/files/<project_id>` dir + its project_files rows
+   * regardless of age — the project (and its rows) is going away. Returns
+   * the dirs removed (tests).
+   */
+  async cleanupProjectFiles(projectId: number): Promise<string[]> {
+    return removeProjectFiles(this.db, this.filesRoot, projectId);
   }
 
   // -------------------------------------------------------------------------

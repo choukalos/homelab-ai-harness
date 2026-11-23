@@ -23,12 +23,14 @@
 import {
   ideas as sqliteIdeas,
   kv as sqliteKv,
+  projectFiles as sqliteProjectFiles,
   projects as sqliteProjects,
   taskEvents as sqliteTaskEvents,
   tasks as sqliteTasks,
   usage as sqliteUsage,
   mysqlIdeas,
   mysqlKv,
+  mysqlProjectFiles,
   mysqlProjects,
   mysqlTaskEvents,
   mysqlTasks,
@@ -48,6 +50,7 @@ export const tasks = (useMysql ? mysqlTasks : sqliteTasks) as typeof sqliteTasks
 export const taskEvents = (useMysql ? mysqlTaskEvents : sqliteTaskEvents) as typeof sqliteTaskEvents;
 export const usage = (useMysql ? mysqlUsage : sqliteUsage) as typeof sqliteUsage;
 export const kv = (useMysql ? mysqlKv : sqliteKv) as typeof sqliteKv;
+export const projectFiles = (useMysql ? mysqlProjectFiles : sqliteProjectFiles) as typeof sqliteProjectFiles;
 
 /** True when the mysql-* table objects are active (DB_DRIVER=mysql). */
 export const tablesUseMysql = useMysql;
