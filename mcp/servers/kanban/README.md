@@ -50,7 +50,10 @@ The image ships **node, python, go, hugo (extended, pinned)** — the supported 
 | Mount | Persistence | Contents |
 |---|---|---|
 | `/data` | persistent (`/home/chuck/data/ai-kanban`) | SQLite DB (default driver), Pi session files, project specs, board/idea/task state + conversation logs, compaction summaries, usage records, app-owned agent dir (`/data/pi-agent`), homelab-ai-harness clone (`/data/harness`) |
+| `/files` | persistent (`/home/chuck/data/ai-kanban-files`) | **durable project file store** — client-staged task inputs (`/files/<project_id>/...`, via `stage_file`), retained for the life of the project (icebox-safe); `delete_project` removes the project's dir + rows, and an orphan sweep (30-day TTL) clears dirs of deleted projects. In the backup scope (staged inputs are source-of-truth content). |
 | `/workspace` | host's `/home/chuck/workspace/`, read-write | agent scratch space: one dir per running/recent task (`task-<id>`: fresh git clone, working files, build artifacts) + media build folders + grooming scratch (`groom-<idea>`). Transitory by design — durable results are pushed out; task/groom dirs are swept after 7 days (or immediately on project delete). |
+| `/media-store` | NAS (lego media store) | media **outputs** + media inputs placed there by the operator/client (referenced by specs, optionally registered via `stage_ref`). Outside the backup scope; never deleted by kanban. |
+| `/publish` | host's `/home/chuck/data/media/public` | blog public drop (served at `https://choukalos.com/files/...`); immutable published content — specs cite the public URL. Never deleted by kanban. |
 
 ## Configuration (.env)
 
@@ -82,6 +85,7 @@ Copy `.env.example` to `.env` and fill in. Real environment variables override t
 | `WORKSPACE_CLEANUP_DAYS` | `7` | Age (days) after which idle `/workspace/task-<id>` / `groom-<id>` scratch dirs are swept (startup + daily). In-flight workspaces are never touched; `delete_project` removes the project's dirs immediately. |
 | `AI_KANBAN_DATA_DIR` | `/data` | data dir root (DB, sessions, agent dir, harness); override for local dev — use a **persistent** dir, not `/tmp` (macOS purges `/tmp` while the server runs) |
 | `AI_KANBAN_WORKSPACE_DIR` | `/workspace` | agent scratch root (task-<id> / groom-<idea> dirs); override for local dev |
+| `KANBAN_PREFLIGHT_STRICT` | unset (advisory) | spec-path preflight mode at `move_to_backlog` / `start_task`: unset → unreachable spec references return a structured warning on the tool result (the move/start proceeds); `1`/`true` → the move/start is refused (409) when any spec reference is unreachable |
 
 ## Local development
 
@@ -165,15 +169,16 @@ The container exposes its tools as an MCP server over streamable HTTP at
 proxy's MCP gateway; the proxy forwards the caller's LiteLLM key, and the
 container scopes the tool set per key (see "Identity & keys").
 
-Tools (25; thin layer over the same service functions the read-only web UI
+Tools (27; thin layer over the same service functions the read-only web UI
 uses for its status views):
 
 | Group | Tools |
 |---|---|
 | Ideas | `list_ideas`, `add_idea`, `edit_idea` (state `idea` only), `discard_idea` (soft delete) |
 | Grooming (interactive) | `start_grooming` (seed turn: the LLM researches, states assumptions, asks questions), `groom_message` (one blocking turn), `groom_status` (poll: state, turn-in-flight, transcript tail, spec), `groom_accept` (background finalize → icebox), `groom_cancel`, `groom_re_groom` (fresh session) |
-| Icebox | `move_to_backlog` (one or more; tasks inherit the idea's owner) |
-| Board | `start_task`, `pause_task`, `resume_task`, `stop_task`, `retry_deploy`, `restart_task` (needs-attention → Backlog, optional resolution note) |
+| Icebox | `move_to_backlog` (one or more; tasks inherit the idea's owner; spec-path preflight) |
+| File intake | `stage_file` (push a small input file ≤ ~100 MB base64 into the project's durable store; returns the container path to cite in specs), `stage_ref` (register an external media reference — URL or NAS path — metadata-only, reachability validated at registration) |
+| Board | `start_task` (spec-path preflight), `pause_task`, `resume_task`, `stop_task`, `retry_deploy`, `restart_task` (needs-attention → Backlog, optional resolution note) |
 | Status | `board_status` (task counts + idea pipeline counts `ideaCounts` + needs-attention summaries + running), `task_status` (state, log tail, usage, failure reason), `project_status` (incl. LLM state summary + icebox listing) |
 | Projects | `list_projects`, `get_project`, `create_project`, `update_project`, `delete_project` (admin; 409 while a task is running/deploy) |
 
@@ -196,6 +201,32 @@ use the proxy's MCP gateway URL — the proxy forwards your LiteLLM key):
   }
 }
 ```
+
+**Spec authoring & file intake (remote clients, 2026-11-23):** task specs
+cite input files by **container path or URL** — the executor runs in this
+container and cannot see a client's filesystem. By input class:
+
+- **Small inputs (scripts, configs, text — ≤ ~100 MB):** push content with
+  `stage_file` (MCP, capability `control`; REST variant
+  `POST /api/projects/<id>/files` for non-MCP clients). `path` is relative
+  to the project store (no `..`, no absolute paths); `content` is base64.
+  Use the returned `/files/<project_id>/<path>` in the spec. Staged files
+  are retained for the life of the project (icebox items are covered by
+  construction; task completion does not delete inputs).
+- **Media inputs (stills, reference video, audio):** reference by location,
+  not push — place the file on the NAS (`/media-store/...`) or the public
+  drop (`https://choukalos.com/files/...`) and cite the container path or
+  URL in the spec. Optionally register it with `stage_ref` (REST variant
+  `POST /api/projects/<id>/refs`) for a machine-checkable audit record —
+  reachability is validated at registration (URL → HTTP HEAD 200; NAS path
+  → exists under the mount).
+- **Spec-path preflight:** at `move_to_backlog` and `start_task`, file paths
+  and media URLs extracted from the spec are checked against the execution
+  environment (mounted roots `/files`, `/workspace`, `/media-store`,
+  `/publish`, `/data`; URLs via bounded HTTP HEAD). Unreachable references
+  return a structured warning on the tool result (advisory — the executor's
+  own P0 gate remains the source of truth); set `KANBAN_PREFLIGHT_STRICT=1`
+  to refuse the move/start instead.
 
 ## Project layout
 
