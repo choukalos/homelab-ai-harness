@@ -812,7 +812,10 @@ Git discipline for task branches.
 Used by: Coding Team (code stories → publish/push to production).
 Research needed: none (internal convention — codify from the repo's commit history
 + project constraints).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/git-flow/SKILL.md`; codified from the
+repo's commit history + the kanban runner's `task/<id>` branch handling + project
+`constraints` deploy gates; registered + enabled in the Skill Hub). Full DoD smoke
+pending the first Phase 1 task.
 
 ### S5 — `docs-housekeeping` (P2)
 
