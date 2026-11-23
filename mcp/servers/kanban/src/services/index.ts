@@ -42,10 +42,19 @@ import {
   type TaskUsageRow,
 } from "./reports.js";
 import { getProjectStatus, type ProjectStatus } from "./projects.js";
+import {
+  decodeStagedContent,
+  stageFile,
+  stageRef,
+  type StageFileResult,
+  type StageRefResult,
+} from "./files.js";
+import type { FetchLike } from "./reachability.js";
 
 export { ServiceError } from "./common.js";
 export type { Project, ProjectInput, ProjectSummary } from "./projects.js";
 export type { ProjectStatus } from "./projects.js";
+export type { StageFileResult, StageRefResult } from "./files.js";
 export type { Idea } from "./ideas.js";
 export type { BoardData, BoardCard, BoardStatus, BoardStatusFilters } from "./board.js";
 export type { IceboxMoveResult } from "./icebox.js";
@@ -76,6 +85,20 @@ export interface KanbanServices {
   editIdea(ideaId: number, text: string): Promise<Idea>;
   /** Delete a project (admin; 409 while a task is running/deploy) + workspace cleanup. */
   deleteProject(projectId: number): Promise<DeleteProjectResult>;
+  /**
+   * Push a small file (base64, ≤ ~100 MB) into the project's durable file
+   * store (stage_file): 400 on an invalid path / bad base64 / oversized
+   * file, 404 on an unknown project. Returns the container-side path
+   * (/files/<project_id>/<path>) to cite in specs. `owner` = caller identity.
+   */
+  stageFile(projectId: number, relPath: string, contentB64: string, owner?: string): Promise<StageFileResult>;
+  /**
+   * Register an external media reference (stage_ref): metadata-only — the
+   * URL (HEAD 200) or NAS path (exists under the media store) is validated
+   * at registration and an unreachable reference is rejected (400). Records
+   * a project_files row (size 0). `owner` = caller identity.
+   */
+  stageRef(projectId: number, ref: string, owner?: string): Promise<StageRefResult>;
   board(): Promise<BoardData>;
   /** Board status for MCP board_status (counts + needs-attention + running). */
   boardStatus(filters?: BoardStatusFilters): Promise<BoardStatus>;
@@ -168,6 +191,10 @@ export interface KanbanServicesDeps {
   grooming?: GroomingManager;
   /** Orchestrator; required for task control (start/retry/restart). */
   orchestrator?: Orchestrator;
+  /** NAS media store mount root for stage_ref validation (default /media-store). */
+  mediaStoreRoot?: string;
+  /** HTTP client for URL reachability checks (default global fetch). */
+  fetchImpl?: FetchLike;
 }
 
 /** Bind the service functions to a db handle. */
@@ -208,6 +235,25 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
           return [...dirs, ...fileDirs];
         }),
       ),
+    stageFile: (projectId, relPath, contentB64, owner) =>
+      orchestrator().then(async (o) => {
+        const content = decodeStagedContent(contentB64);
+        return stageFile(db, {
+          root: o.getFilesRoot(),
+          projectId,
+          path: relPath,
+          content,
+          owner: owner ?? "",
+        });
+      }),
+    stageRef: (projectId, ref, owner) =>
+      stageRef(db, {
+        projectId,
+        ref,
+        owner: owner ?? "",
+        mediaStoreRoot: deps.mediaStoreRoot,
+        fetchImpl: deps.fetchImpl,
+      }),
     board: () => board(db),
     boardStatus: (filters) => boardStatus(db, filters),
     getTask: (id) => getTaskDetail(db, id),

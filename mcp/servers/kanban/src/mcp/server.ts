@@ -4,12 +4,13 @@
  * transport-agnostic service functions the REST API uses.
  *
  * MCP-first (2026-11-21): the web UI is read-only; the MCP surface is the
- * only mutation interface. Tools (25): list_projects, get_project,
+ * only mutation interface. Tools (27): list_projects, get_project,
  * create_project, update_project, delete_project, list_ideas, add_idea,
  * edit_idea, board_status, interactive grooming (start_grooming,
  * groom_message, groom_status, groom_accept, groom_cancel, groom_re_groom),
  * discard_idea, move_to_backlog, start_task, pause/resume/stop_task,
- * retry_deploy, restart_task, task_status, project_status.
+ * retry_deploy, restart_task, task_status, project_status, file intake
+ * (stage_file, stage_ref — remote client file intake, 2026-11-23).
  *
  * Owner attribution: the caller's LiteLLM key resolves to a user name via
  * USER_KEYS (full-key match); create_project / add_idea stamp it on the
@@ -39,7 +40,7 @@ export const MCP_CAPABILITY_SETS = {
     "task_status",
     "project_status",
   ],
-  /** read + board mutation (ideas, interactive grooming, backlog, task control). */
+  /** read + board mutation (ideas, interactive grooming, backlog, task control, file intake). */
   control: [
     "read",
     "add_idea",
@@ -58,6 +59,8 @@ export const MCP_CAPABILITY_SETS = {
     "stop_task",
     "retry_deploy",
     "restart_task",
+    "stage_file",
+    "stage_ref",
   ],
   /** control + project administration. */
   admin: ["control", "create_project", "update_project", "delete_project"],
@@ -92,6 +95,8 @@ export const MCP_TOOL_NAMES: readonly string[] = [
   "restart_task",
   "task_status",
   "project_status",
+  "stage_file",
+  "stage_ref",
 ];
 
 function expandCapabilities(set: readonly string[]): Set<string> {
@@ -376,6 +381,44 @@ export function registerMcpTools(
       inputSchema: { project_id: z.number().int().positive() },
     },
     ({ project_id }) => run(async () => ok(await services.deleteProject(project_id))),
+  );
+
+  reg(
+    "stage_file",
+    {
+      description:
+        "Push a small input file (script, config, text — ≤ ~100 MB) into the project's durable file store. " +
+        "`path` is RELATIVE to the project store (no .., no absolute paths); `content` is base64-encoded. " +
+        "Returns the container-side path (/files/<project_id>/<path>) to cite in task specs — the executor " +
+        "reads it directly. Staged files are retained for the life of the project (icebox-safe). " +
+        "Media inputs (stills, reference video, audio) must NOT be pushed — place them on the NAS/public " +
+        "drop and register the URL or path with stage_ref instead.",
+      inputSchema: {
+        project_id: z.number().int().positive(),
+        path: z.string().min(1),
+        content: z.string().min(1),
+      },
+    },
+    ({ project_id, path, content }) =>
+      run(async () => ok(await services.stageFile(project_id, path, content, owner))),
+  );
+
+  reg(
+    "stage_ref",
+    {
+      description:
+        "Register an external media reference for a project WITHOUT moving content: an http(s) URL " +
+        "(validated with a bounded HTTP HEAD → 200) or a NAS path under /media-store (validated by " +
+        "existence). Unreachable references are rejected at registration. The reference is recorded in " +
+        "the project's file audit (project_files, size 0) so the preflight + audit trail have a " +
+        "machine-checkable record. For media inputs: place the file on the NAS or the public drop " +
+        "(https://choukalos.com/files/...) and register/cite its URL or container path.",
+      inputSchema: {
+        project_id: z.number().int().positive(),
+        ref: z.string().min(1),
+      },
+    },
+    ({ project_id, ref }) => run(async () => ok(await services.stageRef(project_id, ref, owner))),
   );
 
   reg(

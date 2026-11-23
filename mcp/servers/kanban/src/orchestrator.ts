@@ -674,6 +674,11 @@ export class Orchestrator {
     return removeProjectFiles(this.db, this.filesRoot, projectId);
   }
 
+  /** Durable project file store root (/files in the container). */
+  getFilesRoot(): string {
+    return this.filesRoot;
+  }
+
   // -------------------------------------------------------------------------
   // Task pipeline
   // -------------------------------------------------------------------------

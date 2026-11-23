@@ -129,7 +129,19 @@ async function makeApp(opts: {
     workspaceRoot: path.join(dir, "workspace"),
     noTimer: true,
   });
-  const services = createKanbanServices(db, { grooming, orchestrator });
+  // Hermetic URL reachability (stage_ref / preflight): controllable fetch
+  // mock + temp media-store root — no network, no real mounts in tests.
+  const mediaStoreRoot = path.join(dir, "media-store");
+  mkdirSync(mediaStoreRoot, { recursive: true });
+  let fetchStatus = 200;
+  const fetchImpl = (async (_url: string, _init?: RequestInit) =>
+    new Response(null, { status: fetchStatus })) as typeof fetch;
+  const services = createKanbanServices(db, {
+    grooming,
+    orchestrator,
+    mediaStoreRoot,
+    fetchImpl,
+  });
   const app = buildApp({
     cfg,
     db,
@@ -139,7 +151,7 @@ async function makeApp(opts: {
     grooming,
     mcpKeyCapabilities: opts.mcpKeyCapabilities,
   });
-  return { app, db, cfg, services, grooming, mock, orchestrator, taskRunner, deploy };
+  return { app, db, cfg, services, grooming, mock, orchestrator, taskRunner, deploy, dir, mediaStoreRoot, setFetchStatus: (s: number) => { fetchStatus = s; } };
 }
 
 /** Parse a streamable-HTTP response body (JSON or SSE) into a JSON-RPC object. */
@@ -536,7 +548,7 @@ test("POST /mcp auth: actions require a key; discovery is open (proxy registry)"
   assert.equal(noAuthList.statusCode, 200);
   const rpc = parseRpc(noAuthList.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  assert.equal(names.length, 25, `expected the full 25-tool set, got ${names.length}`);
+  assert.equal(names.length, 27, `expected the full 27-tool set, got ${names.length}`);
   // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
@@ -573,7 +585,7 @@ test("POST /mcp answers the initialize handshake", async () => {
   await app.close();
 });
 
-test("POST /mcp tools/list returns the 25-tool set", async () => {
+test("POST /mcp tools/list returns the 27-tool set", async () => {
   const { app } = await makeApp();
   const res = await app.inject({
     method: "POST",
@@ -605,6 +617,8 @@ test("POST /mcp tools/list returns the 25-tool set", async () => {
     "restart_task",
     "resume_task",
     "retry_deploy",
+    "stage_file",
+    "stage_ref",
     "start_grooming",
     "start_task",
     "stop_task",
@@ -1317,7 +1331,7 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
     payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const rpc = parseRpc(res.payload);
-  assert.equal(rpc.result.tools.length, 25, "kanban key sees all 25 tools");
+  assert.equal(rpc.result.tools.length, 27, "kanban key sees all 27 tools");
   await app.close();
 });
 

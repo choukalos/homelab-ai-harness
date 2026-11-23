@@ -24,6 +24,16 @@
  *                              (filterable via ?project=&state=&role=&q=)
  *   GET  /projects/<id>?page=N Project page: completed list (hidden, paginated)
  *   GET  /health               Health probe
+ *   POST /api/projects/<id>/files  File intake (REST variant of the stage_file
+ *                                  MCP tool): { path, content (base64) }
+ *   POST /api/projects/<id>/refs   File intake (REST variant of the stage_ref
+ *                                  MCP tool): { ref (URL or NAS path) }
+ *
+ * The /api file-intake routes are the only mutation endpoints (2026-11-23,
+ * remote client file intake): JSON in/out for non-MCP clients, LAN-bound
+ * like the unauthenticated board UI (LAN trust). The MCP endpoint remains
+ * the attributed mutation path (caller key → owner + capability scoping);
+ * /api rows are stamped owner '' (unattributed).
  */
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { KanbanConfig } from "../config.js";
@@ -370,6 +380,43 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       roles: [...USAGE_ROLES],
     };
     return setHtml(reply, layout("Reports", "reports", reportsPage(view)));
+  });
+
+  // ------------------------------------------------------------------
+  // File intake API (2026-11-23, remote client file intake): REST variants
+  // of the stage_file / stage_ref MCP tools for non-MCP clients. JSON
+  // in/out; ServiceError statuses map straight to the HTTP status.
+  // ------------------------------------------------------------------
+  app.post("/api/projects/:id/files", async (req, reply) => {
+    const id = parseId((req.params as Record<string, string>).id);
+    if (id === undefined) {
+      reply.code(400);
+      return { error: "invalid project id" };
+    }
+    const body = (req.body ?? {}) as { path?: unknown; content?: unknown };
+    try {
+      return await deps.services.stageFile(id, String(body.path ?? ""), String(body.content ?? ""));
+    } catch (err) {
+      const status = err instanceof ServiceError ? err.status : 500;
+      reply.code(status);
+      return { error: err instanceof Error ? err.message : "error" };
+    }
+  });
+
+  app.post("/api/projects/:id/refs", async (req, reply) => {
+    const id = parseId((req.params as Record<string, string>).id);
+    if (id === undefined) {
+      reply.code(400);
+      return { error: "invalid project id" };
+    }
+    const body = (req.body ?? {}) as { ref?: unknown };
+    try {
+      return await deps.services.stageRef(id, String(body.ref ?? ""));
+    } catch (err) {
+      const status = err instanceof ServiceError ? err.status : 500;
+      reply.code(status);
+      return { error: err instanceof Error ? err.message : "error" };
+    }
   });
 
   registerMcpRoutes(app, {
