@@ -726,7 +726,7 @@ Playbooks any role can use. "Used by" maps each to the roles above.
 
 ### S1 — `kanban-board` (P0)
 
-Playbook for operating the board via the 25 `mcp_kanban-*` tools.
+Playbook for operating the board via the 27 `mcp_kanban-*` tools.
 
 - **Triage**: reading `board_status` (task counts, `ideaCounts`, `needsAttention`,
   `running`); what each signal means; when to act vs. wait

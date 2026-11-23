@@ -5,7 +5,7 @@ description: Operate the homelab kanban board via the mcp_kanban MCP tools — t
 
 # Kanban Board
 
-Playbook for operating the homelab kanban board (`mcp_kanban`, 25 tools exposed as
+Playbook for operating the homelab kanban board (`mcp_kanban`, 27 tools exposed as
 `mcp_kanban-<tool>` — in pi sessions via the LiteLLM gateway as
 `mcp__litellm__mcp_kanban_<tool>`). Internal system — codified from
 `mcp/servers/kanban/README.md` + the 2026-11-21/22/23 kanban proposals (no external
@@ -164,10 +164,12 @@ don't infer a gate.
 
 - **Remote clients can't share local paths.** The executor runs in the mcp_kanban
   container on thor. Specs from off-LAN clients must reference durable paths the
-  container can see (NAS `/media-store`, the public drop, repo contents) — not
-  `~/Code/...`. A durable per-project file store + intake tool is proposed
-  (`proposals/2026-11-23-tier2-kanban-remote-client-file-intake.md`) but not built
-  yet — check its status before relying on it.
+  container can see — not `~/Code/...`. The durable per-project file store +
+  intake is live (applied 2026-11-23, `proposals/archive/2026-11-23-tier2-kanban-
+  remote-client-file-intake.md`): small inputs via `stage_file` (→
+  `/files/<project_id>/...`), media inputs on the NAS / public drop cited by
+  path/URL (optionally `stage_ref`); `move_to_backlog`/`start_task` warn about
+  unreachable spec references (advisory preflight).
 - **The 7-day sweep is real.** Anything not pushed/published by the deploy stage is
   gone in a week. "It's in the workspace" is not a durable result.
 - **Grooming turns are slow and blocking** (xhigh thinking) — relay them, don't
@@ -180,9 +182,14 @@ don't infer a gate.
 - **No cost guardrails** (decided 2026-11-21) — `board_status` surfaces running
   cost; report it, don't enforce.
 - **Scratch-project smoke tests are safe** — `create_project` → `delete_project` on
-  a task-less scratch project is a clean cycle (verified 2026-11-22/23).
-- **Tool count drift** — the kanban README's "Tools (23)" header is stale; the
-  table (and the live gateway) have 25.
+  a task-less scratch project is a clean cycle (verified 2026-11-22/23;
+  2026-11-23: also verified the file-intake round-trip + `delete_project` GC on a
+  scratch project).
+- **File intake (2026-11-23)** — remote clients stage task inputs with
+  `stage_file` (small files → `/files/<project_id>/...`) or place media on the
+  NAS / public drop and cite the path/URL (optionally `stage_ref`); specs citing
+  client-local paths are unreachable from the executor and get a preflight
+  warning at `move_to_backlog`/`start_task`.
 
 ## References
 
@@ -190,5 +197,6 @@ don't infer a gate.
 - `proposals/archive/2026-11-21-tier2-mcp-kanban*.md` — the MCP-first + improvements
   decisions (interactive grooming, read-only UI, owner attribution, 7-day sweep,
   `delete_project` semantics).
-- `proposals/2026-11-23-tier2-kanban-remote-client-file-intake.md` — open: durable
-  file store + `stage_file` + spec-path preflight for remote clients.
+- `proposals/archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`
+  — applied 2026-11-23: durable file store + `stage_file`/`stage_ref` +
+  spec-path preflight for remote clients (deployed + verified E2E).

@@ -389,6 +389,24 @@ clip (record why in `qc`).
    Prose entries ("NAS 'media' share: /media-store/...") crashed the deploy
    stage on 2026-11-23 (task 3, PWV2 F2-B) — the stage now extracts embedded
    paths, but clean paths are the convention and the only safe form.
+6. **Task inputs must be reachable from the executor (2026-11-23, PWV2
+   lesson):** the `mcp_kanban` container cannot see the authoring machine's
+   filesystem — client-local paths (`~/Code/...`) in a spec are unreachable
+   and the task stops at the P0 preflight gate (PWV2 tasks 1–2, 2026-11-22/23;
+   the inputs had to be `scp`'d in by hand). Use the file-intake conventions:
+   - **Small inputs** (scripts, configs, text — ≤ ~100 MB): the `stage_file`
+     MCP tool (or `POST /api/projects/<id>/files`) pushes the content into the
+     project's durable store; cite the returned `/files/<project_id>/<path>`
+     in the spec. Staged files live for the life of the project (icebox-safe).
+   - **Media inputs** (stills, reference video, audio): place them where media
+     already lives — the NAS (`/media-store/...`) or the public drop
+     (`/publish/...` = `https://choukalos.com/files/...`) — and cite the
+     container path or public URL in the spec (optionally register with
+     `stage_ref`, which validates reachability at registration). Never tunnel
+     media through MCP.
+   `move_to_backlog`/`start_task` run a spec-path preflight that warns about
+   unreachable references (advisory by default) — fail fast at task creation,
+   not after two QA rounds.
 
 ## R6 — QC gates (vision)
 
