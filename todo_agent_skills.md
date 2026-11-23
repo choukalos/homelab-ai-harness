@@ -178,6 +178,15 @@ gate) → S10 (static review) → S4/S5/S1 (docs + deploy).
   Rules: match the project's existing conventions (S2 recon first); the simplest
   architecture that meets the constraints (no over-engineering); every component
   maps to an owned story.
+  Status: **built 2026-11-23** (`agents-skills/architecture/SKILL.md` +
+  `references/architecture-doc-template.md`; grounded in R2 —
+  `docs/research/R2-swe-agent-recon.md` — recon-grounded conventions, and R8 —
+  `docs/research/R8-pm-artifacts.md` — spec-driven design-first mode; 9-section
+  doc: context & goals, ASCII component diagram with trust boundary, data flow,
+  interfaces/contracts, data model, tech choices with rationale, constraints &
+  trade-offs, ADRs, rollout plan; every component maps to an owned story as the
+  DEV-2 handoff). Registered + enabled in the Skill Hub. Full DoD smoke pending
+  the first Phase 1 task.
 - **DEV-2 — `story-breakdown` (P1).** Spec → stories. Rules: stories are
   independently shippable (vertical slices, not "all the database work"); each
   story has testable acceptance criteria, a size estimate (S/M/L with rationale),
