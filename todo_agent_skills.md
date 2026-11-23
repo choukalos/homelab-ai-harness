@@ -193,6 +193,16 @@ gate) → S10 (static review) → S4/S5/S1 (docs + deploy).
   and explicit dependencies (with a dependency map); a "ready" definition (no
   unresolved questions). Output: a story backlog on the board (ideas/tasks) + the
   dependency map.
+  Status: **built 2026-11-23** (`agents-skills/story-breakdown/SKILL.md` +
+  `references/story-template.md`; grounded in R8 —
+  `docs/research/R8-pm-artifacts.md`: vertical-slice independently shippable
+  stories, testable ACs (checklist default + Given/When/Then; every AC maps to
+  an executable test — stories carry their tests per G5), S/M/L sizing with
+  auditable rationale, blocked_by/blocks dependency map (finish-to-start only,
+  critical path + cycle check), ready gate (independent / small / testable hard
+  checks + negotiable/valuable/estimable soft checks), icebox hygiene
+  (needs-definition vs parked)). Registered + enabled in the Skill Hub. Full DoD
+  smoke pending the first Phase 1 task.
 
 **Audit notes (gaps found in the workflow audit):**
 
