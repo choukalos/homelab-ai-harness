@@ -792,7 +792,10 @@ Marketer (adapted: content QA — factualness/brand/strategy, see CM-1); BA
 (verification of report data).
 Research needed: **R3** (agent self-verification practices; self-check loops;
 avoiding confident-but-wrong completion).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/qa-verify/SKILL.md`; grounded in R3 —
+`docs/research/R3-agent-self-verification.md`; includes G5 tests-as-DoD + G7
+post-deploy watch; the Could-not-verify hard rule; registered + enabled in the
+Skill Hub). Full DoD smoke pending the first Phase 1 task.
 
 ### S4 — `git-flow` (P2)
 
