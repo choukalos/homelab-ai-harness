@@ -54,7 +54,7 @@ import {
   type TaskState,
   type UsageRole,
 } from "./db/schema.js";
-import { ideas, projects, taskEvents, tasks } from "./db/tables.js";
+import { ideas, projects, taskEvents, tasks, tablesUseMysql } from "./db/tables.js";
 import type { Db } from "./services/common.js";
 import { ServiceError } from "./services/common.js";
 import { appendTaskEvent, taskDependencyStatus } from "./services/tasks.js";
@@ -971,6 +971,12 @@ export class Orchestrator {
    * The update is conditional on the current state (`from`) so concurrent
    * transitions (e.g. failTask vs. pipeline completion) can't overwrite each
    * other; a mismatch throws 409.
+   *
+   * Driver note: `.returning()` is Postgres/SQLite-only — drizzle's MySQL
+   * update builder has no such method (MySQL has no RETURNING clause), so on
+   * MySQL we await the plain UPDATE and use the mysql2 OkPacket's
+   * `affectedRows` as the atomic "did the conditional WHERE match" check.
+   * (await resolves to [OkPacket, FieldPacket[]] on the mysql2 driver.)
    */
   private async transition(
     taskId: number,
@@ -979,12 +985,21 @@ export class Orchestrator {
     extra?: { branch?: string; workspace?: string; lastCommit?: string; qaRounds?: number; resolution?: string },
     payload: EventPayload = {},
   ): Promise<void> {
-    const updated = await this.db
-      .update(tasks)
-      .set({ state: to, stateChangedAt: Date.now(), ...(extra ?? {}) })
-      .where(and(eq(tasks.id, taskId), eq(tasks.state, from)))
-      .returning({ id: tasks.id });
-    if (updated.length === 0) {
+    const set = { state: to, stateChangedAt: Date.now(), ...(extra ?? {}) };
+    const where = and(eq(tasks.id, taskId), eq(tasks.state, from));
+    let affected: number;
+    if (tablesUseMysql) {
+      // mysql2: await resolves to [OkPacket, FieldPacket[]] (the `Db` type is
+      // the SQLite boundary cast — see the constructor).
+      const [res] = (await this.db.update(tasks).set(set).where(where)) as unknown as [
+        { affectedRows?: number },
+      ];
+      affected = res.affectedRows ?? 0;
+    } else {
+      const updated = await this.db.update(tasks).set(set).where(where).returning({ id: tasks.id });
+      affected = updated.length;
+    }
+    if (affected === 0) {
       const current = await this.getTask(taskId);
       throw new ServiceError(409, `task ${taskId} is not ${from} (state: ${current.state})`);
     }
