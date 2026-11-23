@@ -5,8 +5,10 @@
   meta-skill built + registered; findings in its `references/`); Q2 answered (skills
   for any pi agent). **Phase 1 research done 2026-11-23** (R2/R3/R6/R8 digests in
   `docs/research/`; R5 re-run after a session crash — all five verified complete).
-  **S1 `kanban-board` built 2026-11-23** (Phase 1 build, first of 9). Next: S2
-  `codebase-recon` (R2 ready) + S4/S5 (no research needed).
+  **S1 `kanban-board` + S2 `codebase-recon` + S3 `qa-verify` + S4 `git-flow` + S5
+  `docs-housekeeping` built 2026-11-23** (Phase 1 build, 5 of 9; all registered in
+  the Skill Hub). Next: S10 (R5 ready) + S11 (R6 ready) + DEV-1 + DEV-2 (R8
+  ready).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -834,7 +836,10 @@ Keep the repo's durable state clean — codify the 2026-11-22 proposal cleanup.
 Used by: Coding Team (update documentation step); all roles (durable state —
 strategy docs, PRDs, and reports live here too).
 Research needed: none (internal convention — `proposals/README.md` is the spec).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/docs-housekeeping/SKILL.md`; codified
+from `proposals/README.md` + the 2026-11-22 proposal cleanup (commit `dc83c4f`);
+includes the G6 ship-docs checklist; registered + enabled in the Skill Hub). Full
+DoD smoke pending the first Phase 1 task.
 
 ### S6 — `security-review` (P3)
 
