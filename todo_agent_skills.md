@@ -6,9 +6,11 @@
   for any pi agent). **Phase 1 research done 2026-11-23** (R2/R3/R6/R8 digests in
   `docs/research/`; R5 re-run after a session crash — all five verified complete).
   **S1 `kanban-board` + S2 `codebase-recon` + S3 `qa-verify` + S4 `git-flow` + S5
-  `docs-housekeeping` built 2026-11-23** (Phase 1 build, 5 of 9; all registered in
-  the Skill Hub). Next: S10 (R5 ready) + S11 (R6 ready) + DEV-1 + DEV-2 (R8
-  ready).
+  `docs-housekeeping` + S10 `code-reviewer` + S11 `security-code-review` +
+  DEV-1 `architecture` + DEV-2 `story-breakdown` + S9 `exec-problem-brief`
+  built 2026-11-23** (Phase 1 build, 9 of 9 + S9 pulled forward from Phase 2;
+  all registered in the Skill Hub). Next: Phase 2 — PM-1/2/3/4/5 + MKT-1 + S12
+  + CM-1/CM-2 (R7/R9 research pending).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -939,7 +941,18 @@ McKinsey-style executive problem-solving brief generator — board-ready
 Used by: PM (deep-dive opportunity pitches), BA (exec presentations / deep-dive
 status), any role pitching a high-stakes question to the exec.
 Research needed: none for the core (spec is complete) — R1 polish only.
-Status: spec received 2026-11-22; build pending.
+Status: **built 2026-11-23** (`agents-skills/exec-problem-brief/SKILL.md`, built
+from the verbatim spec in `references/source-prompt.md`; 5-field structured
+problem input template → 7-step pipeline (Step 0 pre-execution diagnostic →
+Minto answer-first exec summary → SCQ → 3–5 branch MECE issue tree with
+falsifiable hypotheses → evidence & falsification matrix with binary decision
+forks → exactly 3 strategic pillars → phased roadmap 0–2w/2–8w/2–6m with
+Verb+Object+KPI+Owner+Deadline + H/M/L tags → risk & control matrix with
+leading indicators + trigger thresholds) → 7-section board-ready brief;
+hard constraints: no fabricated figures (state the economic equation +
+fastest empirical test), answer-first, strict economic/operational causality,
+decisive action titles). Registered + enabled in the Skill Hub. Full DoD
+smoke pending the first Phase 1 task.
 
 ### S10 — `code-reviewer` (P1, prompt to be written)
 

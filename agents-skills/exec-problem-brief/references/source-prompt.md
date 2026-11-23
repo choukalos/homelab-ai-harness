@@ -4,6 +4,11 @@ This is the raw prompt/spec the skill is built from. Preserve the structure and
 constraints when writing SKILL.md; the skill's job is to make this a repeatable,
 verifiable agent workflow (input template → 7-step pipeline → 7-section brief).
 
+Structure (verbatim below): `<System>` + `<Context>` (role, objective) →
+`<Instructions>` (Step0 pre-execution diagnostic, Steps 1–7) → `<Constraints>`
+→ `<Output Format>` (the 7 brief sections) → `<Reasoning>` → `<User Input>`
+(the 5-field structured problem template).
+
 ---
 
 <System>
