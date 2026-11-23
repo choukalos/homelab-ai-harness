@@ -19,7 +19,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { KanbanServices, ProjectInput } from "../services/index.js";
+import type { KanbanServices, Idea, ProjectInput } from "../services/index.js";
+import {
+  isPreflightStrict,
+  preflightSpec,
+  preflightSpecs,
+  withPreflightWarning,
+} from "../services/preflight.js";
 
 export type { KanbanServices } from "../services/index.js";
 
@@ -591,10 +597,21 @@ export function registerMcpTools(
       description:
         "Move one or more icebox items to the board backlog (creates their tasks). " +
         "All listed ideas must be in the icebox; the orchestrator starts them only " +
-        "when their depends_on ideas have done tasks.",
+        "when their depends_on ideas have done tasks. Spec-path preflight runs first: " +
+        "unreachable input references (client paths, dead URLs) return a structured " +
+        "warning on the result (advisory; strict mode refuses when KANBAN_PREFLIGHT_STRICT=1).",
       inputSchema: { idea_ids: z.array(z.number().int().positive()).min(1) },
     },
-    ({ idea_ids }) => run(async () => ok(await services.moveIceboxToBacklog(idea_ids))),
+    ({ idea_ids }) =>
+      run(async () => {
+        // Spec-path preflight (advisory; strict via KANBAN_PREFLIGHT_STRICT):
+        // fail fast on unreachable inputs, before the move.
+        const specs = (
+          await Promise.all(idea_ids.map((id: number) => services.getIdea(id)))
+        ).filter((idea): idea is Idea => idea !== undefined).map((idea) => idea.spec);
+        const report = await preflightSpecs(specs, { strict: isPreflightStrict() });
+        return ok(withPreflightWarning(await services.moveIceboxToBacklog(idea_ids), report));
+      }),
   );
 
   reg(
@@ -603,10 +620,22 @@ export function registerMcpTools(
       description:
         "Start a backlog task now (bypasses the pickup timer). Dependency and " +
         "per-category slot gates still apply (MEDIA_CONCURRENT_TASKS for " +
-        "media-kind tasks, NON_MEDIA_CONCURRENT_TASKS for everything else).",
+        "media-kind tasks, NON_MEDIA_CONCURRENT_TASKS for everything else). " +
+        "Spec-path preflight runs first: unreachable input references return a " +
+        "structured warning on the result (advisory; strict mode refuses when " +
+        "KANBAN_PREFLIGHT_STRICT=1).",
       inputSchema: { task_id: z.number().int().positive() },
     },
-    ({ task_id }) => run(async () => ok(await services.startTask(task_id))),
+    ({ task_id }) =>
+      run(async () => {
+        // Spec-path preflight (advisory; strict via KANBAN_PREFLIGHT_STRICT):
+        // fail fast on unreachable inputs, before the start.
+        const detail = await services.getTask(task_id);
+        const report = detail
+          ? await preflightSpec(detail.task.spec, { strict: isPreflightStrict() })
+          : { checked: [], unreachable: [] };
+        return ok(withPreflightWarning(await services.startTask(task_id), report));
+      }),
   );
 
   reg(

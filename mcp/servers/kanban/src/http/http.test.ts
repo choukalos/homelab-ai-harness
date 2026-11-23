@@ -871,6 +871,90 @@ test("MCP move_to_backlog: owner inherited from the idea", async () => {
   await app.close();
 });
 
+test("MCP move_to_backlog: spec-path preflight — advisory warning, move proceeds", async () => {
+  const ctx = await makeApp();
+  const { app, services, db, setFetchStatus } = ctx;
+  setFetchStatus(404); // the spec's URL is dead
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const { ideaId } = await makeProjectAndIdea(ctx, "Pre", "Pre idea", "chuck");
+  const spec = {
+    goal: "run the frozen script ~/Code/media-film/potato-wars-v2/frozen.py",
+    steps: ["cite https://choukalos.com/files/missing.mp4"],
+    acceptance: [],
+    kind: "media" as const,
+  };
+  await q.update(ideas).set({ state: "icebox", spec, dependsOn: [] }).where(eq(ideas.id, ideaId));
+
+  const moved = mcpText(await mcpCall(app, "move_to_backlog", { idea_ids: [ideaId] }));
+  // Advisory: the move proceeds...
+  assert.equal(moved.tasks.length, 1);
+  assert.equal(moved.tasks[0].state, "backlog");
+  // ...but the result carries the structured preflight warning.
+  assert.equal(moved.preflight.unreachable.length, 2);
+  const refs = moved.preflight.unreachable.map((r: any) => r.ref).sort();
+  assert.deepEqual(refs, [
+    "https://choukalos.com/files/missing.mp4",
+    "~/Code/media-film/potato-wars-v2/frozen.py",
+  ]);
+  assert.equal((await services.getIdea(ideaId))?.state, "moved");
+  await app.close();
+});
+
+test("MCP move_to_backlog: preflight strict (KANBAN_PREFLIGHT_STRICT=1) refuses unreachable specs", async () => {
+  process.env.KANBAN_PREFLIGHT_STRICT = "1";
+  try {
+    const ctx = await makeApp();
+    const { app, services, db, setFetchStatus } = ctx;
+    setFetchStatus(404);
+    const q = db.db as unknown as BetterSQLite3Database<any>;
+    const { ideaId } = await makeProjectAndIdea(ctx, "PreStrict", "Pre strict idea", "chuck");
+    const spec = {
+      goal: "run the frozen script ~/Code/media-film/potato-wars-v2/frozen.py",
+      steps: ["cite https://choukalos.com/files/missing.mp4"],
+      acceptance: [],
+      kind: "media" as const,
+    };
+    await q.update(ideas).set({ state: "icebox", spec, dependsOn: [] }).where(eq(ideas.id, ideaId));
+
+    const res = await mcpCall(app, "move_to_backlog", { idea_ids: [ideaId] });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /preflight strict/);
+    assert.match(res.content[0].text, /~\/Code\/media-film\/potato-wars-v2\/frozen\.py/);
+    // Refused before the move: the idea stays in the icebox.
+    assert.equal((await services.getIdea(ideaId))?.state, "icebox");
+    await app.close();
+  } finally {
+    delete process.env.KANBAN_PREFLIGHT_STRICT;
+  }
+});
+
+test("MCP start_task: spec-path preflight — advisory warning on unreachable refs", async () => {
+  const ctx = await makeApp();
+  const { app, db } = ctx;
+  const q = db.db as unknown as BetterSQLite3Database<any>;
+  const { task } = await makeTaskFixture(ctx, { state: "backlog" });
+  await q
+    .update(tasks)
+    .set({
+      spec: {
+        goal: "run ~/Code/media-film/potato-wars-v2/frozen.py",
+        steps: [],
+        acceptance: [],
+        kind: "media",
+      },
+    })
+    .where(eq(tasks.id, task.id));
+
+  const started = mcpText(await mcpCall(app, "start_task", { task_id: task.id }));
+  // Advisory: the task starts...
+  assert.equal(started.state, "running");
+  // ...but the result carries the structured preflight warning.
+  assert.equal(started.preflight.unreachable.length, 1);
+  assert.equal(started.preflight.unreachable[0].ref, "~/Code/media-film/potato-wars-v2/frozen.py");
+  await ctx.orchestrator.settled();
+  await app.close();
+});
+
 test("MCP tools: start_task / task_status / restart_task / retry_deploy", async () => {
   const ctx = await makeApp();
   const { app, db, orchestrator } = ctx;
