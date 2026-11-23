@@ -170,7 +170,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Loop quality: accepted proposals over all proposals ever proposed (open + accepted + dismissed + applied).",
+      "description": "Loop quality: applied (implemented) proposals over all proposals ever proposed (open + accepted + dismissed + applied). `accepted` is a transient review state — the terminal success state is `applied`.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -223,12 +223,12 @@
       },
       "targets": [
         {
-          "expr": "sum(proposals_total{status=\"accepted\"}) / clamp_min(sum(proposals_total), 1)",
+          "expr": "sum(proposals_total{status=\"applied\"}) / clamp_min(sum(proposals_total), 1)",
           "legendFormat": "accepted / total",
           "refId": "A"
         }
       ],
-      "title": "Proposals accepted / total proposed",
+      "title": "Proposals applied / total proposed",
       "type": "stat"
     },
     {
