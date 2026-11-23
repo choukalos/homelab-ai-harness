@@ -164,7 +164,7 @@ The container exposes its tools as an MCP server over streamable HTTP at
 proxy's MCP gateway; the proxy forwards the caller's LiteLLM key, and the
 container scopes the tool set per key (see "Identity & keys").
 
-Tools (23; thin layer over the same service functions the read-only web UI
+Tools (25; thin layer over the same service functions the read-only web UI
 uses for its status views):
 
 | Group | Tools |

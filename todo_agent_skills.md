@@ -3,7 +3,10 @@
 - date: 2026-11-22
 - status: open (draft for review) — **Phase 0 R1 done 2026-11-22** (skill-authoring
   meta-skill built + registered; findings in its `references/`); Q2 answered (skills
-  for any pi agent). Next: Phase 1 build (S1 first).
+  for any pi agent). **Phase 1 research done 2026-11-23** (R2/R3/R6/R8 digests in
+  `docs/research/`; R5 re-run after a session crash — all five verified complete).
+  **S1 `kanban-board` built 2026-11-23** (Phase 1 build, first of 9). Next: S2
+  `codebase-recon` (R2 ready) + S4/S5 (no research needed).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -535,7 +538,12 @@ gate + static review) → docs → deploy → post-deploy watch.
   | DEV-2 `story-breakdown` (P1) | needs R8 (the story-breakdown half) |
 
 - **Research** (parallel): R2 (S2), R3 (S3), R5 (S10), R6 (S11), R8 (DEV-2 now,
-  PM-4/5 later)
+  PM-4/5 later) — **all DONE 2026-11-23**: `docs/research/R2-swe-agent-recon.md`,
+  `R3-agent-self-verification.md`, `R5-llm-code-review.md`,
+  `R6-owasp-llm-detection.md`, `R8-pm-artifacts.md` (each: sources fetched +
+  verified, findings, build implications, honest gaps). Note: R5's first run
+  (same day) timed out 3× before writing the file; the re-run with incremental-write
+  discipline succeeded.
 - **Prereq**: S1 first — everything else assumes board ops work
 - **Exit criteria**: one real task on Bluebovine or Invest Hub completes the full
   loop — recon note → architecture (where needed) → story breakdown → code → QA
@@ -716,7 +724,11 @@ Used by: **all roles** (board ops); PM (grooming = the PRD process); Coding Team
 (task lifecycle + deploy gates); BA (board state as a data source).
 Research needed: none (internal system — codify from the kanban README +
 proposals).
-Status: not started.
+Status: **built 2026-11-23** (`agents-skills/kanban-board/SKILL.md`; grounded in
+the kanban README + 2026-11-21/22/23 proposals + live board read — all 4 real
+projects' constraints + 25 live tools verified). Smoke test: triage on the live
+board + scratch-project cycle (the 2026-11-22/23 verification). Full DoD smoke
+(real board item through the playbook) pending the first Phase 1 task.
 
 ### S2 — `codebase-recon` (P1)
 
@@ -1112,13 +1124,13 @@ skill follows that skill; the rules below are its short form.
 | # | Question | Feeds | Suggested skill |
 |---|----------|-------|-----------------|
 | R1 | Agent skill authoring best practices — description quality, progressive disclosure, when to split vs. merge skills, common failure modes | All | `deep-research` (Anthropic skill-authoring guidance + ecosystem patterns) — **DONE 2026-11-22**: findings in `agents-skills/skill-authoring/references/authoring-best-practices.md` (primary sources fetched + verified directly; the `deep_research` job pass returned only empty KB entries and declared the source gap) |
-| R2 | How SWE agents orient in unfamiliar repos — repo-map generation, recon artifacts that help downstream, time-boxing | S2, DEV-1/2 | `deep-research` |
-| R3 | Agent self-verification practices — self-check loops, evidence-based completion, avoiding confident-but-wrong claims, debugging loops | S3, S8, CM-1 | `deep-research` |
+| R2 | How SWE agents orient in unfamiliar repos — repo-map generation, recon artifacts that help downstream, time-boxing | S2, DEV-1/2 | `deep-research` — **DONE 2026-11-23**: `docs/research/R2-swe-agent-recon.md` |
+| R3 | Agent self-verification practices — self-check loops, evidence-based completion, avoiding confident-but-wrong claims, debugging loops | S3, S8, CM-1 | `deep-research` — **DONE 2026-11-23**: `docs/research/R3-agent-self-verification.md` |
 | R4 | Public agent-skill collections worth mining for patterns (not copying) | All | `research-brief` (light) |
-| R5 | What makes LLM code review useful vs. noisy — severity calibration, anti-false-positive design, how review agents (CodeRabbit / Graphite / Greptile) structure review prompts, diff-scoping heuristics for large diffs | S10 | `deep-research` |
-| R6 | OWASP Top 10 (2021) code-level detection patterns for an LLM reviewer — per-category code patterns to look for, common false positives, complementary checklists (OWASP ASVS, dependency/secret scanning) | S11 | `deep-research` |
+| R5 | What makes LLM code review useful vs. noisy — severity calibration, anti-false-positive design, how review agents (CodeRabbit / Graphite / Greptile) structure review prompts, diff-scoping heuristics for large diffs | S10 | `deep-research` — **DONE 2026-11-23** (re-run after 3× timeout): `docs/research/R5-llm-code-review.md` |
+| R6 | OWASP Top 10 (2021) code-level detection patterns for an LLM reviewer — per-category code patterns to look for, common false positives, complementary checklists (OWASP ASVS, dependency/secret scanning) | S11 | `deep-research` — **DONE 2026-11-23**: `docs/research/R6-owasp-llm-detection.md` |
 | R7 | Content marketing & organic-traffic strategy best practices — content pillars, topic clusters, search-intent mapping, SEO for 2025–2026 (incl. AI search/answer engines), funnel mapping, measurement KPIs | S12, MKT-1, CM-1 | `deep-research` |
-| R8 | Product-management artifacts — PRD format, story breakdown / acceptance criteria / ready definition, dependency mapping, competitive-analysis frameworks, opportunity sizing, **ideation frameworks + prioritization (RICE/ICE/Kano)** | PM-1/2/3/4/5, DEV-2 | `deep-research` |
+| R8 | Product-management artifacts — PRD format, story breakdown / acceptance criteria / ready definition, dependency mapping, competitive-analysis frameworks, opportunity sizing, **ideation frameworks + prioritization (RICE/ICE/Kano)** | PM-1/2/3/4/5, DEV-2 | `deep-research` — **DONE 2026-11-23**: `docs/research/R8-pm-artifacts.md` |
 | R9 | Marketing strategy operating cadence — brand/voice frameworks, strategy-doc structure, content ops (ask → brief → draft → QA → publish), content impact measurement | MKT-1, CM-1 | `deep-research` |
 | R10 | BA / exec reporting — KPI definition, dashboard practices, periodic analysis cadence, exec status-report format, feedback routing | BA-1 | `deep-research` |
 
