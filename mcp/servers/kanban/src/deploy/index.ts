@@ -60,6 +60,26 @@ export function postDate(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * Extract the machine path from a (possibly free-text) publish-target entry.
+ *
+ * Grooming-authored specs often embed the path in prose ("NAS 'media' share
+ * (mandatory): /media-store/x/ — file.mp4 + state.json"); the deploy stage
+ * needs the path itself. A clean path (no surrounding whitespace — absolute
+ * or relative) is used as-is; free text yields the first absolute path after
+ * stripping URLs (a URL's path component, e.g. /files/x.mp4 in
+ * choukalos.com/files/x.mp4, is NOT a container path); prose with no usable
+ * path yields null (the entry is skipped, never guessed).
+ */
+export function extractTargetPath(entry: string): string | null {
+  const t = entry.trim();
+  if (!t) return null;
+  if (!/\s/.test(t)) return t;
+  const noUrls = t.replace(/https?:\/\/\S+/g, " ");
+  const m = /\/[A-Za-z0-9._+~-]+(?:\/[A-Za-z0-9._+~-]+)*\/?/.exec(noUrls);
+  return m ? m[0] : null;
+}
+
 // ---------------------------------------------------------------------------
 // Handlers per kind
 // ---------------------------------------------------------------------------
@@ -116,8 +136,13 @@ export const deployBlog: DeployHandler = async (ctx, git) => {
 /**
  * media: publish the task's media/ output to the target.
  *   - absolute target path → local directory on the host: copy, no git
+ *     (includes the blog public drop, /publish/... in the kanban container)
  *   - relative target path → subdirectory of the blog repo: clone, copy,
  *     commit, push (requires blog_repo_url)
+ * publish_targets entries are grooming-authored and may be free text —
+ * extractTargetPath pulls the machine path out of each; entries with no
+ * usable path are skipped (2026-11-23: a prose entry crashed the stage with
+ * "project has no blog_repo_url" after the task had already published).
  */
 export const deployMedia: DeployHandler = async (ctx, git) => {
   // Pick the first publish target that is a real output location: absolute
@@ -129,7 +154,9 @@ export const deployMedia: DeployHandler = async (ctx, git) => {
     const p = path.resolve(t);
     return p === root || p.startsWith(root + path.sep);
   };
-  const candidates = (ctx.spec.publish_targets ?? []).filter((t) => t && !isScratch(t));
+  const candidates = (ctx.spec.publish_targets ?? [])
+    .map((t) => (t ? extractTargetPath(t) : null))
+    .filter((t): t is string => t !== null && !isScratch(t));
   const targetPath = candidates[0] ?? ctx.project.mediaPaths?.[0];
   if (!targetPath) {
     throw new Error("deploy failed: no media path (spec publish_targets or project media_paths)");

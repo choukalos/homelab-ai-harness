@@ -14,6 +14,7 @@ import {
   deployCode,
   deployMedia,
   deployOther,
+  extractTargetPath,
   handlerForKind,
   postDate,
   slugify,
@@ -374,6 +375,97 @@ test("deployMedia: all-scratch publish targets fall back to project media_paths"
   );
   assert.equal(result.target, projectTarget);
   assert.equal(readFileSync(path.join(projectTarget, "img.png"), "utf8"), "img");
+});
+
+// ---------------------------------------------------------------------------
+// extractTargetPath — free-text publish targets (grooming-authored prose)
+// ---------------------------------------------------------------------------
+
+test("extractTargetPath: clean paths as-is; free text → first absolute path; no path → null", () => {
+  // Clean absolute path (the normal case) — unchanged.
+  assert.equal(
+    extractTargetPath("/media-store/potato-wars-v2/b2/file.mp4"),
+    "/media-store/potato-wars-v2/b2/file.mp4",
+  );
+  // Clean relative path (blog-repo subdir) — unchanged.
+  assert.equal(extractTargetPath("media/homelab"), "media/homelab");
+  // Free text with an embedded absolute path (the 2026-11-23 task-3 shape).
+  assert.equal(
+    extractTargetPath(
+      "NAS 'media' share (homelab archive, mandatory): /media-store/potato-wars-v2/b2/ — draft.mp4 + state.json copy (thor mount equivalent: /mnt/lego-media-store/potato-wars-v2/b2/)",
+    ),
+    "/media-store/potato-wars-v2/b2/",
+  );
+  // Absolute path with a prose suffix — the path only.
+  assert.equal(
+    extractTargetPath("/publish/video/draft.mp4 (published via publish-file skill)"),
+    "/publish/video/draft.mp4",
+  );
+  // URL-only text: the URL's path component is NOT a container path.
+  assert.equal(extractTargetPath("served at https://choukalos.com/files/video/x.mp4 only"), null);
+  // Prose with no usable path.
+  assert.equal(extractTargetPath("publish to the blog file area"), null);
+  assert.equal(extractTargetPath(""), null);
+});
+
+test("deployMedia: free-text publish_targets (grooming prose) → path extracted, local copy, no git crash", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-3");
+  mkdirSync(path.join(workspace, "media"), { recursive: true });
+  writeFileSync(path.join(workspace, "media", "draft.mp4"), "vid");
+  const nasTarget = path.join(dir, "nas", "potato-wars-v2", "b2");
+  const { git, calls } = mockPublishGit();
+
+  // The exact shape that crashed 2026-11-23: prose entries, no blog_repo_url.
+  const result = await deployMedia(
+    ctx({
+      kind: "media",
+      workspace,
+      workspaceRoot: path.join(dir, "workspace"),
+      spec: {
+        ...ctx().spec,
+        publish_targets: [
+          `NAS 'media' share (homelab archive, mandatory): ${nasTarget}/ — draft.mp4 + state.json copy (thor mount equivalent: /mnt/lego-media-store/potato-wars-v2/b2/)`,
+          `Public blog file area (explicitly requested): /publish/video/draft.mp4 — served at https://choukalos.com/files/video/draft.mp4`,
+        ],
+      } as IdeaSpec,
+      project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+    }),
+    git,
+  );
+  // The first entry's embedded absolute path wins; local copy, no git.
+  assert.equal(result.target, `${nasTarget}/`);
+  assert.equal(readFileSync(path.join(nasTarget, "draft.mp4"), "utf8"), "vid");
+  assert.equal(calls.clones.length, 0);
+  assert.equal(calls.pushesCurrent.length, 0);
+});
+
+test("deployMedia: URL-only target is skipped, next usable target wins", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-3");
+  mkdirSync(path.join(workspace, "media"), { recursive: true });
+  writeFileSync(path.join(workspace, "media", "draft.mp4"), "vid");
+  const publicTarget = path.join(dir, "publish", "video", "draft.mp4");
+  const { git, calls } = mockPublishGit();
+
+  const result = await deployMedia(
+    ctx({
+      kind: "media",
+      workspace,
+      spec: {
+        ...ctx().spec,
+        publish_targets: [
+          "served at https://choukalos.com/files/video/draft.mp4 (URL only — no container path)",
+          publicTarget,
+        ],
+      } as IdeaSpec,
+      project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+    }),
+    git,
+  );
+  assert.equal(result.target, publicTarget);
+  assert.equal(readFileSync(publicTarget, "utf8"), "vid");
+  assert.equal(calls.clones.length, 0);
 });
 
 // ---------------------------------------------------------------------------

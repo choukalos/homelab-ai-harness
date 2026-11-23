@@ -375,6 +375,20 @@ clip (record why in `qc`).
    path>, subdirectory: "video", destination_name: "<slug>.mp4"})`.
 3. Verify: `curl -sIL https://choukalos.com/files/video/<slug>.mp4` → 200.
 4. Record the public URL in `state.json`.
+5. **When running under the kanban orchestrator (mcp_kanban container):**
+   the orchestrator re-runs a deploy stage after QA that re-publishes from
+   `publish_targets[0]` of the task spec. The blog's public file area is a
+   **directory, not a git repo** — in the kanban container it is mounted at
+   `/publish` (= host `/home/chuck/data/media/public` =
+   `https://choukalos.com/files/`). Write `publish_targets` entries as
+   **machine-readable absolute container paths, path first, no prose around
+   the path**:
+   - NAS archive: `/media-store/<project>/<task>/` (container mount of the
+     lego media share; thor equivalent `/mnt/lego-media-store/...`)
+   - Public drop: `/publish/video/<slug>.mp4`
+   Prose entries ("NAS 'media' share: /media-store/...") crashed the deploy
+   stage on 2026-11-23 (task 3, PWV2 F2-B) — the stage now extracts embedded
+   paths, but clean paths are the convention and the only safe form.
 
 ## R6 — QC gates (vision)
 
