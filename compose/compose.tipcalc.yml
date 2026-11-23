@@ -1,0 +1,64 @@
+name: homelab-tipcalc
+
+# Skills E2E test project (tipcalc, 2026-11-23): public but disposable test
+# property for the agent-skills pipeline. Public URL: test.choukalos.com
+# (CF tunnel -> caddy @tipcalc -> tipcalc:8080).
+#
+# Teardown (when the E2E test concludes): docker compose down -v, remove
+# /home/chuck/data/tipcalc*, the @tipcalc block in caddy/Caddyfile, the CF
+# tunnel hostname, and the tipcalc GitHub repo.
+
+services:
+  tipcalc-runner:
+    image: myoung34/github-runner:latest
+    container_name: tipcalc-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/choukalos/tipcalc
+      - ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - RUNNER_NAME=tipcalc-runner
+      - RUNNER_SCOPE=repo
+      - RUNNER_WORKDIR=/tmp/runner/work-tipcalc
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner/data
+      - DISABLE_AUTO_UPDATE=true
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
+      - LABELS=self-hosted,linux,docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/chuck/data/tipcalc-runner:/runner/data
+      - /tmp/runner:/tmp/runner
+      - /home/chuck/homelab/compose:/home/github-runner/work/compose
+      - /home/chuck/homelab/.env:/home/github-runner/work/.env
+    networks:
+      - public-net
+
+  tipcalc:
+    image: tipcalc:latest
+    # BUILD CONTEXT IS A CI PLACEHOLDER — do NOT "fix" this path.
+    # The tipcalc repo's .github/workflows/deploy.yml (runs on the
+    # self-hosted tipcalc-runner) copies this file and rewrites the
+    # `context:` line below (via sed) to point at the fresh GitHub
+    # checkout, then builds from that copy. The string below is the sed
+    # anchor: if it changes, the workflow's grep guard fails loudly.
+    # CI always deploys from the GitHub checkout — there is no local build
+    # path.
+    build:
+      context: ../../workspace/code/tipcalc
+      dockerfile: Dockerfile
+    container_name: tipcalc
+    restart: unless-stopped
+    stop_grace_period: 10s
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+      - TZ=${TZ}
+    volumes:
+      - /home/chuck/data/tipcalc:/data  # SQLite (durable, disposable)
+    networks:
+      - public-net
+    extra_hosts:
+      - "thor.local:192.168.4.54"
+
+networks:
+  public-net:
+    external: true
