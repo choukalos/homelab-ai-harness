@@ -55,13 +55,22 @@ Tier is a priority bucket, not a reflection-pipeline tier (the
 "Tier 1 propose-only / Tier 2 human applies" language in older footers
 refers to the reflection pipeline's own roles).
 
-## Current state (2026-11-22)
+## Current state (2026-11-23)
 
-- **tier1:** (none open — macstudio-omlx-restart applied 2026-11-21: OMLX
+- **tier1:** (none open — pinned-reference-values +
+  reference-json-overwrite-guard applied 2026-11-23: market-research-brief
+  reference rebuilds now preserve `pinned`/verified market-size + context
+  values across runs, and every `references/<market>.json` write goes through
+  a validate-then-atomic-rename guard that refuses profile-block payloads
+  (20 new stdlib tests; both live datasets pass the guard). Earlier:
+  macstudio-omlx-restart applied 2026-11-21: OMLX
   reloaded on the Mac Studio, `/v1/models` + proxy chat completion verified
   200; capability probes run and `litellm/config.yml` flags updated to match,
   staged pending a litellm-proxy restart)
-- **tier2:** (none open — all closed; see archive)
+- **tier2:** kanban-remote-client-file-intake (open 2026-11-23 — durable
+  per-project file store + intake tool + spec-path preflight so remote
+  clients can author specs with client-local file paths; see
+  `2026-11-23-tier2-kanban-remote-client-file-intake.md`)
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
   applied 2026-11-20; H3 `/model/info` restriction open pending feature
   check; H4 Dylan scoping deferred by design)
@@ -80,4 +89,7 @@ refers to the reflection pipeline's own roles).
   tier2-mcp-kanban (original), tier2-mcp-kanban-mcp-first,
   tier2-mcp-kanban-phase2-user-spend, tier2-mcp-kanban-improvements
   (all applied + verified live; durable content in the kanban README + ops
-  docs)
+  docs) + 2026-11-23: pinned-reference-values,
+  reference-json-overwrite-guard (both applied — `skills/market_research_brief/
+  reference.py`; verified: 20 stdlib tests pass, both live reference datasets
+  pass the write guard, skill.py render path exercised end-to-end)
