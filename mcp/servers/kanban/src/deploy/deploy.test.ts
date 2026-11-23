@@ -378,6 +378,117 @@ test("deployMedia: all-scratch publish targets fall back to project media_paths"
 });
 
 // ---------------------------------------------------------------------------
+// media — self-published (idempotent no-op) paths, 2026-11-23 task 2
+// ---------------------------------------------------------------------------
+
+test("deployMedia: empty media/ + populated FILE target → verified no-op (task self-published)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-2");
+  // media/ exists with only an empty subdir — the exact task-2 shape.
+  mkdirSync(path.join(workspace, "media", "pwv2-c1"), { recursive: true });
+  const target = path.join(dir, "publish", "video", "potato-wars-v2-draft.mp4");
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, "vid");
+  const { git, calls } = mockPublishGit();
+
+  const result = await deployMedia(
+    ctx({
+      kind: "media",
+      workspace,
+      spec: {
+        ...ctx().spec,
+        publish_targets: [`${target} (public via publish_file skill)`],
+      } as IdeaSpec,
+      project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+    }),
+    git,
+  );
+  assert.match(result.published, /already published at/);
+  assert.equal(result.target, target);
+  // No git, no re-copy: the deploy is a verified no-op.
+  assert.equal(calls.clones.length + calls.pushesCurrent.length, 0);
+});
+
+test("deployMedia: empty media/ + populated DIR target (NAS shape) → verified no-op", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-2");
+  mkdirSync(path.join(workspace, "media", "pwv2-c1"), { recursive: true });
+  const nas = path.join(dir, "nas", "potato-wars-v2", "c1-draft");
+  mkdirSync(nas, { recursive: true });
+  writeFileSync(path.join(nas, "potato-wars-v2-draft.mp4"), "vid");
+  writeFileSync(path.join(nas, "state.json"), "{}");
+  writeFileSync(path.join(nas, "REVIEW_PACK.md"), "# review");
+  const { git, calls } = mockPublishGit();
+
+  // The exact task-2 publish_targets shape: free-text prose, trailing-slash dir.
+  const result = await deployMedia(
+    ctx({
+      kind: "media",
+      workspace,
+      spec: {
+        ...ctx().spec,
+        publish_targets: [
+          `${nas}/ (NAS archive: potato-wars-v2-draft.mp4 + state.json + REVIEW_PACK.md)`,
+          `Public blog file area: ${path.join(dir, "publish", "video", "potato-wars-v2-draft.mp4")} — served at https://choukalos.com/files/video/potato-wars-v2-draft.mp4`,
+        ],
+      } as IdeaSpec,
+      project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+    }),
+    git,
+  );
+  assert.match(result.published, /already published at/);
+  assert.match(result.published, /3 file\(s\) verified at target/);
+  assert.equal(result.target, `${nas}/`);
+  assert.equal(calls.clones.length + calls.pushesCurrent.length, 0, "no git for local targets");
+});
+
+test("deployMedia: empty media/ + UNPOPULATED target → failure (still needs attention)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-2");
+  mkdirSync(path.join(workspace, "media"), { recursive: true });
+  const { git } = mockPublishGit();
+
+  // Absolute target, nothing there → explicit failure naming the target.
+  await assert.rejects(
+    deployMedia(
+      ctx({
+        kind: "media",
+        workspace,
+        spec: { ...ctx().spec, publish_targets: [path.join(dir, "nas", "missing")] } as IdeaSpec,
+        project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+      }),
+      git,
+    ),
+    /target .* is not populated/,
+  );
+  // Relative target (blog-repo subdir): not verifiable locally → plain no-media error.
+  await assert.rejects(deployMedia(ctx({ kind: "media", workspace }), git), /no media files/);
+});
+
+test("deployMedia: 0-byte file target is NOT treated as published", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-deploy-media-"));
+  const workspace = path.join(dir, "workspace", "task-2");
+  mkdirSync(path.join(workspace, "media"), { recursive: true });
+  const target = path.join(dir, "out", "x.mp4");
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, ""); // 0 bytes
+  const { git } = mockPublishGit();
+
+  await assert.rejects(
+    deployMedia(
+      ctx({
+        kind: "media",
+        workspace,
+        spec: { ...ctx().spec, publish_targets: [target] } as IdeaSpec,
+        project: { ...ctx().project, blogRepoUrl: null, mediaPaths: null },
+      }),
+      git,
+    ),
+    /is not populated/,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // extractTargetPath — free-text publish targets (grooming-authored prose)
 // ---------------------------------------------------------------------------
 

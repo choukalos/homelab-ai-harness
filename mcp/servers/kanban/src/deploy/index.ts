@@ -7,7 +7,7 @@
  *   other → no-op
  * Failure → needs_attention (retryable via retry_deploy, Slice 5 surface).
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
 import path from "node:path";
 import type { IdeaSpec, TaskKind } from "../db/schema.js";
 import { createPublishGit, type PublishGit } from "../publish/git.js";
@@ -143,6 +143,13 @@ export const deployBlog: DeployHandler = async (ctx, git) => {
  * extractTargetPath pulls the machine path out of each; entries with no
  * usable path are skipped (2026-11-23: a prose entry crashed the stage with
  * "project has no blog_repo_url" after the task had already published).
+ *
+ * Idempotent: media tasks (media-film P7) often self-publish directly to
+ * the target and the QA gate verifies the published output. If the
+ * workspace media/ has no files but the (local) target is already
+ * populated, the deploy is a verified no-op — not a failure (2026-11-23
+ * task 2: draft published to NAS + blog, stage failed with "media is
+ * empty" and parked the task in needs_attention).
  */
 export const deployMedia: DeployHandler = async (ctx, git) => {
   // Pick the first publish target that is a real output location: absolute
@@ -162,12 +169,24 @@ export const deployMedia: DeployHandler = async (ctx, git) => {
     throw new Error("deploy failed: no media path (spec publish_targets or project media_paths)");
   }
   const src = path.join(ctx.workspace, "media");
-  if (!existsSync(src)) {
-    throw new Error(`deploy failed: no media files at ${src}`);
-  }
-  const files = listFiles(src);
+  const files = existsSync(src) ? listFiles(src) : [];
   if (files.length === 0) {
-    throw new Error(`deploy failed: ${src} is empty`);
+    // The task self-published (media-film P7) and QA verified the output:
+    // a populated local target makes the deploy a verified no-op.
+    const verified = alreadyPublished(targetPath);
+    if (verified !== null) {
+      return {
+        published: `already published at ${targetPath} (task self-published; ${verified} file(s) verified at target)`,
+        target: targetPath,
+      };
+    }
+    if (!path.isAbsolute(targetPath)) {
+      // Blog-repo subdir: cannot be verified from this container.
+      throw new Error(`deploy failed: no media files at ${src}`);
+    }
+    throw new Error(
+      `deploy failed: no media files at ${src} and target ${targetPath} is not populated`,
+    );
   }
 
   // Local (absolute) target. A target with a file extension is an exact
@@ -233,6 +252,29 @@ export function handlerForKind(kind: TaskKind): DeployHandler {
     default:
       return deployOther;
   }
+}
+
+/**
+ * Verify a LOCAL (absolute) target already contains published output:
+ * a file target must exist with size > 0; a directory target must exist
+ * and contain at least one file (recursive). Returns the file count, or
+ * null when the target is absent/empty or cannot be verified (relative
+ * targets are blog-repo subdirs — not on this filesystem).
+ */
+function alreadyPublished(targetPath: string): number | null {
+  if (!path.isAbsolute(targetPath)) return null;
+  let st: Stats;
+  try {
+    st = statSync(targetPath);
+  } catch {
+    return null;
+  }
+  if (path.extname(targetPath) !== "") {
+    return st.isFile() && st.size > 0 ? 1 : null;
+  }
+  if (!st.isDirectory()) return null;
+  const n = listFiles(targetPath).length;
+  return n > 0 ? n : null;
 }
 
 /** All files under a dir, relative to it (recursive). */
