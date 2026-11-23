@@ -180,5 +180,19 @@
 		respond "404 Not Found" 404
 	}
 
+	# Skills E2E test project (tipcalc, 2026-11-23): public but disposable test
+	# property for the agent-skills pipeline. App code: tipcalc repo; compose:
+	# compose/compose.tipcalc.yml. Placeholder image until the first kanban deploy.
+	@tipcalc host test.choukalos.com
+	handle @tipcalc {
+		reverse_proxy http://tipcalc:8080 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+		}
+	}
+
 	respond "Not Found" 404
 }
