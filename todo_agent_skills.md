@@ -9,8 +9,11 @@
   `docs-housekeeping` + S10 `code-reviewer` + S11 `security-code-review` +
   DEV-1 `architecture` + DEV-2 `story-breakdown` + S9 `exec-problem-brief`
   built 2026-11-23** (Phase 1 build, 9 of 9 + S9 pulled forward from Phase 2;
-  all registered in the Skill Hub). Next: Phase 2 — PM-1/2/3/4/5 + MKT-1 + S12
-  + CM-1/CM-2 (R7/R9 research pending).
+  all registered in the Skill Hub). **Phase 2 build done 2026-11-23** (PM-1/2/3/4/5
+  + MKT-1 + S12 + CM-1/CM-2, 10 of 10, + G12 `docs/roles/<role>/` artifact
+  conventions; R7/R9 research done 2026-11-23; all registered in the Skill Hub).
+  Remaining: Phase 2 exit smoke (first real task) + Phase 3 (blocked on G3
+  Plausible wiring).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
