@@ -10,7 +10,13 @@
 > see §5). Phases 5–6 + 8
 > not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
 > (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
-> program) added as a **grooming stub** 2026-11-21.
+> program) added as a **grooming stub** 2026-11-21. Phase 10 (host security
+> monitoring & reporting) added 2026-11-24 after the `url565.planning.com`
+> alert investigation (not started). Phase 11 (public-surface security
+> monitoring — CF tunnel, InvestHub, blog, extensible registry) added
+> 2026-11-24 (not started). Phase 12 (file bridge `mcp_filebridge` — unified
+> file edge: public relay + work areas + publish targets; D10–D16 decided
+> 2026-11-24) added 2026-11-24 (not started).
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -525,6 +531,292 @@ breach runbook + table-top done.
 
 ---
 
+### Phase 10 — Host security monitoring & reporting — **ADDED 2026-11-24 (not started)**
+
+> Trigger: the 2026-11-24 manual investigation (company security alert about
+> `url565.planning.com` — result: **clean**; no mail stack on the host, no SMTP
+> connections, zero trace of the domain, no external brute-force, only a few
+> failed logins from Chuck's own LAN devices). That check was ad hoc; this
+> phase makes it a standing daily baseline-diff scan with reporting. Complements
+> Phase 6 (LiteLLM/Caddy-specific alerts) at the host layer.
+
+**Design: baseline-diff.** The host has a known-good state (Phase 4 port
+survivors, one human user, stock cron/timers, known container fleet, **no mail
+binaries**). The scan diffs live state against a baseline file and reports
+deviations. The baseline is refreshed only by explicit `--update` after an
+intentional change — silent drift is the signal.
+
+- [ ] **Baseline capture** `scripts/security-baseline.sh` → `/home/chuck/data/security/baseline.txt`:
+  - [ ] `ss -tlnp` listeners (Phase 4 expected survivors are the expectation)
+  - [ ] user accounts UID ≥ 1000 (expected: `chuck` only)
+  - [ ] cron state: `/etc/crontab`, `/etc/cron.d/*`, `/var/spool/cron/crontabs/*` (list + hashes)
+  - [ ] `systemctl list-timers --all` (unit names)
+  - [ ] `docker ps -a` (names + images)
+  - [ ] mail-tool watchlist (`sendmail msmtp ssmtp mail mutt swaks postfix`) — expected: **none present**
+  - [ ] record capture timestamp; refresh only via explicit `--update` flag (auto-refresh would defeat the diff)
+- [ ] **Daily scan** `scripts/security-scan.sh` + `scripts/systemd/security-scan-daily.{service,timer}` (mirror the `backup-nas-daily` pattern; root service, ~00:30 UTC off-peak):
+  - [ ] **auth.log (last 24h):** failed passwords, invalid users, source IPs outside the known set (`10.8.0.2`, `192.168.4.0/24`, `192.168.5.0/24`) → anomaly
+  - [ ] **port diff:** `ss -tlnp` vs baseline → new or removed listener = anomaly (a new listener is the classic implant signature)
+  - [ ] **outbound connections:** ESTAB on SMTP ports (25/465/587) → immediate anomaly; new external peer IPs (excluding LAN + known CDN/Cloudflare ranges) → note
+  - [ ] **account/cron/timer drift:** new UID ≥ 1000 users, new crontabs, new timers → anomaly
+  - [ ] **container drift:** new/renamed containers vs baseline → anomaly (typosquatted image names are an attack vector)
+  - [ ] **mail-tool appearance:** any watchlist binary now present → anomaly (this host should never send mail)
+  - [ ] **sensitive-file changes:** mtime < 24h under `/etc` (apt/dpkg-managed filtered via `dpkg.log`), `/usr/bin`, `/usr/local/bin` → note
+  - [ ] **process check:** long-running processes not attributable to a known container or host service → note
+- [ ] **Daily report** → `/home/chuck/data/security/reports/security-report-YYYY-MM-DD.md`:
+  - [ ] verdict line (`CLEAN` / `N anomalies` / `M notes`), each finding with evidence (command + output), full baseline-diff table
+  - [ ] anomalies appended to `/home/chuck/data/security/alerts.log` (one line, machine-readable: `timestamp | severity | check | detail`)
+- [ ] **Weekly digest** (weekly timer, same pattern): summarize the last 7 daily reports → `/home/chuck/data/security/reports/security-weekly-YYYY-Www.md` (anomaly counts, recurring notes, auth.log trends — e.g. "3 failed logins from 192.168.4.56 this week vs 0 last week")
+- [ ] **Alert delivery (D7 — decide before wiring):** where do anomalies reach Chuck? Options: (a) file-only (`alerts.log`) + check on demand, (b) Siri/Shortcuts push (no notification path exists in the repo yet — would be net-new), (c) Grafana metric via `node_exporter_textfile` (`security_scan_anomalies_total`, `security_scan_last_run`) + dashboard panel. Working recommendation: **(c) + (a) now, (b) later**.
+- [ ] **On-demand status:** `./homelab.sh security status` — latest report verdict, unread alert count, baseline age (stale baseline is itself a warning)
+- [ ] **Retention:** prune daily reports > 90d, weekly digests > 52w (inside the scan)
+- [ ] **False-positive tuning:** first 2 weeks = observation mode (report only, nothing escalated); then set thresholds from observed noise (apt upgrades, container recreates, Chuck's own LAN logins)
+
+Rollback: `systemctl disable --now security-scan-daily.timer` (+ weekly); scripts are additive (new files only) — deletion is the full rollback. No service changes.
+
+**Out of scope (tracked elsewhere):** LiteLLM 401/spend alerts (Phase 6), CVE cross-checks (§9-style periodic sessions), the work laptop (company-managed, not this host).
+
+---
+
+### Phase 11 — Public-surface security monitoring (tunnel + InvestHub + blog, extensible) — **ADDED 2026-11-24 (not started)**
+
+> Trigger: the 2026-11-24 security check exposed the gap — Phase 10 covers the
+> host, but the **internet-facing surface** (7 Caddy hostnames behind the
+> Cloudflare Tunnel) is only monitored ad hoc (§9 CVE cross-check, §7 manual
+> negative tests). This phase makes the public surface a standing,
+> registry-driven monitoring target.
+> **Extensibility rule: adding a public site = adding one registry entry**
+> (11.0) — every check below reads the registry. The §11.6 runbook is the
+> contract for future sites.
+
+**Current public surface (verified 2026-11-24 from `caddy/Caddyfile` + `docker ps`):**
+
+| Domain | Backend | Auth | Risk notes |
+|---|---|---|---|
+| `llm.choukalos.com` | caddy → litellm-proxy:4000 | Caddy key gate (chuck/dylan) | keys + all 14 MCP tools behind it |
+| `siri.choukalos.com` | caddy → skill-runner:8091; `/dl`,`/upload` → **192.168.4.55:8189 (LAN service via tunnel)** — relay re-scoped in **Phase 12** | X-Api-Key on `/siri/*`,`/api/*`,`/upload` | LAN GPU host reachable publicly (gated) — canary the gate |
+| `api.choukalos.com` | caddy → invest-hub-server:4000 | JWT on protected routes | **public user input + `investorhub` DB → 11.3** |
+| `invest.choukalos.com` | caddy → invest-hub-client:80 (static) + invest-hub-server:4000 (API paths) | none (static) / JWT via API paths | client app |
+| `choukalos.com` | caddy → portal:8080 (Hugo static + portal); `/media/files/*` → skill-runner:8091 | none (public) | **read-only containers (verified `ReadonlyRootfs=true` on portal + portal-git-sync) → 11.4** |
+| `www.choukalos.com` | redirect → choukalos.com | — | probe: redirect intact |
+| `plausible.choukalos.com` | caddy → plausible:8000 | admin UI internet-blocked | probe: block still holds |
+
+#### 11.0 — Public-surface registry (extensibility core)
+
+- [ ] `security/public-surface.yml` — single source of truth; every 11.x check reads it. Seed (versions from §9.2, backends from the 2026-11-24 Caddyfile read):
+  ```yaml
+  tunnel: <CF tunnel name — confirm>
+  domains:
+    llm.choukalos.com:
+      backend: caddy → litellm-proxy:4000
+      stack: {litellm: 1.104.0, caddy: 2.11.7}      # versions feed 11.5 CVE cross-check
+      auth: caddy-key-gate (chuck/dylan)
+      probes:
+        - {path: /v1/models, expect: 200, with: chuck-key}
+        - {path: /v1/models, expect: 401, with: none}
+        - {path: /v1/models, expect: 401, with: wrong-key}
+        - {path: /ui/, expect: 404, with: chuck-key}        # no admin UI
+    siri.choukalos.com:
+      backend: caddy → skill-runner:8091 (+ 192.168.4.55:8189 for /dl,/upload)
+      stack: {fastapi: 0.156.8}
+      auth: X-Api-Key on /siri/*, /api/*, /upload
+      probes:
+        - {path: /health, expect: 200, with: none}
+        - {path: /api/schedule, expect: 401, with: none}    # canary: gate must hold
+        - {path: /api/schedule, expect: 200, with: chuck-key}
+    api.choukalos.com:
+      backend: caddy → invest-hub-server:4000
+      stack: {express: 5.2.1, prisma: 7.8}
+      auth: JWT on protected routes
+      data: public user input + investorhub DB
+      probes:                          # enumerate protected routes during build
+        - {path: /api/famous-portfolios/1, expect: 200, with: none}
+        - {path: /api/<protected>, expect: 401, with: none}
+        - {path: /api/<protected>, expect: 401, with: expired-jwt}
+      log_sources: [invest-hub-server]
+      db: {name: investorhub, schema_diff: weekly}
+    invest.choukalos.com:
+      backend: caddy → invest-hub-client:80 + invest-hub-server:4000 (API paths)
+      stack: {nginx: 1.31.7}
+      probes: [{path: /, expect: 200, with: none}]
+    choukalos.com:
+      backend: caddy → portal:8080 (/media/files/* → skill-runner:8091)
+      stack: {hugo: ">=0.168.0"}
+      integrity: content-hash vs blog repo deploy commit (11.4)
+      probes: [{path: /, expect: 200, with: none}]
+    www.choukalos.com:
+      backend: redirect → choukalos.com
+      probes: [{path: /, expect: 301/302 → choukalos.com}]
+    plausible.choukalos.com:
+      backend: caddy → plausible:8000
+      stack: {plausible: 3.2.0}
+      probes:
+        - {path: /js/script.js, expect: 200, with: none}
+        - {path: /admin/<path>, expect: 404, with: none}      # canary: admin block must hold
+  ```
+  (`probes` = expected responses per auth state — the negative ones are leak detectors; `log_sources` = containers whose logs feed 11.3-style anomaly detection; `db` = schema-diff target.)
+- [ ] **Registry lint** (daily): every Caddyfile `host` matcher + every CF tunnel ingress hostname must map to a registry entry, and vice versa — unknown on either side = alert (this is what makes the registry the single source of truth)
+
+#### 11.1 — Cloudflare Tunnel layer
+
+- [ ] **Tunnel ingress audit** (daily, CF API — same CF token `scripts/rotate-cf-tunnel.sh` uses): fetch tunnel ingress rules + public hostnames, diff vs registry → **unknown public hostname or new ingress path = P0** (closes the §9.4 caveat: extra CF hostnames bypassing Caddy)
+- [ ] **cloudflared version check** (weekly): running version vs latest release + published CVEs → note/alert (feeds 11.5)
+- [ ] **Tunnel health** (daily): reconnect count + origin errors from cloudflared logs; reconnect storm (>N/h, threshold from observation mode) = alert (flap = DoS or compromise)
+- [ ] **CF account hygiene** (monthly): API-token inventory (scope + last-used), CF login alerts enabled, token rotation per `rotate-cf-tunnel.sh` cadence
+
+#### 11.2 — External black-box probes (per registry entry)
+
+- [ ] `scripts/security-probe.sh` (or .py): per registry domain — TLS (protocol floor ≥1.2, cert expiry ≥14d), security headers (HSTS, X-Content-Type-Options, no version disclosure in `Server`/error pages), all registry `probes` (expected 200/401/404 per auth state), admin-route absence (`/ui/`, `/admin`, `/api/keys` → 404/401)
+- [ ] **Must run from outside the LAN** — D8 (vantage point). Results → daily report (per-domain section) + `alerts.log` on any deviation
+- [ ] **Negative-path canary (P0 semantics):** a probe that should 401/404 returning 200 unauthenticated is an **auth regression / leak**, not a probe failure → immediate alert (D7 channel)
+
+#### 11.3 — InvestHub deep-dive (public input + DB)
+
+Highest-risk surface: public user input → Express → Prisma → MySQL. (Log shape verified 2026-11-24: morgan HTTP lines **without client IPs** → per-IP signals come from **Caddy access logs**; app-level signals from `invest-hub-server`.)
+
+- [ ] **API anomaly detection** (daily, last 24h):
+  - [ ] **Caddy access logs:** 401/403 rate per source IP (brute force / credential stuffing; threshold from observation mode)
+  - [ ] **invest-hub-server logs:** SQL-error spikes (SQLi signature — distinct from the known LLM-SQL `1054` noise in mcp_mysql, different container + different signature), 5xx spikes per endpoint, JWT failures (invalid/expired bursts), payload-size outliers (abnormally large POST bodies)
+  - [ ] note: HikariCP connection-leak warnings already appear in normal logs (2026-11-24) — baseline them as noise, don't alert on them
+- [ ] **DB state diff** (weekly, `investorhub`): snapshot `information_schema` (tables, columns, users + privileges) → diff vs previous → **schema or privilege change = P0** (catches malicious DDL and accidental drift alike)
+- [ ] **WAF / rate limiting (D9):** Cloudflare Managed Ruleset (OWASP Core) + per-domain rate limit on `api.choukalos.com` — decide on/off + thresholds; if on, CF WAF block logs become an extra 11.3 log source
+- [ ] **Dependency scan** (weekly): `npm audit` + OSV on the invest-hub repo (currently ad-hoc per §9) → alert on new high/critical; results into the weekly digest
+
+#### 11.4 — Blog + Plausible integrity (read-only verification)
+
+Read-only is a mitigation, not a monitor — verify it stays true:
+
+- [ ] **Deployed-content integrity** (daily): hash portal's served files (git-sync volume) vs `git ls-tree` of the deployed commit in the blog repo → mismatch = tampering (host or repo) — **P0**
+- [ ] **Read-only posture check** (daily): `docker inspect` portal + portal-git-sync — `ReadonlyRootfs` unchanged (baseline 2026-11-24: both `true`) + mount modes; a writable path appearing = anomaly
+- [ ] **Hugo pin check** (weekly): blog repo pin (≥0.168.0, 9.3-H1) + build-machine `hugo version` — drift = note
+- [ ] **Plausible admin block** (daily probe, in 11.2 registry): admin path from outside → 404; a 200 = **P0**
+
+#### 11.5 — CVE cross-check cadence (make §9 standing)
+
+- [ ] **Monthly**: re-run the §9 process against every `stack` version in the registry (NVD/GHSA/OSV/vendor advisories since last run) → new items become 9.3-style tracked rows in §9.3
+- [ ] **Event-driven**: OSV/npm-audit alerts (11.3) or a major vendor CPU (e.g. Oracle/Microsoft patch day) triggers an off-cycle pass
+- [ ] §9.3 table stays the durable record; the monthly pass is the standing trigger
+
+#### 11.6 — Reporting & the "add a new site" runbook
+
+- [ ] All 11.x findings flow into **Phase 10's pipeline**: same daily report (a "Public surface" section per domain), same `alerts.log`, same weekly digest, same Grafana textfile metrics (`security_probe_failures_total{domain=...}`, `security_tunnel_audit_anomalies_total`)
+- [ ] **P0 definitions** (immediate alert via D7 channel + incident note in this file): unauth 200 on an auth-required route, content-tamper mismatch, unknown public hostname/ingress, schema or privilege change on `investorhub`, admin UI reachable on plausible
+- [ ] **Add-a-site runbook** (the extensibility contract — future public sites follow these 6 steps):
+  1. Registry entry: domain, backend, stack versions, auth model, `probes` (incl. at least one negative canary), `log_sources`, `db` if applicable
+  2. Caddy route + CF tunnel ingress via the existing deploy path
+  3. Baseline capture (Phase 10 `--update` + registry lint green)
+  4. External probe live from the D8 vantage point
+  5. Negative-path canary defined (which route must 401/404)
+  6. Verify: §7 checklist + first daily report shows the domain CLEAN
+
+Rollback: registry + scripts are additive (new files); disable the probe/audit timers; CF WAF ruleset removal via CF API/dashboard. No service changes.
+
+**Out of scope:** host-layer checks (Phase 10), LiteLLM 401/spend (Phase 6), the work laptop.
+
+---
+
+### Phase 12 — File bridge: unified file edge (public relay + work areas + publish targets) — **ADDED 2026-11-24 (not started; D10–D16 decided 2026-11-24)**
+
+> Trigger: follow-up to the 2026-11-24 public-surface review (Phase 11).
+> `siri.choukalos.com/media/pipeline/*` currently proxies **directly to Matrix
+> (192.168.4.55:8189)** — the GPU host is an internet-facing origin. Initial
+> proposal: relay via skill-runner. After scoping the full file-transfer
+> surface (below), the recommendation changed to a **dedicated service** —
+> the file edge is bigger than a 2-endpoint relay.
+
+**Why not skill-runner (Q1 resolution, 2026-11-24):**
+- skill-runner holds the most secrets in the stack (memory admin keys, `SIRI_KEY_SERVICE`, session data) + a rw mount to `proposals/`. A data-plane role (multipart parsing, path handling, large-file streaming) is exactly the code that gets parsing bugs — that attack surface doesn't belong in that container.
+- Lifecycle coupling: 500 MB uploads / long downloads vs in-flight skill runs + sessions — a restart of either role shouldn't kill the other.
+- Identity: this is the homelab's **file edge** (public HTTP + MCP tools + work-area/publish-target registry), not a relay — it gets its own service, its own MCP server, its own Phase 11 registry entry.
+- Cost acknowledged: one more container (small: FastAPI + httpx + config).
+
+**Current file-transfer surface (verified 2026-11-24):**
+
+*Work areas (intra-homelab):*
+
+| Work area | Location | Notes |
+|---|---|---|
+| Matrix pipeline | `http://192.168.4.55:8189` (API) | `media_jobs`, 14-day retention; the GPU-host path |
+| Media staging | `/home/chuck/workspace/media` | `MEDIA_STAGING_DIR` (mcp_media `media_put`) |
+| Pipeline fetch | `/home/chuck/data/media/generated/pipeline` | `MEDIA_PIPELINE_FETCH_DIR`; approved publish root |
+| Siri outputs | `/home/chuck/data/media/siri_outputs` | ⚠️ **publicly served today via `/media/files/siri_outputs/*` with human-readable names** (e.g. `siri_output_..._what-coffee-do-I-like.txt`) — violates the Tier-2 "opaque IDs" assumption → 12.4 |
+| NAS media store | `lego.local` `workspace` → `/mnt/lego-media-store` | cifs automount (soft); mcp_kanban binds `/media-store` |
+| Per-category media | `/home/chuck/data/media/{demos,images,clips,...}` | artifact tree under `ARTIFACT_ROOT` |
+
+*Publish targets:*
+
+| Target | Mechanism today | Notes |
+|---|---|---|
+| Blog drop | `publish-file` skill → `/home/chuck/data/media/public/{ai,images,audio,video,tabs}` → `choukalos.com/files/{subdir}/{name}` | validated, atomic, size-capped, idempotent; source roots restricted to `data/media` + `workspace` |
+| (future) bluebovinegroup | — | per-target adapter + registry entry |
+
+*Clients (recipients):* Siri (iOS) via `siri.choukalos.com` (`/media/files/*` public, `/media/pipeline/dl/<token>` signed); laptop via LiteLLM (`media_pull` signed URLs); LAN direct (`thor.local:8091/media/files`).
+
+**Design: `mcp_filebridge` (name decided 2026-11-24, D16) — one Thor container, two faces:**
+
+> **Name (decided 2026-11-24, D16):** `mcp_filebridge` — the bridge files
+> cross between public and internal systems/directories. No collision with
+> `mcp_filesystem` / `mcp_filesystem_readonly` (those are in-place file ops;
+> filebridge is boundary-crossing). Container `mcp_filebridge`, image
+> `ai-mcp-mcp_filebridge`, tools `mcp_filebridge-file_pull` etc.
+> Alternatives considered: `mcp_filegate`, `mcp_fileport`, `mcp_fileedge`.
+
+*Face 1 — public HTTP (Caddy, `siri.choukalos.com`):*
+- [ ] `GET /media/pipeline/dl/<token>` → stream from Matrix (Range passthrough, never buffer); token validation stays on Matrix (transparent relay — no secret sprawl)
+- [ ] `POST /media/pipeline/upload` → Caddy key gate unchanged; stream multipart to Matrix; enforce the 500 MB cap at the relay too
+- [ ] `GET /media/files/{filepath:path}` → **migrate from skill-runner now** (D11: security + consolidated logic — single public file edge, one log source); served from the work-area registry with a per-subdir policy (12.4 — `siri_outputs` excluded from public serving)
+- [x] **No public upload endpoint** (D10 decided 2026-11-24): remote→work-area moves happen via MCP through an agent for now (`file_pull` from a URL / signed token) — no new public write surface
+
+*Face 2 — MCP tools (via litellm → laptop + siri):*
+- [ ] `file_pull(source, work_area)` — source = URL | signed pipeline token | pipeline path | work area; dest = any registered work area (consolidates the cross-area cases of `media_download`/`media_put`/`media_fetch`)
+- [ ] `file_push(file, destination)` — dest = work area | client (mints a signed public URL) | publish target. **Shared persistent output (D13):** `siri_outputs` is siri-only (`remote_write: false`); other clients' persistent output goes to the **NAS media store** — the shared output area for now, extensible later
+- [ ] `file_publish(file, target, ...)` — target = registered publish target; **extract the publish-file engine** (validated/atomic/size-capped/idempotent) as the engine; the `publish-file` skill becomes a thin wrapper
+- [ ] `file_work_areas()` / `file_targets()` — enumerate the registry (transparency)
+
+**Registry (default-deny, consistent with the Phase 2 philosophy):**
+
+```yaml
+work_areas:
+  media_staging:  {path: /home/chuck/workspace/media}
+  pipeline_fetch: {path: /home/chuck/data/media/generated/pipeline}
+  siri_outputs:   {path: /home/chuck/data/media/siri_outputs, remote_write: false}      # siri-only (D13)
+  nas_media_store: {path: /mnt/lego-media-store, automount: true, shared_output: true}  # shared persistent output for other clients (D13)
+  matrix_pipeline: {api: http://192.168.4.55:8189}                                      # first-class (D12)
+  # more Thor areas as needed (D12: registry designed for growth)
+publish_targets:
+  blog:        # homelab files area (existing engine — P12-C)
+    root: /home/chuck/data/media/public
+    subdirs: [ai, images, audio, video, tabs]
+    url_base: https://choukalos.com/files
+    source_roots: [/home/chuck/data/media, /home/chuck/workspace]
+    size_cap_mb: <confirm from publish-file impl>
+  nas:         # publish to the NAS media store (D14)
+    root: /mnt/lego-media-store/<subdir — decide>
+  # bluebovine: (future — adapter interface defined in P12-C, no impl now (D14))
+```
+
+Adding a target/work area = one entry (+ adapter if needed) — the same
+extensibility contract as Phase 11.
+
+**Security properties:**
+- Matrix 8189 stops being an internet origin → LAN-only after cutover (bind/ufw on Matrix — manual task)
+- One audited public file edge: every cross-boundary file move goes through one service with one log format → Phase 11 monitoring (canaries, log anomalies, size/rate limits)
+- Minimal-env container: only work-area paths + pipeline URL — no LiteLLM master key, no memory keys
+- Kill switch: stop the service = public file routes dead, Matrix untouched
+- Rollback: Caddy one-line revert per route (back to `4.55:8189` / `skill-runner:8091`)
+
+**12.4 — `siri_outputs` public exposure (finding, 2026-11-24):**
+- [ ] `/media/files/siri_outputs/*` is public with **human-readable, enumerable names** (timestamp + question text) — personal Q&A data. **Fix lands in P12-A**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path). Interim (before P12-A): exclude `siri_outputs` from skill-runner's `ARTIFACT_ROOT` serving (small change) or move the dir out of the public tree.
+
+**Phasing (D15 decided 2026-11-24 — agreed):**
+- [ ] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix
+- [ ] **P12-B:** MCP tools (Face 2) + registry
+- [ ] **P12-C:** publish engine migration (`publish-file` → `file_publish`) — blog + NAS targets; bluebovine adapter interface (no impl)
+
+**Out of scope:** intra-work-area file ops (`mcp_filesystem` / `mcp_filesystem_readonly` — in-place ops, not boundary-crossing), pipeline-native job flows (mcp_media keeps its tools; cross-area cases route via the bridge).
+
+---
+
 ## 6. Decisions & open questions
 
 ### Resolved (2026-09-06)
@@ -537,12 +829,22 @@ breach runbook + table-top done.
 | D5 | Dead `.env` keys | `LITELLM_PUBLIC_API_KEY` = dead → remove. `SIRI_API_KEY` + `HARNESS_API_KEY` = **in use** (CLI, open-webui) → keep. **2026-11-15:** `LITELLM_PUBLIC_API_KEY` removed (Phase 3); `HARNESS_API_KEY` removed same day (open-webui gone); `SIRI_API_KEY` stays |
 | D6 | `internal-service` key | **Yes** — formalized as Phase 8 |
 | D2b | Rate guardrails for chuck/dylan | **None** — family decision 2026-11-15 (Chuck: no rate limits on the public keys). Consistent with D2 (unlimited budget): the keys are family-only (Caddy gate, Phase 1), spend tracking is live (Phase 3) so abuse is visible, and power-user agent sessions (pi, parallel tool calls) can hit ~60 RPM — any cap would just cause false positives. |
+| D10 | File-bridge public upload scope (Phase 12) | **No public upload endpoint** (2026-11-24) — remote→work-area moves happen via MCP through an agent for now |
+| D11 | `/media/files` migration (Phase 12) | **Move to the bridge now** (2026-11-24) — security + consolidated logic; part of P12-A |
+| D12 | Work-area registry contents (Phase 12) | **NAS + Matrix + Thor areas first-class from day one** (2026-11-24); registry designed for growth — more areas expected |
+| D13 | `siri_outputs` policy + shared output (Phase 12) | `siri_outputs` = **siri-only** (`remote_write: false`) (2026-11-24); other clients' persistent output → **NAS media store** as the shared output area for now (extensible later) |
+| D14 | Publish targets (Phase 12) | **Blog (homelab files area) + NAS now; bluebovine later** (2026-11-24) — not set up yet, no impl now, but the adapter interface must make adding targets trivial |
+| D15 | File-bridge phasing (Phase 12) | **Agreed** (2026-11-24): P12-A public face (relays + `/media/files` migration) → P12-B MCP tools + registry → P12-C publish engine |
+| D16 | File-bridge naming (Phase 12) | **`mcp_filebridge`** (chuck, 2026-11-24) — "the bridge files cross between public and internal"; no collision with `mcp_filesystem`/`_readonly`. Alternatives considered: `mcp_filegate`, `mcp_fileport`, `mcp_fileedge` |
 
 ### Open
 
 | # | Question | Notes |
 |---|---|---|
 | D4 | ufw rules for the two home subnets (`192.168.4.0/24` + `192.168.5.0/24`) | See Phase 5 discussion list — settle before executing |
+| D7 | Alert delivery channel for Phase 10 anomalies | File + Grafana metric now, Siri/Shortcuts push later? See Phase 10 options (a/b/c) |
+| D8 | Vantage point for external black-box probes (Phase 11.2) | Must be **off-LAN** — self-hosted runners run on Thor, so a GitHub Actions workflow would need `ubuntu-latest` (not the self-hosted runner); options: (a) GitHub-hosted cron workflow (free, probe keys as GH secrets), (b) CF Workers cron trigger, (c) small VPS, (d) Mac Studio (unreliable — sleep/travel). Working recommendation: **(a)** |
+| D9 | WAF / rate-limiting posture on `api.choukalos.com` (Phase 11.3) | CF Managed Ruleset (OWASP Core) + rate limit — on/off + thresholds; block logs become a log source if on |
 
 ---
 
@@ -556,6 +858,9 @@ breach runbook + table-top done.
 - [ ] **internal-service key (LAN):** models work, 0 MCP servers; master key no longer present in the 6 internal container envs (Phase 8)
 - [ ] `ss -tlnp` matches Phase 4 expected survivors; `ufw status` active
 - [ ] Grafana: 401 + spend panels live
+- [ ] Security scan (Phase 10): daily timer active, first daily report generated; test anomaly (temporary listener) detected in the next run and cleared
+- [ ] Public surface (Phase 11): registry lint clean (7 Caddy hostnames = CF tunnel hostnames = registry), external probes live from the D8 vantage point, InvestHub DB schema-diff baseline captured, blog content-hash check green, plausible admin-block probe green
+- [ ] File bridge (Phase 12): P12-A public face live (Matrix 8189 no longer a public origin — `ss` on Matrix confirms LAN-only bind; `/media/files` served by the bridge with `siri_outputs` excluded (12.4)), bridge registry lint green
 - [x] Docs updated (Phase 7) — 2026-11-21
 
 ## 8. Rollback (global)
