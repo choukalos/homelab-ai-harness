@@ -88,6 +88,12 @@ KB_ALLOWED_ROOTS: list[str] = [
 # Writable backup target (mounted rw from /home/chuck/data/backups/kb).
 KB_BACKUP_DIR: str = os.environ.get("KB_BACKUP_DIR", "/backups/kb")
 
+# Canonical drop dir for externally-supplied file content (kb_ingest_file
+# `content_b64`) — lets a client outside the home network ingest a file
+# without first dropping it on the host. Files are written here (persistent,
+# so kb_get_pages can re-read them). Host: /home/chuck/data/ai-kb/raw.
+KB_RAW_DIR: str = os.environ.get("KB_RAW_DIR", "/data/ai-kb/raw")
+
 # Digest storage (rw mount; host /home/chuck/data/ai-kb/digests). Digests are
 # a higher-level *model* of a document (procedural/systemic understanding) that
 # complements the KB's factual chunks. File = source of truth; section facts
@@ -373,7 +379,38 @@ def _validate_source_path(path_str: str) -> Path:
     raise ValueError(
         f"Path '{path_str}' is outside the allowed source roots ({allowed}). "
         f"Drop files into /home/chuck/data/ai-kb/raw/ (canonical) or pass a "
-        f"media//workspace path.")
+        f"media//workspace path — or pass `content_b64` to ingest a file "
+        f"supplied from outside the home network.")
+
+
+def _materialize_external_content(content_b64: str,
+                                  filename: Optional[str]) -> Path:
+    """Decode base64 file content and write it to a persistent location so
+    kb_ingest_file can ingest a file that isn't already on the host (e.g.
+    supplied by a client outside the home network). Writes to KB_RAW_DIR if
+    it's writable, else a temp dir. Returns the written path. The default
+    KB_RAW_DIR sits under an allowed root, so normal validation passes."""
+    import tempfile
+    data = base64.b64decode(content_b64)
+    if not data:
+        raise ValueError("content_b64 decoded to empty content.")
+    name = (filename or "ingested.bin").strip()
+    # Sanitize: strip path components, avoid traversal / hidden names.
+    name = os.path.basename(name).lstrip(".") or "ingested.bin"
+    if not re.match(r"^[\w.\- ]+$", name):
+        name = "ingested.bin"
+    try:
+        raw = Path(KB_RAW_DIR)
+        raw.mkdir(parents=True, exist_ok=True)
+        probe = raw / ".kb_write_probe"
+        probe.write_text("x")
+        probe.unlink()
+        target_dir = raw
+    except OSError:
+        target_dir = Path(tempfile.mkdtemp(prefix="kb_ingest_"))
+    p = target_dir / name
+    p.write_bytes(data)
+    return p
 
 
 def _file_sha256(p: Path) -> str:
@@ -1145,22 +1182,40 @@ async def kb_add_fact(text: str, kb: str,
         "via markitdown, images via vision description. ~1200-token chunks "
         "with page ranges; batched embeddings; deterministic IDs (re-ingest "
         "is an idempotent upsert). Long-running for big files. Creates the "
-        "KB if missing — 'description' required on new-KB creation."
+        "KB if missing — 'description' required on new-KB creation. "
+        "Provide either `path` (a file already on the host under an allowed "
+        "root) or `content_b64` (base64 file bytes from a client outside the "
+        "home network; written to the canonical raw dir and ingested)."
     ),
 )
-async def kb_ingest_file(path: str, kb: str,
-                         description: Optional[str] = None) -> dict:
+async def kb_ingest_file(kb: str, path: Optional[str] = None,
+                         description: Optional[str] = None,
+                         content_b64: Optional[str] = None,
+                         filename: Optional[str] = None) -> dict:
     """Ingest a file into a KB.
 
+    Provide either `path` (a file already on the host under an allowed root)
+    or `content_b64` (base64-encoded file bytes, for clients outside the home
+    network). With `content_b64`, the bytes are written to KB_RAW_DIR (the
+    canonical drop point) and ingested from there.
+
     Args:
+        kb: Friendly KB name (creates it if missing).
         path: Absolute container path under an allowed root (media/,
             workspace/, ai-kb/raw/). Host: /home/chuck/data/ai-kb/raw/...
-        kb: Friendly KB name (creates it if missing).
         description: REQUIRED when creating a new KB.
+        content_b64: Base64-encoded file content (alternative to `path`).
+        filename: File name to use when materializing `content_b64`
+            (defaults to 'ingested.bin').
     """
-    p = _validate_source_path(path)
-    if not p.is_file():
-        raise ValueError(f"File not found: {path}")
+    if content_b64 is not None:
+        p = _materialize_external_content(content_b64, filename)
+    else:
+        if not path:
+            raise ValueError("Either `path` or `content_b64` is required.")
+        p = _validate_source_path(path)
+        if not p.is_file():
+            raise ValueError(f"File not found: {path}")
     col = _kb_name(kb)
     sha = _file_sha256(p)
     client = _client()
