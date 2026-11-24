@@ -15,9 +15,10 @@
   Remaining: Phase 2 exit smoke (first real task) + Phase 3 (blocked on G3
   Plausible wiring). **WS3/WS4 planning started 2026-11-24** — own plan doc
   `todo_agentic_framework.md` created; goal model decided (per-domain org
-  goals, agent-suggested charters, proxy KRs, exec override w/ pushback, soft
-  enforcement + BAU); OKR skill proposal (S13 `okr`) staged there, awaiting
-  chuck's review.
+  goals homelab/bluebovine — investhub out of scope/chuck-only; agent-suggested
+  charters; proxy KRs; exec override w/ pushback; soft enforcement + BAU tag
+  + work-mix review; mandatory quality KR; org goals monthly, agent reviews
+  weekly → monthly); S13 `okr` skill accepted 2026-11-24.
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -669,16 +670,19 @@ S9: spec complete — buildable in any phase
 
 **Planned in `todo_agentic_framework.md`** (created 2026-11-24, covering WS3 +
 WS4 together — the agents are the framework's first instances). **Goal model
-decided 2026-11-24**: per-domain org goals (homelab / bluebovine / investhub)
-in `docs/org/goals.md`; agent charters in `docs/agents/<agent>/charter.md`
-(agent suggests → chuck approves); proxy/guess KRs OK for the first pass;
-chuck's direct TODOs always win (tagged `exec`) but agents may push back with
-a compelling argument; soft enforcement (unmapped work flagged, not blocked);
-BAU work gets its own `bau` tag; quality metrics open. **S13 `okr` skill
-proposal staged** in that doc (helps write org + agent OKRs and verifies the
-ladder). Remaining open questions (identity, tasking, review protocol,
-memory, scheduling, guardrails, reporting + new ones from the interview) are
-tracked there. The 2026-11-22 seed list below is kept for history.
+decided 2026-11-24**: per-domain org goals (homelab / bluebovine; investhub
+out of scope — chuck-only) in `docs/org/goals.md`; agent charters in
+`docs/agents/<agent>/charter.md` (agent suggests → chuck approves);
+proxy/guess KRs OK for the first pass; chuck's direct TODOs always win
+(tagged `exec`) but agents may push back with a compelling argument; soft
+enforcement (unmapped work flagged, not blocked); BAU work gets the `bau` tag
++ a work-mix check (BAU vs OKR vs exec) in the periodic review; **mandatory
+quality/safety KR** on every agent. **Cadence**: org goals monthly; agent
+reviews weekly to start → monthly as confidence grows. **S13 `okr` skill
+accepted 2026-11-24** (helps write org + agent OKRs and verifies the ladder).
+Remaining open questions (identity, tasking, review format, memory, scheduling,
+guardrails, reporting, quality-monitoring mechanism, first agent) are tracked
+there. The 2026-11-22 seed list below is kept for history.
 
 **What we know so far (from the conversation):**
 

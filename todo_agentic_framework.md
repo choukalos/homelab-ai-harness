@@ -1,8 +1,8 @@
 # Todo — agentic framework + agents (workstreams 3–4)
 
 - date: 2026-11-24
-- status: open (planning in progress — goal model decided 2026-11-24; OKR skill
-  proposal S13 staged below, awaiting chuck's review)
+- status: open (planning in progress — goal model decided 2026-11-24; S13 `okr`
+  skill accepted 2026-11-24; cadence/scope/BAU/quality decisions 2026-11-24)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
@@ -36,19 +36,22 @@
 
 - **Not written yet** — step 1 of this workstream (the S13 `okr` skill below is
   the tool for the first pass).
-- **Per domain, not one flat set** (chuck 2026-11-24). Three domains so far:
+- **Per domain, not one flat set** (chuck 2026-11-24). Two in-scope domains:
   - **Homelab** — learning by building: the custom harness itself, research,
     personal-interest content (old arcade games, guitar, creating songs/clips,
     teenage-chuck RPGs & war games, cars).
   - **Bluebovine Group** — commercial: consulting, a product (TBD), and content
     that drives traffic + credibility for the site.
-  - **InvestHub** — personal investment interest, teaching the son,
-    discussion/analysis with buddies. *Open: does it stand alone or sit under
-    Bluebovine Group?*
+  - **InvestHub** — **out of scope for agents** (chuck 2026-11-24): chuck's own
+    thing; he'll use the board to build but won't hand it to an agent now. No
+    org goals, no agents. (May re-enter scope later.)
 - **Home**: `docs/org/goals.md` — one file, per-domain sections (split into
   per-domain files later if they grow).
-- **Authorship**: chuck, with the S13 skill. **Cadence**: open (monthly vs
-  quarterly).
+- **Authorship**: chuck, with the S13 skill.
+- **Cadence (chuck 2026-11-24)**: org goals reviewed **monthly**; agent
+  reviews **weekly to start** (agent presents the prior week's work + upcoming
+  plan → chuck's feedback/direction) — move to monthly as chuck grows confident
+  in the framework/agents.
 
 ### Agent charters
 
@@ -92,19 +95,23 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
 - **Enforcement (chuck 2026-11-24)**: **soft** — unmapped work is *flagged* at
   review, never blocked.
 - **BAU (chuck 2026-11-24)**: business-as-usual work (cyber security, tech
-  debt, organization/clean-up) is legitimate and recurring — gets the `bau`
-  tag so it isn't flagged as unmapped. *Open: keep it a tag, or make it a
-  standing "org health" objective per domain?*
+  debt, organization/clean-up) is legitimate and recurring — **tag** approach
+  (the `bau` tag) so it isn't flagged as unmapped. The periodic review
+  includes a **work-mix check**: the ratio of `bau` vs OKR-serving vs `exec`
+  work, so the mix is visible and can be steered.
 
-### Quality metrics (OPEN)
+### Quality metrics
 
-- chuck 2026-11-24: **not decided** — he wants to monitor/metric quality per
-  agent, mechanism TBD. The charter carries the slot; when defined, the BA
-  consumes the same data (one source, no duplicate reporting).
-- Research input (OKR Institute): every agent OKR should carry **at least one
-  quality/safety KR** so the agent can't optimize volume at the expense of
-  trust. Candidate examples: CM "0 published pieces that failed content QA";
-  PM "0 PRDs without acceptance criteria".
+- **Mandatory (chuck 2026-11-24)**: a **quality/safety KR is mandatory** on
+  every agent charter (and on the org goals) — "for now, mandatory quality
+  should be part of our goals." Research basis (OKR Institute): without it an
+  agent can optimize volume at the expense of trust.
+- **Monitoring mechanism** (still open): how quality is measured/metric'd per
+  agent (the KR sets the bar; the measurement plumbing — e.g., BA consuming
+  QA/publish records — is TBD). The charter carries the slot; the BA consumes
+  the same data (one source, no duplicate reporting).
+- Candidate KRs: CM "0 published pieces that failed content QA"; PM "0 PRDs
+  without acceptance criteria".
 
 ### Research grounding (2026-11-24, via mcp_search)
 
@@ -152,9 +159,9 @@ reports + KPI data (once G3 wiring lands); prior-cycle records
 
 **Steps**:
 
-1. **Frame the domain** — which domain(s) (homelab / bluebovine / investhub);
-   what changed since the last cycle (board movement, BA data, chuck's
-   direction).
+1. **Frame the domain** — which domain(s) (homelab / bluebovine — investhub
+   out of scope, chuck-only); what changed since the last cycle (board
+   movement, BA data, chuck's direction).
 2. **Draft org objectives** — 1–3 per domain. Objective in outcome language
    ("make X feel effortless for Y", not "deploy Z"). 2–4 KRs each.
 3. **Write KRs** — each KR gets **definition, source, target, cadence**.
@@ -164,8 +171,8 @@ reports + KPI data (once G3 wiring lands); prior-cycle records
      indicators allowed alongside).
    - **No data? Guess** — mark `proxy` with a validation note ("validate when
      Plausible/data-hub lands"). First pass is guesses by design.
-   - **Quality/safety KR slot** on every domain + every agent (mandatory or
-     not — open with chuck).
+   - **Mandatory quality/safety KR** on every domain + every agent (decided
+     2026-11-24).
 4. **Derive agent objectives** — for each agent in scope: 1–2 objectives,
    each explicitly laddered to a domain org goal (cites the goal it serves);
    2–4 KRs per objective.
@@ -192,9 +199,8 @@ do's/don'ts (short purpose-only mission lines); chuck's 2026-11-24 decisions
 (per-domain org goals; agent-suggested charters; proxy KRs OK; exec override
 with pushback; soft enforcement + BAU).
 
-**Status**: proposal — not yet built, not yet in the S1–S12 library. Belongs
-to WS3 (the org/agent goal system), not workstream 2. If chuck wants it in the
-formal `proposals/` lifecycle (md + MySQL row + CLI), it moves there.
+**Status**: **accepted 2026-11-24 (chuck)** — not yet built. Belongs to WS3
+(the org/agent goal system), not workstream 2.
 
 ## Remaining open design questions
 
@@ -205,8 +211,10 @@ formal `proposals/` lifecycle (md + MySQL row + CLI), it moves there.
 2. ~~Goal model~~ — **decided 2026-11-24** (above).
 3. **Tasking** — how work reaches an agent: kanban board, direct TODOs from
    chuck, periodic self-generated plans? Precedence between the three.
-4. **Periodic review protocol** — cadence, format (plan → feedback → execute →
-   report), where the record lives (`docs/agents/<agent>/reviews/` proposed).
+4. **Periodic review protocol** — **cadence decided 2026-11-24** (weekly agent
+   reviews to start: prior-week review + upcoming plan + work-mix check; org
+   goals monthly). Open: exact format, where the record lives
+   (`docs/agents/<agent>/reviews/` proposed).
 5. **State/memory** — per-agent workspace, durable state across sessions
    (memory skills exist: `memory-conventions`, `session-memory`, `session-sync`);
    per-agent memory namespaces.
@@ -219,21 +227,26 @@ formal `proposals/` lifecycle (md + MySQL row + CLI), it moves there.
 
 New from the 2026-11-24 interview:
 
-9. **Org goal cadence** — monthly vs quarterly review of `docs/org/goals.md`.
-10. **InvestHub placement** — standalone domain or under Bluebovine Group?
-11. **BAU framing** — `bau` tag vs a standing "org health" objective per domain.
-12. **Quality metrics** — mechanism for monitoring/metric-ing agent quality
-    (charter slot exists; mandatory quality KR — yes/no).
+9. ~~Org goal cadence~~ — **decided 2026-11-24**: org goals monthly; agent
+   reviews weekly to start → monthly as confidence grows.
+10. ~~InvestHub placement~~ — **decided 2026-11-24**: out of scope for agents
+    (chuck's own; board for building, no agent handover).
+11. ~~BAU framing~~ — **decided 2026-11-24**: `bau` tag + work-mix check
+    (BAU vs OKR vs exec) in the periodic review.
+12. **Quality metrics** — mandatory quality/safety KR decided (2026-11-24);
+    the *monitoring mechanism* (how quality is measured per agent) remains
+    open.
 13. **First agent** — which agent stands up first (skills-doc Q1, deferred
     here).
 
 ## Next steps
 
-1. chuck reviews the S13 `okr` proposal (this doc) — accept/revise.
-2. First org-goals pass: run the OKR workflow (ad-hoc or built skill) to
-   produce `docs/org/goals.md` for the 3 domains.
-3. Agent charter drafts: first agent suggests its charter from the org goals →
+1. ~~chuck reviews the S13 `okr` proposal~~ — **accepted 2026-11-24**.
+2. Build S13 `okr` (or run the workflow ad-hoc first — chuck's call).
+3. First org-goals pass: produce `docs/org/goals.md` for the 2 in-scope
+   domains (homelab, bluebovine) — the monthly cycle starts.
+4. Agent charter drafts: first agent suggests its charter from the org goals →
    chuck approves (first agent = Q13).
-4. Then the remaining framework questions in suggested order: identity/keys →
-   tasking + review protocol (the operating loop) → scheduling/guardrails →
-   memory/reporting.
+5. Then the remaining framework questions in suggested order: identity/keys →
+   tasking + review protocol (the operating loop — weekly cadence decided) →
+   scheduling/guardrails → memory/reporting.
