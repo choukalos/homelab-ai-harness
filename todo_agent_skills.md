@@ -19,6 +19,10 @@
   charters; proxy KRs; exec override w/ pushback; soft enforcement + BAU tag
   + work-mix review; mandatory quality KR; org goals monthly, agent reviews
   weekly → monthly); S13 `okr` skill accepted 2026-11-24.
+  **3 dev-Mac skills landed 2026-11-24** (infographic, one-page-arcade-2d,
+  one-page-arcade-3d — authored on chuck's Mac, commit 7f4ac03; merged into
+  main, registered + enabled in the Skill Hub, skill-runner restarted +
+  verified live the same day).
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -1133,8 +1137,14 @@ Skill Hub).
 
 ---
 
-## Existing skills by role (the 30)
+## Existing skills by role (53 as of 2026-11-24)
 
+> Count as of 2026-11-24: **53 SKILL.md wrappers in `agents-skills/`** — all
+> registered + enabled in the LiteLLM Skill Hub (marketplace.json serves all
+> 53, verified 2026-11-24). That is the 31 below + the Phase 1/2 role/step
+> skills (S1–S12 + the PM/MKT/CM series, built 2026-11-23) + 3 dev-Mac skills
+> (2026-11-24, table below).
+>
 > Count as of 2026-11-22: **31 SKILL.md wrappers in `agents-skills/`** — the 18
 > pre-port + the 12 ported from the dev Mac (table below) + `skill-authoring` (the R1
 > meta-skill, built 2026-11-22). `exec-problem-brief`
@@ -1147,7 +1157,7 @@ Skill Hub).
 | Product Manager | `deep-research`, `market-research-brief`, `research-brief`, briefs (competitive/market analysis), `business-analyst` (analytics), digest layer (comprehension of market/competitive docs) |
 | Coding Team | the S-series above; `homelab-report` (infra context when a task touches the homelab); `digest-algo` (whitepaper → implementation) |
 | Marketing Strategist | `marketing-strategy` (GTM/launch), `deep-research`, `market-research-brief`, `business-analyst` (analytics) |
-| Content Marketer | `content-writer` (drafts), `publish-file` (publishing), `media-film` (video production), `video-analyze` / `digest-media` (video analysis), `song-transcribe` (audio), digest layer (source material) |
+| Content Marketer | `content-writer` (drafts), `publish-file` (publishing), `media-film` (video production), `video-analyze` / `digest-media` (video analysis), `song-transcribe` (audio), `infographic` / `one-page-arcade-2d` / `one-page-arcade-3d` (one-page HTML production), digest layer (source material) |
 | Business Analyst | `business-analyst` (NL→SQL), `homelab-report`, `investment-brief`, `morning-brief`, `presentation-build` / `presentation-update`, digest layer (comprehension of source material) |
 | Exec-facing (any role) | S9 `exec-problem-brief`, `investment-brief`, `morning-brief`, `presentation-build` |
 | All roles (meta) | `session-memory` (session continuity), `memory-conventions` (memory/KB discipline), `session-sync` (reflection pipeline), `skill-authoring` (authoring/registering/testing skills — built from R1, 2026-11-22) |
@@ -1176,6 +1186,21 @@ all 30 were re-registered 2026-11-22). Digest-layer architecture: see
 | `song-transcribe` | Song (URL/file) → guitar tab + timestamped lyrics via the GPU media pipeline (DSP + ASR + LLM polish) | Content Marketer (audio content) |
 | `ttrpg` | Run a TTRPG session from a game_system digest — deterministic dice/state scripts, no LLM-hallucinated rolls | Family (hobby) — outside the org model |
 | `video-analyze` | Keyframe extraction (ffmpeg scene detection, 3 strategies) + storyboard-style analysis | Content Marketer (feeds `digest-media`) |
+
+### Ported from the dev Mac (2026-11-24, commit `7f4ac03`)
+
+3 prompt-only (pi-native) skills ported from chuck's dev Mac — the one-page
+HTML production skills (infographics + arcade games), encoded from the proven
+Mac work (GURPS/Mekton/Zootopia/retirement infographics; the
+`~/Code/one-page-arcade/` library). Registered + enabled in the LiteLLM Skill
+Hub 2026-11-24 (`scripts/skill-hub-register.sh`); skill-runner restarted +
+verified the same day (marketplace.json serves all 53).
+
+| Skill | What it does | Org-model fit |
+|-------|--------------|---------------|
+| `infographic` | Themed single-page HTML infographics / cheat sheets / stat collages — self-contained 1080px pages (masthead, stat tables, character packages, photo grids) → retina PNG via headless Chrome | Content Marketer (reference sheets); family |
+| `one-page-arcade-2d` | Classic 2D arcade games as one self-contained HTML file (canvas + vanilla JS + procedural WebAudio) via design → plan → parts → assemble → headless-QA → publish-to-blog | Content Marketer (blog /arcade); family |
+| `one-page-arcade-3d` | 3D arcade games as one self-contained HTML file (inlined Three.js r160, flat-shaded low-poly, chase cameras) + the pseudo-3D perspective-on-canvas pattern; WebGL context-loss hardening | Content Marketer (blog /arcade); family |
 
 ## Conventions (how skills get added)
 

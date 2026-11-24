@@ -2,7 +2,17 @@
 
 - slug: kanban-start-task-mysql-returning
 - date: 2026-11-22
-- status: open
+- status: applied
+- applied: 2026-11-23 (pi, thor) — fix commit `58ba806` (2026-11-23): `transition()`
+  is driver-conditional — MySQL awaits the plain UPDATE and uses the mysql2
+  OkPacket's `affectedRows` as the atomic conditional-WHERE check (Option A);
+  SQLite/PG keep `.returning()`; driver-realism test added (Option C). Deployed
+  with the mcp_kanban rebuild 2026-11-23 21:43 UTC (container started after the
+  fix commit); live task transitions verified during the PWV2 production
+  session (the kanban-remote-client-file-intake E2E, 2026-11-23 — see
+  `proposals/archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`).
+  Housekeeping 2026-11-24: file moved from repo root to `proposals/archive/`
+  and the DB row added (both were missing — two-place drift).
 - target user: chuck
 - target repo: `homelab-ai-harness` → `mcp/servers/kanban/` (fix) + `compose/compose.mcp.yml` (redeploy)
 - scope: `Orchestrator.transition()` in `mcp/servers/kanban/src/orchestrator.ts` (~line 986).

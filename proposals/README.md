@@ -55,7 +55,7 @@ Tier is a priority bucket, not a reflection-pipeline tier (the
 "Tier 1 propose-only / Tier 2 human applies" language in older footers
 refers to the reflection pipeline's own roles).
 
-## Current state (2026-11-23)
+## Current state (2026-11-24)
 
 - **tier1:** (none open — pinned-reference-values +
   reference-json-overwrite-guard applied 2026-11-23: market-research-brief
@@ -72,7 +72,16 @@ refers to the reflection pipeline's own roles).
   + `stage_file`/`stage_ref` intake (MCP + REST) + spec-path reachability
   preflight at `move_to_backlog`/`start_task`, so remote clients can author
   specs with client-local file paths; deployed + verified E2E 2026-11-23 —
-  see `archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`)
+  see `archive/2026-11-23-tier2-kanban-remote-client-file-intake.md`;
+  2026-11-23: kanban-start-task-mysql-returning applied (the `transition()`
+  MySQL `.returning()` crash — driver-conditional affectedRows fix +
+  driver-realism test, commit 58ba806; deployed with the mcp_kanban rebuild
+  2026-11-23 21:43 UTC; live transitions verified in the PWV2 session) and
+  tipcalc-ship-docs applied (TipCalc user-facing docs shipped on tipcalc
+  task/9; the tipcalc E2E test project was torn down 2026-11-24 — compose
+  stack removed, test.choukalos.com reserved for future public-facing tests;
+  its proposal file was never committed and was reconstructed from the DB row
+  2026-11-24 — see `archive/2026-11-23-tier2-tipcalc-ship-docs.md`))
 - **tier3:** housekeeping (in progress — H1 image pins + H2 approval gate
   applied 2026-11-20; H3 `/model/info` restriction left open by chuck
   2026-11-23 after the feature check (v1.104.0: no native per-endpoint key
@@ -99,3 +108,7 @@ refers to the reflection pipeline's own roles).
   pass the write guard, skill.py render path exercised end-to-end) +
   2026-11-23: kanban-remote-client-file-intake (applied — durable file store
   + intake + preflight live on mcp_kanban; E2E round-trip + GC verified)
+  + 2026-11-24 housekeeping: kanban-start-task-mysql-returning (applied —
+  the MySQL transition() fix; file moved from repo root + DB row added) and
+  tier2-tipcalc-ship-docs (applied — reconstructed from the DB row; the
+  original file was never committed)

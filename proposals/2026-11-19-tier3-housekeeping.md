@@ -2,7 +2,7 @@
 
 - slug: tier3-housekeeping
 - date: 2026-11-19
-- status: in progress (2026-11-20: H1+H2 applied; H3 left open by chuck 2026-11-23 — feature check done: v1.104.0 has no native per-endpoint key roles, only `litellm_settings.custom_auth` (replaces the whole auth flow); chuck is researching the options before deciding; H4 deferred by design)
+- status: accepted (in progress 2026-11-20: H1+H2 applied; H3 left open by chuck 2026-11-23 — feature check done: v1.104.0 has no native per-endpoint key roles, only `litellm_settings.custom_auth` (replaces the whole auth flow); chuck is researching the options before deciding; H4 deferred by design)
 - applied: 2026-11-20 (pi, thor) — H1+H2 only. H1: pinned the three remaining `:latest` images in `compose/compose.ai-core.yml` to the currently running digests — `searxng/searxng@sha256:c642712f…`, `unclecode/crawl4ai@sha256:9021b3cb…`, `ghcr.io/presenton/presenton@sha256:ddf0d1f2…` (digests from `docker inspect` on the running containers; note: Docker 29.9.3 container inspect has no top-level `RepoDigests`, so the repo digests were read from `docker image inspect <image>` and verified to resolve to each running container's image ID; config-only, no restart). H2: new `docs/operations/approval-gates.md` — explicit approval gate for thor host reboots / whole-Docker-stack shutdowns (no reboot or stack shutdown without Chuck's explicit request; extends the standing rule for litellm-proxy / session-carrying services, memory `0b2ff954`), referencing the job-checkpoint mechanism (`docs/operations/job-checkpoints.md`) as the mitigation. H3 remains open (verify v1.104.0 per-endpoint key roles before applying); H4 remains deferred by design.
 - tier: 3
 - target user: chuck
