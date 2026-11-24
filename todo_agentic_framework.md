@@ -239,6 +239,22 @@ New from the 2026-11-24 interview:
 13. **First agent** — which agent stands up first (skills-doc Q1, deferred
     here).
 
+## Pending (unanswered as of 2026-11-24 — for the next session)
+
+- **Draft vs build first**: run the S13 workflow ad-hoc to produce the first
+  `docs/org/goals.md` draft (suggested 2026-11-24), or build the skill first?
+- **Org-goals anchoring questions (chuck)**:
+  1. Homelab — is "the virtual team ships real work with minimal
+     intervention" (harness/agents working) the main goal, or is the
+     personal-interest content (arcade/guitar/songs/RPGs/cars) an
+     equal-weight objective?
+  2. Bluebovine — this month's priority: credibility/traffic content, or
+     defining the product (TBD)? Or both — which leads?
+  3. Scale — how many objectives per domain: one sharp objective, or 2–3?
+- **Phase 2 exit smoke** (tipcalc E2E test project, commits `dc13a0a` /
+  `0ddd3f1`) was running 2026-11-24 — update the status line in
+  `todo_agent_skills.md` when it completes.
+
 ## Next steps
 
 1. ~~chuck reviews the S13 `okr` proposal~~ — **accepted 2026-11-24**.
