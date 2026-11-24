@@ -180,9 +180,13 @@
 		respond "404 Not Found" 404
 	}
 
-	# Skills E2E test project (tipcalc, 2026-11-23): public but disposable test
-	# property for the agent-skills pipeline. App code: tipcalc repo; compose:
-	# compose/compose.tipcalc.yml. Placeholder image until the first kanban deploy.
+	# test.choukalos.com — reserved for public-facing test properties.
+	# Was the tipcalc Skills E2E smoke test (2026-11-23); TORN DOWN 2026-11-24
+	# (app, compose, data + GitHub repo removed; kanban project id 11 kept as the
+	# durable record of the smoke test). Handler + CF tunnel/DNS are kept on
+	# purpose so the URL stays warm for reuse — it currently 502s (no backend).
+	# To reuse: bring up a service on tipcalc:8080, or re-point this block at the
+	# new backend.
 	@tipcalc host test.choukalos.com
 	handle @tipcalc {
 		reverse_proxy http://tipcalc:8080 {
