@@ -142,6 +142,56 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
    loops. The kanban board already *is* the task layer — the goal model plugs
    in above it.
 
+## Framework research (2026-11-24) — `docs/agent-org-framework.md`
+
+A 4-lane research pass (OKR theory, org-design theory, multi-agent LLM
+evidence, control/feedback theory) was distilled into
+`docs/agent-org-framework.md` (full notes in `docs/agent-org-research/`). Core
+thesis: **an agent org is a control system, not a social system** — design the
+sensors (verification), setpoints (OKRs), loops (cadence). Its Minimal Viable
+Version is 5 rules; here's how they map to what we've already decided:
+
+1. **One objective, 3–5 machine-measurable KRs** — already the S13 design:
+   every KR has definition/source/target/cadence, and `proxy` KRs carry a
+   validation note. The framework's one hardening: a KR with *no* machine
+   check (not even a deferred one) is rejected at goal-setting time.
+2. **One supervisor, N workers, depth 1; default N=1** — consistent with the
+   roster: chuck is the supervisor, the 4–5 standing agents are peers, and no
+   agent spawns its own sub-team. Anthropic evidence (verified in the research
+   pass): production systems run exactly 2 levels deep; multi-agent costs ~15×
+   tokens and only pays off on parallelizable, verifiable breadth. Right-sizing
+   (1 agent for lookups, 2–4 for comparisons, 10+ for parallel breadth) should
+   go in the tasking design (open question 3).
+3. **Deterministic done-checks; no self-grading at the gate** — this is the
+   answer to open question 12 (quality-metrics monitoring mechanism): every
+   artifact class gets an external predicate (content QA pass, tests, schema,
+   resolvable citations), and the BA consuming QA/publish records is exactly
+   the "one source, no duplicate reporting" the plan already chose. Agents
+   propose; the pipeline disposes.
+4. **Three loops: per-task (seconds), per-batch (fresh-context review),
+   per-milestone (KR scoring + adapt)** — the decided cadence already *is*
+   this: kanban QA stage = fast loop, weekly agent review = mid loop, monthly
+   org-goal review = slow loop. Two additions worth adopting: (a) **bounded
+   retries + hysteresis** in tasking (same failure > N → escalate, don't
+   thrash); (b) **fresh-context reviewer** for quality gates — critics who saw
+   the worker's reasoning rubber-stamp it (documented LLM sycophancy).
+5. **All state in files; every agent replaceable** — consistent with open
+   question 5 (state/memory): charters, `docs/agents/<agent>/reviews/`, and the
+   memory skills are the mechanism. The framework's test: *if any agent dies
+   right now, can a fresh one pick up from files alone?* Use it when designing
+   the per-agent workspace.
+
+New implications not yet in the plan: (a) the **delegation contract** — every
+task brief carries objective + output format + tools + explicit boundaries
+(Anthropic's dominant reliability lever); (b) **pass by reference, not
+content** — agents write structured outputs to disk and hand over references;
+(c) **per-agent spend attribution** (open question 1) is the right cost control
+given the ~15× multi-agent token multiplier; (d) evaluate agent **outcomes +
+process, not steps** — agents take different valid paths.
+
+**Status**: research done 2026-11-24; the 5-rule MVV is the proposed
+pre-flight check for standing up the first agent (Q13) — discuss before build.
+
 ## S13 — `okr` skill (PROPOSAL — awaiting chuck's review)
 
 **Purpose**: help chuck (or an agent) write org + agent OKRs, and verify the
