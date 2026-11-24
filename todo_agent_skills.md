@@ -13,7 +13,11 @@
   + MKT-1 + S12 + CM-1/CM-2, 10 of 10, + G12 `docs/roles/<role>/` artifact
   conventions; R7/R9 research done 2026-11-23; all registered in the Skill Hub).
   Remaining: Phase 2 exit smoke (first real task) + Phase 3 (blocked on G3
-  Plausible wiring).
+  Plausible wiring). **WS3/WS4 planning started 2026-11-24** — own plan doc
+  `todo_agentic_framework.md` created; goal model decided (per-domain org
+  goals, agent-suggested charters, proxy KRs, exec override w/ pushback, soft
+  enforcement + BAU); OKR skill proposal (S13 `okr`) staged there, awaiting
+  chuck's review.
 - target: chuck + pi
 - source: post-kanban-setup conversation 2026-11-22 (board live with 4 projects;
   workers have 25 kanban MCP tools + 119 proxy tools + 29 existing skills)
@@ -649,9 +653,9 @@ S9: spec complete — buildable in any phase
 
 ### Deferred / out of scope (explicit)
 
-- **The agentic framework + agents** — now workstreams 3–4 (planned separately
-  in their own TODO doc); this doc's role/step skills work regardless of who
-  runs them
+- **The agentic framework + agents** — now workstreams 3–4 (own plan doc
+  `todo_agentic_framework.md`, created 2026-11-24; goal model decided
+  2026-11-24); this doc's role/step skills work regardless of who runs them
 - **Social media publishing** (G9) — later, separate item
 - **BA cadence / scheduling** (Q11) — resolves in the WS3/WS4 planning (the
   periodic review protocol sets the cadence)
@@ -661,11 +665,20 @@ S9: spec complete — buildable in any phase
 
 ---
 
-## Workstream 3 — Agentic framework (needs planning)
+## Workstream 3 — Agentic framework (planning in progress)
 
-Not yet discussed in depth — this is a stub of what we know so far. Planning
-happens in its own TODO doc (proposed: `todo_agentic_framework.md`, covering
-WS3 + WS4 together — the agents are the framework's first instances).
+**Planned in `todo_agentic_framework.md`** (created 2026-11-24, covering WS3 +
+WS4 together — the agents are the framework's first instances). **Goal model
+decided 2026-11-24**: per-domain org goals (homelab / bluebovine / investhub)
+in `docs/org/goals.md`; agent charters in `docs/agents/<agent>/charter.md`
+(agent suggests → chuck approves); proxy/guess KRs OK for the first pass;
+chuck's direct TODOs always win (tagged `exec`) but agents may push back with
+a compelling argument; soft enforcement (unmapped work flagged, not blocked);
+BAU work gets its own `bau` tag; quality metrics open. **S13 `okr` skill
+proposal staged** in that doc (helps write org + agent OKRs and verifies the
+ladder). Remaining open questions (identity, tasking, review protocol,
+memory, scheduling, guardrails, reporting + new ones from the interview) are
+tracked there. The 2026-11-22 seed list below is kept for history.
 
 **What we know so far (from the conversation):**
 
@@ -697,7 +710,10 @@ WS3 + WS4 together — the agents are the framework's first instances).
   project; agent-level gates?)
 - Reporting: accomplishments/learnings → chuck + the board + the BA?
 
-## Workstream 4 — Agents (needs planning, depends on WS3)
+## Workstream 4 — Agents (planning in progress, depends on WS3)
+
+Roster + per-agent model tracked in `todo_agentic_framework.md` (created
+2026-11-24).
 
 **Roster (chuck, 2026-11-22): one standing agent per role:**
 
