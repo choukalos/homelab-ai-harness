@@ -187,6 +187,16 @@ authenticated (a LiteLLM key) and stamped with the caller's owner (full-key
 match against `USER_KEYS`; the kanban key → `kanban`). Projects/ideas are
 stamped at creation; tasks inherit the idea's owner.
 
+**Known limitation — icebox specs are frozen (gap, 2026-11-24):** `edit_idea`
+works only in state `idea`; once grooming finalizes a spec (state `icebox`),
+there is no MCP path to fix it (e.g., a stale URL discovered after grooming).
+Options: (a) discard + re-add + re-groom (regenerates the spec from the idea
+text — loses the groomed detail), or (b) owner-level direct DB update of the
+`ideas.spec` JSON (bypasses the MCP-only mutation rule; used 2026-11-24 for
+the PWV2 blog-reorg publish paths — surgical field-level edits, verified by
+diff, with a changelog note appended to `spec.notes`). Candidate fix: an
+`edit_idea_spec` tool (icebox, field-level, owner-stamped, audit-logged).
+
 Example client config (direct to the container on the LAN; via the proxy,
 use the proxy's MCP gateway URL — the proxy forwards your LiteLLM key):
 
