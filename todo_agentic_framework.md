@@ -301,9 +301,10 @@ New from the 2026-11-24 interview:
   2. Bluebovine — this month's priority: credibility/traffic content, or
      defining the product (TBD)? Or both — which leads?
   3. Scale — how many objectives per domain: one sharp objective, or 2–3?
-- **Phase 2 exit smoke** (tipcalc E2E test project, commits `dc13a0a` /
-  `0ddd3f1`) was running 2026-11-24 — update the status line in
-  `todo_agent_skills.md` when it completes.
+- ~~**Phase 2 exit smoke** (tipcalc E2E test project, commits `dc13a0a` /
+  `0ddd3f1`)~~ — **done 2026-11-24**: board 6/6 done, pipeline validated
+  (build + security gate + content skills); test infra torn down 2026-11-24
+  (`c5f989e`/`6fec099`); `todo_agent_skills.md` status line updated.
 
 ## Next steps
 

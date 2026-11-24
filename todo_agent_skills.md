@@ -12,8 +12,15 @@
   all registered in the Skill Hub). **Phase 2 build done 2026-11-23** (PM-1/2/3/4/5
   + MKT-1 + S12 + CM-1/CM-2, 10 of 10, + G12 `docs/roles/<role>/` artifact
   conventions; R7/R9 research done 2026-11-23; all registered in the Skill Hub).
-  Remaining: Phase 2 exit smoke (first real task) + Phase 3 (blocked on G3
-  Plausible wiring). **WS3/WS4 planning started 2026-11-24** — own plan doc
+  **Phase 2 exit smoke done 2026-11-24** (TipCalc E2E test project id 11: 6/6
+  board tasks done — PM workflow → architecture + story breakdown → build →
+  ship docs + proposal → E2E verification → blog draft; pipeline validated:
+  build + security gate (seeded SQLi/XSS flagged as blockers, as designed) +
+  content skills; test infra torn down 2026-11-24, commits c5f989e/6fec099;
+  kanban project 11 kept as the durable record; state file
+  tmp/skills-e2e-smoke-state.md).
+  Remaining: Phase 3 (blocked on G3 Plausible wiring). **WS3/WS4 planning
+  started 2026-11-24** — own plan doc
   `todo_agentic_framework.md` created; goal model decided (per-domain org
   goals homelab/bluebovine — investhub out of scope/chuck-only; agent-suggested
   charters; proxy KRs; exec override w/ pushback; soft enforcement + BAU tag
@@ -621,6 +628,15 @@ in agreed locations.
   - CM: ≥1 piece of content published that passed content QA (factualness
     verified via search) + content inventory updated
   - Exec: ≥1 opportunity pitch delivered (PM-3; S9 for the deep-dive)
+- **Exit smoke (done 2026-11-24):** the disposable TipCalc E2E test project
+  (board project id 11) ran the pipeline on 6 real board tasks — PM workflow →
+  architecture + story breakdown → build → ship user-facing docs + homelab
+  proposal (applied + archived: `tier2-tipcalc-ship-docs`) → E2E verification
+  pass → blog draft (content-QA evidence; DRAFT only, publishing left to
+  chuck). Pipeline validated: build + security gate (seeded SQLi/XSS flagged
+  as blockers, as designed) + content skills. Test infra torn down 2026-11-24
+  (commits `c5f989e`/`6fec099`); kanban project 11 kept as the durable record;
+  state file `tmp/skills-e2e-smoke-state.md`.
 
 ### Phase 3 — Measurement / feedback loop
 
