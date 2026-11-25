@@ -1,8 +1,10 @@
 # Todo — agentic framework + agents (workstreams 3–4)
 
 - date: 2026-11-24
-- status: open (planning in progress — goal model decided 2026-11-24; S13 `okr`
-  skill accepted 2026-11-24; cadence/scope/BAU/quality decisions 2026-11-24)
+- status: open (planning complete 2026-11-25 — all framework design
+  questions decided; S13 `okr` skill built + registered 2026-11-25; next:
+  first org-goals pass; Q13 first agent deferred to the org-goals pass.
+  Goal model + S13 acceptance 2026-11-24; all other decisions 2026-11-25)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
@@ -52,6 +54,34 @@
   reviews **weekly to start** (agent presents the prior week's work + upcoming
   plan → chuck's feedback/direction) — move to monthly as chuck grows confident
   in the framework/agents.
+
+### Org-goal anchoring (decided 2026-11-25 interview)
+
+- **Homelab — one objective this cycle**: the **personal-interest content is
+  the main goal** (arcade/guitar/songs/RPGs/cars). "The virtual team ships
+  real work" (harness/agents) is the means, not the goal — harness upkeep is
+  **BAU** (tagged), not an objective. "Learning by building" lives inside the
+  content (the content is the vehicle). Early warning: if the work-mix check
+  shows `bau` eating the content ratio, promote the harness to a second
+  objective at the first monthly review.
+- **Bluebovine — two objectives this cycle**: (O1) credible/traffic content,
+  (O2) defining the product (research/etc.). O2 is **phased**: define →
+  iterate toward product-market fit; the monthly org review is the shift
+  point — rewrite the objective at the cycle boundary, don't append a third.
+- **Scale rule**: default **1–2 objectives per domain per cycle**; 3 only
+  with an explicit justification (surfaced in the okr alignment report).
+  Objectives are a cycle decision, not a fixed constant — the monthly cadence
+  is the growth mechanism.
+- **Draft shape** (to be redone by the S13 skill's first run):
+  - Homelab O: "personal-interest content ships on a steady rhythm and is
+    worth coming back to" — KRs: pieces/mo (proxy), pillar spread (≥2 of
+    arcade/guitar/songs/RPGs/cars active per month), quality KR (0 pieces
+    failing content QA), revisit/traffic (proxy until Plausible wiring).
+  - Bluebovine O1: "the site compounds trust and traffic" — content volume,
+    traffic growth (proxy), engagement.
+  - Bluebovine O2: "the product is defined and validated, ready to iterate"
+    — market analysis done, opportunity selected + pitched, PRD/spec drafted,
+    validation signal (phase: define).
 
 ### Agent charters
 
@@ -112,6 +142,157 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
   the same data (one source, no duplicate reporting).
 - Candidate KRs: CM "0 published pieces that failed content QA"; PM "0 PRDs
   without acceptance criteria".
+
+### Tasking + review protocol (decided 2026-11-25 interview)
+
+**Tasking (Q3):**
+
+- **Single work queue**: the kanban board is the single source of truth for
+  agent-managed work — one queue, no shadow queues (MVV rule 5).
+- **Chuck's direct TODOs — board cards (option a, confirmed 2026-11-25)**:
+  all agent work — including chuck's direct TODOs — becomes a board card
+  (tagged `exec`), so the board is the single queue *and* the concurrency
+  gate. (Started as option b "lightweight + logged in review"; promoted to
+  (a) the same day with the board-as-gate decision.)
+- **Clarifying questions on exec TODOs (chuck 2026-11-25)**: when chuck hands
+  an agent a TODO directly, the agent asks clarifying questions (one bounded
+  round) before executing, so it has a complete brief — the exec-TODO mirror
+  of the flag-don't-guess rule.
+- **Self-plans flow through the review**: agents don't silently create work.
+  The weekly review's upcoming-plan section is where an agent proposes next
+  week's cards; chuck approves/adjusts; then they're pulled like normal cards.
+- **Task brief standard**: every agent-authored card carries the 4-element
+  delegation contract (objective, output format, tools, boundaries). At
+  pickup, an agent with an incomplete brief **flags it, doesn't guess**.
+  Applies to agent-authored cards; chuck's direct TODOs are his channel (no
+  enforcement — but see clarifying questions above).
+- **Capacity / concurrency (3.5) — decided 2026-11-25 (chuck)**:
+  - **No model separation** (rejected). Instead **model assignment by work
+    type**: `matrix-coder` for the majority of work (product, analyst,
+    generic board workers, interactive chats); `matrix-copywriter` for
+    marketing/strategist content work (per-key default model in LiteLLM).
+    Side benefit: the two content agents never contend with interactive chats
+    on the coder model — combined with the session budget below, most
+    contention is solved without formal separation.
+  - **Concurrency budget**: the board orchestrator's existing per-category
+    slot gate gets a third category — `AGENT_CONCURRENT_TASKS` (default
+    **1**), alongside `MEDIA_CONCURRENT_TASKS` (1) and
+    `NON_MEDIA_CONCURRENT_TASKS` (2) — so **1 agent run + 2 board workers =
+    3 concurrent LLM sessions** to start. Each is an env var chuck can tune
+    (same pattern as the board's concurrent work items).
+  - **Interactive-first is a hard rule**: interactive chats never queue
+    behind agent work; the budget bounds contention. v2 option: admission
+    hold — defer new agent/board starts while an interactive session is
+    active (in-flight runs finish).
+  - **In-run sub-agent fanout**: v1 = agent runs are **single-session**;
+    fanout requires **chuck's explicit ask** (2026-11-25) — it is a
+    single-approval action class (feeds Q7 autonomy tiers). Right-sizing
+    (1 / 2–4 / 10+) stays the discipline for when chuck authorizes fanout.
+  - **Board as the gate**: all agent work is a board card (transparency), so
+    the orchestrator's dependency + slot gate is the single admission point
+    for all agent-driven LLM sessions. Slot classification: by **executor
+    identity** — cards assigned to a standing agent count against
+    `AGENT_CONCURRENT_TASKS` regardless of work kind (confirmed 2026-11-25).
+
+**Review protocol (Q4) — confirmed:**
+
+- **Weekly review**: one file per agent per week at
+  `docs/agents/<slug>/reviews/YYYY-WW.md`, 7 parts: (1) prior-week
+  accomplishments with evidence/links, (2) KR progress vs trajectory, (3)
+  work-mix check (`bau` vs OKR vs `exec` + spend line), (4) quality KR
+  status, (5) upcoming plan (proposed cards), (6) learnings / what the loops
+  caught or missed, (7) chuck's feedback (appended after he responds).
+  Mechanics: the agent generates the doc from board state + its own
+  artifacts, presents it, chuck responds in chat, response appended to the
+  file.
+- **Monthly org review**: KR scoring 0–1, retro, the **only place goals may
+  change** (incl. the bluebovine define→iterate shift). Record at
+  `docs/org/reviews/YYYY-MM.md`; `docs/org/goals.md` updated in the same
+  pass.
+
+### Scheduling (Q6) — decided 2026-11-25 interview
+
+- **Trigger set** (confirmed):
+  1. **Kanban events** (existing orchestrator pickup): eligible agent cards
+     auto-start when deps are done + the agent slot is free.
+  2. **chuck**: direct TODOs → cards; interactive chat on demand.
+  3. **Cron** (new jobs in `schedules.json`, skill-runner scheduler —
+     hot-reload, America/Chicago):
+     - `weekly-agent-reviews` — one job generating all four agents' weekly
+       review docs. **Friday 15:00 CT.**
+     - `monthly-org-review` — KR scoring + retro + goal adaptation.
+       **First Friday 15:00 CT** (after that week's agent reviews land, so
+       it can consume them).
+     - Nothing else for now (BA data consumption rides inside the weekly
+       reviews). Keep the periodic set minimal.
+- **Self-plan card lifecycle** (confirmed): agent-created cards start as
+  **idea/grooming** (the orchestrator only auto-starts from backlog → no
+  auto-start); chuck approves at the weekly review → promoted to backlog.
+- **Review delivery + non-stacking rule** (chuck 2026-11-25): no push
+  notification — chuck checks for reviews himself. **Scheduled reviews are
+  non-stacking**: if a review goes unanswered (no feedback, nothing promoted
+  to backlog), the next scheduled cycle for that agent (or the monthly org
+  review) is **skipped** until chuck interacts (accept / reject / request
+  another pass / promote cards). Mechanism: each review doc carries a status
+  (pending until chuck's part-7 feedback or explicit ack is appended) —
+  file-based state, consistent with MVV rule 5.
+
+### Guardrails (Q7) — decided 2026-11-25 interview
+
+- **Autonomy tiers** (chuck-approved 2026-11-25; AWS risk-tiering pattern —
+  read-only autonomous, low-risk writes single-approval, high-risk stricter).
+  Living table — tiers can be re-granted/revoked at review:
+
+  | Action class | Tier |
+  |---|---|
+  | Read (board, files, KB, memory, search) | Autonomous |
+  | Own workspace — drafts/artifacts under `docs/agents/<slug>/` | Autonomous |
+  | Create board cards in own project | Autonomous (no auto-start — idea/grooming, per Q6) |
+  | **Publish to blog (publish-file)** | **Autonomous** (chuck 2026-11-25 — quality-gated: the content QA pass is the external predicate; first autonomous external-facing action) |
+  | Promote own cards to backlog (auto-start) | Single-approval (chuck, at the weekly review) |
+  | Edit org/charter docs (`docs/org/`, `charter.md`) | Single-approval |
+  | Deploy (existing per-project deploy gates) | Single-approval |
+  | Spend beyond soft threshold | Single-approval (threshold set after first data) |
+  | Sub-agent fanout | Explicit ask (decided 2026-11-25) |
+  | External comms (email, social) | Explicit ask (v1: nothing external without chuck) |
+  | Delete durable state (files, board history) | Explicit ask |
+  | Change framework config (skills, orchestrator, keys) | Explicit ask |
+
+- **Trust grants — design now, use later** (confirmed): v1 runs pure
+  single-approval; after 2–3 weekly reviews, repeated safe approvals can be
+  granted as bounded patterns (specific command/parameter/resource — no
+  wildcards; revocable; logged in the weekly review).
+- **No new agent-level gates** beyond this table + the existing pipeline
+  gates (QA, security, deploy) (confirmed).
+
+### State/memory (Q5) — decided 2026-11-25 interview
+
+- **Per-agent workspace** (confirmed): the existing per-identity pattern —
+  `pi-agent-<slug>` (alongside `pi-agent-chuck` / `pi-agent-dylan`) for
+  session state, plus the durable home `docs/agents/<slug>/` (charter +
+  reviews).
+- **Per-agent memory namespaces** (confirmed): each agent's LiteLLM key =
+  its own mcp_memory identity, **private to that agent**. No cross-access to
+  chuck's private memory (agents aren't family — the `household` scope stays
+  family-only). Context about chuck flows through task briefs and files
+  (charter, docs), not memory reads. MVV rule-5 test: *if any agent dies, a
+  fresh one picks up from files + its own namespace alone.*
+- **Session sync** (confirmed): agents ship session transcripts via
+  `session-sync` to the reflection pipeline, same as chuck's sessions.
+
+### Reporting (Q8) — decided 2026-11-25 interview
+
+- **Three surfaces** (settled by earlier decisions): → chuck via the weekly
+  review docs; → board via cards + movement; → BA by *consuming* the same
+  underlying records (QA/publish logs, board state, spend) — one source, no
+  duplicate reporting.
+- **BA's org-level KPI digest** (confirmed): weekly cross-agent digest
+  (spend per agent, pieces published, QA results, work-mix ratios) at
+  `docs/org/kpi/YYYY-WW.md`, alongside the weekly reviews, feeding the
+  monthly org review.
+- **Learnings flow** (confirmed): learnings that change *how work gets done*
+  are promoted to the durable doc at review time (charter "updated <date>"
+  note, skill edits via proposals) — no separate learnings repo.
 
 ### Research grounding (2026-11-24, via mcp_search)
 
@@ -192,7 +373,30 @@ process, not steps** — agents take different valid paths.
 **Status**: research done 2026-11-24; the 5-rule MVV is the proposed
 pre-flight check for standing up the first agent (Q13) — discuss before build.
 
-## S13 — `okr` skill (PROPOSAL — awaiting chuck's review)
+### New implications from the org-theory lane (discussed 2026-11-25)
+
+From the org-theory research lane (`docs/agent-org-research/org-theory.md`,
+9 rules; full distillation in `docs/agent-org-framework.md` §2). Four
+implications not yet in the plan — to be folded into the tasking design:
+
+- **(e) The communication graph is a tasking decision (Conway's inverse)** —
+  the agents' interaction topology *becomes* the system architecture. Ours:
+  agents interact via the kanban board + files, **not with each other**
+  (depth 1, no agent-to-agent delegation). State this topology explicitly in
+  the tasking design.
+- **(f) Name the platform/product layering (Team Topologies)** — skills +
+  MCP tools = platform layer; role agents = thin product layer. Consequence:
+  new capabilities go into the platform (skills/tools), **not** into agent
+  prompts.
+- **(g) Per-task-type configuration (Mintzberg)** — content production =
+  pipeline with QA gates (the kanban QA stage); research = specialist; novel
+  problems = multi-perspective. Mostly a property of role + task type,
+  encoded in the role skills (WS2), not new machinery.
+- **(h) Standardize outputs before debate (Galbraith)** — agent artifact
+  outputs get schemas/structure before we ever consider agent-to-agent
+  debate or mutual adjustment.
+
+## S13 — `okr` skill (ACCEPTED 2026-11-24 — not yet built)
 
 **Purpose**: help chuck (or an agent) write org + agent OKRs, and verify the
 ladder — that agent OKRs line up to the org's OKRs.
@@ -249,31 +453,51 @@ do's/don'ts (short purpose-only mission lines); chuck's 2026-11-24 decisions
 (per-domain org goals; agent-suggested charters; proxy KRs OK; exec override
 with pushback; soft enforcement + BAU).
 
-**Status**: **accepted 2026-11-24 (chuck)** — not yet built. Belongs to WS3
-(the org/agent goal system), not workstream 2.
+**Status**: **accepted 2026-11-24 (chuck); built + registered 2026-11-25**
+(`agents-skills/okr/` — 7/7 YAML guard tests pass; Skill Hub live, gateway
+list verified). Belongs to WS3 (the org/agent goal system), not workstream 2.
 
 ## Remaining open design questions
 
 (From the 2026-11-22 seed list; goal model — Q2 — is now decided above.)
+**All questions decided 2026-11-25 except Q13** (first agent — deferred to
+the first org-goals pass).
 
-1. **Identity** — per-agent LiteLLM keys: capability scoping (read/control/
-   admin sets exist), per-agent spend visibility/budgets.
+1. ~~**Identity**~~ — **decided 2026-11-25 (chuck)**: one LiteLLM key per
+   agent (the `USER_KEYS` pattern extended to agents), created when the agent
+   stands up. All agents start with the **same tool set** — no per-role
+   capability scoping yet (keys structured so scoping can be added later; it
+   remains a guardrails/Q7 decision). Spend: **per-agent visibility from day
+   one, no hard caps** — soft thresholds in the weekly review (spend line in
+   the work-mix check); consider budget caps after a few iterations with real
+   data. **Slugs**: `product` (PM), `analyst` (BA), `strategist` (marketing
+   strategist), `marketing` (content marketer). **Researcher out of the
+   roster for now** (the research skill exists; add a key when/if it stands
+   up). Slugs drive key names, charter paths
+   (`docs/agents/<slug>/charter.md`), and future memory namespaces.
 2. ~~Goal model~~ — **decided 2026-11-24** (above).
-3. **Tasking** — how work reaches an agent: kanban board, direct TODOs from
-   chuck, periodic self-generated plans? Precedence between the three.
-4. **Periodic review protocol** — **cadence decided 2026-11-24** (weekly agent
-   reviews to start: prior-week review + upcoming plan + work-mix check; org
-   goals monthly). Open: exact format, where the record lives
-   (`docs/agents/<agent>/reviews/` proposed).
-5. **State/memory** — per-agent workspace, durable state across sessions
-   (memory skills exist: `memory-conventions`, `session-memory`, `session-sync`);
-   per-agent memory namespaces.
-6. **Scheduling** — what triggers an agent run (cron? kanban events? chuck?).
-7. **Guardrails** — autonomy tiers per action class; persistent trust grants
-   (bounded, revocable, logged); agent-level gates beyond per-project deploy
-   gates.
-8. **Reporting** — accomplishments/learnings → chuck + board + BA (BA
-   *consumes* agent reports, doesn't duplicate them).
+3. ~~**Tasking**~~ — **decided 2026-11-25** (single queue; **all agent work
+   incl. exec TODOs = board cards**; self-plans via review; 4-element brief +
+   flag-don't-guess; clarifying questions on exec TODOs; sub-agent capacity
+   decided — item 14).
+4. ~~**Periodic review protocol**~~ — **decided 2026-11-25** (weekly 7-part
+   review at `docs/agents/<slug>/reviews/YYYY-WW.md`; monthly org review at
+   `docs/org/reviews/YYYY-MM.md` — the only place goals change).
+5. ~~**State/memory**~~ — **decided 2026-11-25** (`pi-agent-<slug>`
+   workspaces; per-agent private mcp_memory namespaces, no cross-access to
+   chuck's memory; context via briefs/files; agents use `session-sync`).
+6. ~~**Scheduling**~~ — **decided 2026-11-25** (kanban events + chuck + cron:
+   `weekly-agent-reviews` Fri 15:00 CT, `monthly-org-review` first Fri 15:00
+   CT; self-plan cards idea/grooming → review → backlog; non-stacking
+   reviews — skip the next cycle if the previous one is unanswered).
+7. ~~**Guardrails**~~ — **decided 2026-11-25** (autonomy tier table approved
+   — blog publish = autonomous, quality-gated; trust grants design-now/
+   use-later; no new agent-level gates beyond the table + existing pipeline
+   gates).
+8. ~~**Reporting**~~ — **decided 2026-11-25** (chuck via weekly reviews,
+   board via cards, BA consumes the same records — one source; BA's weekly
+   org KPI digest at `docs/org/kpi/YYYY-WW.md`; learnings promoted to
+   durable docs at review time).
 
 New from the 2026-11-24 interview:
 
@@ -283,37 +507,64 @@ New from the 2026-11-24 interview:
     (chuck's own; board for building, no agent handover).
 11. ~~BAU framing~~ — **decided 2026-11-24**: `bau` tag + work-mix check
     (BAU vs OKR vs exec) in the periodic review.
-12. **Quality metrics** — mandatory quality/safety KR decided (2026-11-24);
-    the *monitoring mechanism* (how quality is measured per agent) remains
-    open.
+12. ~~**Quality metrics**~~ — mandatory quality/safety KR decided
+    (2026-11-24); **monitoring mechanism decided 2026-11-25** (via the 4.1
+    + 8.1 decisions): external predicates per artifact class (QA pass,
+    tests, schema, resolvable citations — MVV rule 3), quality-KR status in
+    the weekly review (part 4), and the BA's KPI digest consuming the same
+    records.
 13. **First agent** — which agent stands up first (skills-doc Q1, deferred
-    here).
+    here). **Decide after the first org-goals pass** (2026-11-25): the
+    goals show which agent has the sharpest starting KR (candidates:
+    `marketing` for the homelab content goal, `product` for the bluebovine
+    product-definition goal).
+14. ~~**Sub-agent capacity / concurrency**~~ — **decided 2026-11-25** (model
+    assignment, not separation; `AGENT_CONCURRENT_TASKS=1` + existing
+    `NON_MEDIA_CONCURRENT_TASKS=2` = 3-session budget, env-var tunable;
+    interactive-first hard rule; v1 single-session agent runs, fanout only on
+    chuck's explicit ask; board as the gate; slots classified by executor
+    identity).
 
-## Pending (unanswered as of 2026-11-24 — for the next session)
+## Pending — all resolved 2026-11-25
 
-- **Draft vs build first**: run the S13 workflow ad-hoc to produce the first
-  `docs/org/goals.md` draft (suggested 2026-11-24), or build the skill first?
+- ~~**Draft vs build first**~~ — **decided 2026-11-25 (chuck)**: build the S13
+  `okr` skill first, then run it for the first org-goals pass.
 - **Org-goals anchoring questions (chuck)**:
-  1. Homelab — is "the virtual team ships real work with minimal
-     intervention" (harness/agents working) the main goal, or is the
-     personal-interest content (arcade/guitar/songs/RPGs/cars) an
-     equal-weight objective?
-  2. Bluebovine — this month's priority: credibility/traffic content, or
-     defining the product (TBD)? Or both — which leads?
-  3. Scale — how many objectives per domain: one sharp objective, or 2–3?
+  1. ~~Homelab~~ — **decided 2026-11-25 (chuck)**: the **personal-interest
+     content is the main goal** (arcade/guitar/songs/RPGs/cars). "The virtual
+     team ships real work" (harness/agents) is the means, not the goal —
+     its upkeep is BAU, not an objective (resolved 2026-11-25: "learning by
+     building" lives inside the content; see "Org-goal anchoring").
+  2. ~~Bluebovine~~ — **decided 2026-11-25 (chuck)**: **both** — credible/
+     traffic content **and** defining the product (research/etc.) this cycle.
+     The product track is a **phase**: define → iterate toward product-market
+     fit; the monthly org review is the shift point (rewrite the objective at
+     the cycle boundary, don't append a third).
+  3. ~~Scale~~ — **decided 2026-11-25 (chuck)**: 1 objective for homelab,
+     2 for bluebovine this cycle; default 1–2 per domain per cycle, 3 only
+     with explicit justification (okr alignment report surfaces it). Harness/
+     learning-by-building = BAU for now (see "Org-goal anchoring").
 - ~~**Phase 2 exit smoke** (tipcalc E2E test project, commits `dc13a0a` /
   `0ddd3f1`)~~ — **done 2026-11-24**: board 6/6 done, pipeline validated
   (build + security gate + content skills); test infra torn down 2026-11-24
   (`c5f989e`/`6fec099`); `todo_agent_skills.md` status line updated.
 
-## Next steps
+## Next steps (build order confirmed 2026-11-25)
 
 1. ~~chuck reviews the S13 `okr` proposal~~ — **accepted 2026-11-24**.
-2. Build S13 `okr` (or run the workflow ad-hoc first — chuck's call).
+2. ~~Build S13 `okr`~~ — **done 2026-11-25** (`agents-skills/okr/SKILL.md`;
+   7/7 YAML guard tests pass; registered + enabled in the Skill Hub via
+   `skill-hub-register.sh` — "1 added, 0 failed"; gateway list verified).
 3. First org-goals pass: produce `docs/org/goals.md` for the 2 in-scope
    domains (homelab, bluebovine) — the monthly cycle starts.
-4. Agent charter drafts: first agent suggests its charter from the org goals →
-   chuck approves (first agent = Q13).
-5. Then the remaining framework questions in suggested order: identity/keys →
-   tasking + review protocol (the operating loop — weekly cadence decided) →
-   scheduling/guardrails → memory/reporting.
+4. First agent (Q13): decide after the org-goals pass — the goals show
+   which agent has the sharpest starting KR (candidates: `marketing` or
+   `product`).
+5. First agent's charter draft: agent suggests from the org goals → chuck
+   approves.
+6. Stand up the first agent: `pi-agent-<slug>` workspace, LiteLLM key
+   (model assignment per work type), `AGENT_CONCURRENT_TASKS` slot,
+   `weekly-agent-reviews` + `monthly-org-review` cron jobs.
+7. First weekly review cycle — and the monthly clock starts.
+
+All framework design questions decided 2026-11-25 (Q13 deferred to step 4).
