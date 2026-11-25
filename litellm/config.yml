@@ -113,6 +113,35 @@ model_list:
         chat_template_kwargs:
           enable_thinking: false
 
+  # ── Gemma 4 31B — GPU 1 copywriter (Ollama, Matrix) ───────────
+  # XOR-tenant with the media GPU workers: the pipeline's VRAM headroom
+  # guard (media-pipeline/server.py _ensure_vram_headroom) evicts Ollama
+  # when a media job needs VRAM; OLLAMA_KEEP_ALIVE=5m idle-unloads; the
+  # first request after an unload triggers a ~46 s on-demand load (hence
+  # timeout 180). If the model can't load (GPU 1 media-held, or hot
+  # ComfyUI ~18 GB), the per-entry fallback routes the request to
+  # matrix-coder instead of erroring. Manual override (Matrix):
+  # `model-manager gpu1 swap {media|copywriter}`.
+  # Added 2026-11-25 via POST /model/new (zero-downtime, no proxy
+  # restart) + this file for persistence — plan:
+  # thor_copywriter_litellm_plan.md. Capability tags deliberately absent:
+  # config convention is verified-only tags (probe live before tagging).
+  - model_name: matrix-copywriter
+    model_info:
+      mode: chat
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000001
+    litellm_params:
+      model: ollama/gemma4:31b
+      api_base: http://matrix:11434
+      api_key: "unused"
+      timeout: 180
+      # No num_retries: global router num_retries is 0 → the fallback fires
+      # on the FIRST failure (a load that can't fit in VRAM fails fast
+      # instead of burning a ~46 s doomed retry).
+      fallbacks:
+        - {model: matrix-coder}
+
   # ── Nomic embed-text — mcp_knowledge (KB search/digests;
   #    EMBED_MODEL=embeddings in compose.mcp.yml) ──
   - model_name: embeddings
