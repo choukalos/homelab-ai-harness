@@ -7,7 +7,8 @@
 > persistence. Verification 1–2 PASS (serving confirmed; see "Observed
 > behavior" below), 3 partial (loaded, but VRAM-degraded while the C-production
 > render held GPU 1 — full-footprint check deferred), 4–7 deferred (need a quiet
-> GPU 1 window and/or the Matrix console).
+> GPU 1 window and/or the Matrix console); Matrix-side doc updates
+> (contract v1.2, profile comment, Matrix TODO.md) pending the same.
 > Option A from the 2026-11-25 GPU-1 sidecar discussion: Ollama tenant on GPU 1,
 > exposed through Thor LiteLLM with a fallback to `matrix-coder`.
 
@@ -136,18 +137,28 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       `model-manager gpu1 swap copywriter` — clean both ways. (Matrix-side;
       deferred — no Thor→Matrix ssh.)
 
-## Step 5 — Doc updates (this repo, after verification)
+## Step 5 — Doc updates
+
+**Thor side (this repo) — DONE 2026-11-25:**
+
+- `litellm/config.yml` — entry + per-entry `fallbacks` (committed `1a64ae0`)
+- `docs/thor_model_alias_registry.md` — live-aliases row (6-model set,
+  verified via `GET /v1/models`)
+- This plan doc — status APPLIED + observed-behavior section
+
+**Matrix side — PENDING (needs the Matrix console; Thor has no ssh to
+Matrix, `chuck@192.168.4.55` key-auth denied 2026-11-25):**
 
 1. **`docs/matrix_thor_contract.md` → v1.2**: add the row to §3 alias table:
    ```
    | `matrix-copywriter` | `ollama/gemma4:31b` → `http://matrix:11434` | Ollama port 11434 (GPU 1) | `daily`, `llms` — XOR-tenant with media-gpu1; falls back to `matrix-coder` when GPU 1 is media-held |
    ```
-   and a note under the alias table: `matrix-copywriter` has
-   `model_group_fallbacks → [matrix-coder]` (2026-11-25).
+   and a note under the alias table: `matrix-copywriter` has per-entry
+   `fallbacks: [matrix-coder]` (2026-11-25).
 2. **`models/profiles/ollama-copywriter-gpu1.yaml`**: change
    `alias: matrix-copywriter  # NEW LiteLLM alias (Phase 3/4 adds the Thor entry)`
    → `alias: matrix-copywriter  # LIVE in Thor LiteLLM since 2026-11-25 (fallback → matrix-coder)`.
-3. **`TODO.md`**: close the checkbox (see entry below).
+3. **`TODO.md` (Matrix)**: close the "Thor entry" checkbox.
 
 ## Observed behavior (applied 2026-11-25, render running)
 

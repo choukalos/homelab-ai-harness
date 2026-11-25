@@ -5,12 +5,14 @@
 > strategy and were never implemented; see the live table below)
 > Status: Superseded in practice by the live LiteLLM config.
 
-## Live aliases (verified 2026-11-20, `GET /v1/models` — 5-model set)
+## Live aliases (verified 2026-11-25, `GET /v1/models` — 6-model set; the
+2026-11-20 baseline was the 5-model set)
 
 | alias | backend | purpose | notes |
 |---|---|---|---|
 | `matrix-coder` | `openai/qwen38-27b` via vLLM (`matrix:8000`) | Main model — chat, skills, extraction LLM | "One model rule" in practice; `fallbacks: [studio-gemma4-26b]` (2026-11-19) |
 | `matrix-coder-fast` | same Qwen3 backend | Fast path — thinking OFF baked in (`enable_thinking: false`) | Added 2026-11-19 (tier1-litellm-model-config-pass); 0 reasoning tokens vs 52–53 baseline |
+| `matrix-copywriter` | `ollama/gemma4:31b` (`matrix:11434`, GPU 1) | GPU 1 copywriter (XOR-tenant with the media pipeline) | Added 2026-11-25 (zero-downtime `POST /model/new` + config, commit `1a64ae0`; plan `thor_copywriter_litellm_plan.md`); per-entry `fallbacks: [matrix-coder]`; `timeout: 180` (~46 s on-demand load after the 5-min idle-unload). **Reasoning model** — short max-tokens budgets return empty content (text lands in the `thinking` field); needs a generous output budget. Observed 2026-11-25: while a media render holds GPU 1 it serves CPU-offloaded at ~2.5 tok/s (642–714 MB VRAM slice) instead of failing — the fallback is for hard failures only. **Verification checks 3–7 pending** (quiet GPU 1 window + Matrix console) — see the plan doc |
 | `studio-gemma4-26b` | OMLX (`macstudio:8000`) | Backup LLM for the `matrix-coder` fallback | Supersedes `studio-gemma4-4b` (LMStudio); capability tags **VERIFIED 2026-11-21** against the reloaded upstream — tool calling + JSON schema work, no vision (text-only MLX), 262144 max_model_len (`tier1-macstudio-omlx-restart` applied; upstream was down 2026-11-17→21) |
 | `embeddings` | `ollama/nomic-embed-text` (`matrix:11434`) | KB path (legacy name) | 768-dim; `mode: embedding` (misclassification fixed 2026-11-19) |
 | `homelab-embedding-v1` | same nomic backend | **Memory path** (versioned alias) | Added 2026-08-26 (memory Phase 1); migration runbook in `docs/memory/embedding-migration.md` — never silently repoint v1 |
@@ -18,13 +20,6 @@
 No longer live as of 2026-11-20: `hf-sd3` (removed 2026-11-19 — no
 consumer), `matrix-gemma4-moe` and `studio-gemma4-4b` (superseded by the
 `studio-gemma4-26b` OMLX upstream).
-
-**Planned:** `matrix-copywriter` (gemma4:31b on Ollama, `matrix:11434`) —
-Phase 3/4 of the Matrix 2-GPU plan (GPU 1, XOR the media pipeline). Note for
-when it lands: gemma4:31b is a **reasoning model** — short
-`num_predict`/max-tokens budgets return empty content (the text lands in the
-`thinking` field); the alias needs a generous output budget. (From
-`docs/thor_2gpu_grafana_handoff.md`, removed 2026-11-21.)
 
 **Per-key reality (2026-08-28):** the July per-key allowlist table below was
 never implemented. Keys in LiteLLM: master (OPS), public (`llm.choukalos.com`),
