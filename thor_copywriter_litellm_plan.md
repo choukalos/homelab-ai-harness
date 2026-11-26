@@ -1,26 +1,18 @@
 # Plan: Expose Gemma 4 31B (GPU 1 copywriter) via Thor LiteLLM
 
 > Created: 2026-11-25
-> Status: **APPLIED 2026-11-25 (zero-downtime runtime path)** — entry +
-> fallback live via `POST /model/new` (no proxy restart; model_id
-> f62c1c71-0574-4e30-9caa-ba172be8ea48); `litellm/config.yml` updated for
-> persistence. Verification 1–2 PASS (serving confirmed; see "Observed
-> behavior" below), 3 partial (loaded, but VRAM-degraded while the C-production
-> render held GPU 1 — full-footprint check deferred), 4–7 deferred (need a quiet
-> GPU 1 window and/or the Matrix console); Matrix-side doc updates
-> (contract v1.2, profile comment, Matrix TODO.md) pending the same.
-> **2026-11-26 verification session: checks 4, 5, 6 PASS** (live fallback
-> fired — dead-upstream request returned 200 from qwen38-27b in 0.5 s, no 5xx
-> to the caller; idle-unload confirmed at the keep_alive expiry; evict-on-media
-> confirmed — TTS job start evicted the loaded copywriter and completed
-> cleanly). Also surfaced a real bug: the per-entry `fallbacks:` idiom (used by
-> this entry AND `matrix-coder`) bypasses the router and 500s on group
-> aliases. Fallbacks moved to router-level `router_settings.fallbacks`
-> (config applied + proxy recreated 2026-11-26 15:53 UTC with
-> `--force-recreate`; verified live). Check 3 partially confirmed from Thor
-> (loaded + VRAM slice via `/api/ps`); 7 still deferred (Matrix console —
-> Thor→Matrix ssh re-tested and denied 2026-11-26 16:23 UTC). See
-> "Verification session 2026-11-26" below.
+> Status: **COMPLETE 2026-11-26** — all verification checks closed (1–6 PASS;
+> check 3 closed with the operator-confirmed full footprint — ~23 GB fits the
+> 24 GB GPU 1, ~700 MB for ComfyUI in its evicted state, and ComfyUI ranges by
+> pipeline run, evicting or sharing VRAM with the copywriter; check 7 closed
+> without a live test — operator acceptance, Matrix console). Applied
+> 2026-11-25 (zero-downtime runtime path, model_id
+> f62c1c71-0574-4e30-9caa-ba172be8ea48); the per-entry `fallbacks:` idiom was
+> found broken during verification (bypasses the router, 500s on group
+> aliases) and replaced with router-level `router_settings.fallbacks` (config
+> applied + proxy recreated 2026-11-26 15:53 UTC with `--force-recreate`;
+> verified live). Residual (Matrix console only): the Matrix-side doc updates
+> in Step 5 (contract v1.2, profile comment, Matrix TODO.md).
 > Option A from the 2026-11-25 GPU-1 sidecar discussion: Ollama tenant on GPU 1,
 > exposed through Thor LiteLLM with a fallback to `matrix-coder`.
 
@@ -138,11 +130,14 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       first call = the on-demand load).
 - [x] **3. Loaded on GPU 1** (Matrix): `docker exec ollama ollama ps` (gemma4:31b
       listed, PROCESSOR 100% GPU) + `nvidia-smi -i 1 --query-gpu=memory.used
-      --format=csv` (~22 GB). — **PARTIAL 2026-11-26 (from Thor)**: loaded state +
-      VRAM slice confirmed via `http://192.168.4.55:11434/api/ps` (gemma4:31b
+      --format=csv` (~22 GB). — **CLOSED 2026-11-26**: loaded state + VRAM slice
+      confirmed from Thor via `http://192.168.4.55:11434/api/ps` (gemma4:31b
       listed, 642→714→1353 MB slice across the render window — degraded while
-      media/ComfyUI hold GPU 1). Full ~22 GB footprint + GPU index via
-      `nvidia-smi -i 1` still need the Matrix console.
+      media/ComfyUI hold GPU 1). Full footprint operator-confirmed 2026-11-26:
+      **~23 GB fits the 24 GB GPU 1** (~700 MB for ComfyUI in its evicted
+      state); ComfyUI ranges by pipeline run and either evicts or shares VRAM
+      with the copywriter. (The `nvidia-smi -i 1` GPU-index confirmation was not
+      run from Thor — the profile pins `device_ids: ['1']`.)
 - [x] **4. Idle unload** (Matrix): wait 5 min with no requests → `ollama ps` empty,
       `nvidia-smi -i 1` back to media-pipeline baseline. (Observable from Thor via
       `http://192.168.4.55:11434/api/ps`.) — **PASS 2026-11-26 16:30:47 UTC**:
@@ -175,11 +170,12 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       **already evicted** (guard fired at job start; nomic-embed-text also stopped)
       → job completed `done` with `vo.wav` produced, no OOM. (Pipeline log line not
       observable from Thor — the eviction + clean completion is the behavior check.)
-- [ ] **7. Manual swap still works**: `model-manager gpu1 swap media` then
-      `model-manager gpu1 swap copywriter` — clean both ways. (Matrix-side;
-      deferred — no Thor→Matrix ssh: re-tested 2026-11-26 16:23 UTC, `Permission
-      denied (publickey,password)`. `model-manager` is GPU-host-local only —
-      no remote-callable path exists (docs/media-mcp-handoff.md).)
+- [x] **7. Manual swap still works**: `model-manager gpu1 swap media` then
+      `model-manager gpu1 swap copywriter` — clean both ways. — **CLOSED
+      2026-11-26 without a live test** (operator acceptance — the checks are
+      sufficient; Thor→Matrix ssh denied, re-tested 16:23 UTC; `model-manager`
+      is GPU-host-local with no remote path, docs/media-mcp-handoff.md). The
+      manual swap remains the Matrix-side override as designed.
 
 ## Step 5 — Doc updates
 
@@ -190,8 +186,9 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
   verified via `GET /v1/models`)
 - This plan doc — status APPLIED + observed-behavior section
 
-**Matrix side — PENDING (needs the Matrix console; Thor has no ssh to
-Matrix, `chuck@192.168.4.55` key-auth denied 2026-11-25):**
+**Matrix side — PENDING (the only residual after the 2026-11-26 close;
+needs the Matrix console; Thor has no ssh to Matrix, `chuck@192.168.4.55`
+key-auth denied, re-tested 2026-11-26 16:23 UTC):**
 
 1. **`docs/matrix_thor_contract.md` → v1.2**: add the row to §3 alias table:
    ```
@@ -241,10 +238,9 @@ running on Matrix — deliberately, to prove coexistence. Findings:
 - **No interference with the render**: task 13 stayed `running` with no
   failures throughout the test window.
 
-**Deferred checks:** 3 (full ~22 GB footprint + GPU index via `nvidia-smi -i 1` —
-loaded state confirmed from Thor 2026-11-26), 7 (`model-manager gpu1 swap` —
-Matrix console; Thor→Matrix ssh re-tested and denied 2026-11-26).
-Checks 4, 5, 6 completed 2026-11-26 — see below.
+**All checks closed 2026-11-26** (1–6 PASS; 3 closed with the
+operator-confirmed footprint; 7 closed without a live test). Residual:
+the Matrix-side doc updates in Step 5 (Matrix console only).
 
 ---
 
@@ -298,8 +294,10 @@ same prompt returns the correct reply ("COPYWRITER-OK"). Confirms the existing
 
 - **5 (fallback): PASS** — 5a degraded live request 200 (~14.1 s); 5b dead-upstream
   twin → router fallback fired, 200 from `qwen38-27b` in ~0.5 s, no 5xx.
-- **3 (loaded on GPU 1): PARTIAL** — loaded + VRAM slice confirmed from Thor via
-  `/api/ps`; full footprint + GPU index still need the Matrix console.
+- **3 (loaded on GPU 1): CLOSED** — loaded + VRAM slice confirmed from Thor via
+  `/api/ps`; full footprint operator-confirmed 2026-11-26: ~23 GB fits the
+  24 GB GPU 1 (~700 MB for ComfyUI evicted); ComfyUI ranges by pipeline run,
+  evicting or sharing VRAM with the copywriter.
 - **4 (idle unload): PASS** (16:30:47 UTC) — loaded state with expiry 16:30:10
   (one one-off expiry reset ~16:25 with no proxy copywriter traffic — logs
   checked; expiry then stable across two 3-min-spaced samples) → model GONE
@@ -309,9 +307,9 @@ same prompt returns the correct reply ("COPYWRITER-OK"). Confirms the existing
   evicted at 16:31:29 (guard fired at job start) → job `done`, `vo.wav`
   produced, no OOM. Pipeline log line not observable from Thor — the eviction +
   clean completion is the behavior check.
-- **7 (manual swap): still deferred** — Matrix console; Thor→Matrix ssh
-  re-tested 2026-11-26 16:23 UTC (`Permission denied (publickey,password)`);
-  `model-manager` is GPU-host-local with no remote path.
+- **7 (manual swap): CLOSED without a live test** (operator acceptance —
+  the checks are sufficient; Matrix console; Thor→Matrix ssh re-tested
+  2026-11-26 16:23 UTC, denied; `model-manager` is GPU-host-local).
 
 ---
 
