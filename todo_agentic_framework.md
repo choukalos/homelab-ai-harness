@@ -2,9 +2,10 @@
 
 - date: 2026-11-24
 - status: open (planning complete 2026-11-25 — all framework design
-  questions decided; S13 `okr` skill built + registered 2026-11-25; next:
-  first org-goals pass; Q13 first agent deferred to the org-goals pass.
-  Goal model + S13 acceptance 2026-11-24; all other decisions 2026-11-25)
+  questions decided; S13 `okr` skill built + registered 2026-11-25; Q15
+  domain knowledge decided 2026-11-26; next: first org-goals pass; Q13 first
+  agent deferred to the org-goals pass. Goal model + S13 acceptance
+  2026-11-24; decisions 2026-11-25; Q15 2026-11-26)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
@@ -14,7 +15,8 @@
 
 - **WS3 — the agentic framework**: the system that runs the role agents —
   identity/keys, goal model, projects, constraints, tasking, periodic review
-  protocol, state/memory, scheduling, reporting, guardrails, spend.
+  protocol, state/memory, domain knowledge (Q15), scheduling, reporting,
+  guardrails, spend.
 - **WS4 — the agents**: one standing agent per role. The agents are the
   framework's first instances, so they're planned together.
 
@@ -94,7 +96,8 @@
      org goal (cites the org goal it serves).
   3. **Key results** — 2–4 per objective. Each KR: definition, source, target,
      cadence.
-  4. **Projects** — the kanban projects this agent works.
+  4. **Projects** — the kanban projects this agent works + the domain KB(s)
+     it owns (Q15).
   5. **Constraints** — must-not-without-approval list (feeds the guardrails
      question).
   6. **Autonomy tiers** — autonomous / single-approval / never, per action
@@ -201,7 +204,9 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
   accomplishments with evidence/links, (2) KR progress vs trajectory, (3)
   work-mix check (`bau` vs OKR vs `exec` + spend line), (4) quality KR
   status, (5) upcoming plan (proposed cards), (6) learnings / what the loops
-  caught or missed, (7) chuck's feedback (appended after he responds).
+  caught or missed — incl. the domain-KB line: facts added/corrected/
+  forgotten + collision log (Q15), (7) chuck's feedback (appended after he
+  responds).
   Mechanics: the agent generates the doc from board state + its own
   artifacts, presents it, chuck responds in chat, response appended to the
   file.
@@ -220,7 +225,8 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
      hot-reload, America/Chicago):
      - `weekly-agent-reviews` — one job generating all four agents' weekly
        review docs. **Friday 15:00 CT.**
-     - `monthly-org-review` — KR scoring + retro + goal adaptation.
+     - `monthly-org-review` — KR scoring + retro + goal adaptation + the
+       domain-KB staleness pass (`kb_forget` superseded facts, Q15).
        **First Friday 15:00 CT** (after that week's agent reviews land, so
        it can consume them).
      - Nothing else for now (BA data consumption rides inside the weekly
@@ -249,6 +255,8 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
   | Own workspace — drafts/artifacts under `docs/agents/<slug>/` | Autonomous |
   | Create board cards in own project | Autonomous (no auto-start — idea/grooming, per Q6) |
   | **Publish to blog (publish-file)** | **Autonomous** (chuck 2026-11-25 — quality-gated: the content QA pass is the external predicate; first autonomous external-facing action) |
+  | Write/correct shared domain KB — **own domain** (Q15) | **Autonomous** (chuck 2026-11-26 — correctable store; enables ad-hoc distillation at discovery time) |
+  | Write/correct shared domain KB — other domains (Q15) | Single-approval |
   | Promote own cards to backlog (auto-start) | Single-approval (chuck, at the weekly review) |
   | Edit org/charter docs (`docs/org/`, `charter.md`) | Single-approval |
   | Deploy (existing per-project deploy gates) | Single-approval |
@@ -275,8 +283,13 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
   its own mcp_memory identity, **private to that agent**. No cross-access to
   chuck's private memory (agents aren't family — the `household` scope stays
   family-only). Context about chuck flows through task briefs and files
-  (charter, docs), not memory reads. MVV rule-5 test: *if any agent dies, a
-  fresh one picks up from files + its own namespace alone.*
+  (charter, docs), not memory reads.
+- **Shared domain KB** (Q15, decided 2026-11-26): the third store —
+  org-level, per-domain `mcp_knowledge` collections, correctable +
+  forgettable. Private memory = what *this agent* learned; the domain KB =
+  what *the org* knows. MVV rule-5 test (updated): *if any agent dies, a
+  fresh one picks up from files + its own namespace + the shared domain KB
+  alone.*
 - **Session sync** (confirmed): agents ship session transcripts via
   `session-sync` to the reflection pipeline, same as chuck's sessions.
 
@@ -292,9 +305,56 @@ ORG GOAL (per domain) → AGENT OBJECTIVE (linked) → KR → TASK
   monthly org review.
 - **Learnings flow** (confirmed): learnings that change *how work gets done*
   are promoted to the durable doc at review time (charter "updated <date>"
-  note, skill edits via proposals) — no separate learnings repo.
+  note, skill edits via proposals) — no separate learnings repo. Domain
+  knowledge is the exception to "at review time": durable facts are
+  distilled to the shared KB **ad hoc at discovery time** (Q15).
+- **Domain KB activity** (Q15): the weekly review's part-6 KB line (facts
+  added/corrected/forgotten per agent + collision log) feeds the BA's KPI
+  digest; collisions escalate per Q15 (repeated same-fact collisions or
+  >3/week → raised to chuck in the review).
 
-### Research grounding (2026-11-24, via mcp_search)
+### Domain knowledge (Q15) — decided 2026-11-26
+
+**Question**: where do org/industry domain knowledge live — what the org
+knows about a domain (bluebovine positioning/product, the market,
+competitors) — and how does it flow?
+
+**Three tiers (decided):**
+
+| Tier | Store | Scope | Mutability |
+|---|---|---|---|
+| Long-form, durable | Files — goals, charters, briefs, digests, reviews | Org | Edit with "updated <date>" note |
+| Distilled, queryable facts | Shared domain KB — `mcp_knowledge` collections per domain (`kb_bluebovine`, `kb_market-smarthome`, …) | Org — all agents read | Correctable + forgettable (`kb_correct`/`kb_forget`) |
+| Agent working knowledge | Per-agent private `mcp_memory` namespace (Q5) | Agent | Add-only |
+
+- **Boundary**: private memory = what *this agent* learned; domain KB = what
+  *the org* knows. Forcing function: the MVV rule-5 replaceability test — if
+  market knowledge lived only in one agent's private namespace, a fresh
+  replacement would lose the org's domain model.
+- **Why the KB, not memory**: domain knowledge changes (competitor launches,
+  revised numbers); memory is add-only, the KB supports correction/forget.
+- **Acquisition**: the existing research skills are the pipeline
+  (market-research-brief, deep-research, pm-market-analysis) — knowledge
+  enters via the platform layer (implication (f)), not agent prompts.
+- **Ingestion — ad hoc (chuck 2026-11-26)**: agents distill durable domain
+  facts **at discovery time**, not only at review — a research pass that
+  yields a durable fact writes it to the domain KB immediately, with
+  provenance (source + date). The monthly org review additionally runs the
+  **staleness pass** (`kb_forget` superseded facts). No new cron jobs.
+- **Contradictions (chuck 2026-11-26)**: when a new fact contradicts an
+  existing KB fact, the **owning agent arbitrates** (correct, or keep + note
+  the conflict). Every collision is logged in the weekly review.
+  **Escalation**: repeated collisions on the same fact, or >3 collisions in
+  a week, get raised to chuck in the weekly review for his judgment
+  (threshold is a working default — tunable at review).
+- **Consumption**: agents `kb_search` at task start (the memory-conventions
+  "retrieve before asking" pattern); briefs cite KB facts with provenance.
+  Pass by reference, not content.
+- **Ownership**: the agent whose charter covers the domain owns its KB —
+  named in the charter (Projects section). Own-domain writes are
+  autonomous; cross-domain writes are single-approval (Q7 table).
+
+## Research grounding (2026-11-24, via mcp_search)
 
 1. **OKR-driven agentic pattern** (OKR Institute, via
    tarikdavis.co.uk/blog/how-to-write-effective-okrs-for-ai-agents): objectives
@@ -409,7 +469,8 @@ closeout (progress review → next cycle's draft).
 **Inputs**: `docs/org/goals.md` (or `homelab_vision.md` + domain context when
 org goals don't exist yet); board state (what work exists / is in flight); BA
 reports + KPI data (once G3 wiring lands); prior-cycle records
-(`docs/agents/<agent>/reviews/`).
+(`docs/agents/<agent>/reviews/`); shared domain KB (domain context for the
+monthly pass — Q15).
 
 **Steps**:
 
@@ -460,8 +521,8 @@ list verified). Belongs to WS3 (the org/agent goal system), not workstream 2.
 ## Remaining open design questions
 
 (From the 2026-11-22 seed list; goal model — Q2 — is now decided above.)
-**All questions decided 2026-11-25 except Q13** (first agent — deferred to
-the first org-goals pass).
+**All questions decided except Q13** (first agent — deferred to the first
+org-goals pass). Q15 (domain knowledge) decided 2026-11-26.
 
 1. ~~**Identity**~~ — **decided 2026-11-25 (chuck)**: one LiteLLM key per
    agent (the `USER_KEYS` pattern extended to agents), created when the agent
@@ -524,6 +585,13 @@ New from the 2026-11-24 interview:
     interactive-first hard rule; v1 single-session agent runs, fanout only on
     chuck's explicit ask; board as the gate; slots classified by executor
     identity).
+15. ~~**Domain knowledge**~~ — **decided 2026-11-26 (chuck)**: three tiers —
+    files (long-form), shared per-domain KB (distilled facts, correctable +
+    forgettable), per-agent private memory (working knowledge); agents
+    distill ad hoc at discovery time; the owning agent arbitrates
+    contradictions, with repeated collisions (>3/week or same-fact repeats)
+    raised to chuck in the weekly review; own-domain KB writes autonomous,
+    cross-domain single-approval (Q7 table). See "Domain knowledge (Q15)".
 
 ## Pending — all resolved 2026-11-25
 
@@ -564,7 +632,8 @@ New from the 2026-11-24 interview:
    approves.
 6. Stand up the first agent: `pi-agent-<slug>` workspace, LiteLLM key
    (model assignment per work type), `AGENT_CONCURRENT_TASKS` slot,
-   `weekly-agent-reviews` + `monthly-org-review` cron jobs.
+   `weekly-agent-reviews` + `monthly-org-review` cron jobs, its domain KB
+   ownership named in the charter (collection creates on first write — Q15).
 7. First weekly review cycle — and the monthly clock starts.
 
 All framework design questions decided 2026-11-25 (Q13 deferred to step 4).
