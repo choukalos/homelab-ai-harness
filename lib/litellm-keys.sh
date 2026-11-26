@@ -45,7 +45,8 @@ LiteLLM Key Management
       Show full details for a specific key.
 
   ./homelab.sh key update <key-or-alias-or-username> [options]
-      Update an existing key (same options as add).
+      Update an existing key (same options as add, plus --alias to rename
+      the key's alias).
 
   ./homelab.sh key delete <key-or-alias-or-username>
       Delete a key.
@@ -171,12 +172,13 @@ _key_find_hash() {
 import sys, json
 keys = json.load(sys.stdin)
 target = sys.argv[1].lower()
-# Exact match on user_id, alias, or key_name
+# Exact match on hash, user_id, alias, or key_name
 for k in keys:
+    h = (k.get('hash') or '').lower()
     uid = (k.get('user_id') or '').lower()
     alias = (k.get('alias') or '').lower()
     name = (k.get('key_name') or '').lower()
-    if target in (uid, alias, name):
+    if target in (h, uid, alias, name):
         print(k['hash']); sys.exit(0)
 # Partial match
 for k in keys:
@@ -386,7 +388,7 @@ _key_update() {
     exit 1
   fi
 
-  local models="" budget="" rpm="" tpm="" duration=""
+  local models="" budget="" rpm="" tpm="" duration="" new_alias=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --models)   models="$2";    shift 2 ;;
@@ -394,6 +396,7 @@ _key_update() {
       --rpm)      rpm="$2";      shift 2 ;;
       --tpm)      tpm="$2";      shift 2 ;;
       --duration) duration="$2";  shift 2 ;;
+      --alias)    new_alias="$2"; shift 2 ;;
       *)          echo "Unknown option: $1" >&2; exit 1 ;;
     esac
   done
@@ -402,14 +405,15 @@ _key_update() {
   payload=$(python3 -c "
 import json, sys
 d = {'key': sys.argv[1]}
-models, budget, rpm, tpm, duration = sys.argv[2:7]
+models, budget, rpm, tpm, duration, new_alias = sys.argv[2:8]
 if models:   d['models'] = models.split(',')
 if budget:   d['max_budget'] = float(budget)
 if rpm:      d['rpm_limit'] = int(rpm)
 if tpm:      d['tpm_limit'] = int(tpm)
 if duration: d['duration'] = duration
+if new_alias: d['key_alias'] = new_alias
 print(json.dumps(d))
-" "${hash}" "${models}" "${budget}" "${rpm}" "${tpm}" "${duration}")
+" "${hash}" "${models}" "${budget}" "${rpm}" "${tpm}" "${duration}" "${new_alias}")
 
   local resp
   resp=$(curl -s -X POST -H "Authorization: Bearer ${LITELLM_MASTER}" \
@@ -646,4 +650,320 @@ PY
   # Master key row (not in /key/list — internal only, F6).
   local master_last4="${LITELLM_MASTER: -4}"
   echo "| master (\`sk-...${master_last4}\`) | — | admin, everything | — | — | internal only (F6) |"
+}
+
+# ── key rotate (Phase 13.2) ──
+# One command: back up .env (Phase 0 pattern) → mint a new key with
+# identical attributes (alias, user, models, limits, MCP access groups)
+# → atomically update the .env var → regenerate derived maps (the kanban
+# capability map while it is still suffix-keyed; 13.3 makes this a no-op)
+# → restart affected containers (caddy is RECREATED for the family keys —
+# its env is baked at container creation, so a plain reload would keep the
+# old keys) → BLOCK the old key → run scripts/key-sync-check.sh.
+# The old key is NOT deleted: block → observe N days → key delete <hash>
+# (the F5/Phase 3 pattern). Subsumes the Phase 6 quarterly-rotation
+# cadence for the family keys.
+
+_key_rotate() {
+  local identifier="${1:?Usage: ./homelab.sh key rotate <key-or-alias-or-username> [--env-var VAR] [--observe-days N] [--yes]}"
+  shift
+  local env_var="" observe_days=30 assume_yes=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --env-var)      env_var="$2";      shift 2 ;;
+      --observe-days) observe_days="$2"; shift 2 ;;
+      --yes)          assume_yes=1;     shift ;;
+      *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  [[ -n "${LITELLM_MASTER}" ]] || { echo "❌ LITELLM_MASTER_KEY not set (source .env first)." >&2; exit 1; }
+
+  local repo_root env_file
+  repo_root=$(cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd)
+  env_file="${repo_root}/.env"
+  [[ -f "${env_file}" ]] || { echo "❌ .env not found at ${env_file}" >&2; exit 1; }
+
+  # ── Resolve the current key ──
+  local hash
+  hash=$(_key_find_hash "${identifier}")
+  [[ "${hash}" != "NOT_FOUND" && -n "${hash}" ]] || { echo "❌ Key '${identifier}' not found." >&2; exit 1; }
+
+  local all_json entry
+  all_json=$(_key_fetch_all)
+  entry=$(_key_get_by_hash "${all_json}" "${hash}")
+  [[ "${entry}" != "NOT_FOUND" ]] || { echo "❌ Internal key lookup failed." >&2; exit 1; }
+
+  local user_id models_json max_budget rpm_limit tpm_limit groups_json alias key_name
+  read -r user_id models_json max_budget rpm_limit tpm_limit groups_json alias key_name <<<"$(echo "${entry}" | python3 -c "
+import sys, json
+k = json.load(sys.stdin)
+print('\t'.join([
+    str(k.get('user_id') or ''),
+    json.dumps(k.get('models') or []),
+    'null' if k.get('max_budget') is None else str(k['max_budget']),
+    'null' if k.get('rpm_limit') is None else str(k['rpm_limit']),
+    'null' if k.get('tpm_limit') is None else str(k['tpm_limit']),
+    json.dumps(k.get('access_group_ids') or []),
+    str(k.get('alias') or ''),
+    str(k.get('key_name') or ''),
+]))
+" 2>/dev/null)"
+
+  # ── Resolve the .env var + verify it matches this key ──
+  if [[ -z "${env_var}" ]]; then
+    env_var="LITELLM_KEY_$(echo "${alias}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
+  fi
+  local current_env_val
+  current_env_val=$(grep -E "^${env_var}=" "${env_file}" | head -1 | cut -d= -f2-)
+  [[ -n "${current_env_val}" ]] || { echo "❌ ${env_var} not found in .env (pass --env-var VAR)." >&2; exit 1; }
+
+  # key_name is masked (sk-...szvw) — compare the last 4 chars.
+  local masked_tail="${key_name: -4}"
+  if [[ "${current_env_val: -4}" != "${masked_tail}" ]]; then
+    echo "❌ ${env_var} in .env does not match key '${identifier}' (env …${current_env_val: -4} vs key …${masked_tail})." >&2
+    echo "  Fix the mismatch first (scripts/key-sync-check.sh), then rotate." >&2
+    exit 1
+  fi
+
+  # ── Confirm ──
+  echo "Rotate plan for '${identifier}' (${key_name}):"
+  echo "  .env var:       ${env_var}"
+  echo "  user_id:        ${user_id:-—}"
+  echo "  models:         ${models_json}"
+  echo "  budget/rpm/tpm: ${max_budget}/${rpm_limit}/${tpm_limit}"
+  echo "  MCP groups:     ${groups_json}"
+  local stamp8
+  stamp8=$(date +%Y%m%d-%H%M)
+  echo "  old key:        alias → '${alias}-old-${stamp8}' + BLOCKED after consumers restart (observe ${observe_days} days, then delete)"
+  if [[ "${assume_yes}" != "1" ]]; then
+    local ans
+    read -rp "Proceed? [y/N] " ans || { echo "Aborted (no confirmation)."; exit 1; }
+    [[ "${ans}" == "y" || "${ans}" == "Y" ]] || { echo "Aborted."; exit 1; }
+  fi
+
+  # ── 1. Back up .env (Phase 0 pattern) ──
+  local backup_dir="/home/chuck/data/backups" stamp
+  stamp=$(date +%F-%H%M%S)
+  mkdir -p "${backup_dir}"
+  cp "${env_file}" "${backup_dir}/env-${stamp}.bak" && chmod 600 "${backup_dir}/env-${stamp}.bak"
+  echo "✅ 1/8 .env backed up → ${backup_dir}/env-${stamp}.bak"
+
+  # ── 2. Free the canonical alias ──
+  # LiteLLM enforces unique key aliases across ALL keys (blocked included —
+  # _enforce_unique_key_alias, v1.104.0), so the old key must move off the
+  # alias before the new key can take it. The old key keeps its identity via
+  # the -old-<stamp> alias during the observation window (visible in
+  # 'key inventory', easy to delete after).
+  local old_alias_new
+  if [[ -n "${alias}" ]]; then
+    old_alias_new="${alias}-old-${stamp8}"
+    local resp_rename
+    resp_rename=$(curl -s --max-time 15 -X POST -H "Authorization: Bearer ${LITELLM_MASTER}" \
+      -H "Content-Type: application/json" "${LITELLM_PROXY}/key/update" \
+      -d "$(python3 -c "import json,sys; print(json.dumps({'key': sys.argv[1], 'key_alias': sys.argv[2]}))" "${hash}" "${old_alias_new}")")
+    if ! echo "${resp_rename}" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if ('key' in d or 'key_name' in d or 'token' in d) else 1)" 2>/dev/null; then
+      echo "❌ Failed to rename old key's alias to '${old_alias_new}': ${resp_rename}" >&2
+      echo "  Nothing else changed — the old key still works under '${alias}'." >&2
+      exit 1
+    fi
+    echo "✅ 2/8 old key alias '${alias}' → '${old_alias_new}' (frees the canonical alias)"
+  else
+    old_alias_new=""
+    echo "✅ 2/8 key has no alias — nothing to free"
+  fi
+
+  # ── 2. Mint the new key (identical attrs + MCP groups) ──
+  local payload resp new_key
+  payload=$(python3 -c "
+import json, sys
+d = {'key_alias': sys.argv[1]}
+uid, models, budget, rpm, tpm, groups = sys.argv[2:8]
+if uid: d['user_id'] = uid
+models = json.loads(models)
+if models: d['models'] = models
+if budget != 'null': d['max_budget'] = float(budget)
+if rpm != 'null':   d['rpm_limit'] = int(rpm)
+if tpm != 'null':   d['tpm_limit'] = int(tpm)
+groups = json.loads(groups)
+if groups: d['access_group_ids'] = groups
+print(json.dumps(d))
+" "${alias}" "${user_id}" "${models_json}" "${max_budget}" "${rpm_limit}" "${tpm_limit}" "${groups_json}")
+
+  resp=$(curl -s --max-time 30 -X POST "${LITELLM_PROXY}/key/generate" \
+    -H "Authorization: Bearer ${LITELLM_MASTER}" \
+    -H "Content-Type: application/json" \
+    -d "${payload}")
+  new_key=$(echo "${resp}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))" 2>/dev/null)
+  if [[ -z "${new_key}" || "${new_key}" == "null" ]]; then
+    echo "❌ Failed to mint new key: ${resp}" >&2
+    if [[ -n "${old_alias_new}" ]]; then
+      echo "  NOTE: the old key was renamed to '${old_alias_new}' (still active, not blocked)." >&2
+      echo "  To restore the original alias: ./homelab.sh key update ${old_alias_new} --alias ${alias}" >&2
+      echo "  (or just keep using it — only the alias label changed, the key value is unchanged.)" >&2
+    fi
+    exit 1
+  fi
+
+  # Verify the new key works before touching anything else.
+  local probe
+  probe=$(curl -s --max-time 15 -o /dev/null -w "%{http_code}" \
+    "${LITELLM_PROXY}/v1/models" -H "Authorization: Bearer ${new_key}")
+  if [[ "${probe}" != "200" ]]; then
+    echo "❌ New key failed the /v1/models probe (HTTP ${probe})." >&2
+    echo "  Blocking the dangling new key and aborting — .env is untouched; the old key" >&2
+    if [[ -n "${old_alias_new}" ]]; then
+      echo "  still works (now aliased '${old_alias_new}'; restore with: key update ${old_alias_new} --alias ${alias})." >&2
+    else
+      echo "  still works." >&2
+    fi
+    local new_hash
+    new_hash=$(_key_find_hash "${new_key: -4}")
+    if [[ "${new_hash}" != "NOT_FOUND" ]]; then
+      curl -s -X POST -H "Authorization: Bearer ${LITELLM_MASTER}" \
+        -H "Content-Type: application/json" "${LITELLM_PROXY}/key/block" \
+        -d "$(python3 -c "import json,sys; print(json.dumps({'key': sys.argv[1]}))" "${new_hash}")" >/dev/null 2>&1
+    fi
+    exit 1
+  fi
+  echo "✅ 3/8 new key minted (same user/models/limits/MCP groups, canonical alias) + /v1/models probe 200"
+
+  # ── 3. Update .env atomically (same-dir temp + rename) ──
+  local tmp
+  tmp=$(mktemp "${env_file}.XXXX")
+  sed "s|^${env_var}=.*|${env_var}=${new_key}|" "${env_file}" > "${tmp}"
+  if ! grep -q "^${env_var}=${new_key}$" "${tmp}"; then
+    echo "❌ .env update failed (line not replaced)." >&2
+    rm -f "${tmp}"
+    exit 1
+  fi
+  chmod 600 "${tmp}"
+  mv "${tmp}" "${env_file}"
+  echo "✅ 4/8 .env updated (${env_var})"
+
+  # ── 4. Regenerate derived maps ──
+  # KANBAN_MCP_KEY_CAPABILITIES is suffix-keyed until 13.3 lands; swap the
+  # old 8-char suffix for the new one. Alias-keyed entries (post-13.3) are
+  # stable across rotation — nothing to do.
+  local kanban_var="KANBAN_MCP_KEY_CAPABILITIES"
+  if grep -q "^${kanban_var}=" "${env_file}"; then
+    local old_suffix="${current_env_val: -8}" new_suffix="${new_key: -8}"
+    local kanban_val
+    kanban_val=$(grep -E "^${kanban_var}=" "${env_file}" | head -1 | cut -d= -f2-)
+    if [[ "${kanban_val}" == *"${old_suffix}"* ]]; then
+      ENV_FILE="${env_file}" KANBAN_VAR="${kanban_var}" OLD_S="${old_suffix}" NEW_S="${new_suffix}" python3 - <<'PY'
+import os, tempfile
+path = os.environ["ENV_FILE"]
+var, old, new = os.environ["KANBAN_VAR"], os.environ["OLD_S"], os.environ["NEW_S"]
+lines = []
+for ln in open(path).readlines():
+    if ln.startswith(var + "="):
+        ln = ln.replace(old, new)
+    lines.append(ln)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".env.")
+with os.fdopen(fd, "w") as f:
+    f.writelines(lines)
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+PY
+      echo "✅ 5/8 ${kanban_var}: suffix ${old_suffix} → ${new_suffix}"
+    else
+      echo "✅ 5/8 ${kanban_var}: no entry for this key's suffix (alias-keyed or absent) — unchanged"
+    fi
+  else
+    echo "✅ 5/8 no ${kanban_var} in .env — nothing to regenerate"
+  fi
+
+  # ── 5. Restart affected containers ──
+  # Services whose compose block references \${env_var} must be recreated to
+  # pick up the new value. Caddy consumes the family keys via env_file
+  # (no explicit ref) — recreate it too; a plain 'caddy reload' re-parses
+  # with the container's baked env and would keep the OLD keys.
+  local restart_cmds=() f svc
+  for f in compose/*.yml; do
+    grep -q "\${${env_var}}" "$f" || continue
+    while IFS= read -r svc; do
+      [[ -n "${svc}" ]] && restart_cmds+=("docker compose --env-file .env -f ${f} up -d ${svc}")
+    done < <(python3 -c "
+import sys
+var, path = sys.argv[1], sys.argv[2]
+lines = open(path).readlines()
+services, cur = {}, None
+for ln in lines:
+    if len(ln) > 2 and ln.startswith('  ') and not ln.startswith('    ') and ln.rstrip().endswith(':'):
+        cur = ln.strip()[:-1]
+        services[cur] = []
+    elif cur is not None:
+        services[cur].append(ln)
+for s, body in services.items():
+    if any(('$' + '{' + var) in b for b in body):
+        print(s)
+" "$f" "${env_var}")
+  done
+  case "${env_var}" in
+    LITELLM_KEY_CHUCK|LITELLM_KEY_DYLAN)
+      restart_cmds+=("docker compose --env-file .env -f compose/compose.core.yml up -d caddy")
+      ;;
+  esac
+
+  if [[ ${#restart_cmds[@]} -eq 0 ]]; then
+    echo "✅ 6/8 no containers reference \${${env_var}} — nothing to restart"
+  else
+    cd "${repo_root}"
+    local cmd
+    for cmd in "${restart_cmds[@]}"; do
+      echo "   → ${cmd}"
+      eval "${cmd}" >/dev/null || { echo "❌ Restart failed: ${cmd}" >&2; exit 1; }
+    done
+    echo "✅ 6/8 ${#restart_cmds[@]} container(s) recreated"
+  fi
+
+  # ── 6. Block the old key ──
+  local resp2
+  resp2=$(curl -s --max-time 15 -X POST -H "Authorization: Bearer ${LITELLM_MASTER}" \
+    -H "Content-Type: application/json" "${LITELLM_PROXY}/key/block" \
+    -d "$(python3 -c "import json,sys; print(json.dumps({'key': sys.argv[1]}))" "${hash}")")
+  if ! echo "${resp2}" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if (d.get('blocked') or 'key_name' in d) else 1)" 2>/dev/null; then
+    echo "❌ Failed to block old key: ${resp2}" >&2
+    echo "  .env already points at the new key — block manually: ./homelab.sh key block ${hash}" >&2
+    exit 1
+  fi
+  echo "✅ 7/8 old key (${key_name}, alias '${old_alias_new:-—}') BLOCKED"
+
+  # ── 8. key-sync-check ──
+  # Gate semantics (same as scripts/rotate-github-tokens.sh): drift on the
+  # ROTATED var = the rotation did not propagate → FAIL. Drift on OTHER
+  # vars = pre-existing carrier drift (containers that carry the var via
+  # whole-.env injection but don't use it — they refresh on their next
+  # recreate) → informational, does not fail the rotation.
+  echo "   → scripts/key-sync-check.sh"
+  local sync_out sync_rc
+  sync_out=$("${repo_root}/scripts/key-sync-check.sh" 2>&1)
+  sync_rc=$?
+  echo "${sync_out}"
+  if grep -q "DRIFT.*${env_var}" <<<"${sync_out}"; then
+    echo "❌ key-sync-check: drift on ${env_var} — the rotation did not fully propagate. Recreate the flagged container(s) per the output above, then re-run scripts/key-sync-check.sh" >&2
+    exit 1
+  fi
+  if [[ ${sync_rc} -ne 0 ]]; then
+    echo "⚠️  key-sync-check: pre-existing drift on OTHER vars (unrelated to this rotation — carrier containers awaiting their next recreate). See output above."
+  else
+    echo "✅ 8/8 key-sync-check: all in sync"
+  fi
+
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  ✅ Rotation complete for '${identifier}'"
+  echo ""
+  echo "  New key (update your clients now):"
+  echo "  ${new_key}"
+  echo ""
+  echo "  Old key ${key_name} (alias now '${old_alias_new:-—}'): BLOCKED (not deleted)."
+  echo "  Observe ${observe_days} days, then delete:"
+  echo "    ./homelab.sh key delete ${hash}"
+  echo ""
+  echo "  .env backup:  ${backup_dir}/env-${stamp}.bak"
+  echo "  Rollback:     restore the backup + ./homelab.sh key unblock ${hash}"
+  echo "                 + recreate the containers from step 5"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }

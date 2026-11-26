@@ -867,7 +867,7 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
       across the 10 compose files point at `../.env` (verified live);
       `docker compose config` passes for all 10 stacks (n8n warning is
       pre-existing: N8N_DB_* unset, unrelated).
-- [ ] **13.2 — `key rotate <name>`** in `lib/litellm-keys.sh`: one command —
+- [x] **13.2 — `key rotate <name>`** in `lib/litellm-keys.sh`: one command —
       mint in proxy → atomically update `.env` (Phase 0 backup first) →
       regenerate derived maps (13.3) → restart affected containers →
       **block old key** → print "observe N days, then `key delete <name>`"
@@ -876,6 +876,30 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
       `LITELLM_KEY_DYLAN` (Phase 1 note) and a `scripts/key-sync-check.sh`
       run at the end. Subsumes the Phase 6 quarterly-rotation cadence for
       the family keys.
+      **Done 2026-11-26 (pi):** `./homelab.sh key rotate <key> [--env-var VAR]
+      [--observe-days N] [--yes]` — 8 steps: (1) .env backup (Phase 0
+      pattern), (2) rename old key's alias to `<alias>-old-<YYYYMMDD-HHMM>`
+      (LiteLLM enforces unique key aliases across ALL keys incl. blocked —
+      `_enforce_unique_key_alias`, v1.104.0 — so the canonical alias must be
+      freed first; the old key stays identifiable during the observation
+      window), (3) mint new key with identical attrs + `access_group_ids`
+      + canonical alias, probe `/v1/models` (200 or abort + block dangling
+      key), (4) atomic .env update (same-dir temp + rename, 600), (5)
+      regenerate `KANBAN_MCP_KEY_CAPABILITIES` suffix entry while it is
+      suffix-keyed (no-op post-13.3), (6) recreate the compose services
+      that reference the var + **recreate caddy** for the family keys
+      (finding: a plain `caddy reload` re-parses with the container's
+      baked env and would keep the OLD keys — the Phase 1 note's "reload"
+      is insufficient after a key change), (7) block old key, (8)
+      `scripts/key-sync-check.sh` with rotate-github-tokens.sh gate
+      semantics: drift on the rotated var = FAIL, drift on other vars =
+      informational carrier drift. `key update --alias` added (rename
+      support). Verified with a full drill on a disposable key: rotate ×2,
+      new key 200 / blocked old key 401, .env + alias state verified, test
+      artifacts cleaned (3 keys deleted, env line removed). Pre-existing
+      drift found by the gate: GITHUB_ACCESS_TOKEN/GITHUB_RUNNER_TOKEN on
+      7 carrier containers (expected per rotate-github-tokens.sh — refresh
+      on next recreate; GITHUB_RUNNER_TOKEN is unconsumed legacy).
 - [ ] **13.3 — Alias-based capability map**: `KANBAN_MCP_KEY_CAPABILITIES`
       keyed by alias (`product:control`) instead of raw suffixes; kanban
       server resolves alias → key (kanban harness change, small — separate
