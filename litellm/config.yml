@@ -83,8 +83,11 @@ model_list:
       # deployment while OMLX is down, so this is inert until macstudio:8000
       # is back (tier1-macstudio-omlx-restart). Caveat: cross-model fallback
       # changes behavior (homelab availability > model fidelity — accepted).
-      fallbacks:
-        - {model: studio-inkling-mini}
+      # Fallback is router-level (router_settings.fallbacks below) — per-entry
+      # `fallbacks:` was removed 2026-11-26: the per-entry mechanism resolves
+      # fallbacks via a direct litellm.acompletion() call that bypasses the
+      # router, so group aliases (matrix-coder, studio-inkling-mini) fail
+      # with "LLM Provider NOT provided" and the caller gets a 500.
 
   # ── Qwen3.6-27B, thinking OFF — fast mode for straightforward tasks ──
   # Qwen3 thinking is BINARY (reasoning_effort is ignored by the model): a
@@ -144,8 +147,10 @@ model_list:
       # No num_retries: global router num_retries is 0 → the fallback fires
       # on the FIRST failure (a load that can't fit in VRAM fails fast
       # instead of burning a ~46 s doomed retry).
-      fallbacks:
-        - {model: matrix-coder}
+      # Fallback is router-level (router_settings.fallbacks below), NOT
+      # per-entry — see the matrix-coder note: per-entry `fallbacks:` with a
+      # group alias bypasses the router and 500s the caller (verified live
+      # 2026-11-26; the router-level fallback is the working mechanism).
 
   # ── Nomic embed-text — mcp_knowledge (KB search/digests;
   #    EMBED_MODEL=embeddings in compose.mcp.yml) ──
@@ -198,6 +203,17 @@ litellm_settings:
 router_settings:
   enable_pre_call_checks: true
   num_retries: 0
+  # Router-level model-group fallbacks (the working mechanism — verified
+  # live 2026-11-26: dead-upstream request to a copywriter twin returned a
+  # 200 served by qwen38-27b in 0.5 s, no 5xx to the caller). Per-entry
+  # `fallbacks:` does NOT work for group aliases (bypasses the router —
+  # "LLM Provider NOT provided"); do not reintroduce it. Applied at startup
+  # via Router(**router_settings); runtime equivalent: POST /fallback.
+  fallbacks:
+    - matrix-copywriter:
+        - matrix-coder
+    - matrix-coder:
+        - studio-inkling-mini
 
 mcp_servers:
   mcp_search:

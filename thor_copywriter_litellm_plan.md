@@ -9,6 +9,15 @@
 > render held GPU 1 — full-footprint check deferred), 4–7 deferred (need a quiet
 > GPU 1 window and/or the Matrix console); Matrix-side doc updates
 > (contract v1.2, profile comment, Matrix TODO.md) pending the same.
+> **2026-11-26 verification session: check 5 PASS** (live fallback fired —
+> dead-upstream request returned 200 from qwen38-27b in 0.5 s, no 5xx to the
+> caller) and surfaced a real bug: the per-entry `fallbacks:` idiom (used by
+> this entry AND `matrix-coder`) bypasses the router and 500s on group
+> aliases. Fallbacks moved to router-level `router_settings.fallbacks`
+> (config applied + proxy recreated 2026-11-26 15:53 UTC with
+> `--force-recreate`; verified live). Check 3 partially confirmed from Thor
+> (loaded + VRAM slice via `/api/ps`); 4/6/7 still deferred (quiet GPU 1
+> window + Matrix console). See "Verification session 2026-11-26" below.
 > Option A from the 2026-11-25 GPU-1 sidecar discussion: Ollama tenant on GPU 1,
 > exposed through Thor LiteLLM with a fallback to `matrix-coder`.
 
@@ -72,8 +81,17 @@ NOTE: `matrix-gemma4-moe` does NOT exist in the config (never did — the origin
 
 ## Step 2 — Thor: the fallback
 
-The fallback is the per-entry `fallbacks:` above (the config file's own idiom),
-NOT a new `litellm_settings.model_group_fallbacks` block — `litellm_settings`
+**SUPERSEDED 2026-11-26**: the per-entry `fallbacks:` idiom below is broken —
+see "Verification session 2026-11-26". The live fallback is router-level:
+`router_settings.fallbacks` in `litellm/config.yml` (matrix-copywriter →
+matrix-coder; matrix-coder → studio-inkling-mini), applied at startup via
+`Router(**router_settings)`; runtime equivalent `POST /fallback`.
+
+---
+
+The fallback was originally the per-entry `fallbacks:` above (the config file's
+own idiom), NOT a new `litellm_settings.model_group_fallbacks` block —
+`litellm_settings`
 already exists (prometheus callbacks) and the file's convention is per-entry
 `fallbacks:`.
 
@@ -115,19 +133,30 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       zero-downtime runtime apply).
 - [x] **2. Serves**: chat completion returns a coherent reply (done 2026-11-25;
       first call = the on-demand load).
-- [ ] **3. Loaded on GPU 1** (Matrix): `docker exec ollama ollama ps` (gemma4:31b
+- [x] **3. Loaded on GPU 1** (Matrix): `docker exec ollama ollama ps` (gemma4:31b
       listed, PROCESSOR 100% GPU) + `nvidia-smi -i 1 --query-gpu=memory.used
-      --format=csv` (~22 GB).
+      --format=csv` (~22 GB). — **PARTIAL 2026-11-26 (from Thor)**: loaded state +
+      VRAM slice confirmed via `http://192.168.4.55:11434/api/ps` (gemma4:31b
+      listed, 642→714→1353 MB slice across the render window — degraded while
+      media/ComfyUI hold GPU 1). Full ~22 GB footprint + GPU index via
+      `nvidia-smi -i 1` still need the Matrix console.
 - [ ] **4. Idle unload** (Matrix): wait 5 min with no requests → `ollama ps` empty,
       `nvidia-smi -i 1` back to media-pipeline baseline. (Observable from Thor via
       `http://192.168.4.55:11434/api/ps`.)
-- [ ] **5. Fallback**: with GPU 1 held (ComfyUI hot at ~18 GB, or a media job
+- [x] **5. Fallback**: with GPU 1 held (ComfyUI hot at ~18 GB, or a media job
       running), request `matrix-copywriter` from Thor → reply comes back from
       `qwen38-27b` (check LiteLLM logs for the fallback event; the response content
       is the tell — 31B vs 27B style). No 5xx to the caller.
       (Wiring verified 2026-11-25 via the entry's `fallbacks`; live test deferred
       until the C-production media task finishes — needs GPU 1 held + model
-      unloaded.)
+      unloaded.) — **PASS 2026-11-26 (router-level mechanism)**: 5a — degraded
+      live request 200 in ~14.1 s (model loaded in a small VRAM slice, served
+      slowly — the expected degraded-mode behavior); 5b — throwaway entry
+      `copywriter-fb-test` pointed at a dead upstream (`matrix:11435`) with a
+      router-level fallback to `matrix-coder`: request returned **200 in ~0.5 s
+      served by `qwen38-27b`**, zero 5xx. The per-entry idiom on the SAME
+      dead-upstream shape returned **500 in 10 s** ("LLM Provider NOT provided")
+      — see the findings below. Test entry + its fallback deleted after the test.
 - [ ] **6. Evict-on-media**: load the copywriter (step 2), then queue a small media
       job (e.g., TTS) → pipeline log shows the headroom-guard `ollama stop`, job
       completes, no OOM. (Passive variant: watch `/api/ps` while a media job runs —
@@ -198,8 +227,67 @@ running on Matrix — deliberately, to prove coexistence. Findings:
   failures throughout the test window.
 
 **Deferred checks (quiet window / Matrix console):** 3 (full ~22 GB footprint +
-GPU index via `nvidia-smi -i 1`), 4 (idle unload), 5 (live fallback), 6 (new-job
-eviction), 7 (`model-manager gpu1 swap`).
+GPU index via `nvidia-smi -i 1` — loaded state confirmed from Thor 2026-11-26),
+4 (idle unload), 6 (new-job eviction), 7 (`model-manager gpu1 swap`).
+Check 5 (live fallback) completed 2026-11-26 — see below.
+
+---
+
+## Verification session 2026-11-26 (fallback mechanism + config cutover)
+
+Ran after the C-production render (board task 13) finished, using the Thor-side
+proxy for Ollama state (`http://192.168.4.55:11434/api/ps`).
+
+### Finding 1 — the per-entry `fallbacks:` idiom is broken (the big one)
+
+The per-entry `litellm_params.fallbacks` (used by BOTH `matrix-copywriter` and
+`matrix-coder` since 2026-11-19/25) resolves fallbacks via a direct
+`litellm.acompletion()` call that **bypasses the router** — so a fallback target
+that is a model-group alias (`matrix-coder`, `studio-inkling-mini`) fails with
+"LLM Provider NOT provided" and the caller gets a **500**. Proved live with a
+throwaway entry (`copywriter-fb-test`, dead upstream `matrix:11435`, timeout 10,
+per-entry fallback to `matrix-coder`): request → **500 in 10 s**. The
+router-level fallback (`POST /fallback`, persisted as `router_settings.fallbacks`)
+on the same dead-upstream shape → **200 in ~0.5 s from `qwen38-27b`**, no 5xx.
+
+**Fix applied**: per-entry `fallbacks:` removed from both entries; the two
+fallbacks moved to `router_settings.fallbacks` in `litellm/config.yml` (applied
++ proxy recreated 2026-11-26 15:53 UTC with `docker compose up -d
+--force-recreate` — plain `up -d` does NOT reload a changed mounted config file).
+Verified post-cutover: container healthy, all 6 models, `GET /fallback` shows
+both fallbacks, copywriter entry has no per-entry fallbacks (proof the new file
+loaded), live copywriter request 200 with correct content.
+
+### Finding 2 — LiteLLM model reconciliation clobbers runtime fallback state
+
+Deleting model entries (`POST /model/delete`) triggers model reconciliation,
+which rebuilds the router from the file config and **overwrote the DB
+`router_settings` row** (the `POST /fallback` persistence target) with the file's
+empty fallbacks — `GET /fallback` went from "configured" to "No general
+fallbacks configured" immediately after the deletes. The live fallbacks had to be
+re-POSTed. Consequence: runtime `POST /fallback` state is fragile across model
+add/delete operations — the config file is the durable source of truth, and any
+model-list surgery on this proxy should be followed by a `GET /fallback` check.
+(Also removed during this session: the stale 2026-11-25 DB copywriter entry
+`f62c1c71-…` that shadowed the file entry with the same broken per-entry idiom.)
+
+### Finding 3 — reasoning-model token budget artifact (not a bug)
+
+`max_tokens: 20` on `matrix-copywriter` → HTTP 200 with **empty content** (all
+completion tokens consumed by reasoning; raw Ollama shows the same: 50 tokens
+evaluated, empty content, `done_reason: length`). With `max_tokens: 100` the
+same prompt returns the correct reply ("COPYWRITER-OK"). Confirms the existing
+"Reasoning model" caveat: clients need a generous output budget on this alias.
+
+### Checks closed this session
+
+- **5 (fallback): PASS** — 5a degraded live request 200 (~14.1 s); 5b dead-upstream
+  twin → router fallback fired, 200 from `qwen38-27b` in ~0.5 s, no 5xx.
+- **3 (loaded on GPU 1): PARTIAL** — loaded + VRAM slice confirmed from Thor via
+  `/api/ps`; full footprint + GPU index still need the Matrix console.
+- **4/6/7: still deferred** — idle unload (the keep_alive expiry kept resetting
+  while Ollama rescheduled VRAM), evict-on-media (needs a NEW media job starting
+  while the model is loaded), manual swap (Matrix console; Thor→Matrix ssh denied).
 
 ---
 

@@ -43,7 +43,9 @@
   `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete 2026-08-28;
   current state 2026-10-21 — retrieval quality, mcp_memory, cold-start flag). Admin endpoints use the `X-Api-Key` header.
 - **LiteLLM:** 6 live aliases (2026-11-26) — `matrix-coder` (+
-  `fallbacks: [studio-inkling-mini]`), `matrix-coder-fast` (thinking OFF),
+  router-level fallback → `studio-inkling-mini` via `router_settings.fallbacks`,
+  2026-11-26 — the per-entry `fallbacks:` idiom bypasses the router and 500s
+  on group aliases), `matrix-coder-fast` (thinking OFF),
   `matrix-copywriter` (GPU-1 copywriter, added 2026-11-25),
   `studio-inkling-mini` (OMLX backup; **swapped in 2026-11-26** from
   `studio-gemma4-26b` — Inkling-2-Mini via key-gated OMLX; capability tags
