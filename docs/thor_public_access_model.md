@@ -83,8 +83,8 @@ Narrow public endpoints protected by API keys at the Caddy layer + backend auth.
 |---|---|---|---|
 | `GET /health` | None | `skill-runner:8091` | Health check |
 | `POST /siri/*` | `X-Api-Key: $LITELLM_KEY_CHUCK` or `$LITELLM_KEY_DYLAN` | `skill-runner:8091` | Ask, skill launch |
-| `GET /media/files/*` | None | `skill-runner:8091` | Artifact retrieval |
-| `GET/POST /media/pipeline/*` | per Tier 3 table below | matrix `:8189` | Signed-URL media retrieval |
+| `GET /media/files/*` | None | `mcp_filebridge:8000` (P12-A, 2026-11-26) | Artifact retrieval (policy-gated: allowlisted subdirs only) |
+| `GET/POST /media/pipeline/*` | per Tier 3 table below | `mcp_filebridge:8000` (relay → matrix `:8189`) | Signed-URL media retrieval |
 | *everything else* | — | `404` | Blocked |
 
 **Rules:**
@@ -94,7 +94,7 @@ Narrow public endpoints protected by API keys at the Caddy layer + backend auth.
   Caddy-layer key — it's an app-level credential used by `cli/run-skill.sh`
   (legacy mode) and `cli/verify_attribution.sh` (T7) when calling
   skill-runner directly.
-- `/media/files/*` is public because artifacts may need to be retrieved by iOS Shortcuts without auth headers. This is acceptable because artifact filenames are opaque IDs.
+- `/media/files/*` is public because artifacts may need to be retrieved by iOS Shortcuts without auth headers. **Policy (P12-A, 2026-11-26, supersedes the stale "opaque filenames" rationale):** served by `mcp_filebridge` with a **per-subdir allowlist (default-deny)** — only `generated/`, `images/`, `demos/`, `presentations/` under `/home/chuck/data/media` are publicly served; every other top-level subdir (`siri_outputs`, `research_reports`, `investment_briefs`, `homelab_reports`, `code_reviews`, `public`, …) returns **404** (not 403 — no subdir enumeration). This resolves finding **12.4**: `siri_outputs/*` (human-readable enumerable personal Q&A) is no longer public (D13: siri-only — siri keeps its own access path: skill API artifact endpoint + LAN). `public/` is served only via its canonical path `choukalos.com/files/` (portal).
 - Does **not** expose: raw LiteLLM, raw MCP servers, admin tools, broad research without skill controls, code tools, raw filesystem.
 
 #### `llm.choukalos.com` — LiteLLM Remote Access
@@ -157,11 +157,21 @@ Only two narrow paths are proxied. The Plausible admin login and dashboard are *
 
 | Route | Auth | Backend | Purpose |
 |---|---|---|---|
-| `siri.choukalos.com/media/pipeline/dl/<token>` | None (the signed token IS the credential) | `192.168.4.55:8189` (matrix media-pipeline) | Off-LAN retrieval of media-pipeline results (Range supported) |
-| `siri.choukalos.com/media/pipeline/upload` | `X-Api-Key` (chuck/dylan LiteLLM key) | `192.168.4.55:8189` | Push a local file to `media_jobs/uploads/` (500MB cap) |
+| `siri.choukalos.com/media/pipeline/dl/<token>` | None (the signed token IS the credential) | `mcp_filebridge:8000` (transparent relay → matrix `192.168.4.55:8189`; P12-A 2026-11-26) | Off-LAN retrieval of media-pipeline results (Range supported, never buffered) |
+| `siri.choukalos.com/media/pipeline/upload` | `X-Api-Key` (chuck/dylan LiteLLM key) | `mcp_filebridge:8000` (relay → matrix) | Push a local file to `media_jobs/uploads/` (500MB cap at the relay **and** matrix; X-Api-Key stripped on the upstream leg) |
 | *everything else under `/media/pipeline/*`* | — | `404` | Rest of the pipeline API stays LAN-only (incl. `/dl_token` minting) |
 
 **Rules:**
+- **P12-A cutover (2026-11-26, SEC-12):** both routes now go through
+  `mcp_filebridge` (the homelab's single public file edge) instead of
+  matrix `192.168.4.55:8189` directly. Token validation stays on matrix
+  (transparent relay — no secret sprawl); the bridge's env carries **no
+  secrets** (work-area path + pipeline URL only). **Kill switch:** stopping
+  `mcp_filebridge` kills the public file routes (502); matrix is untouched.
+  Post-cutover, matrix 8189 is no longer an internet origin — LAN-only
+  bind/ufw is a manual follow-up (`docs/thor_manual_tasks.md`). Rollback:
+  one-line Caddy revert per route (back to `192.168.4.55:8189`) + graceful
+  `caddy reload`.
 - Option C of `media_pipeline_gaps.md` Part 2: served under the existing
   `siri.choukalos.com` tunnel hostname — no new Cloudflare DNS record.
 - Tokens are minted **LAN-only** by the pipeline's `/dl_token` (TTL 1–168h,
@@ -183,11 +193,11 @@ Verified against `caddy/Caddyfile`:
 
 | Host | Paths Proxied | Auth | Backend |
 |---|---|---|---|
-| `choukalos.com` | All | None | `portal:8080` (`/media/files/*` → `skill-runner:8091`) |
+| `choukalos.com` | All | None | `portal:8080` (`/media/files/*` → `mcp_filebridge:8000`, P12-A) |
 | `www.choukalos.com` | Redirect to `choukalos.com` | — | — |
 | `invest.choukalos.com` | `/api/*` + rest | App-level (downstream) | `invest-hub-server:4000` / `invest-hub-client:80` |
 | `api.choukalos.com` | All | App-level (downstream) | `invest-hub-server:4000` |
-| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*`, `/media/pipeline/*` | `X-Api-Key` (chuck/dylan LiteLLM key) on `/siri/*` and `/media/pipeline/upload`; `/media/pipeline/dl/<token>` public (token is the credential) | `skill-runner:8091` (`/media/pipeline/*` → matrix `192.168.4.55:8189`) |
+| `siri.choukalos.com` | `/health`, `/siri/*`, `/media/files/*`, `/media/pipeline/*` | `X-Api-Key` (chuck/dylan LiteLLM key) on `/siri/*` and `/media/pipeline/upload`; `/media/pipeline/dl/<token>` public (token is the credential) | `skill-runner:8091` (`/siri/*`, `/api/*`, `/health`); `mcp_filebridge:8000` (`/media/files/*` policy-gated, `/media/pipeline/dl|upload` relay → matrix `192.168.4.55:8189`) — P12-A 2026-11-26 |
 | `llm.choukalos.com` | All paths | `X-Api-Key` or `Bearer` (chuck/dylan LiteLLM key; Caddy 401s everything else — gate live 2026-11-15) | `litellm-proxy:4000` |
 | `plausible.choukalos.com` | `/js/*`, `/api/event` only | None | `plausible:8000` |
 

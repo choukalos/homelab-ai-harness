@@ -347,6 +347,48 @@ Validation:
 
 ---
 
+## Phase 17 - Matrix 8189 → LAN-only (post-P12-A file-bridge cutover)
+
+> **WHEN:** After the P12-A cutover is live on thor (`mcp_filebridge` up +
+> Caddy reloaded — task 16, 2026-11-26). Once the public file routes go
+> through the bridge, matrix 8189 is no longer an internet origin and its
+> public bind can be closed. Do it from a LAN session (or the router
+> OpenVPN — matrix is a separate host, so a lockout can't affect thor's
+> remote path).
+
+```text
+MANUAL TASK FOR CHUCK (owner: chuck; host: matrix, 192.168.4.55):
+Reason:
+Post-P12-A, the only public consumers of matrix 8189 (siri.choukalos.com
+/media/pipeline/dl|upload) now relay through mcp_filebridge on ai-net —
+matrix 8189 no longer needs to be reachable from the internet. Close the
+public bind so the GPU host's pipeline API is LAN-only (defense-in-depth;
+also removes the canary target from the public surface).
+Command:
+1. Confirm the cutover is live first (thor): `docker exec caddy cat
+   /etc/caddy/Caddyfile | grep mcp_filebridge` (4 upstreams) and a public
+   download via https://siri.choukalos.com/media/pipeline/dl/<fresh-token>
+   returns 200.
+2. On matrix: find the pipeline API bind (compose file / uvicorn args / ufw
+   rule for 8189) and rebind 0.0.0.0:8189 -> 192.168.4.55:8189 (or add
+   `sudo ufw deny 8189 from any to any` + `sudo ufw allow 8189 from
+   192.168.4.0/24` if the bind must stay 0.0.0.0).
+3. Restart only the pipeline service on matrix (targeted, not the whole
+   stack). Expected impact: nothing changes for thor/ai-net consumers
+   (mcp_media + mcp_filebridge reach it on the LAN).
+Rollback:
+Revert the bind/ufw change + restart the pipeline service (public route
+works again via the old bind; the bridge relay is unaffected either way).
+Validation:
+- From thor (ai-net): `curl -s http://192.168.4.55:8189/health` -> 200
+- From OUTSIDE the LAN (e.g. this task container's vantage or a phone on
+  cellular): `curl -s -m 5 http://192.168.4.55:8189/health` -> times out / refused
+- Public download via the bridge still 200 (full path CF -> tunnel -> Caddy
+  -> bridge -> matrix on the LAN)
+```
+
+---
+
 ## Summary of Pending Manual Tasks
 
 | # | Phase | Task | Priority |
@@ -363,3 +405,4 @@ Validation:
 | 10 | 14 | Cloudflare tunnel (if needed) | ✅ RESOLVED — no extra routes needed; all public access on the existing 6 tunnel domains (verified 2026-11-15) |
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
 | 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | **OPEN** — High — **LAN session only (at home), not via OpenVPN** |
+| 13 | 12 (file bridge) | Matrix 8189 → LAN-only (rebind/ufw on matrix after P12-A cutover is live) | **OPEN** — Medium — post-P12-A (task 16, 2026-11-26); owner chuck |

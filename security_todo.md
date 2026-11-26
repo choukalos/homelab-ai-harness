@@ -16,7 +16,10 @@
 > monitoring — CF tunnel, InvestHub, blog, extensible registry) added
 > 2026-11-24 (not started). Phase 12 (file bridge `mcp_filebridge` — unified
 > file edge: public relay + work areas + publish targets; D10–D16 decided
-> 2026-11-24) added 2026-11-24 (not started).
+> 2026-11-24) added 2026-11-24. **P12-A (public face) landed 2026-11-26**
+> (task 16): `mcp_filebridge` service + Caddy cutover committed; live apply
+> on thor (compose up + graceful caddy reload + public verification) is the
+> pending deploy step — see task-16 report.
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -762,9 +765,9 @@ Rollback: registry + scripts are additive (new files); disable the probe/audit t
 > Alternatives considered: `mcp_filegate`, `mcp_fileport`, `mcp_fileedge`.
 
 *Face 1 — public HTTP (Caddy, `siri.choukalos.com`):*
-- [ ] `GET /media/pipeline/dl/<token>` → stream from Matrix (Range passthrough, never buffer); token validation stays on Matrix (transparent relay — no secret sprawl)
-- [ ] `POST /media/pipeline/upload` → Caddy key gate unchanged; stream multipart to Matrix; enforce the 500 MB cap at the relay too
-- [ ] `GET /media/files/{filepath:path}` → **migrate from skill-runner now** (D11: security + consolidated logic — single public file edge, one log source); served from the work-area registry with a per-subdir policy (12.4 — `siri_outputs` excluded from public serving)
+- [x] `GET /media/pipeline/dl/<token>` → stream from Matrix (Range passthrough, never buffer); token validation stays on Matrix (transparent relay — no secret sprawl) — **done 2026-11-26 (task 16)**: `mcp_filebridge` `/dl/{token}` (httpx stream + aiter_bytes, never buffers; Range + status + content headers passed through). Evidence: unit tests (stub upstream) + live smoke vs real Matrix — fresh token fetch byte-identical (sha256 match), `Range: bytes=0-99` → 206 `Content-Range: bytes 0-99/540`, bad token 404.
+- [x] `POST /media/pipeline/upload` → Caddy key gate unchanged; stream multipart to Matrix; enforce the 500 MB cap at the relay too — **done 2026-11-26 (task 16)**: streaming multipart relay (Content-Type incl. boundary forwarded; X-Api-Key stripped on the upstream leg); `UPLOAD_MAX_MB=500` enforced at the relay (Content-Length fast path 413 before reading; chunked counted while streaming). Evidence: unit tests (cap with small cap, Matrix-never-sees-body) + live smoke — small upload 200 → `media_jobs/uploads` (re-minted token fetch 200), 2 MiB vs 1 MiB cap → 413 (log: `bytes_out: 0`).
+- [x] `GET /media/files/{filepath:path}` → **migrate from skill-runner now** (D11: security + consolidated logic — single public file edge, one log source); served from the work-area registry with a per-subdir policy (12.4 — `siri_outputs` excluded from public serving) — **done 2026-11-26 (task 16)**: FileResponse (native Range) from `MEDIA_ROOT`, allowlist `[generated, images, demos, presentations]` (default-deny; `filebridge.yaml`), traversal containment check; non-allowlisted/traversal/missing/directory → 404 (not 403). Cutover covers BOTH hosts (`siri.choukalos.com` @siri_media + `choukalos.com` @blog). Evidence: 12 policy unit tests + live smoke (allowlisted 200 + Range 206; siri_outputs 404; `../etc/passwd` + nested traversal 404; directory 404).
 - [x] **No public upload endpoint** (D10 decided 2026-11-24): remote→work-area moves happen via MCP through an agent for now (`file_pull` from a URL / signed token) — no new public write surface
 
 *Face 2 — MCP tools (via litellm → laptop + siri):*
@@ -806,12 +809,12 @@ extensibility contract as Phase 11.
 - Rollback: Caddy one-line revert per route (back to `4.55:8189` / `skill-runner:8091`)
 
 **12.4 — `siri_outputs` public exposure (finding, 2026-11-24):**
-- [ ] `/media/files/siri_outputs/*` is public with **human-readable, enumerable names** (timestamp + question text) — personal Q&A data. **Fix lands in P12-A**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path). Interim (before P12-A): exclude `siri_outputs` from skill-runner's `ARTIFACT_ROOT` serving (small change) or move the dir out of the public tree.
+- [x] `/media/files/siri_outputs/*` is public with **human-readable, enumerable names** (timestamp + question text) — personal Q&A data. **RESOLVED 2026-11-26 (P12-A, task 16)**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path — skill API artifact endpoint + LAN). Cutover committed (Caddyfile, task 16); no interim mitigation was needed (cutover lands in one sitting).
 
 **Phasing (D15 decided 2026-11-24 — agreed):**
-- [ ] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix
-- [ ] **P12-B:** MCP tools (Face 2) + registry
-- [ ] **P12-C:** publish engine migration (`publish-file` → `file_publish`) — blog + NAS targets; bluebovine adapter interface (no impl)
+- [x] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix — **done 2026-11-26 (task 16)**: `mcp/servers/filebridge/` (22 unit tests green), `compose/compose.mcp.yml` service (no host port, minimal env), Caddy cutover commit (4 one-line upstream swaps, `caddy validate` green). Live apply on thor (targeted `up -d mcp_filebridge` + graceful `caddy reload` + public verification battery + kill-switch test) = pending deploy step, runbook in task-16 report. **Post-cutover follow-up: Matrix 8189 → LAN-only (bind/ufw on the Matrix host — manual task, `docs/thor_manual_tasks.md`).**
+- [ ] **P12-B:** MCP tools (Face 2) + registry — **unblocked by P12-A** (grows `filebridge.yaml` into the full work-area/publish-target registry)
+- [ ] **P12-C:** publish engine migration (`publish-file` → `file_publish`) — blog + NAS targets; bluebovine adapter interface (no impl) — **unblocked by P12-B**
 
 **Out of scope:** intra-work-area file ops (`mcp_filesystem` / `mcp_filesystem_readonly` — in-place ops, not boundary-crossing), pipeline-native job flows (mcp_media keeps its tools; cross-area cases route via the bridge).
 
@@ -860,7 +863,7 @@ extensibility contract as Phase 11.
 - [ ] Grafana: 401 + spend panels live
 - [ ] Security scan (Phase 10): daily timer active, first daily report generated; test anomaly (temporary listener) detected in the next run and cleared
 - [ ] Public surface (Phase 11): registry lint clean (7 Caddy hostnames = CF tunnel hostnames = registry), external probes live from the D8 vantage point, InvestHub DB schema-diff baseline captured, blog content-hash check green, plausible admin-block probe green
-- [ ] File bridge (Phase 12): P12-A public face live (Matrix 8189 no longer a public origin — `ss` on Matrix confirms LAN-only bind; `/media/files` served by the bridge with `siri_outputs` excluded (12.4)), bridge registry lint green
+- [ ] File bridge (Phase 12): P12-A public face live — **code + cutover committed 2026-11-26 (task 16)**; remaining: live apply on thor (compose up + caddy reload + public verification), then Matrix 8189 no longer a public origin (`ss` on Matrix confirms LAN-only bind — manual follow-up, `docs/thor_manual_tasks.md`); `/media/files` served by the bridge with `siri_outputs` excluded (12.4 ✅ resolved at the edge); bridge registry lint green (P12-B)
 - [x] Docs updated (Phase 7) — 2026-11-21
 
 ## 8. Rollback (global)
