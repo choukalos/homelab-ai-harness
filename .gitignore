@@ -62,3 +62,6 @@ skills/market_research_brief/references/*.json.tmp
 
 # litellm rollback backups (kept on disk, not in git)
 litellm/config.yml.pre-*
+
+# local python venvs (test runs)
+.venv/

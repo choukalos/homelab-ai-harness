@@ -1,0 +1,33 @@
+# mcp_filebridge policy — P12-A (SEC-12).
+#
+# P12-A carries the MINIMAL public-file-serving policy. P12-B grows this file
+# into the full work-area / publish-target registry (schema below is shaped
+# for that: top-level sections, one entry per area/target).
+#
+# public_file_serving: GET /media/files/{path} (Caddy, siri.choukalos.com +
+# choukalos.com). DEFAULT-DENY: only `allow`ed top-level subdirs of `root`
+# are publicly served; everything else -> 404 (not 403 — do not leak which
+# subdirs exist). Finding 12.4: siri_outputs (human-readable enumerable
+# personal Q&A) is deliberately NOT allowlisted (D13: siri-only; siri keeps
+# its own access path — skill API artifact endpoint + LAN).
+
+public_file_serving:
+  root: /home/chuck/data/media
+  allow:
+    - generated      # generated artifacts (incl. generated/pipeline fetch dir)
+    - images
+    - demos
+    - presentations
+
+# --- P12-B will add (schema placeholder, not read by P12-A code) ----------
+# work_areas:
+#   media_staging:    {path: /home/chuck/workspace/media}
+#   pipeline_fetch:   {path: /home/chuck/data/media/generated/pipeline}
+#   siri_outputs:     {path: /home/chuck/data/media/siri_outputs, remote_write: false}
+#   nas_media_store:  {path: /mnt/lego-media-store, automount: true, shared_output: true}
+#   matrix_pipeline:  {api: http://192.168.4.55:8189}
+# publish_targets:
+#   blog:
+#     root: /home/chuck/data/media/public
+#     subdirs: [ai, images, audio, video, tabs]
+#     url_base: https://choukalos.com/files

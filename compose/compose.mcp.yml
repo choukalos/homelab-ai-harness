@@ -167,6 +167,39 @@ services:
     networks:
       - ai-net
 
+  mcp_filebridge:
+    build:
+      context: ../mcp/servers/filebridge
+    container_name: mcp_filebridge
+    # Run as chuck (uid/gid 1000) — MEDIA_ROOT is a ro mount; nothing is
+    # written. P12-A (SEC-12, 2026-11-26): the homelab's single public file
+    # edge. Minimal env by design — NO LiteLLM/memory/master/API keys (env
+    # check is a hard gate: docker inspect | grep -ciE 'litellm|memory|
+    # master|api_key' must be 0). No host port: Caddy reaches it on ai-net
+    # (debug: docker run --rm --network ai-net curlimages/curl -s
+    # http://mcp_filebridge:8000/health). Kill switch: docker stop
+    # mcp_filebridge kills the public file routes; Matrix untouched.
+    user: "1000:1000"
+    environment:
+      - FILEBRIDGE_PORT=8000
+      - MEDIA_PIPELINE_URL=http://192.168.4.55:8189
+      - MEDIA_ROOT=/home/chuck/data/media
+      # Mirrors Matrix MEDIA_UPLOAD_MAX_MB (default 500) — keep in sync if
+      # Matrix's cap changes.
+      - UPLOAD_MAX_MB=500
+      - TZ=America/Chicago
+    volumes:
+      - /home/chuck/data/media:/home/chuck/data/media:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ai-net
+
   mcp_vision:
     build:
       context: ../mcp/servers/vision

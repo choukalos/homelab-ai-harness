@@ -1,0 +1,26 @@
+[project]
+name = "mcp-filebridge"
+version = "0.1.0"
+description = "The homelab's single public file edge (P12-A, SEC-12): transparent pipeline relays + policy-gated /media/files serving"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+mcp-filebridge = "app:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
