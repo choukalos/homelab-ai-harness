@@ -181,11 +181,13 @@ stale file until `docker restart caddy` — or verify with an md5 compare first.
 
 ## Manual follow-up (recorded)
 
-- **Matrix 8189 → LAN-only** (owner: chuck, host: matrix 192.168.4.55):
-  after the cutover is live, rebind `0.0.0.0:8189` → `192.168.4.55:8189` (or
-  ufw deny-from-any + allow-LAN) and restart only the pipeline service.
-  Full runbook with validation + rollback: `docs/thor_manual_tasks.md`
-  (Phase 17, table row 13). Also noted in `security_todo.md` Phase 12.
+- **Matrix 8189 → LAN-only — ✅ DONE 2026-11-26 (validated from thor):**
+  LAN `192.168.4.55:8189/health` → 200; external vantage points
+  (check-host.net, US + IL) TCP `104.5.56.59:8189` → connection timeout
+  (filtered); public download via the bridge → 200 + sha256 identical (full
+  path CF → tunnel → Caddy → bridge → Matrix on the LAN); bridge `/health`
+  `pipeline_reachable: true`. Full runbook: `docs/thor_manual_tasks.md`
+  (Phase 17, table row 13).
 
 ## Unblocked
 

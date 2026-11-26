@@ -349,6 +349,12 @@ Validation:
 
 ## Phase 17 - Matrix 8189 → LAN-only (post-P12-A file-bridge cutover)
 
+> **✅ DONE 2026-11-26 (validated from thor).** LAN `192.168.4.55:8189/health`
+> → 200; external vantage points (check-host.net US + IL) TCP
+> `104.5.56.59:8189` → connection timeout (filtered); public download via the
+> bridge → 200 + sha256 identical (full path CF → tunnel → Caddy → bridge →
+> Matrix on the LAN); bridge `/health` `pipeline_reachable: true`.
+
 > **WHEN:** After the P12-A cutover is live on thor (`mcp_filebridge` up +
 > Caddy reloaded — task 16, 2026-11-26). Once the public file routes go
 > through the bridge, matrix 8189 is no longer an internet origin and its
@@ -405,4 +411,4 @@ Validation:
 | 10 | 14 | Cloudflare tunnel (if needed) | ✅ RESOLVED — no extra routes needed; all public access on the existing 6 tunnel domains (verified 2026-11-15) |
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
 | 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | **OPEN** — High — **LAN session only (at home), not via OpenVPN** |
-| 13 | 12 (file bridge) | Matrix 8189 → LAN-only (rebind/ufw on matrix after P12-A cutover is live) | **OPEN** — Medium — post-P12-A (task 16, 2026-11-26); owner chuck |
+| 13 | 12 (file bridge) | Matrix 8189 → LAN-only (rebind/ufw on matrix after P12-A cutover is live) | ✅ DONE 2026-11-26 — validated from thor: LAN 200, external vantage timeout, public chain via bridge 200 + sha256 identical |
