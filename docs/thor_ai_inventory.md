@@ -42,11 +42,13 @@
   map, retrieval/writeback, admin REST + CLI, `/metrics`) — see
   `docs/memory/IMPLEMENTATION_STATE.md` (Phases 0–9 complete 2026-08-28;
   current state 2026-10-21 — retrieval quality, mcp_memory, cold-start flag). Admin endpoints use the `X-Api-Key` header.
-- **LiteLLM:** 5 live aliases (2026-11-20) — `matrix-coder` (+
-  `fallbacks: [studio-gemma4-26b]`), `matrix-coder-fast` (thinking OFF),
-  `studio-gemma4-26b` (OMLX backup; capability tags verified 2026-11-21 —
-  tool calling + JSON schema, no vision; upstream reloaded,
-  `tier1-macstudio-omlx-restart` applied), `embeddings`,
+- **LiteLLM:** 6 live aliases (2026-11-26) — `matrix-coder` (+
+  `fallbacks: [studio-inkling-mini]`), `matrix-coder-fast` (thinking OFF),
+  `matrix-copywriter` (GPU-1 copywriter, added 2026-11-25),
+  `studio-inkling-mini` (OMLX backup; **swapped in 2026-11-26** from
+  `studio-gemma4-26b` — Inkling-2-Mini via key-gated OMLX; capability tags
+  verified 2026-11-26 — tool calling + JSON schema + vision + native
+  reasoning), `embeddings`,
   `homelab-embedding-v1` (memory path). 2026-11-19 model-config pass:
   capability tags, fast alias, fallback, `hf-sd3` removed. 11 MCP servers / **71 tools** registered (was 4 servers / 11 in July; 34 → 44 with the media-pipeline tools, 44 → 40 when the legacy media tools were removed, 40 → 41 with `mcp_mysql.schema_overview`, 41 → 46 with `mcp_vision` — all on 2026-08-28; 46 → 56 with `mcp_knowledge` v2 + `mcp_skills` on 2026-08-29; 56 → 64 with the 8 media post-gen edit/file-movement tools on 2026-09-07; 64 → 71 on 2026-09-20: `mcp_memory` added (2 tools) + `mcp_knowledge` digest tools (5) — and transport migrated streamable-http → SSE; 71 → 75 on 2026-09-25 (`media_job_result` + 3 voice tools). **Live count as of 2026-10-31: 87 tools (23 on `mcp_media`, including `media_transcribe_song`)** — the history line was not maintained through the Sept–Oct additions; counts are authoritative from LiteLLM `/mcp-rest/tools/list`. **Live count as of 2026-11-20: 89 tools across 12 servers** (`mcp_datahub` 10, `mcp_media` 25, `mcp_memory` 3 — verified per-server 2026-11-20). **Live count as of 2026-11-21: 92 tools across 13 servers** (`mcp_sessions` added 2026-11-21 — `sessions_ingest`, `sessions_list`, `sessions_get`; verified via `/mcp-rest/tools/list`). **Live count as of 2026-11-21 (late): 94 tools across 13 servers** (`mcp_media` 25 → 27 with the M1–M5 client layer — `media_kill_job` + `media_queue_status`; verified via `/mcp-rest/tools/list` + MCP-level E2E through the proxy). **Live count as of 2026-11-21 (kanban): 110 tools across 14 servers** (`mcp_kanban` added 2026-11-21 — 16 tools: `list_projects`, `get_project`, `create_project`, `update_project`, `list_ideas`, `add_idea`, `groom_idea`, `move_to_backlog`, `start_task`, `pause_task`, `resume_task`, `stop_task`, `retry_deploy`, `restart_task`, `task_status`, `project_status`; bare names, no server prefix — LiteLLM v1.104 exposes native tool names; verified via `/mcp-rest/tools/list` + E2E `tools/call` through the proxy with chuck/dylan/unknown keys).
   Memory service key scoped to exactly `[matrix-coder, homelab-embedding-v1]`.

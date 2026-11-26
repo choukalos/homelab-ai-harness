@@ -10,16 +10,18 @@
 
 | alias | backend | purpose | notes |
 |---|---|---|---|
-| `matrix-coder` | `openai/qwen38-27b` via vLLM (`matrix:8000`) | Main model — chat, skills, extraction LLM | "One model rule" in practice; `fallbacks: [studio-gemma4-26b]` (2026-11-19) |
+| `matrix-coder` | `openai/qwen38-27b` via vLLM (`matrix:8000`) | Main model — chat, skills, extraction LLM | "One model rule" in practice; `fallbacks: [studio-inkling-mini]` (2026-11-19; fallback alias renamed 2026-11-26) |
 | `matrix-coder-fast` | same Qwen3 backend | Fast path — thinking OFF baked in (`enable_thinking: false`) | Added 2026-11-19 (tier1-litellm-model-config-pass); 0 reasoning tokens vs 52–53 baseline |
 | `matrix-copywriter` | `ollama/gemma4:31b` (`matrix:11434`, GPU 1) | GPU 1 copywriter (XOR-tenant with the media pipeline) | Added 2026-11-25 (zero-downtime `POST /model/new` + config, commit `1a64ae0`; plan `thor_copywriter_litellm_plan.md`); per-entry `fallbacks: [matrix-coder]`; `timeout: 180` (~46 s on-demand load after the 5-min idle-unload). **Reasoning model** — short max-tokens budgets return empty content (text lands in the `thinking` field); needs a generous output budget. Observed 2026-11-25: while a media render holds GPU 1 it serves CPU-offloaded at ~2.5 tok/s (642–714 MB VRAM slice) instead of failing — the fallback is for hard failures only. **Verification checks 3–7 pending** (quiet GPU 1 window + Matrix console) — see the plan doc |
-| `studio-gemma4-26b` | OMLX (`macstudio:8000`) | Backup LLM for the `matrix-coder` fallback | Supersedes `studio-gemma4-4b` (LMStudio); capability tags **VERIFIED 2026-11-21** against the reloaded upstream — tool calling + JSON schema work, no vision (text-only MLX), 262144 max_model_len (`tier1-macstudio-omlx-restart` applied; upstream was down 2026-11-17→21) |
+| `studio-inkling-mini` | OMLX (`macstudio:8000`, key-gated `${OMLX_API_KEY}` since the 2026-11-26 upgrade) | Backup LLM for the `matrix-coder` fallback | **Swapped in 2026-11-26** from `studio-gemma4-26b` (user changed the studio model to Inkling + OMLX upgrade now requires an API key); upstream model `Inkling-2-Mini-oQ4e-mtp`, 1048576 max_model_len; capability tags **VERIFIED 2026-11-26** live — tool calling + JSON schema + **vision (VLM)** + **native reasoning** all work. Predecessor `studio-gemma4-26b` (OMLX, tags verified 2026-11-21 — tool calling + JSON schema, no vision, 262144) had superseded `studio-gemma4-4b` (LMStudio) |
 | `embeddings` | `ollama/nomic-embed-text` (`matrix:11434`) | KB path (legacy name) | 768-dim; `mode: embedding` (misclassification fixed 2026-11-19) |
 | `homelab-embedding-v1` | same nomic backend | **Memory path** (versioned alias) | Added 2026-08-26 (memory Phase 1); migration runbook in `docs/memory/embedding-migration.md` — never silently repoint v1 |
 
-No longer live as of 2026-11-20: `hf-sd3` (removed 2026-11-19 — no
+No longer live: `hf-sd3` (removed 2026-11-19 — no
 consumer), `matrix-gemma4-moe` and `studio-gemma4-4b` (superseded by the
-`studio-gemma4-26b` OMLX upstream).
+`studio-gemma4-26b` OMLX upstream), `studio-gemma4-26b` (superseded by
+`studio-inkling-mini` 2026-11-26 — the gemma model is still loaded on the
+OMLX server but no longer referenced by the proxy).
 
 **Per-key reality (2026-08-28):** the July per-key allowlist table below was
 never implemented. Keys in LiteLLM: master (OPS), public (`llm.choukalos.com`),

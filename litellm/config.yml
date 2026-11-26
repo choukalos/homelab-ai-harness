@@ -9,32 +9,37 @@
 # OMLX upstream (see model_info comment) — supports_function_calling/response_schema
 # raised to true. Requires `docker compose -f compose/compose.ai-core.yml up -d litellm`
 # to take effect (restart severs active proxy sessions — needs explicit approval).
+# 2026-11-26: backup model swapped studio-gemma4-26b → studio-inkling-mini
+# (Inkling-2-Mini-oQ4e-mtp; OMLX upgrade now key-gated — api_key ${OMLX_API_KEY}
+# from .env). Capability flags re-probed live 2026-11-26: tool calls, json_schema,
+# vision (VLM), native reasoning — all work. Same recreate command to take effect.
 model_list:
-  # -- Gemma-4 via OMLX on Mac Studio M1 (Backup LLM) -----------------------
-  - model_name: studio-gemma4-26b
+  # -- Inkling-2-Mini via OMLX on Mac Studio M1 (Backup LLM) ----------------
+  - model_name: studio-inkling-mini
     model_info:
       mode: chat
-      # VERIFIED 2026-11-21 against the reloaded OMLX upstream
-      # (macstudio:8000, /v1/models → 262144 max_model_len):
+      # VERIFIED 2026-11-26 against the upgraded OMLX upstream
+      # (macstudio:8000, /v1/models → 1048576 max_model_len, model_type vlm):
       #   - tool calling: WORKS (finish_reason tool_calls, well-formed call)
       #   - response_format json_schema: WORKS (schema-conformant JSON)
-      #   - image_url content: 500 from OMLX (text-only MLX model) → no vision
-      #   - context: 128k input + 16k output = 144384 < 262144 (conservative,
+      #   - image_url content: WORKS (VLM — reasoning references image color)
+      #   - native reasoning: reasoning_content present (reasoning model)
+      #   - context: 128k input + 16k output = 144384 << 1048576 (conservative,
       #     valid; upstream headroom left for prompt+completion safety)
       max_input_tokens: 128000
       max_output_tokens: 16384
-      supports_function_calling: true   # probed 2026-11-21
-      supports_vision: false            # probed 2026-11-21 (500, text-only)
-      supports_reasoning: false       # Gemma has no native reasoning tokens
-      supports_response_schema: true    # probed 2026-11-21
+      supports_function_calling: true   # probed 2026-11-26
+      supports_vision: true             # probed 2026-11-26 (VLM, image processed)
+      supports_reasoning: true          # probed 2026-11-26 (reasoning_content)
+      supports_response_schema: true    # probed 2026-11-26
       input_cost_per_token: 0.00000025
       output_cost_per_token: 0.000002
       cache_creation_input_token_cost: 0.000000025
       cache_read_input_token_cost: 0.0000000025
     litellm_params:
-      model: openai/gemma-4-26B-A4B-it-QAT-MLX-4bit
+      model: openai/Inkling-2-Mini-oQ4e-mtp
       api_base: http://macstudio:8000/v1
-      api_key: "unused"
+      api_key: "os.environ/OMLX_API_KEY"
       num_retries: 2
 
   # ── Qwen3.6-27B via vLLM (port 8000) ─────────────────────────────
@@ -73,13 +78,13 @@ model_list:
       api_base: http://matrix:8000/v1
       api_key: "unused"
       num_retries: 2
-      # Make the "Backup LLM" real: fail over to gemma when matrix vLLM is
+      # Make the "Backup LLM" real: fail over to inkling when matrix vLLM is
       # down. enable_pre_call_checks (router_settings) skips the dead
       # deployment while OMLX is down, so this is inert until macstudio:8000
       # is back (tier1-macstudio-omlx-restart). Caveat: cross-model fallback
       # changes behavior (homelab availability > model fidelity — accepted).
       fallbacks:
-        - {model: studio-gemma4-26b}
+        - {model: studio-inkling-mini}
 
   # ── Qwen3.6-27B, thinking OFF — fast mode for straightforward tasks ──
   # Qwen3 thinking is BINARY (reasoning_effort is ignored by the model): a
@@ -151,7 +156,7 @@ model_list:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000001
       cache_creation_input_token_cost: 0.0000001
-      cache_read_input_token_cost: 0.00000001
+      cache_read_input_token_cost: 0.0000001
     litellm_params:
       model: ollama/nomic-embed-text
       api_base: http://matrix:11434
@@ -168,7 +173,7 @@ model_list:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000001
       cache_creation_input_token_cost: 0.0000001
-      cache_read_input_token_cost: 0.00000001
+      cache_read_input_token_cost: 0.0000001
     litellm_params:
       model: ollama/nomic-embed-text
       api_base: http://matrix:11434
@@ -282,3 +287,4 @@ mcp_servers:
     extra_headers:
       - Authorization
     timeout: 7200
+

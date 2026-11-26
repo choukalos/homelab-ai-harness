@@ -1158,7 +1158,7 @@ Potential future additions:
 - `mcp_stocks` MCP server (external market-data APIs)
 - Google Analytics / Amplitude integration for `business_analyst`
 - More skill implementations (`code_review`, `repo_maintenance` — currently TODO placeholders)
-- Consider a non-reasoning model (e.g. `studio-gemma4-26b`) for the slower
+- Consider a faster model (e.g. `studio-inkling-mini`) for the slower
   content/GTM skills — `matrix-coder` is slow (~110s/call) and intermittently
   returns `content: None`
 - CI/CD for MCP servers and skills

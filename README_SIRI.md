@@ -230,8 +230,8 @@ curl -s -X POST https://siri.choukalos.com/siri/api/chat \
         GPU host (matrix:8188 ComfyUI, media pipeline) · Mac Studio (LM Studio)
 ```
 
-- **Models:** `matrix-coder` (vLLM on matrix, default), `studio-gemma4-26b`
-  (LM Studio on Mac Studio), `embeddings` / `homelab-embedding-v1` (nomic).
+- **Models:** `matrix-coder` (vLLM on matrix, default), `studio-inkling-mini`
+  (OMLX on Mac Studio, key-gated since 2026-11-26), `embeddings` / `homelab-embedding-v1` (nomic).
   Default chat model: `SKILL_RUNNER_DEFAULT_MODEL` env var (`.env`).
 - **Memory:** in-process mem0 in skill-runner, Qdrant collection
   `mem0_memories`, per-user identities from `MEMORY_USER_KEYS`.
