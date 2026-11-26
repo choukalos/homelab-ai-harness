@@ -322,7 +322,9 @@ services:
       - TASK_THINKING=medium
       - QA_THINKING=xhigh
       - SUMMARY_THINKING=medium
-      # Caller-key scoping (tails of LITELLM_KEY_CHUCK / LITELLM_KEY_DYLAN).
+      # Caller-key scoping — ALIAS-keyed (Phase 13.3, 2026-11-26): entries are
+      # USER_KEYS aliases (chuck/dylan) resolved to the full key at call time,
+      # so key rotation no longer requires a suffix swap here.
       # Owner attribution is derived from USER_KEYS below (full-key match).
       - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
       # Per-user LLM spend attribution (Phase 2): sessions for work owned by

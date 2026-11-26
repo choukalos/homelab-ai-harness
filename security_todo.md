@@ -900,10 +900,27 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
       drift found by the gate: GITHUB_ACCESS_TOKEN/GITHUB_RUNNER_TOKEN on
       7 carrier containers (expected per rotate-github-tokens.sh — refresh
       on next recreate; GITHUB_RUNNER_TOKEN is unconsumed legacy).
-- [ ] **13.3 — Alias-based capability map**: `KANBAN_MCP_KEY_CAPABILITIES`
+- [x] **13.3 — Alias-based capability map**: `KANBAN_MCP_KEY_CAPABILITIES`
       keyed by alias (`product:control`) instead of raw suffixes; kanban
       server resolves alias → key (kanban harness change, small — separate
       repo: `data/ai-kanban`).
+      **Done 2026-11-26 (pi):** `KANBAN_MCP_KEY_CAPABILITIES="chuck:admin;
+      dylan:control"` — alias entries resolve to the full key via `USER_KEYS`
+      (exact match) at call time; legacy suffix entries still work
+      (backward compatible, no suffix fallback for known aliases). Kanban
+      harness: `resolveMcpCapabilities` + `userKeys` param (commit
+      `edf0285` on main, both clones synced via GitHub; the two clones —
+      `/home/chuck/homelab` and `/home/chuck/data/ai-kanban/harness` — are
+      separate checkouts of the same repo, and the Docker build context is
+      the homelab clone's `mcp/servers/kanban`). 231/231 kanban tests pass
+      (4 new: alias resolution, rotation survival, no-suffix-fallback,
+      mixed map). mcp_kanban rebuilt + recreated; E2E verified: chuck
+      `board_status` 200 + `delete_project` reaches handler (admin), dylan
+      `board_status` 200 + `delete_project` → "not available for this key"
+      (control), unknown key → 401, kanban key → full set, and through the
+      LiteLLM proxy (chuck → `mcp_kanban_board_status` tool call). Rotation
+      is now a no-op for the map: `key rotate` only updates `USER_KEYS`
+      (via .env + container recreate).
 - [x] **13.4 — `key inventory`**: generate the §1 key table from the proxy
       (`/key/info` + access groups + spend) so the table is never
       hand-maintained; reuse the output in the Phase 6
