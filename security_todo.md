@@ -17,9 +17,10 @@
 > 2026-11-24 (not started). Phase 12 (file bridge `mcp_filebridge` — unified
 > file edge: public relay + work areas + publish targets; D10–D16 decided
 > 2026-11-24) added 2026-11-24. **P12-A (public face) landed 2026-11-26**
-> (task 16): `mcp_filebridge` service + Caddy cutover committed; live apply
-> on thor (compose up + graceful caddy reload + public verification) is the
-> pending deploy step — see task-16 report. Phase 13 (LiteLLM key
+> (task 16): `mcp_filebridge` service + Caddy cutover committed; **LIVE on
+> thor 2026-11-26** — deploy runbook executed (build + start, cutover, public
+> battery, kill switch, regression, port diff — all green; see task-16
+> report "Deployed" section). Phase 13 (LiteLLM key
 > lifecycle + `.env` consolidation — the agent-key driver; the decided slice
 > of the Phase 9 stub) added 2026-11-26 (DONE 2026-11-26 — all 5 work items
 > complete).
@@ -821,7 +822,7 @@ extensibility contract as Phase 11.
 - [x] **Fix lands in P12-A**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path — skill API artifact endpoint + LAN). **RESOLVED 2026-11-26 (P12-A, task 16)**: cutover committed (Caddyfile) + live-applied on thor the same day.
 
 **Phasing (D15 decided 2026-11-24 — agreed):**
-- [x] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix — **done 2026-11-26 (task 16)**: `mcp/servers/filebridge/` (22 unit tests green), `compose/compose.mcp.yml` service (no host port, minimal env), Caddy cutover commit (4 one-line upstream swaps, `caddy validate` green). Live apply on thor (targeted `up -d mcp_filebridge` + graceful `caddy reload` + public verification battery + kill-switch test) = pending deploy step, runbook in task-16 report. **Post-cutover follow-up: Matrix 8189 → LAN-only (bind/ufw on the Matrix host — manual task, `docs/thor_manual_tasks.md`).**
+- [x] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix — **DONE + LIVE 2026-11-26 (task 16)**: `mcp/servers/filebridge/` (22 unit tests green), `compose/compose.mcp.yml` service (no host port, minimal env), Caddy cutover commit (4 one-line upstream swaps, `caddy validate` green). **Live apply on thor 2026-11-26 17:15–17:25 UTC — all runbook steps green**: build + start (env gate 0, healthy, ai-net smoke), cutover (note: the bind-mounted Caddyfile was pinned to a pre-merge inode after the git merge's rename-replacement — `caddy reload` loaded the stale file; fixed with `docker restart caddy`, which re-binds the mount), public battery (dl sha256 identical to direct Matrix + Range 206 + bad-token 404 + cf-cache-status DYNAMIC; upload 401/401/200 + round-trip; 501 MB → 413 at the Cloudflare edge (100 MB free-plan cap) with the bridge's 500 MB cap proven via ai-net (413, `bytes_out: 0` — Matrix never saw the body); `/media/files` policy on both hosts — allowlisted 200, siri_outputs/non-allowlisted/traversal/directory 404; `/media/pipeline/jobs` + `/dl_token` 404), kill switch (4 routes 502 while Matrix + skill-runner stay 200; clean recovery), regression (siri/api 200 with chuck key, LAN skill-runner face untouched, blog portal intact), port diff (no new host ports). **Effective public upload cap: 100 MB (Cloudflare edge) — the bridge's 500 MB cap is the backstop.** **Post-cutover follow-up: Matrix 8189 → LAN-only (bind/ufw on the Matrix host — manual task, `docs/thor_manual_tasks.md`).**
 - [ ] **P12-B:** MCP tools (Face 2) + registry — **unblocked by P12-A** (grows `filebridge.yaml` into the full work-area/publish-target registry)
 - [ ] **P12-C:** publish engine migration (`publish-file` → `file_publish`) — blog + NAS targets; bluebovine adapter interface (no impl) — **unblocked by P12-B**
 

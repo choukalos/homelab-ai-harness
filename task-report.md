@@ -10,6 +10,11 @@
 | 7a75d84 | `caddy: P12-A file-bridge cutover` — 4 one-line upstream swaps (rollback anchor) |
 | fb8c0df | `docs: P12-A ship-docs` |
 
+**DEPLOYED 2026-11-26 17:15–17:25 UTC (thor)** — merged to main (`065baed`),
+runbook executed end-to-end, all steps green. See "Deployed" below for
+evidence + the one deviation (bind-mount inode pin required a caddy restart
+instead of a pure graceful reload).
+
 ## What was built
 
 `mcp/servers/filebridge/` — the homelab's single public file edge (P12-A):
@@ -115,39 +120,64 @@ see Could-not-verify for the live confirmation.
   demos, presentations, siri_outputs, research_reports, investment_briefs,
   homelab_reports, code_reviews, public, clips.
 
-### ⏳ Pending on thor (deploy runbook — exact commands)
-```bash
-# 1. Build + start (NO traffic yet — Caddy still points at old upstreams
-#    until step 3; the repo Caddyfile is already cut over):
-cd /home/chuck/homelab && git fetch origin task/16 && git checkout task/16
-cp .env /home/chuck/data/backups/env-$(date +%F).bak && chmod 600 /home/chuck/data/backups/env-$(date +%F).bak   # Phase 0 convention (public-surface change)
-ss -tlnp | sort > /tmp/ss-baseline.txt
-docker compose -f compose/compose.mcp.yml --env-file .env up -d --build mcp_filebridge
-docker inspect mcp_filebridge --format '{{.Config.Env}}' | grep -ciE 'litellm|memory|master|api_key'   # must be 0
-docker run --rm --network ai-net curlimages/curl -s http://mcp_filebridge:8000/health                 # ai-net smoke
-# 2. Cutover (graceful):
-docker exec caddy caddy validate --config /etc/caddy/Caddyfile
-docker exec caddy caddy reload --config /etc/caddy/Caddyfile
-# 3. Public battery (full path CF -> tunnel -> Caddy -> bridge):
-#    fresh-token dl 200 + sha256 == direct Matrix; Range bytes=0-99 -> 206;
-#    bad token 404; upload no key 401 / wrong key 401 / chuck key 200 (+
-#    re-mint dl_token for the uploaded path and fetch); 501 MB upload -> 413
-#    from the relay (bridge log cap trip; Matrix never sees the body);
-#    /media/files on BOTH hosts: allowlisted 200 (one real file each of
-#    generated/, images/, demos/, presentations/), siri_outputs +
-#    research_reports/investment_briefs/homelab_reports/code_reviews/public
-#    404, ../etc/passwd + ..%2F 404, directory 404;
-#    /media/pipeline/jobs + /dl_token public -> 404; cf-cache-status DYNAMIC.
-# 4. Kill switch: docker stop mcp_filebridge -> all four public routes 502
-#    while Matrix /health + skill-runner /health stay 200; docker start -> 200.
-# 5. Regression: skill-runner /health 200; /siri/* + /api/* 200 with chuck
-#    key; LAN http://192.168.4.54:8091/media/files/<allowlisted> 200
-#    (skill-runner's LAN face is untouched in P12-A).
-# 6. Post: ss -tlnp | diff /tmp/ss-baseline.txt - (no new host port).
-```
-**Rollback (one-line per route, or `git checkout 7a75d84~1 -- caddy/Caddyfile`
-+ reload):** dl/upload → `http://192.168.4.55:8189`; both /media/files →
-`http://skill-runner:8091`.
+### ✅ Deployed on thor (2026-11-26 17:15–17:25 UTC — all steps green)
+
+Runbook executed as written, with one deviation (noted):
+
+1. **Build + start** — `up -d --build mcp_filebridge`: image built, container
+   healthy; env gate `grep -ciE 'litellm|memory|master|api_key'` = **0**
+   (env is exactly the five documented vars + base-image LANG/GPG_KEY);
+   ai-net smoke `/health` 200, `pipeline_reachable: true`, allowlist
+   `[demos, generated, images, presentations]`, cap 500 MB. `.env` backed up
+   to `/home/chuck/data/backups/env-2026-11-26.bak`; `ss -tlnp` baseline
+   captured.
+2. **Cutover — DEVIATION**: `caddy validate` + `caddy reload` reported
+   success but loaded the **pre-merge** Caddyfile: the bind mount
+   (`/home/chuck/homelab/caddy/Caddyfile → /etc/caddy/Caddyfile`, ro) is
+   pinned to the file's **inode** from container creation (14 h earlier), and
+   the git merge replaced the file via rename (new inode). Detected via
+   md5 mismatch (container `01471b2e…` = pre-merge `c0b0d85` version, zero
+   `mcp_filebridge` refs) + a battery anomaly (`research_reports` 200 —
+   skill-runner's unfiltered face). Fix: `docker restart caddy` (re-binds the
+   mount; container md5 = host md5 `33e14cb8…`, 7 `mcp_filebridge` refs).
+   Brief public-edge interruption (~4 s); no data impact.
+3. **Public battery** (post-restart, all through CF → tunnel → Caddy →
+   bridge; bridge log lines prove the relay):
+   - DL: fresh token → **200, 371,308 B, sha256 `811bb118…` identical** to
+     direct Matrix; `Range: bytes=0-99` → **206** + Content-Range passthrough;
+     bad token **404**; `cf-cache-status: DYNAMIC`.
+   - Upload: no key **401**, wrong key **401**, chuck key **200** (landed
+     `uploads/20261126T172150_…`); re-minted token → fetched via public
+     bridge, content identical. Bridge log: `POST /upload → upstream
+     192.168.4.55:8189/upload, 200, bytes_in 233` (X-Api-Key stripped on the
+     upstream leg).
+   - Cap: 501 MB public upload → **413 in 0.15 s from the Cloudflare edge**
+     (free-plan 100 MB payload cap — the body never reaches the relay);
+     50 MB public upload → 200 (Caddy imposes no practical body limit).
+     Bridge's own 500 MB cap proven via ai-net: 501 MB → **413 in 0.62 s**,
+     log `{"status":413,"bytes_in":525336787,"bytes_out":0,"duration_ms":0}`
+     — Matrix never saw the body. **Effective public upload cap: 100 MB
+     (CF edge); bridge 500 MB is the backstop.**
+   - `/media/files` (both hosts): allowlisted **200** (one real file each of
+     generated/, images/, demos/, presentations/); siri_outputs **404**
+     (both hosts); research_reports/public/homelab_reports/investment_briefs
+     **404**; `../etc/passwd`, `generated/../../etc/passwd`, `..%2F` variants
+     **404**; directory **404**.
+   - `/media/pipeline/jobs` + `/dl_token` public → **404**.
+4. **Kill switch** — `docker stop mcp_filebridge`: all four public routes
+   **502** while Matrix `/health` + skill-runner `/health` stay **200**;
+   `docker start` → 200s, container healthy.
+5. **Regression** — siri `/api/health` + api `/health` **200** with chuck
+   key; LAN `192.168.4.54:8091/media/files/<allowlisted>` **200** (skill-
+   runner's LAN face untouched); blog portal `/` + `/files/` **200**.
+6. **Port diff** — `ss -tlnp` before/after: **no diff** (no new host port).
+
+**Rollback (still valid — one-line per route, or `git checkout 7a75d84~1 --
+caddy/Caddyfile` + sync into the caddy container + reload/restart):**
+dl/upload → `http://192.168.4.55:8189`; both /media/files →
+`http://skill-runner:8091`. (Remember the inode pin: after any git
+rename-replacement of `caddy/Caddyfile`, the running caddy container sees the
+stale file until `docker restart caddy` — or verify with an md5 compare first.)
 
 ## Manual follow-up (recorded)
 
