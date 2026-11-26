@@ -634,9 +634,14 @@ New from the 2026-11-24 interview:
    4 charter drafts `docs/agents/<slug>/charter.md` — pending chuck's review).
    The monthly cycle starts; Q13 first-agent decision pending (recommendation:
    `product`).
-4. First agent (Q13): decide after the org-goals pass — the goals show
-   which agent has the sharpest starting KR (candidates: `marketing` or
-   `product`).
+4. ~~First agent (Q13)~~ — **decided 2026-11-26 (chuck)**: stand up
+   `strategist` first, then `marketing` (sooner-starting; serves Homelab O1);
+   `product` follows. Charter drafts in `docs/agents/<slug>/charter.md` —
+   reviewed with chuck 2026-11-26 (slow-burn targets, 6-pillar set, market =
+   PM consulting, O2-before-O1).
+   **Prerequisite: security Phase 13 (automated key management) lands first**
+   (chuck 2026-11-26) — agent keys via the new `key add`/`key rotate` ops
+   layer, not the manual 5-step loop.
 5. First agent's charter draft: agent suggests from the org goals → chuck
    approves.
 6. Stand up the first agent: `pi-agent-<slug>` workspace, LiteLLM key

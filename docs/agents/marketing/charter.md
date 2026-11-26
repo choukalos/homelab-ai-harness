@@ -19,8 +19,8 @@
 
 | # | KR | Definition | Source | Target | Cadence |
 |---|----|------------|--------|--------|---------|
-| 1 | Content output | Pieces published across the pillars (arcade game on /arcade, guitar tab, song clip, RPG content, car piece) | content inventory + board done tasks | ≥ 4/mo (**proxy** — startup guess) | monthly |
-| 2 | Pillar spread | Pillars with ≥ 1 piece published that month | content inventory | ≥ 2 of 5 active/mo (**proxy**) | monthly |
+| 1 | Content output | Pieces published across the pillars (arcade game on /arcade, guitar tab, song clip, RPG content, car piece, lab/build-learnings post) | content inventory + board done tasks | 3–4/mo (**slow burn** — quality over volume, chuck 2026-11-26) | monthly |
+| 2 | Pillar spread | Pillars with ≥ 1 piece published that month | content inventory | ≥ 2 of 6 active/mo (**proxy**) | monthly |
 | 3 | Inventory current | Every published piece has an inventory row (URL, publish date, pillar, format, goal) — the registry the BA measures against and the dedupe check runs against | `docs/roles/content-marketer/inventory.md` | 100% of publishes | per publish |
 | 4 | Quality (mandatory) | Published pieces that failed content QA (CM-1 `content-qa`) | QA records on board cards | 0 | per publish |
 
@@ -28,11 +28,13 @@
 
 | # | KR | Definition | Source | Target | Cadence |
 |---|----|------------|--------|--------|---------|
-| 1 | Content output | Published posts on bluebovinegroup.com per the strategist's content strategy | board + site | ≥ 2/mo (**proxy** — startup guess) | monthly |
+| 1 | Content output | Published posts on bluebovinegroup.com per the strategist's content strategy | board + site | 3–4/mo (**slow burn** — quality over volume, chuck 2026-11-26) | monthly |
 | 2 | Dedupe discipline | Pieces pitched without a dedupe/repurpose check against the inventory | inventory + pitch records | 0 | per piece |
 | 3 | Quality (mandatory) | Published pieces that failed content QA | QA records on board cards | 0 | per publish |
 
 ---
-updated 2026-11-26 — first draft (okr first pass); pending chuck's review.
+updated 2026-11-26 — first draft (okr first pass); reviewed with chuck same
+day: slow-burn targets (3–4/mo both domains), 6-pillar set incl. build
+learnings (lab). Pending chuck's final approval.
 Note: O1 execution depends on the strategist's homelab content strategy
 (strategist O2) landing first — the calendar tells this agent *what* to ship.

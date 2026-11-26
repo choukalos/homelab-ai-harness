@@ -60,6 +60,13 @@ Full drafts in `docs/agents/<slug>/charter.md` (objectives/KRs sections only).
   later." Rationale: the homelab content chain (strategist O2 → marketing O1)
   serves the cycle's main goal (Homelab O1) and both agents' skills are built;
   `product` (bluebovine O2) follows after.
+- **Charter review (chuck, 2026-11-26)**: slow-burn targets — 3–4 pieces/mo
+  homelab and 3–4 posts/mo bluebovine (quality over volume); 6th pillar added
+  (build learnings/lab — arcade & media pipeline lessons first, then AI
+  harness); bluebovine market = product management consulting (explicit
+  market-profile step in strategist KR3); strategist sequences O2 (homelab)
+  before O1 (bluebovine). **Prerequisite (chuck)**: security Phase 13
+  (automated key management) lands before agent stand-up.
 - **Content inventory doesn't exist yet** — `docs/roles/content-marketer/
   inventory.md` is created at first publish; KR1/KR2 sources are live from
   day one via board done tasks until then.

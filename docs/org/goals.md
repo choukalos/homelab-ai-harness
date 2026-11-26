@@ -32,7 +32,9 @@ Friday of January 2027)
 **O1 — Personal-interest content ships on a steady rhythm and is worth coming
 back to.**
 
-Pillars: arcade games, guitar, songs/clips, RPGs & war games, cars.
+Pillars: arcade games, guitar, songs/clips (creating songs), RPGs & war
+games, cars, **build learnings (lab)** — what we learned building things
+(arcade & media pipeline first, then the AI harness; chuck 2026-11-26).
 
 > Anchoring (2026-11-25): the personal-interest content is the main goal.
 > "The virtual team ships real work" (harness/agents) is the **means**, not
@@ -43,8 +45,8 @@ Pillars: arcade games, guitar, songs/clips, RPGs & war games, cars.
 
 | # | KR | Definition | Source | Target | Cadence |
 |---|----|------------|--------|--------|---------|
-| 1 | Content output (leading) | Pieces published across the pillars (arcade game on /arcade, guitar tab, song clip, RPG content, car piece) | content inventory (`docs/roles/content-marketer/inventory.md` — created at first publish) + board done tasks | ≥ 4 pieces/mo (**proxy** — startup guess) | monthly |
-| 2 | Pillar spread (leading) | Pillars with ≥ 1 piece published that month | content inventory | ≥ 2 of 5 pillars active/mo (**proxy**) | monthly |
+| 1 | Content output (leading) | Pieces published across the pillars (arcade game on /arcade, guitar tab, song clip, RPG content, car piece, lab/build-learnings post) | content inventory (`docs/roles/content-marketer/inventory.md` — created at first publish) + board done tasks | 3–4 pieces/mo (**slow burn** — quality over volume, chuck 2026-11-26) | monthly |
+| 2 | Pillar spread (leading) | Pillars with ≥ 1 piece published that month | content inventory | ≥ 2 of 6 pillars active/mo (**proxy**) | monthly |
 | 3 | Revisit / traffic (outcome) | Return-visitor share / sessions on choukalos.com content | Plausible (not wired — G3) | +10% MoM sessions (**proxy** — validate when Plausible lands) | monthly |
 | 4 | Quality (mandatory) | Published pieces that failed content QA (CM-1 `content-qa`) | QA records on board cards + inventory | 0 | per publish |
 
@@ -54,7 +56,7 @@ Pillars: arcade games, guitar, songs/clips, RPGs & war games, cars.
 
 | # | KR | Definition | Source | Target | Cadence |
 |---|----|------------|--------|--------|---------|
-| 1 | Content volume (leading) | Published posts on bluebovinegroup.com | board + site | ≥ 2 posts/mo (**proxy**) | monthly |
+| 1 | Content volume (leading) | Published posts on bluebovinegroup.com | board + site | 3–4 posts/mo (**slow burn** — quality over volume, chuck 2026-11-26) | monthly |
 | 2 | Traffic growth (outcome) | Sessions MoM | Cloudflare analytics / Plausible (**proxy** — validate when wired) | +10% MoM (**proxy**) | monthly |
 | 3 | Engagement (outcome) | Avg. time on site + scroll depth on posts | Cloudflare analytics (**proxy** — validate when wired) | ≥ 1 min avg. time on posts (**proxy**) | monthly |
 | 4 | Quality (mandatory) | Published pieces that failed content QA | QA records on board cards + inventory | 0 | per publish |
@@ -84,4 +86,9 @@ No org goal is chuck-only this cycle; no goal is uncovered.
 updated 2026-11-26 — first pass (okr skill S13): formalizes the 2026-11-24/25
 goal-model + anchoring decisions from `todo_agentic_framework.md` into
 four-field KRs. Cycle 2026-12. All traffic/engagement KRs are `proxy` until
-Plausible wiring (G3) lands.
+Plausible wiring (G3) lands. Charter review same day (chuck): slow-burn
+targets (3–4 pieces/mo both domains — quality over volume), 6th pillar added
+(build learnings/lab), bluebovine market = product management consulting,
+strategist sequences homelab (O2) before bluebovine (O1); Q13 = `strategist`
+then `marketing`; security Phase 13 (key management) lands before agent
+stand-up.
