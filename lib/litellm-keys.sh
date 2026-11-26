@@ -38,6 +38,19 @@ LiteLLM Key Management
         ./homelab.sh key add family         # unlimited, all models
         ./homelab.sh key add guest --duration 30d --budget 5
 
+  ./homelab.sh key add-agent <slug> [options]
+      Stand up an agent key end-to-end (Phase 13.5, framework step 6):
+      mint with the per-work-type model default, then wire .env in one
+      atomic pass — LITELLM_KEY_<SLUG>, MEMORY_USER_KEYS entry,
+      KANBAN_MCP_KEY_CAPABILITIES entry (alias-keyed, 13.3) — recreate
+      skill-runner + mcp_kanban, run scripts/key-sync-check.sh.
+
+      Options:
+        --work-type T      coding (default: matrix-coder) or writing
+                           (matrix-copywriter)
+        --capability C     kanban capability set: read|control (default)
+                           |admin
+
   ./homelab.sh key list
       List all keys with user, models, spend, and status.
 
@@ -83,6 +96,7 @@ HELP
       ;;
 
     add)     shift; _key_add "$@" ;;
+    add-agent) shift; _key_add_agent "$@" ;;
     list)    shift; _key_list "$@" ;;
     info)    shift; _key_info "$@" ;;
     update)  shift; _key_update "$@" ;;
@@ -965,5 +979,172 @@ for s, body in services.items():
   echo "  .env backup:  ${backup_dir}/env-${stamp}.bak"
   echo "  Rollback:     restore the backup + ./homelab.sh key unblock ${hash}"
   echo "                 + recreate the containers from step 5"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+# ── key add-agent (Phase 13.5) ──
+# One command to stand up an agent key (framework step 6): mint with the
+# per-work-type model default, then wire the three .env surfaces in one
+# atomic pass:
+#   1. LITELLM_KEY_<SLUG>=<key>          (the key itself)
+#   2. MEMORY_USER_KEYS += ,<slug>=LITELLM_KEY_<SLUG>   (identity/spend map —
+#      env-var-name template, stable across rotation)
+#   3. KANBAN_MCP_KEY_CAPABILITIES += ;<slug>:<capability>
+#      (alias-keyed since 13.3 — stable across rotation)
+# Then recreate the consumers (skill-runner: MEMORY_USER_KEYS;
+# mcp_kanban: the capability map) and run scripts/key-sync-check.sh.
+# Conventions (todo_agentic_framework.md step-6 checklist): alias = slug
+# (product/analyst/strategist/marketing); model default by work type
+# (coding → matrix-coder, writing → matrix-copywriter); default
+# capability = control (board mutation without project admin).
+
+_key_add_agent() {
+  local slug="${1:?Usage: ./homelab.sh key add-agent <slug> [--work-type coding|writing] [--capability read|control|admin]}"
+  shift
+  local work_type="coding" capability="control"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --work-type)  work_type="$2";  shift 2 ;;
+      --capability) capability="$2"; shift 2 ;;
+      *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  [[ -n "${LITELLM_MASTER}" ]] || { echo "❌ LITELLM_MASTER_KEY not set (source .env first)." >&2; exit 1; }
+  [[ "${slug}" =~ ^[a-z][a-z0-9_-]*$ ]] || { echo "❌ slug must be lowercase (letters/digits/-/_), e.g. 'strategist'." >&2; exit 1; }
+  case "${capability}" in read|control|admin) ;; *) echo "❌ --capability must be read|control|admin." >&2; exit 1 ;; esac
+  local models
+  case "${work_type}" in
+    coding)  models="matrix-coder" ;;
+    writing) models="matrix-copywriter" ;;
+    *) echo "❌ --work-type must be coding|writing." >&2; exit 1 ;;
+  esac
+
+  local repo_root env_file env_var
+  repo_root=$(cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd)
+  env_file="${repo_root}/.env"
+  env_var="LITELLM_KEY_$(echo "${slug}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
+
+  # Guards: slug and env var must be unused.
+  local existing
+  existing=$(_key_find_hash "${slug}")
+  if [[ "${existing}" != "NOT_FOUND" && -n "${existing}" ]]; then
+    echo "❌ A key matching '${slug}' already exists." >&2
+    exit 1
+  fi
+  grep -q "^${env_var}=" "${env_file}" && { echo "❌ ${env_var} already present in .env." >&2; exit 1; }
+
+  # 1. Mint (per-work-type model default).
+  local payload resp new_key
+  payload=$(python3 -c "
+import json, sys
+print(json.dumps({'user_id': sys.argv[1], 'key_alias': sys.argv[1], 'models': [sys.argv[2]]}))
+" "${slug}" "${models}")
+  resp=$(curl -s --max-time 30 -X POST "${LITELLM_PROXY}/key/generate" \
+    -H "Authorization: Bearer ${LITELLM_MASTER}" \
+    -H "Content-Type: application/json" \
+    -d "${payload}")
+  new_key=$(echo "${resp}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))" 2>/dev/null)
+  if [[ -z "${new_key}" || "${new_key}" == "null" ]]; then
+    echo "❌ Failed to mint key for '${slug}': ${resp}" >&2
+    exit 1
+  fi
+  local probe
+  probe=$(curl -s --max-time 15 -o /dev/null -w "%{http_code}" \
+    "${LITELLM_PROXY}/v1/models" -H "Authorization: Bearer ${new_key}")
+  if [[ "${probe}" != "200" ]]; then
+    echo "❌ New key failed the /v1/models probe (HTTP ${probe}) — aborting, nothing written." >&2
+    local new_hash
+    new_hash=$(_key_find_hash "${new_key: -4}")
+    if [[ "${new_hash}" != "NOT_FOUND" ]]; then
+      curl -s -X POST -H "Authorization: Bearer ${LITELLM_MASTER}" \
+        -H "Content-Type: application/json" "${LITELLM_PROXY}/key/block" \
+        -d "$(python3 -c "import json,sys; print(json.dumps({'key': sys.argv[1]}))" "${new_hash}")" >/dev/null 2>&1
+    fi
+    exit 1
+  fi
+  echo "✅ 1/4 key minted for agent '${slug}' (alias=${slug}, user=${slug}, models=${models}) + probe 200"
+
+  # 2. Wire the three .env surfaces in one atomic pass.
+  ENV_FILE="${env_file}" ENV_VAR="${env_var}" NEW_KEY="${new_key}" SLUG="${slug}" CAP="${capability}" python3 - <<'PY'
+import os, tempfile
+path = os.environ["ENV_FILE"]
+env_var, new_key, slug, cap = (os.environ[k] for k in ("ENV_VAR", "NEW_KEY", "SLUG", "CAP"))
+lines = open(path).readlines()
+out, added_var, added_mem, added_kanban = [], False, False, False
+for ln in lines:
+    if ln.startswith("MEMORY_USER_KEYS="):
+        val = ln.split("=", 1)[1].rstrip("\n")
+        if f"{slug}=" not in val:
+            ln = f"MEMORY_USER_KEYS={val},{slug}={env_var}\n"
+        added_mem = True
+    elif ln.startswith("KANBAN_MCP_KEY_CAPABILITIES="):
+        val = ln.split("=", 1)[1].rstrip("\n")
+        quoted = val.startswith('"') and val.endswith('"')
+        inner = val[1:-1] if quoted else val
+        if f"{slug}:" not in inner:
+            inner = f"{inner};{slug}:{cap}"
+        ln = f"KANBAN_MCP_KEY_CAPABILITIES={'\"' + inner + '\"' if quoted else inner}\n"
+        added_kanban = True
+    out.append(ln)
+out.append(f"{env_var}={new_key}\n")
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".env.")
+with os.fdopen(fd, "w") as f:
+    f.writelines(out)
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+missing = [n for n, ok in (("MEMORY_USER_KEYS", added_mem),
+                            ("KANBAN_MCP_KEY_CAPABILITIES", added_kanban)) if not ok]
+if missing:
+    raise SystemExit("missing .env line(s): " + ", ".join(missing))
+PY
+  if [[ $? -ne 0 ]]; then
+    echo "❌ .env wiring failed (MEMORY_USER_KEYS / KANBAN_MCP_KEY_CAPABILITIES line missing?). Key '${new_key:0:12}…' is minted but unwired — delete it: ./homelab.sh key delete ${slug}" >&2
+    exit 1
+  fi
+  echo "✅ 2/4 .env wired: ${env_var} + MEMORY_USER_KEYS + KANBAN_MCP_KEY_CAPABILITIES (${slug}:${capability})"
+
+  # 3. Recreate the consumers.
+  cd "${repo_root}"
+  local cmds=(
+    "docker compose --env-file .env -f compose/compose.skill-runner.yml up -d skill-runner"
+    "docker compose --env-file .env -f compose/compose.mcp.yml up -d mcp_kanban"
+  )
+  local cmd
+  for cmd in "${cmds[@]}"; do
+    echo "   → ${cmd}"
+    eval "${cmd}" >/dev/null || { echo "❌ Restart failed: ${cmd}" >&2; exit 1; }
+  done
+  echo "✅ 3/4 skill-runner + mcp_kanban recreated"
+
+  # 4. key-sync-check (gate: fail on drift of the new var; other drift = informational).
+  echo "   → scripts/key-sync-check.sh"
+  local sync_out sync_rc
+  sync_out=$("${repo_root}/scripts/key-sync-check.sh" 2>&1)
+  sync_rc=$?
+  echo "${sync_out}" | tail -3
+  if grep -q "DRIFT.*${env_var}" <<<"${sync_out}"; then
+    echo "❌ key-sync-check: drift on ${env_var} — fix per the output above." >&2
+    exit 1
+  fi
+  [[ ${sync_rc} -ne 0 ]] && echo "⚠️  key-sync-check: pre-existing drift on OTHER vars (unrelated — see full output)."
+  echo "✅ 4/4 key-sync-check: ${env_var} in sync"
+
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  ✅ Agent key ready: '${slug}'"
+  echo ""
+  echo "  API Key (hand to the agent's config):"
+  echo "  ${new_key}"
+  echo ""
+  echo "  Model default:  ${models} (work type: ${work_type})"
+  echo "  Kanban caps:    ${capability}"
+  echo ""
+  echo "  Next (framework step-6 checklist):"
+  echo "    - pi-agent-${slug} workspace under data/ai-kanban/"
+  echo "    - AGENT_CONCURRENT_TASKS slot + cron jobs"
+  echo "    - record the key in security_todo.md §1 (key inventory)"
+  echo "  Rotation: ./homelab.sh key rotate ${slug}"
+  echo "  Rollback: ./homelab.sh key delete ${slug} + restore the .env backup"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }

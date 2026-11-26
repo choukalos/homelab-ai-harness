@@ -933,17 +933,38 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
       master). Note: no list-all-groups endpoint exists in v1.104.0
       (`GET /mcp/access/groups` returns 200 empty) — groups resolved per-ID
       from each key's `access_group_ids`.
-- [ ] **13.5 — Agent key conventions** (feeds the framework plan's step 6):
+- [x] **13.5 — Agent key conventions** (feeds the framework plan's step 6):
       aliases = slugs (`product`, `analyst`, `strategist`, `marketing`);
       mint via `key add` with per-key model default by work type
       (`matrix-coder` / `matrix-copywriter`); `MEMORY_USER_KEYS` + kanban
       capability map updated in the same command (13.2/13.3 make this
       mechanical); the first rotation drill = agent standup itself
       (mint → verify → record in §1).
+      **Done 2026-11-26 (pi):** `./homelab.sh key add-agent <slug>
+      [--work-type coding|writing] [--capability read|control|admin]`
+      (default: coding → `matrix-coder`, capability `control`) — one command
+      mints the key, probes it, then wires the three `.env` surfaces in one
+      atomic pass (`LITELLM_KEY_<SLUG>`, `MEMORY_USER_KEYS` entry,
+      `KANBAN_MCP_KEY_CAPABILITIES` alias entry), recreates the consumers
+      (skill-runner + mcp_kanban), and gates on `scripts/key-sync-check.sh`
+      (fail on drift of the new var; other drift = informational). Conventions
+      live in the framework step-6 checklist. **Enabler (kanban harness,
+      `ff9fd48` + `f172c93` on main):** `USER_KEYS` now accepts env-var-NAME
+      refs resolved at boot, so `compose.mcp.yml` sets
+      `USER_KEYS=${MEMORY_USER_KEYS}` — single source of truth, no per-agent
+      compose edit; a resolved ref that isn't a LiteLLM key (e.g.
+      `service=SIRI_KEY_SERVICE`, the siri service token) is skipped with a
+      startup warning instead of crashing `validateUserKeysAtBoot`. 233/233
+      kanban tests. E2E: stood up a throwaway `testagent` (writing) —
+      `board_status` 200 + `delete_project` → "not available for this key"
+      (control) with zero compose edits; then fully torn down (key deleted,
+      `.env` restored, containers recreated, chuck/dylan re-verified).
 
 Rollback: 13.1 restore `compose/.env` from git/backup + recreate; 13.2/13.4
 are additive script functions (delete = rollback); 13.3 revert the kanban
-capability map to suffix form (git) + recreate; 13.5 `key delete <slug>`.
+capability map to suffix form (git) + recreate; 13.5 `key delete <slug>` +
+remove the `.env` lines (`LITELLM_KEY_<SLUG>`, `MEMORY_USER_KEYS`,
+`KANBAN_MCP_KEY_CAPABILITIES`) + recreate skill-runner + mcp_kanban.
 
 **Out of scope (Phase 9):** per-service env delivery (the carrier problem),
 SOPS/encrypted at-rest, all-secrets inventory + breach runbook, non-LiteLLM

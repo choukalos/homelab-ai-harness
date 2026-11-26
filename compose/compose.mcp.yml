@@ -323,15 +323,20 @@ services:
       - QA_THINKING=xhigh
       - SUMMARY_THINKING=medium
       # Caller-key scoping — ALIAS-keyed (Phase 13.3, 2026-11-26): entries are
-      # USER_KEYS aliases (chuck/dylan) resolved to the full key at call time,
-      # so key rotation no longer requires a suffix swap here.
+      # USER_KEYS aliases (MEMORY_USER_KEYS members) resolved to the full
+      # key at call time, so key rotation no longer requires a suffix swap
+      # here.
       # Owner attribution is derived from USER_KEYS below (full-key match).
       - MCP_KEY_CAPABILITIES=${KANBAN_MCP_KEY_CAPABILITIES}
       # Per-user LLM spend attribution (Phase 2): sessions for work owned by
       # a user run against the proxy with that user's key (LiteLLM bills the
-      # spend to the user's key/budget). Full keys, interpolated from .env.
-      # USER_KEYS also drives MCP owner attribution (full-key match).
-      - USER_KEYS=chuck=${LITELLM_KEY_CHUCK},dylan=${LITELLM_KEY_DYLAN}
+      # spend to the user's key/budget). Values may be ENV-VAR NAMES (the
+      # template form of MEMORY_USER_KEYS) — resolved in-container at boot,
+      # since the container carries the full .env. USER_KEYS also drives MCP
+      # owner attribution (full-key match) and alias-keyed capability
+      # entries (Phase 13.3). Single source of truth: agent stand-up
+      # (key add-agent, Phase 13.5) needs no per-agent compose edit.
+      - USER_KEYS=${MEMORY_USER_KEYS}
       # Workspace scratch sweep age (task-<id> / groom-<id> dirs; default 7).
       - WORKSPACE_CLEANUP_DAYS=7
     # LAN-only web UI (presenton pattern: LAN-IP bind, not 0.0.0.0).
