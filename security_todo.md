@@ -825,7 +825,7 @@ extensibility contract as Phase 11.
 
 ---
 
-### Phase 13 — LiteLLM key lifecycle + `.env` consolidation (agent-key driver) — **ADDED 2026-11-26 (IN PROGRESS — NEXT BUILD per chuck 2026-11-26: do the automated key management before building the agents; framework step-6 prerequisite)**
+### Phase 13 — LiteLLM key lifecycle + `.env` consolidation (agent-key driver) — **ADDED 2026-11-26 (DONE 2026-11-26 — all 5 work items complete: 13.1 one-.env, 13.2 key rotate, 13.3 alias-based capability map, 13.4 key inventory, 13.5 agent key conventions + `key add-agent`; framework step-6 prerequisite met)**
 
 > Trigger: the agentic framework plan (`todo_agentic_framework.md`) stands up
 > 4 standing agents, each with its own LiteLLM key (per-agent spend
