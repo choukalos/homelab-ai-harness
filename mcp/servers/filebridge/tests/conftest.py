@@ -64,6 +64,21 @@ class _StubHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self._send(200, b'{"ok":true}')
+        elif self.path.startswith("/files/"):
+            rel = self.path[len("/files/"):]
+            data = self.server.stub.files.get(rel)
+            if data is None:
+                self._send(404, b'{"error":"not found"}')
+            else:
+                self._send(200, data,
+                           {"Content-Type": "application/octet-stream"})
+        elif self.path.startswith("/raw/"):
+            name = self.path[len("/raw/"):]
+            body = bytes(range(256)) * 2  # 512 bytes
+            self._send(200, body, {
+                "Content-Type": "video/mp4",
+                "Content-Disposition": f'attachment; filename="{name}"',
+            })
         elif self.path.startswith("/dl/"):
             token = self.path[len("/dl/"):]
             if token == "badtoken":
@@ -111,6 +126,7 @@ class _StubServer:
         self.uploads: list[dict] = []
         self.upload_status: int | None = None
         self.upload_body: bytes = b""
+        self.files: dict[str, bytes] = {}  # P12-B: /files/{rel} contents
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _StubHandler)
         self.httpd.stub = self  # handler access via self.server.stub
         self.port = self.httpd.server_address[1]
@@ -138,7 +154,7 @@ def stub(monkeypatch, media_root, policy_file):
                                           "allow": ["generated", "images", "demos", "presentations"]})
     s.app = appmod.app
     s.client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=appmod.app), base_url="http://testserver"
+        transport=httpx.ASGITransport(app=appmod.app), base_url="http://127.0.0.1"
     )
     # app.state.client for the upstream leg (lifespan not run under ASGITransport)
     s.app.state.client = httpx.AsyncClient()
@@ -153,3 +169,154 @@ def stub_small_cap(stub, monkeypatch):
     monkeypatch.setattr(appmod, "UPLOAD_MAX_MB", 1)
     monkeypatch.setattr(appmod, "UPLOAD_MAX_BYTES", 1 * 1024 * 1024)
     return stub
+
+
+# ---------------------------------------------------------------------------
+# P12-B: full registry (work_areas + publish_targets) on temp paths
+# ---------------------------------------------------------------------------
+
+FULL_REGISTRY_YAML = """
+public_file_serving:
+  root: {root}
+  allow: [generated, images, demos, presentations]
+work_areas:
+  media_staging: {{path: {staging}}}
+  pipeline_fetch: {{path: {fetch}}}
+  siri_outputs: {{path: {siri}, remote_write: false}}
+  nas_media_store: {{path: {nas}, automount: true, shared_output: true}}
+  matrix_pipeline: {{api: {api}}}
+publish_targets:
+  blog:
+    root: {blogroot}
+    subdirs: [ai, images, audio, video, tabs]
+    default_subdir: ai
+    url_base: https://choukalos.com/files
+    source_roots: [{root}, {staging}]
+    size_cap_mb: 100
+  nas:
+    root: {naspub}
+    subdirs: []
+    url_base: ""
+    source_roots: [{root}, {staging}]
+    size_cap_mb: 100
+"""
+
+
+@pytest.fixture()
+def full_stub_base(stub, media_root, tmp_path, monkeypatch):
+    """`stub` + the full P12-B registry (temp work areas / publish targets).
+
+    Patches app.REGISTRY so the MCP face + token route see it; the P12-A
+    HTTP /media/files face keeps the POLICY already patched by `stub`.
+    Returns a namespace with the registry doc + the temp area paths."""
+    from types import SimpleNamespace
+
+    import app as appmod
+    import yaml as _yaml
+
+    staging = tmp_path / "staging"
+    fetch = media_root / "generated" / "pipeline"
+    siri = media_root / "siri_outputs"
+    nas = tmp_path / "nas"
+    naspub = nas / "published"
+    for d in (staging, fetch, nas, naspub, media_root / "public" / "ai"):
+        d.mkdir(parents=True, exist_ok=True)
+    (staging / "staged.mp4").write_bytes(b"STAGED-FILE-CONTENT")
+    (fetch / "fetched.mp4").write_bytes(b"FETCHED-FILE-CONTENT")
+
+    doc = _yaml.safe_load(FULL_REGISTRY_YAML.format(
+        root=str(media_root), staging=str(staging), fetch=str(fetch),
+        siri=str(siri), nas=str(nas), api=stub.url,
+        blogroot=str(media_root / "public"), naspub=str(naspub)))
+    monkeypatch.setattr(appmod, "REGISTRY", doc)
+    monkeypatch.setattr(appmod, "PULL_MAX_BYTES", 100 * 1024 * 1024)
+    return SimpleNamespace(
+        doc=doc, client=stub.client, url=stub.url, stub=stub,
+        media_root=media_root, staging=staging, fetch=fetch, siri=siri,
+        nas=nas, naspub=naspub)
+
+
+@pytest.fixture(scope="session")
+async def mcp_session():
+    """Start the MCP session manager ONCE per test session, inside a
+    dedicated background task.
+
+    anyio task groups must be entered AND exited in the same task, so the
+    session manager's `run()` (which owns the task group) lives in its own
+    task for the whole session. uvicorn starts it via the app lifespan in
+    production; ASGITransport never runs lifespans, so tests do it here.
+    Idempotent: if `run()` was already started (app lifespan), this just
+    waits for stop."""
+    import asyncio
+
+    import app as appmod  # noqa: F401  (mounts the face -> session manager exists)
+    import mcp_face
+
+    sm = mcp_face.mcp.session_manager
+    stop = asyncio.Event()
+
+    async def _run():
+        try:
+            async with sm.run():
+                await stop.wait()
+        except RuntimeError:
+            await stop.wait()  # already started elsewhere
+
+    task = asyncio.get_running_loop().create_task(_run())
+    for _ in range(500):
+        if getattr(sm, "_task_group", None) is not None:
+            break
+        await asyncio.sleep(0.01)
+    assert getattr(sm, "_task_group", None) is not None, \
+        "MCP session manager did not start"
+    yield
+    stop.set()
+    await asyncio.wait_for(task, timeout=10)
+
+
+@pytest.fixture()
+async def full_stub(full_stub_base, mcp_session):
+    """full_stub_base + the MCP session manager running (mcp_session)."""
+    yield full_stub_base
+
+
+# ---------------------------------------------------------------------------
+# P12-B: MCP JSON-RPC helpers (streamable HTTP, stateless)
+# ---------------------------------------------------------------------------
+
+
+async def rpc(client, method, params=None, _id=1):
+    """POST one JSON-RPC message to the MCP face; return the parsed
+    JSON-RPC response (JSON or the last SSE data: line)."""
+    import json as _json
+
+    body = {"jsonrpc": "2.0", "id": _id, "method": method}
+    if params is not None:
+        body["params"] = params
+    r = await client.post(
+        "/mcp", json=body,
+        headers={"Content-Type": "application/json",
+                 "Accept": "application/json, text/event-stream"})
+    assert r.status_code == 200, f"{method} -> {r.status_code}: {r.text[:300]}"
+    ct = r.headers.get("content-type", "")
+    if "text/event-stream" in ct:
+        data = [l[5:].strip() for l in r.text.splitlines()
+                if l.startswith("data:")]
+        assert data, r.text[:300]
+        return _json.loads(data[-1])
+    return r.json()
+
+
+async def call_tool(client, name, args, _id=1):
+    """tools/call -> the tool's dict result (structuredContent or JSON text)."""
+    import json as _json
+
+    res = await rpc(client, "tools/call", {"name": name, "arguments": args}, _id)
+    assert "result" in res, f"{name} -> error: {res}"
+    out = res["result"]
+    if out.get("isError"):
+        raise AssertionError(f"tool {name} returned isError: {out}")
+    if isinstance(out.get("structuredContent"), dict):
+        return out["structuredContent"]
+    text = out["content"][0]["text"]
+    return _json.loads(text)

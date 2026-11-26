@@ -6,8 +6,13 @@ WORKDIR /app
 COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
-# Copy application code + policy config
+# Copy application code + registry config (P12-A + P12-B + P12-C)
 COPY app.py .
+COPY registry.py .
+COPY tokens.py .
+COPY fileops.py .
+COPY publish_engine.py .
+COPY mcp_face.py .
 COPY filebridge.yaml .
 
 EXPOSE 8000

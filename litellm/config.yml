@@ -3,6 +3,11 @@
 # streamable HTTP, unlike the SSE servers) is live; proxy restarted manually
 # 2026-11-21 (restart severs active proxy sessions). Verified: 110 proxy
 # tools (94 + 16 kanban) + E2E tools/call with chuck/dylan/unknown keys.
+# 2026-11-26: `mcp_filebridge` entry added under mcp_servers (P12-B, SEC-12;
+# 15th server; streamable HTTP at /mcp) — CONFIG ONLY, not yet applied:
+# takes effect at the litellm recreate in the P12-B/C deploy runbook
+# (docs/filebridge_p12bc_deploy.md — restart severs active proxy sessions)
+# + the family-mcp-full access-group update (PUT /v1/unified_access_group).
 #
 # LIVE since 2026-11-19 — tier1-litellm-model-config-pass (proposals/2026-11-19-tier1-litellm-model-config-pass.md)
 # 2026-11-21: studio-gemma4-26b capability flags verified against the reloaded
@@ -300,6 +305,26 @@ mcp_servers:
   mcp_kanban:
     transport: http
     url: http://mcp_kanban:3000/mcp
+    extra_headers:
+      - Authorization
+    timeout: 7200
+
+  # mcp_filebridge — the homelab's single public file edge (P12-B, SEC-12,
+  # 2026-11-26). 15th server; streamable HTTP (transport: http) at POST
+  # /mcp — same shape as mcp_kanban. Tools surface BARE (file_pull /
+  # file_push / file_publish / file_work_areas / file_targets — no server
+  # prefix). Decision 3a: the face has no auth of its own — the proxy key
+  # gate (access groups) decides which keys see the tools; the bridge
+  # registry enforces per-area rules regardless of caller. CONFIG ONLY
+  # (added 2026-11-26): takes effect at the litellm recreate in the P12-B/C
+  # deploy runbook (docs/filebridge_p12bc_deploy.md — restart severs active
+  # proxy sessions; user timing). The family-mcp-full access group
+  # (07c1acf8-...) must be extended with mcp_filebridge for the chuck/dylan
+  # keys (PUT /v1/unified_access_group/<id> — deploy step, NOT executed
+  # here; per-key MCP access is group-granted, default-deny).
+  mcp_filebridge:
+    transport: http
+    url: http://mcp_filebridge:8000/mcp
     extra_headers:
       - Authorization
     timeout: 7200

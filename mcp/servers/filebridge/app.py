@@ -1,4 +1,4 @@
-"""mcp_filebridge — the homelab's single public file edge (P12-A, SEC-12).
+"""mcp_filebridge — the homelab's single public file edge (P12-A + P12-B, SEC-12).
 
 Face 1 (public HTTP, behind Caddy on siri.choukalos.com / choukalos.com):
 
@@ -15,6 +15,13 @@ Face 1 (public HTTP, behind Caddy on siri.choukalos.com / choukalos.com):
                                  Matrix). The UPLOAD_MAX_MB cap is enforced
                                  at the relay too (Matrix enforces it as
                                  well — keep in sync).
+  GET  /media/files/dl/{token} — 1b bridge-minted signed token (P12-B):
+                                 path-bound, TTL'd (1-168 h), in-process
+                                 store; the token IS the credential.
+                                 Minted ONLY via the MCP face (file_push
+                                 destination="client"). Unknown/expired/
+                                 missing -> 404 (never 403). Registered
+                                 BEFORE the catch-all below (precedence).
   GET  /media/files/{path}     — serves MEDIA_ROOT via FileResponse (native
                                  Range) ONLY for allowlisted top-level
                                  subdirs (filebridge.yaml, default-deny).
@@ -23,9 +30,32 @@ Face 1 (public HTTP, behind Caddy on siri.choukalos.com / choukalos.com):
                                  which subdirs exist). Lands finding 12.4:
                                  siri_outputs is NOT publicly served.
 
+Face 2 (MCP, via litellm — P12-B, decision 3a): streamable HTTP at
+  POST /mcp — tools file_pull / file_push / file_publish /
+  file_work_areas / file_targets. No auth of its own: the litellm key
+  gate (access groups) decides which callers see the tools; registry
+  policies enforce per-area rules regardless of caller. D13:
+  siri_outputs (remote_write: false) rejects writes + public tokens for
+  ALL callers.
+
+Face 3 (ai-net only — P12-C): the publish engine endpoint
+  POST /publish — the single publish engine (publish_engine.py,
+  extracted from the publish-file skill; the skill is now a thin wrapper
+  that POSTs here). NOT routed publicly (Caddy has no /publish route) and
+  the container publishes no host ports, so it is reachable only from the
+  ai-net docker network (skill-runner et al.). JSON body:
+  {source_path, target, destination_name?, subdirectory?, overwrite?}.
+  200 = the report shape {summary, artifact_path, report:{...}};
+  400 = {error}.
+
 No public upload of work-area files (D10). No secrets in this container,
 ever: env is FILEBRIDGE_PORT, MEDIA_PIPELINE_URL, MEDIA_ROOT, UPLOAD_MAX_MB,
-TZ — no LiteLLM / memory / master / API keys.
+PULL_MAX_MB, FILEBRIDGE_PUBLIC_URL, TZ — no LiteLLM / memory / master / API
+keys.
+
+Registry (filebridge.yaml): public_file_serving + work_areas +
+publish_targets — linted at boot (fail-fast) and standalone
+(`python app.py lint`).
 
 Kill switch: stopping this container kills the public file routes; Matrix
 and skill-runner are untouched.
@@ -33,17 +63,23 @@ and skill-runner are untouched.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-
 import httpx
-import yaml
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+
+import fileops
+import mcp_face
+import publish_engine
+import registry as regmod
+import tokens as tokmod
 
 # ---------------------------------------------------------------------------
 # Config (env — minimal by design; no secrets)
@@ -61,6 +97,25 @@ POLICY_FILE = Path(os.environ.get("FILEBRIDGE_POLICY", Path(__file__).parent / "
 # the internet is slow and must never be cut off mid-stream.
 UPSTREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=None, pool=None)
 
+# P12-B: cap for file_pull remote fetches (parity with the 500 MB
+# upload/publish caps) + public base for 1b token URLs (Caddy
+# /media/files/* on both hosts — not a secret; the token is the credential).
+PULL_MAX_MB = int(os.environ.get("PULL_MAX_MB", "500"))
+PULL_MAX_BYTES = PULL_MAX_MB * 1024 * 1024
+FILEBRIDGE_PUBLIC_URL = os.environ.get(
+    "FILEBRIDGE_PUBLIC_URL", "https://siri.choukalos.com/media/files"
+).rstrip("/")
+
+# ---------------------------------------------------------------------------
+# Registry (P12-B): public_file_serving + work_areas + publish_targets.
+# Linted at import (fail-fast at boot / `python app.py lint`).
+# ---------------------------------------------------------------------------
+
+REGISTRY = regmod.load(POLICY_FILE)
+POLICY = regmod.serving(REGISTRY)  # P12-A shape: {"root": Path, "allow": [...]}
+LINT_ERRORS, LINT_WARNINGS = regmod.lint(REGISTRY)
+TOKENS = tokmod.TokenStore()
+
 # Response headers we pass through from Matrix on the /dl relay.
 DL_PASSTHROUGH_HEADERS = (
     "content-type",
@@ -77,27 +132,26 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("filebridge")
 
 
-def _load_policy() -> dict:
-    """Load the per-subdir public-file-serving policy (default-deny)."""
-    try:
-        with open(POLICY_FILE) as f:
-            doc = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        doc = {}
-    serving = doc.get("public_file_serving") or {}
-    root = Path(serving.get("root", str(MEDIA_ROOT)))
-    allow = [str(s) for s in (serving.get("allow") or [])]
-    return {"root": root, "allow": allow}
-
-
-POLICY = _load_policy()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.client = httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT, follow_redirects=False)
-    yield
-    await app.state.client.aclose()
+    # P12-B: start the MCP session manager's task group. The mounted
+    # sub-app's own lifespan is not run by the parent app, so we start it
+    # here (uvicorn runs this lifespan). ASGITransport-based tests never
+    # run lifespans — they start it via the session-scoped `mcp_session`
+    # fixture instead (the RuntimeError guard makes double-start a no-op).
+    sm_cm = None
+    try:
+        sm_cm = mcp_face.mcp.session_manager.run()
+        await sm_cm.__aenter__()
+    except RuntimeError:
+        sm_cm = None
+    try:
+        yield
+    finally:
+        if sm_cm is not None:
+            await sm_cm.__aexit__(None, None, None)
+        await app.state.client.aclose()
 
 
 app = FastAPI(title="mcp_filebridge", lifespan=lifespan)
@@ -285,6 +339,30 @@ async def upload_relay(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# GET /media/files/dl/{token} — 1b bridge-minted signed token (P12-B)
+#
+# Path-bound, TTL'd; the token IS the credential. Minted ONLY via the MCP
+# face (file_push destination="client") — no public mint endpoint (D10).
+# Registered BEFORE the /media/files/{filepath:path} catch-all below so it
+# wins route precedence (FastAPI matches in registration order).
+# ---------------------------------------------------------------------------
+
+
+@app.get("/media/files/dl/{token}")
+async def media_files_dl(request: Request, token: str):
+    rlog = _RequestLog(request, None)
+    entry = TOKENS.lookup(token)
+    if entry is None or not Path(entry["path"]).is_file():
+        # Unknown / expired / missing file -> 404 (never 403 — do not leak
+        # which tokens exist).
+        _log_end(rlog, 404, 0, 0)
+        return JSONResponse({"error": "Not Found"}, status_code=404)
+    resp = FileResponse(Path(entry["path"]))  # native Range support
+    _log_end(rlog, 200, 0, 0)
+    return resp
+
+
+# ---------------------------------------------------------------------------
 # GET /media/files/{filepath:path} — policy-gated work-area serving
 # ---------------------------------------------------------------------------
 
@@ -326,7 +404,78 @@ async def media_files(request: Request, filepath: str):
     return resp
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# POST /publish — the publish engine (P12-C; ai-net only, NOT public)
+#
+# The single publish engine (publish_engine.py, extracted from the
+# publish-file skill — the skill is a thin wrapper that POSTs here).
+# Reachable only from the ai-net docker network: Caddy has no /publish
+# route and the container publishes no host ports.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/publish")
+async def publish_endpoint(request: Request):
+    rlog = _RequestLog(request, None)
+    try:
+        body = await request.json()
+    except Exception:
+        _log_end(rlog, 400, 0, 0)
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        _log_end(rlog, 400, 0, 0)
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    src = str(body.get("source_path") or "").strip()
+    target = str(body.get("target") or "").strip()
+    if not src or not target:
+        _log_end(rlog, 400, 0, 0)
+        return JSONResponse(
+            {"error": "source_path and target are required"}, status_code=400)
+    try:
+        # Blocking file I/O (up to the target size cap) -> worker thread
+        # so the event loop stays responsive during large local copies.
+        out = await asyncio.to_thread(
+            publish_engine.publish,
+            REGISTRY, target, src,
+            subdirectory=str(body.get("subdirectory") or ""),
+            destination_name=str(body.get("destination_name") or ""),
+            overwrite=bool(body.get("overwrite", False)))
+    except publish_engine.PublishError as e:
+        fileops.audit("publish", source=src[:200], target=target,
+                      status="error", error=str(e))
+        _log_end(rlog, 400, 0, 0)
+        return JSONResponse({"error": str(e)}, status_code=400)
+    fileops.audit("publish", source=src[:200], target=target, status="ok",
+                  path=out["report"]["path"],
+                  duplicate=out["report"].get("duplicate", False))
+    _log_end(rlog, 200, 0, 0)
+    return JSONResponse(out)
+
+
+# ---------------------------------------------------------------------------
+# Face 2: MCP — streamable HTTP at POST /mcp (P12-B, decision 3a).
+# Mounted LAST so every explicit route above wins (including the
+# /media/files/dl/{token} precedence over the /media/files catch-all).
+# ---------------------------------------------------------------------------
+app.mount("/", mcp_face.mcp.streamable_http_app())
+
+
+def main() -> None:
+    """Boot the bridge (uvicorn). Fails fast on a broken registry."""
+    if LINT_ERRORS:
+        for e in LINT_ERRORS:
+            log.error("registry lint: %s", e)
+        raise SystemExit(f"registry lint failed ({len(LINT_ERRORS)} errors) "
+                         "— refusing to boot (fix filebridge.yaml)")
+    for w in LINT_WARNINGS:
+        log.warning("registry lint: %s", w)
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=FILEBRIDGE_PORT)
+
+
+if __name__ == "__main__":
+    # `python app.py lint` — standalone registry lint (exit 0 = green).
+    if len(sys.argv) > 1 and sys.argv[1] == "lint":
+        raise SystemExit(regmod.lint_cli(REGISTRY))
+    main()

@@ -1,34 +1,39 @@
 #!/usr/bin/env python3
-"""Unit tests for the publish_file skill — NO live services, no network.
+"""Unit tests for the publish_file skill — THIN WRAPPER contract (P12-C).
+
+The publish engine moved to the bridge (mcp/servers/filebridge/
+publish_engine.py, served at POST /publish on ai-net); the skill is a
+thin wrapper that POSTs and passes the result through verbatim. NO live
+services, no network — the HTTP layer is stubbed.
 
 Covers:
-  - subdirectory enum regression (proposal publish-file-subdirectory-enum-test,
-    2026-11-13): SUBDIRS is exactly (ai, images, audio, video, tabs); the
-    invalid 'files' is rejected with a clear error; 'tabs' is accepted;
-    every valid subdirectory is accepted; invalid ones are rejected;
-    skill.yml's documented enum matches the code enum (the 2026-11-06
-    drift — commit bd2d2f32d502 — listed 'files' in the docs while the
-    code rejected it)
-  - idempotent republish (proposal publish-file-dedup, 2026-11-13): the
-    2026-11-08 job ledger showed same-file re-publishes failing with
-    "destination already exists" (10 failed duplicate jobs). Now:
-    identical content → no-op SUCCESS (report.duplicate=true, no copy);
-    different content without overwrite → error naming the sha256
-    mismatch + the overwrite hint; overwrite=true always replaces
-    (the force flag — a changed render is never silently suppressed)
+  - wrapper POSTs the correct request (URL, method, content-type, body:
+    source_path / target=blob / destination_name / subdirectory /
+    overwrite)
+  - report-shape pass-through (bridge 200 -> identical dict)
+  - bridge 400 {"error"} -> {"error": ...} (rejection surfaced verbatim)
+  - bridge down (URLError) -> clear error naming the bridge, NO fallback
+  - missing source_path / invalid subdirectory -> error WITHOUT any HTTP
+    call (fail fast, keep the skill.yml enum)
+  - skill.yml's documented enum matches the wrapper's SUBDIRS (the
+    2026-11-06 drift regression — commit bd2d2f32d502)
+  - the wrapper is THIN: no local copy/hash logic (single engine, no
+    duplicate logic — the engine lives in the bridge)
 
 Run with plain python3 (no pytest, no fastapi, no yaml):
     python3 skills/publish_file/test_skill.py
 """
 from __future__ import annotations
 
-import hashlib
 import importlib.util
+import io
+import json
 import os
 import re
 import sys
-import tempfile
 import types
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,28 +63,29 @@ class FakeJob:
         self.logs.append(msg)
 
 
-def load_skill(tmp: Path) -> types.ModuleType:
-    """Load the skill module with a temp drop zone + approved source root."""
-    os.environ["PUBLISH_FILE_ROOT"] = str(tmp / "public")
-    os.environ["PUBLISH_FILE_PUBLIC_BASE"] = "https://example.test/files"
+class _FakeResponse:
+    """Context manager mimicking urllib's response (readable bytes)."""
+
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def load_skill() -> types.ModuleType:
+    """Load the wrapper module with a stubbed bridge URL."""
+    os.environ["PUBLISH_FILE_BRIDGE_URL"] = "http://bridge.test:8000"
     spec = importlib.util.spec_from_file_location("skill_publish_file_test", SKILL_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    # Approved source root → the temp media dir (resolved: the skill
-    # compares against root.resolve()).
-    mod.SOURCE_ROOTS = [(tmp / "media").resolve()]
     return mod
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def write_source(tmp: Path, name: str, data: bytes) -> Path:
-    p = tmp / "media" / name
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_bytes(data)
-    return p
 
 
 def yml_enum() -> list[str]:
@@ -91,222 +97,207 @@ def yml_enum() -> list[str]:
     return [s.strip() for s in m.group(1).split(",") if s.strip()]
 
 
-# ---------------------------------------------------------------------------
-# Proposal 1 — subdirectory enum regression
-# ---------------------------------------------------------------------------
+REPORT = {
+    "summary": "published a.txt (13.0 B) → https://choukalos.com/files/ai/a.txt",
+    "artifact_path": "/home/chuck/data/media/public/ai/a.txt",
+    "report": {
+        "path": "/home/chuck/data/media/public/ai/a.txt",
+        "url": "https://choukalos.com/files/ai/a.txt",
+        "size_bytes": 13,
+        "sha256": "abc123",
+        "destination_name": "a.txt",
+        "subdirectory": "ai",
+    },
+}
+
+
+class StubHTTP:
+    """Stub urllib.request.urlopen; captures the Request, returns a
+    canned response or raises a canned error."""
+
+    def __init__(self):
+        self.requests: list[urllib.request.Request] = []
+        self.response: bytes | None = None
+        self.error: Exception | None = None
+
+    def urlopen(self, req, timeout=None):
+        self.requests.append(req)
+        if self.error is not None:
+            raise self.error
+        if self.response is None:
+            raise AssertionError("stub urlopen called with no canned response")
+        return _FakeResponse(self.response)
+
+    def install(self, mod):
+        self._orig = mod.urllib.request.urlopen
+        mod.urllib.request.urlopen = self.urlopen
+
+    def uninstall(self, mod):
+        mod.urllib.request.urlopen = self._orig
+
+
+def test_posts_correct_request():
+    print("test_posts_correct_request")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.response = json.dumps(REPORT).encode()
+    stub.install(mod)
+    try:
+        res = mod.run(
+            {"source_path": "/home/chuck/data/media/x/a.txt",
+             "destination_name": "a.txt", "subdirectory": "images",
+             "overwrite": True},
+            FakeJob())
+    finally:
+        stub.uninstall(mod)
+    check("no error", "error" not in res, str(res.get("error")))
+    check("exactly one HTTP call", len(stub.requests) == 1,
+          str(len(stub.requests)))
+    req = stub.requests[0]
+    check("POSTs the bridge /publish URL",
+          req.full_url == "http://bridge.test:8000/publish", req.full_url)
+    check("method is POST", req.get_method() == "POST")
+    check("content-type is JSON",
+          req.get_header("Content-type") == "application/json",
+          str(req.get_header("Content-type")))
+    body = json.loads(req.data.decode())
+    check("body has source_path",
+          body.get("source_path") == "/home/chuck/data/media/x/a.txt")
+    check("body target is blog (skill contract)", body.get("target") == "blog")
+    check("body passes destination_name", body.get("destination_name") == "a.txt")
+    check("body passes subdirectory", body.get("subdirectory") == "images")
+    check("body passes overwrite", body.get("overwrite") is True)
+
+
+def test_report_passthrough():
+    print("test_report_passthrough")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.response = json.dumps(REPORT).encode()
+    stub.install(mod)
+    try:
+        res = mod.run({"source_path": "/home/chuck/data/media/x/a.txt"},
+                      FakeJob())
+    finally:
+        stub.uninstall(mod)
+    check("result is the engine report verbatim", res == REPORT,
+          json.dumps(res)[:120])
+    check("report shape intact (summary/artifact_path/report)",
+          set(res) == {"summary", "artifact_path", "report"})
+    check("report fields intact",
+          set(res["report"]) == {"path", "url", "size_bytes", "sha256",
+                                 "destination_name", "subdirectory"})
+
+
+def test_bridge_rejection_surfaced():
+    print("test_bridge_rejection_surfaced")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.error = urllib.error.HTTPError(
+        "http://bridge.test:8000/publish", 400, "Bad Request", {},
+        io.BytesIO(json.dumps(
+            {"error": "subdirectory 'files' is not a valid subdirectory: it "
+                     "would produce a /files/files/... URL. Use one of "
+                     "['ai', 'images', 'audio', 'video', 'tabs'] (default: "
+                     "'ai')."}
+        ).encode()))
+    stub.install(mod)
+    try:
+        res = mod.run({"source_path": "/home/chuck/data/media/x/a.txt"},
+                      FakeJob())
+    finally:
+        stub.uninstall(mod)
+    check("error surfaced", "error" in res, str(res)[:120])
+    check("bridge error text passed through verbatim",
+          "files" in res.get("error", "") and "files/files" in res.get("error", ""))
+
+
+def test_bridge_down_clear_error_no_fallback():
+    print("test_bridge_down_clear_error_no_fallback")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.error = urllib.error.URLError("Name or service not known")
+    stub.install(mod)
+    try:
+        job = FakeJob()
+        res = mod.run({"source_path": "/home/chuck/data/media/x/a.txt"}, job)
+    finally:
+        stub.uninstall(mod)
+    check("error returned", "error" in res, str(res)[:160])
+    check("error names the bridge URL",
+          "bridge.test:8000/publish" in res.get("error", ""))
+    check("error says no fallback by design",
+          "no local fallback" in res.get("error", ""))
+    check("job log records the failure",
+          any("bridge unreachable" in line for line in job.logs),
+          str(job.logs)[:120])
+
+
+def test_missing_source_path_no_http():
+    print("test_missing_source_path_no_http")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.install(mod)
+    try:
+        res = mod.run({"source_path": "  "}, FakeJob())
+    finally:
+        stub.uninstall(mod)
+    check("error returned", res.get("error") == "source_path is required")
+    check("no HTTP call made", len(stub.requests) == 0)
+
+
+def test_invalid_subdirectory_no_http():
+    print("test_invalid_subdirectory_no_http")
+    mod = load_skill()
+    stub = StubHTTP()
+    stub.install(mod)
+    try:
+        res = mod.run({"source_path": "/home/chuck/data/media/x/a.txt",
+                       "subdirectory": "bogus"}, FakeJob())
+    finally:
+        stub.uninstall(mod)
+    check("error returned", "error" in res, str(res)[:120])
+    check("error lists the valid set",
+          all(s in res.get("error", "") for s in mod.SUBDIRS))
+    check("no HTTP call made", len(stub.requests) == 0)
 
 
 def test_subdirectory_enum():
     print("test_subdirectory_enum")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        check(
-            "SUBDIRS is exactly (ai, images, audio, video, tabs)",
-            tuple(mod.SUBDIRS) == ("ai", "images", "audio", "video", "tabs"),
-            str(mod.SUBDIRS),
-        )
-        check("'files' is NOT a valid subdirectory", "files" not in mod.SUBDIRS)
-        check("'tabs' IS a valid subdirectory", "tabs" in mod.SUBDIRS)
-        # 'files' is rejected with the specific guard (not just the generic
-        # allowlist error) — the 2026-09-16 kaelen /files/files/... incident.
-        try:
-            mod._validate_destination("files", "x.txt")
-            check("'files' rejected", False, "no error raised")
-        except mod.PublishError as exc:
-            check("'files' rejected", True)
-            check(
-                "'files' error explains why (no /files/files/...)",
-                "files" in str(exc) and "files/files" in str(exc),
-                str(exc)[:100],
-            )
-        # Every valid subdirectory is accepted.
-        for s in mod.SUBDIRS:
-            try:
-                dest = mod._validate_destination(s, "ok.txt")
-                check(f"subdirectory '{s}' accepted", dest.name == "ok.txt")
-            except mod.PublishError as exc:
-                check(f"subdirectory '{s}' accepted", False, str(exc))
-        # An invalid (non-'files') subdirectory is rejected.
-        try:
-            mod._validate_destination("bogus", "x.txt")
-            check("invalid subdirectory rejected", False, "no error raised")
-        except mod.PublishError as exc:
-            check("invalid subdirectory rejected", True)
-            check(
-                "invalid error lists the valid set",
-                all(s in str(exc) for s in mod.SUBDIRS),
-                str(exc)[:100],
-            )
-        # Docs match code: skill.yml's enum == SUBDIRS (the 2026-11-06 drift
-        # regression — bd2d2f32d502).
-        enum = yml_enum()
-        check(
-            "skill.yml enum matches SUBDIRS",
-            enum == list(mod.SUBDIRS),
-            f"yml={enum} code={list(mod.SUBDIRS)}",
-        )
+    mod = load_skill()
+    check("SUBDIRS is exactly (ai, images, audio, video, tabs)",
+          tuple(mod.SUBDIRS) == ("ai", "images", "audio", "video", "tabs"),
+          str(mod.SUBDIRS))
+    check("'files' is NOT a valid subdirectory", "files" not in mod.SUBDIRS)
+    check("'tabs' IS a valid subdirectory", "tabs" in mod.SUBDIRS)
+    # Docs match code: skill.yml's enum == SUBDIRS (the 2026-11-06 drift
+    # regression — bd2d2f32d502).
+    enum = yml_enum()
+    check("skill.yml enum matches SUBDIRS", enum == list(mod.SUBDIRS),
+          f"yml={enum} code={list(mod.SUBDIRS)}")
 
 
-# ---------------------------------------------------------------------------
-# Proposal 3 — idempotent republish (content-hash dedup)
-# ---------------------------------------------------------------------------
-
-
-def test_publish_new():
-    print("test_publish_new")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        src = write_source(tmp, "a.txt", b"hello publish")
-        job = FakeJob()
-        res = mod.run(
-            {"source_path": str(src), "subdirectory": "ai"}, job
-        )
-        check("no error", "error" not in res, str(res.get("error")))
-        check("summary says published", "published" in res.get("summary", ""))
-        check("not flagged duplicate", res.get("report", {}).get("duplicate") is not True)
-        dest = Path(res["artifact_path"])
-        check("destination file exists", dest.is_file())
-        check("content copied", dest.read_bytes() == b"hello publish")
-        rep = res["report"]
-        check(
-            "report sha256 correct",
-            rep["sha256"] == _sha256(b"hello publish"),
-            rep["sha256"][:12],
-        )
-        check("report size correct", rep["size_bytes"] == len(b"hello publish"))
-        check("report url uses subdirectory", "/files/ai/a.txt" in rep["url"])
-
-
-def test_duplicate_identical_content_is_noop_success():
-    print("test_duplicate_identical_content_is_noop_success")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        src = write_source(tmp, "b.txt", b"same content twice")
-        job1 = FakeJob()
-        res1 = mod.run({"source_path": str(src), "subdirectory": "audio"}, job1)
-        check("first publish ok", "error" not in res1, str(res1.get("error")))
-        dest = Path(res1["artifact_path"])
-        mtime_before = dest.stat().st_mtime_ns
-        # Second publish, same content, no overwrite → no-op success.
-        job2 = FakeJob()
-        res2 = mod.run({"source_path": str(src), "subdirectory": "audio"}, job2)
-        check("duplicate is a SUCCESS (no error)", "error" not in res2, str(res2))
-        check("report.duplicate=true", res2.get("report", {}).get("duplicate") is True)
-        check(
-            "summary says already published / no-op",
-            "already published" in res2.get("summary", "").lower()
-            and "no-op" in res2.get("summary", "").lower(),
-            res2.get("summary", ""),
-        )
-        check(
-            "no re-copy (destination mtime unchanged)",
-            dest.stat().st_mtime_ns == mtime_before,
-        )
-        check(
-            "report sha256 matches the published file",
-            res2["report"]["sha256"] == _sha256(b"same content twice"),
-        )
-        check(
-            "job log records the dedup",
-            any("duplicate" in line for line in job2.logs),
-            str(job2.logs)[:120],
-        )
-
-
-def test_different_content_fails_without_overwrite():
-    print("test_different_content_fails_without_overwrite")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        src = write_source(tmp, "c.txt", b"v1 content")
-        job1 = FakeJob()
-        res1 = mod.run({"source_path": str(src), "subdirectory": "tabs"}, job1)
-        check("first publish ok", "error" not in res1, str(res1.get("error")))
-        # Source changes (new render, same filename) → republish must FAIL
-        # (never silently return the old content) unless overwrite=true.
-        src.write_bytes(b"v2 content - different")
-        job2 = FakeJob()
-        res2 = mod.run({"source_path": str(src), "subdirectory": "tabs"}, job2)
-        check("changed content fails", "error" in res2, str(res2)[:120])
-        check(
-            "error names the mismatch + overwrite hint",
-            "different content" in res2["error"] and "overwrite=true" in res2["error"],
-            res2["error"][:120],
-        )
-        dest = Path(res1["artifact_path"])
-        check("old content preserved", dest.read_bytes() == b"v1 content")
-
-
-def test_overwrite_is_the_force_flag():
-    print("test_overwrite_is_the_force_flag")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        src = write_source(tmp, "d.txt", b"original")
-        job1 = FakeJob()
-        res1 = mod.run({"source_path": str(src), "subdirectory": "video"}, job1)
-        check("first publish ok", "error" not in res1, str(res1.get("error")))
-        # overwrite=true with IDENTICAL content still replaces (bypasses the
-        # dedup no-op) — the force flag must always win.
-        job2 = FakeJob()
-        res2 = mod.run(
-            {"source_path": str(src), "subdirectory": "video", "overwrite": True},
-            job2,
-        )
-        check("overwrite identical content succeeds", "error" not in res2, str(res2))
-        check(
-            "overwrite is not reported as a duplicate no-op",
-            res2.get("report", {}).get("duplicate") is not True,
-            res2.get("summary", ""),
-        )
-        # overwrite=true with CHANGED content replaces the file.
-        src.write_bytes(b"replaced content")
-        job3 = FakeJob()
-        res3 = mod.run(
-            {"source_path": str(src), "subdirectory": "video", "overwrite": True},
-            job3,
-        )
-        check("overwrite changed content succeeds", "error" not in res3, str(res3))
-        dest = Path(res1["artifact_path"])
-        check("file actually replaced", dest.read_bytes() == b"replaced content")
-
-
-def test_same_source_different_destination_is_not_duplicate():
-    print("test_same_source_different_destination_is_not_duplicate")
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        mod = load_skill(tmp)
-        src = write_source(tmp, "e.txt", b"one file, two homes")
-        job1 = FakeJob()
-        res1 = mod.run(
-            {"source_path": str(src), "subdirectory": "ai", "destination_name": "one.txt"},
-            job1,
-        )
-        job2 = FakeJob()
-        res2 = mod.run(
-            {"source_path": str(src), "subdirectory": "images", "destination_name": "two.txt"},
-            job2,
-        )
-        check("first publish ok", "error" not in res1, str(res1.get("error")))
-        check("second (different dest) publishes normally", "error" not in res2, str(res2))
-        check(
-            "second is not a duplicate no-op",
-            res2.get("report", {}).get("duplicate") is not True,
-        )
-        check("two distinct destinations", res1["artifact_path"] != res2["artifact_path"])
+def test_wrapper_is_thin():
+    print("test_wrapper_is_thin")
+    src = Path(SKILL_PATH).read_text()
+    check("no local copy logic (mkstemp/os.replace)",
+          "mkstemp" not in src and "os.replace" not in src)
+    check("no local hash logic (hashlib)", "hashlib" not in src)
+    check("no tempfile usage", "tempfile" not in src)
+    check("posts to the bridge (single engine)",
+          "/publish" in src and "mcp_filebridge" in src)
 
 
 def main():
     tests = [
+        test_posts_correct_request,
+        test_report_passthrough,
+        test_bridge_rejection_surfaced,
+        test_bridge_down_clear_error_no_fallback,
+        test_missing_source_path_no_http,
+        test_invalid_subdirectory_no_http,
         test_subdirectory_enum,
-        test_publish_new,
-        test_duplicate_identical_content_is_noop_success,
-        test_different_content_fails_without_overwrite,
-        test_overwrite_is_the_force_flag,
-        test_same_source_different_destination_is_not_duplicate,
+        test_wrapper_is_thin,
     ]
     for fn in tests:
         fn()

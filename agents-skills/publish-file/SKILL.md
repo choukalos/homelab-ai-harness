@@ -7,6 +7,16 @@ description: "Publish a file from an approved source root to the blog's public d
 
 Publish a file from an approved source root to the blog's public drop zone (/home/chuck/data/media/public), served at https://choukalos.com/files/. Validated, atomic, size-capped.
 
+> **Architecture note (P12-C, 2026-11-26):** the publish engine (validation,
+> atomic copy, size cap, idempotent republish) now lives in the
+> **mcp_filebridge** bridge — `mcp/servers/filebridge/publish_engine.py`,
+> served at `POST /publish` (ai-net only, not public) and parameterized by
+> the bridge registry (`filebridge.yaml` `publish_targets`). This skill is a
+> **thin wrapper**: it POSTs to the bridge and passes the result through
+> verbatim. There is **no local fallback** — if the bridge is down the skill
+> fails with a clear error (single engine, no duplicate logic). The inputs
+> and result shape below are unchanged.
+
 ## How to run
 
 Call the `mcp_skills` MCP tool **`run_skill`** with:

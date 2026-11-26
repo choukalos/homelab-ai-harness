@@ -171,12 +171,14 @@ services:
     build:
       context: ../mcp/servers/filebridge
     container_name: mcp_filebridge
-    # Run as chuck (uid/gid 1000) — MEDIA_ROOT is a ro mount; nothing is
-    # written. P12-A (SEC-12, 2026-11-26): the homelab's single public file
-    # edge. Minimal env by design — NO LiteLLM/memory/master/API keys (env
-    # check is a hard gate: docker inspect | grep -ciE 'litellm|memory|
-    # master|api_key' must be 0). No host port: Caddy reaches it on ai-net
-    # (debug: docker run --rm --network ai-net curlimages/curl -s
+    # Run as chuck (uid/gid 1000): writes land in the rw work-area /
+    # publish-target mounts only (media staging, NAS store + published/,
+    # blog public drop); the rest of data/media stays ro. P12-A/B/C
+    # (SEC-12, 2026-11-26): the homelab's single public file edge. Minimal
+    # env by design — NO LiteLLM/memory/master/API keys (env check is a
+    # hard gate: docker inspect | grep -ciE 'litellm|memory|master|api_key'
+    # must be 0). No host port: Caddy reaches it on ai-net (debug: docker
+    # run --rm --network ai-net curlimages/curl -s
     # http://mcp_filebridge:8000/health). Kill switch: docker stop
     # mcp_filebridge kills the public file routes; Matrix untouched.
     user: "1000:1000"
@@ -189,7 +191,31 @@ services:
       - UPLOAD_MAX_MB=500
       - TZ=America/Chicago
     volumes:
+      # P12-A: public serving root (MEDIA_ROOT) — the /media/files
+      # allowlist is read-only.
       - /home/chuck/data/media:/home/chuck/data/media:ro
+      # P12-B work areas (registry `work_areas` in filebridge.yaml; container
+      # paths mirror host paths — the boot lint checks existence
+      # in-container):
+      # siri_outputs — remote_write:false (D13, siri-only): reads-only
+      # suffice (nested over the ro data/media mount).
+      - /home/chuck/data/media/siri_outputs:/home/chuck/data/media/siri_outputs:ro
+      # media_staging — writable (file_pull/file_push destination; also
+      # mcp_media's MEDIA_STAGING_DIR) — rw nested over the ro workspace
+      # mount below.
+      - /home/chuck/workspace/media:/home/chuck/workspace/media
+      # nas_media_store — shared_output (D13) + the `nas` publish root
+      # (/mnt/lego-media-store/published) — rw (host cifs automount;
+      # registry `automount: true` = missing path is a lint warning, not an
+      # error).
+      - /mnt/lego-media-store:/mnt/lego-media-store
+      # P12-C publish engine (POST /publish; the publish-file skill POSTs
+      # here): the blog target root is WRITTEN by the engine (rw nested
+      # over the ro data/media mount); the publish source_roots are READ
+      # (workspace ro — the boot lint also requires source_roots to exist
+      # in-container).
+      - /home/chuck/data/media/public:/home/chuck/data/media/public
+      - /home/chuck/workspace:/home/chuck/workspace:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
       interval: 30s
