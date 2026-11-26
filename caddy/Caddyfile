@@ -19,8 +19,12 @@
 		# Same-origin media access (blog-todo.md B3) — mirrors the siri route so
 		# blog posts can embed generated artifacts (charts/demos/videos) on
 		# choukalos.com.
+		# P12-A cutover (2026-11-26, SEC-12): upstream skill-runner:8091 ->
+		# mcp_filebridge:8000 (policy-gated: allowlisted subdirs only, default-
+		# deny; siri_outputs no longer public — finding 12.4). Rollback: revert
+		# this one line to http://skill-runner:8091 + caddy reload.
 		handle /media/files/* {
-			reverse_proxy http://skill-runner:8091
+			reverse_proxy http://mcp_filebridge:8000
 		}
 		# Hugo portal (blog-todo.md B4 cutover, 2026-08-28): static site +
 		# /files/ public drop zone + /status/. Served by the portal container
@@ -72,7 +76,11 @@
 		path /media/files/*
 	}
 	handle @siri_media {
-		reverse_proxy http://skill-runner:8091
+		# P12-A cutover (2026-11-26, SEC-12): upstream skill-runner:8091 ->
+		# mcp_filebridge:8000 (policy-gated, default-deny; siri_outputs excluded
+		# — finding 12.4). Rollback: revert this one line to
+		# http://skill-runner:8091 + caddy reload.
+		reverse_proxy http://mcp_filebridge:8000
 	}
 
 	# Media pipeline public route (2026-09-07, media_pipeline_gaps.md T3;
@@ -91,15 +99,21 @@
 	}
 	handle @siri_pipeline {
 		uri strip_prefix /media/pipeline
+		# P12-A cutover (2026-11-26, SEC-12): upstream 192.168.4.55:8189 ->
+		# mcp_filebridge:8000 (transparent relay; Range passthrough; 500 MB cap
+		# enforced at the relay too; X-Api-Key stripped on the upstream leg).
+		# Matrix 8189 is no longer an internet origin (LAN-only follow-up:
+		# docs/thor_manual_tasks.md). Rollback: revert the two lines below to
+		# http://192.168.4.55:8189 + caddy reload.
 		# Signed-token download (public; token is the credential).
 		handle /dl/* {
-			reverse_proxy http://192.168.4.55:8189
+			reverse_proxy http://mcp_filebridge:8000
 		}
-		# Upload (authenticated, multipart, 500MB cap enforced by matrix).
+		# Upload (authenticated, multipart, 500MB cap at Caddy-gated relay + matrix).
 		handle /upload {
 			@noAuth expression {http.request.header.X-Api-Key} != '{$LITELLM_KEY_CHUCK}' && {http.request.header.X-Api-Key} != '{$LITELLM_KEY_DYLAN}'
 			respond @noAuth "Unauthorized" 401
-			reverse_proxy http://192.168.4.55:8189
+			reverse_proxy http://mcp_filebridge:8000
 		}
 		respond "Not Found" 404
 	}
