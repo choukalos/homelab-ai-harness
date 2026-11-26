@@ -19,6 +19,13 @@
 		# Same-origin media access (blog-todo.md B3) — mirrors the siri route so
 		# blog posts can embed generated artifacts (charts/demos/videos) on
 		# choukalos.com.
+		# SEC-12 interim (2026-11-26, finding 12.4): siri_outputs = personal Q&A
+		# with enumerable names — not for public serving. 404 until the P12-A
+		# file-bridge cutover replaces this route with the allowlist policy.
+		# Rollback: delete this block.
+		handle /media/files/siri_outputs/* {
+			respond "Not Found" 404
+		}
 		handle /media/files/* {
 			reverse_proxy http://skill-runner:8091
 		}
@@ -72,6 +79,13 @@
 		path /media/files/*
 	}
 	handle @siri_media {
+		# SEC-12 interim (2026-11-26, finding 12.4): siri_outputs is siri-only
+		# (D13) — 404 publicly until the P12-A file-bridge allowlist lands. Siri
+		# keeps its own access path (skill API artifact endpoint + LAN). Rollback:
+		# delete this block.
+		handle /media/files/siri_outputs/* {
+			respond "Not Found" 404
+		}
 		reverse_proxy http://skill-runner:8091
 	}
 

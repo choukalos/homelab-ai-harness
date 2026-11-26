@@ -813,7 +813,8 @@ extensibility contract as Phase 11.
 - Rollback: Caddy one-line revert per route (back to `4.55:8189` / `skill-runner:8091`)
 
 **12.4 — `siri_outputs` public exposure (finding, 2026-11-24):**
-- [ ] `/media/files/siri_outputs/*` is public with **human-readable, enumerable names** (timestamp + question text) — personal Q&A data. **Fix lands in P12-A**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path). Interim (before P12-A): exclude `siri_outputs` from skill-runner's `ARTIFACT_ROOT` serving (small change) or move the dir out of the public tree.
+- [x] **Interim applied 2026-11-26 (pi, thor):** Caddy 404s `/media/files/siri_outputs/*` on both public hosts (choukalos.com `@blog` + siri.choukalos.com `@siri_media`) — graceful reload, no restarts. Verified: public siri_outputs → 404 on both hosts (cf-cache-status DYNAMIC — not edge-cached), allowlisted subdirs → 200, LAN skill-runner face (`192.168.4.54:8091`) unchanged (siri keeps its own access path). Rollback = delete the two Caddy blocks + `caddy reload`.
+- [ ] **Fix lands in P12-A**: the bridge serves `/media/files` with a per-subdir policy — allowlisted subdirs only, `siri_outputs` excluded (D13: siri-only; siri keeps its own access path).
 
 **Phasing (D15 decided 2026-11-24 — agreed):**
 - [ ] **P12-A: public face** — the two pipeline relays + `/media/files/*` migration off skill-runner (one cutover, one rollback) — the security fix
