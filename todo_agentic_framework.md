@@ -3,8 +3,13 @@
 - date: 2026-11-24
 - status: open (planning complete 2026-11-25 — all framework design
   questions decided; S13 `okr` skill built + registered 2026-11-25; Q15
-  domain knowledge decided 2026-11-26; next: first org-goals pass; Q13 first
-  agent deferred to the org-goals pass. Goal model + S13 acceptance
+  domain knowledge decided 2026-11-26; **first org-goals pass done 2026-11-26**
+  — `docs/org/goals.md` (cycle 2026-12: homelab O1 content; bluebovine O1
+  trust+traffic, O2 product-define), alignment report
+  `docs/org/alignment/2026-11-26-first-pass.md`, 4 charter drafts
+  `docs/agents/<slug>/charter.md` (pending chuck's review); Q13 first agent:
+  recommendation = `product` (sharpest machine-checkable KRs — bluebovine O2),
+  decision pending chuck. Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
@@ -623,8 +628,11 @@ New from the 2026-11-24 interview:
 2. ~~Build S13 `okr`~~ — **done 2026-11-25** (`agents-skills/okr/SKILL.md`;
    7/7 YAML guard tests pass; registered + enabled in the Skill Hub via
    `skill-hub-register.sh` — "1 added, 0 failed"; gateway list verified).
-3. First org-goals pass: produce `docs/org/goals.md` for the 2 in-scope
-   domains (homelab, bluebovine) — the monthly cycle starts.
+3. ~~First org-goals pass~~ — **done 2026-11-26** (`docs/org/goals.md` cycle
+   2026-12; alignment report `docs/org/alignment/2026-11-26-first-pass.md`;
+   4 charter drafts `docs/agents/<slug>/charter.md` — pending chuck's review).
+   The monthly cycle starts; Q13 first-agent decision pending (recommendation:
+   `product`).
 4. First agent (Q13): decide after the org-goals pass — the goals show
    which agent has the sharpest starting KR (candidates: `marketing` or
    `product`).
