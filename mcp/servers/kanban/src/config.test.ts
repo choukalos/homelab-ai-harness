@@ -280,6 +280,7 @@ test("parseUserKeys: env-var-name references resolve at boot (Phase 13.5)", () =
     chuck: process.env.LITELLM_KEY_CHUCK,
     dylan: process.env.LITELLM_KEY_DYLAN,
     empty: process.env.EMPTY_REF_TEST,
+    siri: process.env.SIRI_KEY_SERVICE,
   };
   process.env.LITELLM_KEY_CHUCK = "sk-resolved-chuck";
   process.env.LITELLM_KEY_DYLAN = "sk-resolved-dylan";
@@ -300,8 +301,16 @@ test("parseUserKeys: env-var-name references resolve at boot (Phase 13.5)", () =
     // Empty reference → fail fast.
     process.env.EMPTY_REF_TEST = "";
     assert.throws(() => parseUserKeys("ghost=EMPTY_REF_TEST"), /unset or empty/);
+    // Resolved reference that is NOT a LiteLLM key (the shared identity map
+    // may carry non-LiteLLM credentials, e.g. the siri service token) →
+    // skipped with a warning, not a startup failure.
+    process.env.SIRI_KEY_SERVICE = "24d3abcdef00ff94";
+    assert.deepEqual(
+      parseUserKeys("chuck=LITELLM_KEY_CHUCK,service=SIRI_KEY_SERVICE"),
+      { chuck: "sk-resolved-chuck" },
+    );
   } finally {
-    for (const [k, v] of Object.entries({ LITELLM_KEY_CHUCK: saved.chuck, LITELLM_KEY_DYLAN: saved.dylan, EMPTY_REF_TEST: saved.empty })) {
+    for (const [k, v] of Object.entries({ LITELLM_KEY_CHUCK: saved.chuck, LITELLM_KEY_DYLAN: saved.dylan, EMPTY_REF_TEST: saved.empty, SIRI_KEY_SERVICE: saved.siri })) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }

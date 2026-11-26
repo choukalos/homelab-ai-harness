@@ -320,11 +320,23 @@ export function parseUserKeys(value: string | undefined): Record<string, string>
     if (name === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty name`);
     if (key === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty key`);
     if (/^[A-Z_][A-Z0-9_]*$/.test(key)) {
-      const resolved = process.env[key];
+      const rawRef = key;
+      const resolved = process.env[rawRef];
       if (!resolved || resolved.trim() === "") {
-        throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} references env var ${key}, which is unset or empty`);
+        throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} references env var ${rawRef}, which is unset or empty`);
       }
       key = resolved;
+      // The shared identity map (MEMORY_USER_KEYS) may carry non-LiteLLM
+      // credentials (e.g. the siri service token). LiteLLM keys always
+      // start with 'sk-'; a resolved reference that isn't one can't
+      // authenticate to the proxy or be billed — skip it with a warning
+      // instead of failing startup. Literal values keep the fail-fast path
+      // (accepted here, rejected by validateUserKeysAtBoot if the proxy
+      // doesn't serve them).
+      if (!key.startsWith("sk-")) {
+        console.warn(`[config] USER_KEYS entry ${JSON.stringify(name)} (env ref ${rawRef}) is not a LiteLLM key — skipped`);
+        continue;
+      }
     }
     if (name in out) throw new ConfigError(`USER_KEYS has duplicate name ${JSON.stringify(name)}`);
     out[name] = key;
