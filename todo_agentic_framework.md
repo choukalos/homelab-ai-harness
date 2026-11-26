@@ -634,6 +634,26 @@ New from the 2026-11-24 interview:
    (model assignment per work type), `AGENT_CONCURRENT_TASKS` slot,
    `weekly-agent-reviews` + `monthly-org-review` cron jobs, its domain KB
    ownership named in the charter (collection creates on first write — Q15).
+
+   **Step-6 build checklist** (added 2026-11-26 — the thin WS3 build layer;
+   everything else in the framework reuses existing infrastructure):
+
+   - [ ] `AGENT_CONCURRENT_TASKS` slot category (default **1**) — env var in
+         `data/ai-kanban/harness/mcp/servers/kanban/.env` (+ `.env.example`),
+         read in `src/config.ts`; slot classification by **executor identity**
+         (cards assigned to a standing agent count against this slot regardless
+         of work kind) in the orchestrator (`src/mcp/server.ts`)
+   - [ ] Per-agent LiteLLM key — extend the user-keys pattern in
+         `homelab/litellm/config.yml`; per-key default model by work type
+         (`matrix-coder` for product/analyst, `matrix-copywriter` for
+         strategist/marketing)
+   - [ ] Cron jobs in `homelab/scheduler/schedules.json` (hot-reload,
+         America/Chicago): `weekly-agent-reviews` Fri 15:00, `monthly-org-review`
+         first Fri 15:00
+   - [ ] `pi-agent-<slug>` workspace under `data/ai-kanban/` (alongside
+         `pi-agent-chuck` / `pi-agent-dylan`)
+   - [ ] Charter names the agent's domain KB ownership (Q15) — the collection
+         creates on first write, nothing to pre-create
 7. First weekly review cycle — and the monthly clock starts.
 
 All framework design questions decided 2026-11-25 (Q13 deferred to step 4).
