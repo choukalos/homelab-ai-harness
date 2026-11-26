@@ -825,7 +825,7 @@ extensibility contract as Phase 11.
 
 ---
 
-### Phase 13 — LiteLLM key lifecycle + `.env` consolidation (agent-key driver) — **ADDED 2026-11-26 (not started — NEXT BUILD per chuck 2026-11-26: do the automated key management before building the agents; framework step-6 prerequisite)**
+### Phase 13 — LiteLLM key lifecycle + `.env` consolidation (agent-key driver) — **ADDED 2026-11-26 (IN PROGRESS — NEXT BUILD per chuck 2026-11-26: do the automated key management before building the agents; framework step-6 prerequisite)**
 
 > Trigger: the agentic framework plan (`todo_agentic_framework.md`) stands up
 > 4 standing agents, each with its own LiteLLM key (per-agent spend
@@ -859,9 +859,14 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
 
 **Work items:**
 
-- [ ] **13.1 — One `.env`**: kill the `compose/.env` duplicate (symlink, or
+- [x] **13.1 — One `.env`**: kill the `compose/.env` duplicate (symlink, or
       repoint the 12 `env_file:` refs at the root `.env`); verify per stack
       after (`docker compose config` per file + recreate smoke).
+      **Done 2026-11-26 (pi):** already consolidated since 2026-11-21 —
+      `compose/.env` is a symlink to `../.env` and all 12 `env_file:` refs
+      across the 10 compose files point at `../.env` (verified live);
+      `docker compose config` passes for all 10 stacks (n8n warning is
+      pre-existing: N8N_DB_* unset, unrelated).
 - [ ] **13.2 — `key rotate <name>`** in `lib/litellm-keys.sh`: one command —
       mint in proxy → atomically update `.env` (Phase 0 backup first) →
       regenerate derived maps (13.3) → restart affected containers →
@@ -875,10 +880,18 @@ versioning stays a Phase 9 question (agenda item 3), deferred.
       keyed by alias (`product:control`) instead of raw suffixes; kanban
       server resolves alias → key (kanban harness change, small — separate
       repo: `data/ai-kanban`).
-- [ ] **13.4 — `key inventory`**: generate the §1 key table from the proxy
+- [x] **13.4 — `key inventory`**: generate the §1 key table from the proxy
       (`/key/info` + access groups + spend) so the table is never
       hand-maintained; reuse the output in the Phase 6
       `scripts/audit-litellm-keys.sh`.
+      **Done 2026-11-26 (pi):** `./homelab.sh key inventory [--json]` in
+      `lib/litellm-keys.sh` — builds the §1-format table from `/key/list` +
+      `/key/info` (incl. `access_group_ids`) + `/v1/access_group/{id}` (group
+      name + MCP server count); appends the master-key row; `--json` for the
+      audit script. Verified live (4 rows: chuck, dylan, memory-service,
+      master). Note: no list-all-groups endpoint exists in v1.104.0
+      (`GET /mcp/access/groups` returns 200 empty) — groups resolved per-ID
+      from each key's `access_group_ids`.
 - [ ] **13.5 — Agent key conventions** (feeds the framework plan's step 6):
       aliases = slugs (`product`, `analyst`, `strategist`, `marketing`);
       mint via `key add` with per-key model default by work type

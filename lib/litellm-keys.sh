@@ -55,6 +55,29 @@ LiteLLM Key Management
 
   ./homelab.sh key unblock <key-or-alias-or-username>
       Unblock a previously blocked key.
+
+  ./homelab.sh key inventory [--json]
+      Generate the security_todo.md §1 key inventory table from the live
+      proxy (/key/list + /key/info + MCP access groups) so the table is
+      never hand-maintained (Phase 13.4). --json for machine output
+      (scripts/audit-litellm-keys.sh).
+
+  ./homelab.sh key rotate <key-or-alias-or-username> [options]
+      Rotate a key end-to-end (Phase 13.2): back up .env, mint a new key
+      with identical attributes (alias, user, models, limits, MCP access
+      groups), atomically update the .env var, regenerate derived maps,
+      restart affected containers, BLOCK the old key, reload Caddy when
+      rotating the family keys, run scripts/key-sync-check.sh.
+
+      Options:
+        --env-var VAR        .env variable holding the key (default:
+                             LITELLM_KEY_<NAME> for family keys)
+        --observe-days N     Observation window before deleting the old
+                             blocked key (default: 30)
+
+      Examples:
+        ./homelab.sh key rotate chuck
+        ./homelab.sh key rotate strategist --env-var LITELLM_KEY_STRATEGIST
 HELP
       ;;
 
@@ -65,6 +88,8 @@ HELP
     delete)  shift; _key_delete "$@" ;;
     block)   shift; _key_block "$@" ;;
     unblock) shift; _key_unblock "$@" ;;
+    inventory) shift; _key_inventory "$@" ;;
+    rotate)  shift; _key_rotate "$@" ;;
     *)
       echo "Unknown key subcommand: ${subcmd}" >&2
       _litellm help
@@ -122,7 +147,8 @@ e = {
     'blocked': info.get('blocked'),
     'expires': info.get('expires'),
     'created_at': info.get('created_at'),
-    'last_active': info.get('last_active')
+    'last_active': info.get('last_active'),
+    'access_group_ids': info.get('access_group_ids') or []
 }
 print(json.dumps(e))
 " 2>/dev/null)
@@ -509,4 +535,115 @@ print('ok' if 'blocked' in d or 'key_name' in d else 'error')
     echo "❌ Failed to unblock key. Response: ${resp}" >&2
     exit 1
   fi
+}
+
+# ── key inventory (Phase 13.4) ──
+# Generates the security_todo.md §1 key inventory table from the live
+# proxy so the table is never hand-maintained. Sources:
+#   /key/list + /key/info (per hash)  → key attrs incl. access_group_ids
+#   /v1/access_group/{id}             → MCP group name + server count
+# Columns match the §1 format: | key_alias | user_id | scope | budget | rpm/tpm | notes |
+# The master key is not in /key/list — it is appended as a static row.
+
+_key_inventory() {
+  local format="table"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) format="json"; shift ;;
+      *) echo "Unknown option: $1 (usage: key inventory [--json])" >&2; exit 1 ;;
+    esac
+  done
+
+  if [[ -z "${LITELLM_MASTER}" ]]; then
+    echo "❌ LITELLM_MASTER_KEY not set (source .env first)." >&2
+    exit 1
+  fi
+
+  local all_json
+  all_json=$(_key_fetch_all)
+
+  # Resolve access-group IDs → {name, server count} via the proxy API.
+  local groups_json
+  groups_json=$(echo "${all_json}" | ALL_JSON="${all_json}" LITELLM_MASTER="${LITELLM_MASTER}" LITELLM_PROXY="${LITELLM_PROXY}" python3 - <<'PY'
+import os, json, urllib.request
+keys = json.loads(os.environ["ALL_JSON"])
+ids = sorted({g for k in keys for g in (k.get("access_group_ids") or [])})
+groups = {}
+for gid in ids:
+    try:
+        req = urllib.request.Request(
+            os.environ["LITELLM_PROXY"] + "/v1/access_group/" + gid,
+            headers={"Authorization": "Bearer " + os.environ["LITELLM_MASTER"]})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            d = json.load(r)
+        groups[gid] = {"name": d.get("access_group_name", ""),
+                       "servers": len(d.get("access_mcp_server_ids") or [])}
+    except Exception:
+        groups[gid] = {"name": gid, "servers": 0}
+print(json.dumps(groups))
+PY
+)
+
+  if [[ "${format}" == "json" ]]; then
+    echo "${all_json}" | ALL_JSON="${all_json}" GRP_JSON="${groups_json}" python3 - <<'PY'
+import os, json
+keys = json.loads(os.environ["ALL_JSON"])
+groups = json.loads(os.environ["GRP_JSON"])
+for k in keys:
+    k["mcp_groups"] = [groups.get(g, {}).get("name", g)
+                       for g in (k.get("access_group_ids") or [])]
+print(json.dumps(keys, indent=2))
+PY
+    return
+  fi
+
+  echo "${all_json}" | ALL_JSON="${all_json}" GRP_JSON="${groups_json}" python3 - <<'PY'
+import os, json, datetime
+keys = json.loads(os.environ["ALL_JSON"])
+groups = json.loads(os.environ["GRP_JSON"])
+
+def fmt_date(v):
+    if not v:
+        return "—"
+    try:
+        return datetime.datetime.fromisoformat(str(v).replace("Z", "")).strftime("%Y-%m-%d")
+    except Exception:
+        return str(v)[:10]
+
+def scope(k):
+    models = k.get("models") or []
+    m = ", ".join(models) if models else "all models"
+    gids = k.get("access_group_ids") or []
+    if gids:
+        g = "; ".join(
+            "{} ({} MCP)".format(groups.get(g, {}).get("name", g),
+                                 groups.get(g, {}).get("servers", "?"))
+            for g in gids)
+        return m + " + MCP: " + g
+    return m + " + MCP: none"
+
+print("| key_alias | user_id | scope | budget | rpm/tpm | notes |")
+print("|---|---|---|---|---|---|")
+for k in keys:
+    alias = k.get("alias") or "*(no alias)*"
+    uid = k.get("user_id") or "—"
+    rpm, tpm = k.get("rpm_limit"), k.get("tpm_limit")
+    rate = "{}/{}".format(rpm, tpm) if (rpm or tpm) else "none"
+    budget = k.get("max_budget")
+    budget_str = ("$" + format(budget, "g")) if budget is not None else "none"
+    notes = ["created {}".format(fmt_date(k.get("created_at")))]
+    if k.get("last_active"):
+        notes.append("last active {}".format(fmt_date(k.get("last_active"))))
+    spend = k.get("spend") or 0
+    if spend:
+        notes.append("spend ${:.2f}".format(spend))
+    if k.get("blocked"):
+        notes.append("**BLOCKED**")
+    print("| `{}` | {} | {} | {} | {} | {} |".format(
+        alias, uid, scope(k), budget_str, rate, "; ".join(notes)))
+PY
+
+  # Master key row (not in /key/list — internal only, F6).
+  local master_last4="${LITELLM_MASTER: -4}"
+  echo "| master (\`sk-...${master_last4}\`) | — | admin, everything | — | — | internal only (F6) |"
 }
