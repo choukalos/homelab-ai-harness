@@ -274,6 +274,40 @@ test("parseUserKeys: malformed entries fail fast", () => {
   assert.throws(() => parseUserKeys("chuck=sk-1,chuck=sk-2"), /duplicate name/);
 });
 
+test("parseUserKeys: env-var-name references resolve at boot (Phase 13.5)", () => {
+  // Save/restore — the test runner's environment may already carry these.
+  const saved = {
+    chuck: process.env.LITELLM_KEY_CHUCK,
+    dylan: process.env.LITELLM_KEY_DYLAN,
+    empty: process.env.EMPTY_REF_TEST,
+  };
+  process.env.LITELLM_KEY_CHUCK = "sk-resolved-chuck";
+  process.env.LITELLM_KEY_DYLAN = "sk-resolved-dylan";
+  try {
+    // MEMORY_USER_KEYS template form: name=ENV_VAR_NAME.
+    assert.deepEqual(
+      parseUserKeys("chuck=LITELLM_KEY_CHUCK,dylan=LITELLM_KEY_DYLAN"),
+      { chuck: "sk-resolved-chuck", dylan: "sk-resolved-dylan" },
+    );
+    // Mixed: literal keys and references coexist (literal keys start with
+    // 'sk-' and never match the env-var pattern).
+    assert.deepEqual(
+      parseUserKeys("chuck=LITELLM_KEY_CHUCK,other=sk-other"),
+      { chuck: "sk-resolved-chuck", other: "sk-other" },
+    );
+    // Unset reference → fail fast.
+    assert.throws(() => parseUserKeys("ghost=NO_SUCH_VAR_XYZ"), /unset or empty/);
+    // Empty reference → fail fast.
+    process.env.EMPTY_REF_TEST = "";
+    assert.throws(() => parseUserKeys("ghost=EMPTY_REF_TEST"), /unset or empty/);
+  } finally {
+    for (const [k, v] of Object.entries({ LITELLM_KEY_CHUCK: saved.chuck, LITELLM_KEY_DYLAN: saved.dylan, EMPTY_REF_TEST: saved.empty })) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
 test("parseConfig: USER_KEYS lands in cfg.userKeys (absent → {})", () => {
   const withKeys = parseConfig({ ...baseEnv, USER_KEYS: "chuck=sk-chuck,dylan=sk-dylan" });
   assert.deepEqual(withKeys.userKeys, { chuck: "sk-chuck", dylan: "sk-dylan" });

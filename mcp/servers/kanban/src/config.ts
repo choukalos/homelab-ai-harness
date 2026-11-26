@@ -84,14 +84,18 @@ const envSchema = z
       .describe("model ID in the LiteLLM config"),
     GITHUB_TOKEN: optionalNonEmpty().describe("git push auth (deploy stage)"),
 
-    // Per-user LLM spend attribution (Phase 2): name=full-key pairs.
+    // Per-user LLM spend attribution (Phase 2): name=full-key pairs, or
+    // name=ENV_VAR_NAME references resolved at boot (Phase 13.5 — the
+    // container carries the full .env via env_file, so USER_KEYS can be
+    // derived from MEMORY_USER_KEYS, the homelab-wide identity map).
     USER_KEYS: z
       .string()
-      .min(1)
       .optional()
       .describe(
         "per-user spend attribution: comma-separated name=full-LiteLLM-key pairs " +
-          "(e.g. chuck=sk-...,dylan=sk-...); sessions for work owned by a user run " +
+          "(e.g. chuck=sk-...,dylan=sk-...), or name=ENV_VAR_NAME references " +
+          "resolved from the container environment at boot (e.g. " +
+          "chuck=LITELLM_KEY_CHUCK); sessions for work owned by a user run " +
           "against the proxy with that user's key",
       ),
 
@@ -291,6 +295,15 @@ const ENV_LINE_RE = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
  * Parse USER_KEYS (`name=full-key,name2=full-key2`, comma-separated).
  * Names are trimmed, must be non-empty and unique; keys must be non-empty.
  * Malformed entries throw a ConfigError (fail fast, PLAN.md §1).
+ *
+ * Phase 13.5: a key value that looks like an env-var name (`^[A-Z_][A-Z0-9_]*$`)
+ * is resolved from the container environment at boot. This lets USER_KEYS be
+ * derived from MEMORY_USER_KEYS (the homelab-wide identity map, whose values
+ * are env-var NAMES, not literal keys) — single source of truth, and agent
+ * stand-up (`key add-agent`) needs no per-agent compose edit. Literal keys
+ * never match the pattern (they start with `sk-`), so both forms coexist.
+ * An unset/empty referenced var throws (fail fast, consistent with the rest
+ * of this parser).
  */
 export function parseUserKeys(value: string | undefined): Record<string, string> {
   if (!value || value.trim() === "") return {};
@@ -300,12 +313,19 @@ export function parseUserKeys(value: string | undefined): Record<string, string>
     if (entry === "") continue;
     const eq = entry.indexOf("=");
     if (eq <= 0) {
-      throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} is malformed (expected name=full-key)`);
+      throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} is malformed (expected name=full-key or name=ENV_VAR_NAME)`);
     }
     const name = entry.slice(0, eq).trim();
-    const key = entry.slice(eq + 1).trim();
+    let key = entry.slice(eq + 1).trim();
     if (name === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty name`);
     if (key === "") throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} has an empty key`);
+    if (/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+      const resolved = process.env[key];
+      if (!resolved || resolved.trim() === "") {
+        throw new ConfigError(`USER_KEYS entry ${JSON.stringify(entry)} references env var ${key}, which is unset or empty`);
+      }
+      key = resolved;
+    }
     if (name in out) throw new ConfigError(`USER_KEYS has duplicate name ${JSON.stringify(name)}`);
     out[name] = key;
   }
