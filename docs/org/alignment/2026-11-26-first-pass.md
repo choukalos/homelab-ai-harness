@@ -55,10 +55,11 @@ Full drafts in `docs/agents/<slug>/charter.md` (objectives/KRs sections only).
   close second (homelab content KRs are checkable via inventory + board), but
   its execution depends on the strategist's content strategy landing first
   (dependency chain: strategy → calendar → production).
-- **First-agent recommendation**: stand up `product` first (self-contained
-  three-artifact sequence: market analysis → pitch → PRD; all PM skills
-  built), then `marketing` once the strategist's homelab content strategy
-  exists. Decision: chuck's (Q13).
+- **Q13 decision (chuck, 2026-11-26)**: stand up **`strategist` first, then
+  `marketing`** — "the main ones that can get started sooner rather than
+  later." Rationale: the homelab content chain (strategist O2 → marketing O1)
+  serves the cycle's main goal (Homelab O1) and both agents' skills are built;
+  `product` (bluebovine O2) follows after.
 - **Content inventory doesn't exist yet** — `docs/roles/content-marketer/
   inventory.md` is created at first publish; KR1/KR2 sources are live from
   day one via board done tasks until then.

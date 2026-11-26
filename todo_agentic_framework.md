@@ -7,9 +7,10 @@
   — `docs/org/goals.md` (cycle 2026-12: homelab O1 content; bluebovine O1
   trust+traffic, O2 product-define), alignment report
   `docs/org/alignment/2026-11-26-first-pass.md`, 4 charter drafts
-  `docs/agents/<slug>/charter.md` (pending chuck's review); Q13 first agent:
-  recommendation = `product` (sharpest machine-checkable KRs — bluebovine O2),
-  decision pending chuck. Goal model + S13 acceptance
+  `docs/agents/<slug>/charter.md` (pending chuck's review); Q13 decided
+  2026-11-26: stand up `strategist` first, then `marketing` (chuck — the ones
+  that can start sooner; serves Homelab O1, the cycle's main goal); `product`
+  follows. Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
