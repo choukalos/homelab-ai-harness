@@ -16,7 +16,9 @@
 > monitoring — CF tunnel, InvestHub, blog, extensible registry) added
 > 2026-11-24 (not started). Phase 12 (file bridge `mcp_filebridge` — unified
 > file edge: public relay + work areas + publish targets; D10–D16 decided
-> 2026-11-24) added 2026-11-24 (not started).
+> 2026-11-24) added 2026-11-24 (not started). Phase 13 (LiteLLM key
+> lifecycle + `.env` consolidation — the agent-key driver; the decided slice
+> of the Phase 9 stub) added 2026-11-26 (not started).
 > Goal: only Chuck's and Dylan's LiteLLM keys may reach `llm.choukalos.com` /
 > `siri.choukalos.com`; every other layer (LAN exposure, host firewall, key
 > hygiene, monitoring) hardened in depth.
@@ -439,6 +441,11 @@ Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY
 > discussion). Goal: turn ad-hoc key handling into a program — inventory,
 > delivery, rotation, breach response — and decide how far to move away from
 > the single massive `.env`.
+>
+> **2026-11-26:** the LiteLLM/agent-key slice is scoped and decided as
+> **Phase 13** (key lifecycle tooling, `.env` dedupe, alias-based capability
+> map, agent key conventions) — the agent-driven subset of this agenda
+> (items 1/2-lite/4 for the LiteLLM class). The rest of this agenda stands.
 
 **Current state (facts, 2026-11-21):**
 - One massive `.env` at repo root — 97 vars, ~30 secrets (LiteLLM keys,
@@ -817,6 +824,78 @@ extensibility contract as Phase 11.
 
 ---
 
+### Phase 13 — LiteLLM key lifecycle + `.env` consolidation (agent-key driver) — **ADDED 2026-11-26 (not started)**
+
+> Trigger: the agentic framework plan (`todo_agentic_framework.md`) stands up
+> 4 standing agents, each with its own LiteLLM key (per-agent spend
+> attribution) + a `MEMORY_USER_KEYS` entry + a kanban capability entry + a
+> per-key model default. Rotation/drop today is a 5-step manual loop (create
+> → edit two `.env` files → hand-edit the suffix map → restart consumers →
+> block/observe/delete) — run ~4× at agent standup, then periodically.
+> **Scope note:** this is the decided, agent-driven slice of the Phase 9
+> stub's grooming agenda (LiteLLM-class rotation + the `.env` dedupe). The
+> broader program (per-service env delivery, SOPS/at-rest decision,
+> all-secrets inventory, breach runbook) stays in Phase 9.
+
+**Assessment (2026-11-26):** the architecture is sound — the LiteLLM proxy
+DB is already the source of truth for LLM keys (`./homelab.sh key
+add/list/block/delete` exists), `.env` is bootstrap + name-references
+(`MEMORY_USER_KEYS=chuck=$LITELLM_KEY_CHUCK,...`), per-key MCP scoping is in
+place (Phase 2). What's missing is the *operations* layer. **No new secrets
+manager** (Vault/Infisical/Doppler rejected — a crown-jewel daemon holding
+every secret contradicts this plan's surface-shrink direction and is overkill
+for a single-operator homelab; realistic risks are drift, stale keys,
+accidental exposure — all addressed below). SOPS+age for encrypted
+versioning stays a Phase 9 question (agenda item 3), deferred.
+
+**Findings (verified 2026-11-26):**
+- Two near-identical `.env` files (root + `compose/`, both gitignored, ~95
+  vars each) → drift hazard. 12 compose files consume via `env_file:`.
+- `KANBAN_MCP_KEY_CAPABILITIES` is keyed by **raw key suffixes**
+  (`faxfoUszvw:admin;…`) — rotating a key silently breaks the map.
+- The §1 key inventory table is hand-maintained; `key list` exists but isn't
+  wired to it.
+
+**Work items:**
+
+- [ ] **13.1 — One `.env`**: kill the `compose/.env` duplicate (symlink, or
+      repoint the 12 `env_file:` refs at the root `.env`); verify per stack
+      after (`docker compose config` per file + recreate smoke).
+- [ ] **13.2 — `key rotate <name>`** in `lib/litellm-keys.sh`: one command —
+      mint in proxy → atomically update `.env` (Phase 0 backup first) →
+      regenerate derived maps (13.3) → restart affected containers →
+      **block old key** → print "observe N days, then `key delete <name>`"
+      (the block → observe → delete pattern from the F5/Phase 3 work).
+      Includes the Caddy reload step when rotating `LITELLM_KEY_CHUCK`/
+      `LITELLM_KEY_DYLAN` (Phase 1 note) and a `scripts/key-sync-check.sh`
+      run at the end. Subsumes the Phase 6 quarterly-rotation cadence for
+      the family keys.
+- [ ] **13.3 — Alias-based capability map**: `KANBAN_MCP_KEY_CAPABILITIES`
+      keyed by alias (`product:control`) instead of raw suffixes; kanban
+      server resolves alias → key (kanban harness change, small — separate
+      repo: `data/ai-kanban`).
+- [ ] **13.4 — `key inventory`**: generate the §1 key table from the proxy
+      (`/key/info` + access groups + spend) so the table is never
+      hand-maintained; reuse the output in the Phase 6
+      `scripts/audit-litellm-keys.sh`.
+- [ ] **13.5 — Agent key conventions** (feeds the framework plan's step 6):
+      aliases = slugs (`product`, `analyst`, `strategist`, `marketing`);
+      mint via `key add` with per-key model default by work type
+      (`matrix-coder` / `matrix-copywriter`); `MEMORY_USER_KEYS` + kanban
+      capability map updated in the same command (13.2/13.3 make this
+      mechanical); the first rotation drill = agent standup itself
+      (mint → verify → record in §1).
+
+Rollback: 13.1 restore `compose/.env` from git/backup + recreate; 13.2/13.4
+are additive script functions (delete = rollback); 13.3 revert the kanban
+capability map to suffix form (git) + recreate; 13.5 `key delete <slug>`.
+
+**Out of scope (Phase 9):** per-service env delivery (the carrier problem),
+SOPS/encrypted at-rest, all-secrets inventory + breach runbook, non-LiteLLM
+rotation runbooks (MySQL, Qdrant, app keys).
+
+---
+
 ## 6. Decisions & open questions
 
 ### Resolved (2026-09-06)
@@ -836,6 +915,7 @@ extensibility contract as Phase 11.
 | D14 | Publish targets (Phase 12) | **Blog (homelab files area) + NAS now; bluebovine later** (2026-11-24) — not set up yet, no impl now, but the adapter interface must make adding targets trivial |
 | D15 | File-bridge phasing (Phase 12) | **Agreed** (2026-11-24): P12-A public face (relays + `/media/files` migration) → P12-B MCP tools + registry → P12-C publish engine |
 | D16 | File-bridge naming (Phase 12) | **`mcp_filebridge`** (chuck, 2026-11-24) — "the bridge files cross between public and internal"; no collision with `mcp_filesystem`/`_readonly`. Alternatives considered: `mcp_filegate`, `mcp_fileport`, `mcp_fileedge` |
+| D17 | Key-management architecture (Phase 13) | **No new secrets manager** (chuck, 2026-11-26 — Vault/Infisical rejected: crown-jewel daemon, overkill for single-operator). Keep proxy-as-source-of-truth + `.env` bootstrap; fix the operations layer: one `.env`, `key rotate` (block → observe → delete), alias-based kanban capability map, generated key inventory. SOPS/at-rest stays a Phase 9 question |
 
 ### Open
 

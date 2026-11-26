@@ -643,10 +643,12 @@ New from the 2026-11-24 interview:
          read in `src/config.ts`; slot classification by **executor identity**
          (cards assigned to a standing agent count against this slot regardless
          of work kind) in the orchestrator (`src/mcp/server.ts`)
-   - [ ] Per-agent LiteLLM key — extend the user-keys pattern in
-         `homelab/litellm/config.yml`; per-key default model by work type
-         (`matrix-coder` for product/analyst, `matrix-copywriter` for
-         strategist/marketing)
+   - [ ] Per-agent LiteLLM key — mint via `./homelab.sh key add <slug>`
+         (proxy API; token → `.env` as `LITELLM_KEY_<SLUG>`); per-key default
+         model by work type (`matrix-coder` for product/analyst,
+         `matrix-copywriter` for strategist/marketing); key lifecycle per
+         security_todo.md **Phase 13** (one `.env`, `key rotate`,
+         alias-based kanban capability map, `MEMORY_USER_KEYS` entry)
    - [ ] Cron jobs in `homelab/scheduler/schedules.json` (hot-reload,
          America/Chicago): `weekly-agent-reviews` Fri 15:00, `monthly-org-review`
          first Fri 15:00
