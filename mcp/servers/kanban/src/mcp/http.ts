@@ -101,7 +101,7 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteDeps): voi
       }
       allowed = undefined; // full tool set for the proxy's global registry
     } else {
-      const resolved = resolveMcpCapabilities(bearer, deps.cfg.litellm.apiKey, mapping);
+      const resolved = resolveMcpCapabilities(bearer, deps.cfg.litellm.apiKey, mapping, deps.cfg.userKeys);
       if (!resolved) {
         reply.code(401).send({
           jsonrpc: "2.0",
@@ -110,7 +110,8 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteDeps): voi
             code: -32001,
             message:
               "unauthorized: this key is not authorized for the kanban MCP endpoint " +
-              "(add it to MCP_KEY_CAPABILITIES with a capability set, e.g. <key-suffix>:read)",
+              "(add it to MCP_KEY_CAPABILITIES with a capability set, e.g. <alias>:read " +
+              "or <key-suffix>:read)",
           },
         });
         return;

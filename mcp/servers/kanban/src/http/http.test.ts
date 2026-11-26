@@ -1419,6 +1419,131 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
   await app.close();
 });
 
+test("MCP: alias-keyed capability entry resolves via USER_KEYS full-key match (Phase 13.3)", async () => {
+  const ctx = await makeApp({
+    userKeys: { chuck: "sk-chuck-alias-key" },
+    mcpKeyCapabilities: new Map([["chuck", new Set(["read"])]]),
+  });
+  const { app } = ctx;
+  const call = (key: string, method: string, params: Record<string, unknown> = {}) =>
+    app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${key}`,
+      },
+      payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+
+  // The alias's full key → read-scoped tools.
+  const list = await call("sk-chuck-alias-key", "tools/list");
+  const names = parseRpc(list.payload).result.tools.map((t: any) => t.name).sort();
+  assert.deepEqual(names, READ_TOOLS, "alias full-key match → read tools only");
+
+  // A different key → 401.
+  const bad = await call("sk-someone-else", "tools/list");
+  assert.equal(bad.statusCode, 401, "non-matching key rejected");
+  await app.close();
+});
+
+test("MCP: alias entry survives key rotation (map unchanged, USER_KEYS updated)", async () => {
+  // Before rotation: alias 'chuck' → old key value.
+  const before = await makeApp({
+    userKeys: { chuck: "sk-old-value" },
+    mcpKeyCapabilities: new Map([["chuck", new Set(["read"])]]),
+  });
+  const resOld = await before.app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-old-value",
+    },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  assert.equal(resOld.statusCode, 200, "old key authorized before rotation");
+  await before.app.close();
+
+  // After rotation: same capability map, USER_KEYS now holds the NEW value.
+  const after = await makeApp({
+    userKeys: { chuck: "sk-new-value" },
+    mcpKeyCapabilities: new Map([["chuck", new Set(["read"])]]),
+  });
+  const resNew = await after.app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-new-value",
+    },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  assert.equal(resNew.statusCode, 200, "new key authorized with the SAME capability map");
+  const resOldAfter = await after.app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-old-value",
+    },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  assert.equal(resOldAfter.statusCode, 401, "old key no longer matches the alias");
+  await after.app.close();
+});
+
+test("MCP: alias entries never fall back to suffix matching", async () => {
+  // 'chuck' is a USER_KEYS alias — a key that merely ENDS with 'chuck'
+  // must NOT match the alias entry (legacy suffix semantics are disabled
+  // for known aliases).
+  const ctx = await makeApp({
+    userKeys: { chuck: "sk-the-real-chuck-key" },
+    mcpKeyCapabilities: new Map([["chuck", new Set(["read"])]]),
+  });
+  const res = await ctx.app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-ends-with-chuck",
+    },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  assert.equal(res.statusCode, 401, "suffix-like key rejected for an alias entry");
+  await ctx.app.close();
+});
+
+test("MCP: mixed map — alias entries + legacy suffix entries coexist", async () => {
+  const ctx = await makeApp({
+    userKeys: { dylan: "sk-dylan-full" },
+    mcpKeyCapabilities: new Map([
+      ["dylan", new Set(["read"])],
+      ["legacy99", new Set(["read"])],
+    ]),
+  });
+  const call = (key: string) =>
+    ctx.app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${key}`,
+      },
+      payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+  assert.equal((await call("sk-dylan-full")).statusCode, 200, "alias entry works");
+  assert.equal((await call("sk-anything-legacy99")).statusCode, 200, "legacy suffix entry works");
+  assert.equal((await call("sk-stranger")).statusCode, 401, "unknown key rejected");
+  await ctx.app.close();
+});
+
 test("MCP: edit_idea + delete_project round-trip", async () => {
   const ctx = await makeApp();
   const { app, services, db } = ctx;

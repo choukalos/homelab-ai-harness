@@ -120,12 +120,14 @@ function expandCapabilities(set: readonly string[]): Set<string> {
 }
 
 /**
- * Parse the MCP_KEY_CAPABILITIES env var: `key-suffix:cap1,cap2;...` where
- * key-suffix is the TAIL of a Bearer key (keys are secret — match on the
- * last N chars) and caps are capability sets (read/control/admin) or
- * individual tool names. The kanban key (LITELLM_API_KEY) always gets the
- * full set. Unknown entries are dropped; an empty/invalid mapping yields
- * {} (every non-kanban key is rejected with a clear error).
+ * Parse the MCP_KEY_CAPABILITIES env var: `keyref:cap1,cap2;...` where
+ * keyref is either a key ALIAS (resolved to the full key via USER_KEYS —
+ * stable across key rotation, Phase 13.3) or the TAIL of a Bearer key
+ * (legacy suffix form — keys are secret, match on the last N chars).
+ * caps are capability sets (read/control/admin) or individual tool names.
+ * The kanban key (LITELLM_API_KEY) always gets the full set. Unknown
+ * entries are dropped; an empty/invalid mapping yields {} (every
+ * non-kanban key is rejected with a clear error).
  */
 export function parseMcpKeyCapabilities(raw: string | undefined): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
@@ -150,19 +152,29 @@ export function parseMcpKeyCapabilities(raw: string | undefined): Map<string, Se
 /**
  * Resolve the allowed tool set for a Bearer key:
  * - the kanban key (LITELLM_API_KEY) → the full tool set (always);
- * - a key whose tail matches a MCP_KEY_CAPABILITIES entry → that entry's
- *   expanded tools;
+ * - a keyref that is a USER_KEYS alias and the Bearer key equals the
+ *   alias's full key → that entry's expanded tools (Phase 13.3 — exact
+ *   full-key match, stable across key rotation);
+ * - a key whose tail matches a legacy suffix entry → that entry's
+ *   expanded tools (backward compatibility);
  * - anything else → null (the endpoint rejects the request with a clear
  *   "key not authorized" error).
+ *
+ * Alias entries NEVER fall back to suffix matching (no ambiguity);
+ * keyrefs absent from userKeys keep the legacy suffix semantics.
  */
 export function resolveMcpCapabilities(
   bearerKey: string,
   kanbanKey: string,
   mapping: Map<string, Set<string>> = new Map(),
+  userKeys: Record<string, string> = {},
 ): Set<string> | null {
   if (bearerKey === kanbanKey) return new Set(MCP_TOOL_NAMES);
-  for (const [suffix, caps] of mapping) {
-    if (bearerKey.length >= suffix.length && bearerKey.endsWith(suffix)) {
+  for (const [keyref, caps] of mapping) {
+    const aliasKey = userKeys[keyref];
+    if (aliasKey !== undefined) {
+      if (bearerKey === aliasKey) return expandCapabilities([...caps]);
+    } else if (bearerKey.length >= keyref.length && bearerKey.endsWith(keyref)) {
       return expandCapabilities([...caps]);
     }
   }
