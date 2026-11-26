@@ -9,15 +9,18 @@
 > render held GPU 1 — full-footprint check deferred), 4–7 deferred (need a quiet
 > GPU 1 window and/or the Matrix console); Matrix-side doc updates
 > (contract v1.2, profile comment, Matrix TODO.md) pending the same.
-> **2026-11-26 verification session: check 5 PASS** (live fallback fired —
-> dead-upstream request returned 200 from qwen38-27b in 0.5 s, no 5xx to the
-> caller) and surfaced a real bug: the per-entry `fallbacks:` idiom (used by
+> **2026-11-26 verification session: checks 4, 5, 6 PASS** (live fallback
+> fired — dead-upstream request returned 200 from qwen38-27b in 0.5 s, no 5xx
+> to the caller; idle-unload confirmed at the keep_alive expiry; evict-on-media
+> confirmed — TTS job start evicted the loaded copywriter and completed
+> cleanly). Also surfaced a real bug: the per-entry `fallbacks:` idiom (used by
 > this entry AND `matrix-coder`) bypasses the router and 500s on group
 > aliases. Fallbacks moved to router-level `router_settings.fallbacks`
 > (config applied + proxy recreated 2026-11-26 15:53 UTC with
 > `--force-recreate`; verified live). Check 3 partially confirmed from Thor
-> (loaded + VRAM slice via `/api/ps`); 4/6/7 still deferred (quiet GPU 1
-> window + Matrix console). See "Verification session 2026-11-26" below.
+> (loaded + VRAM slice via `/api/ps`); 7 still deferred (Matrix console —
+> Thor→Matrix ssh re-tested and denied 2026-11-26 16:23 UTC). See
+> "Verification session 2026-11-26" below.
 > Option A from the 2026-11-25 GPU-1 sidecar discussion: Ollama tenant on GPU 1,
 > exposed through Thor LiteLLM with a fallback to `matrix-coder`.
 
@@ -140,9 +143,14 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       listed, 642→714→1353 MB slice across the render window — degraded while
       media/ComfyUI hold GPU 1). Full ~22 GB footprint + GPU index via
       `nvidia-smi -i 1` still need the Matrix console.
-- [ ] **4. Idle unload** (Matrix): wait 5 min with no requests → `ollama ps` empty,
+- [x] **4. Idle unload** (Matrix): wait 5 min with no requests → `ollama ps` empty,
       `nvidia-smi -i 1` back to media-pipeline baseline. (Observable from Thor via
-      `http://192.168.4.55:11434/api/ps`.)
+      `http://192.168.4.55:11434/api/ps`.) — **PASS 2026-11-26 16:30:47 UTC**:
+      loaded with expiry 16:30:10 (after one one-off expiry reset ~16:25 with no
+      copywriter traffic via the proxy — logs checked; expiry then held stable
+      across 16:25:58/16:29:02 samples) → gemma4:31b GONE at 16:30:47 (37 s past
+      expiry). `nomic-embed-text` stayed loaded on its own keep_alive (periodic
+      KB/memory embedding traffic — unrelated).
 - [x] **5. Fallback**: with GPU 1 held (ComfyUI hot at ~18 GB, or a media job
       running), request `matrix-copywriter` from Thor → reply comes back from
       `qwen38-27b` (check LiteLLM logs for the fallback event; the response content
@@ -157,14 +165,21 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
       served by `qwen38-27b`**, zero 5xx. The per-entry idiom on the SAME
       dead-upstream shape returned **500 in 10 s** ("LLM Provider NOT provided")
       — see the findings below. Test entry + its fallback deleted after the test.
-- [ ] **6. Evict-on-media**: load the copywriter (step 2), then queue a small media
+- [x] **6. Evict-on-media**: load the copywriter (step 2), then queue a small media
       job (e.g., TTS) → pipeline log shows the headroom-guard `ollama stop`, job
       completes, no OOM. (Passive variant: watch `/api/ps` while a media job runs —
       the guard evicts Ollama at job start. Do NOT queue an extra job while the
-      production render is running.)
+      production render is running.) — **PASS 2026-11-26 16:31 UTC**: copywriter
+      loaded cold (20.5 s, 1353 MB VRAM, expiry 16:36:19) → TTS job
+      `1f3f3b62ef93` submitted ~16:31:20 → `/api/ps` at 16:31:29 shows gemma4:31b
+      **already evicted** (guard fired at job start; nomic-embed-text also stopped)
+      → job completed `done` with `vo.wav` produced, no OOM. (Pipeline log line not
+      observable from Thor — the eviction + clean completion is the behavior check.)
 - [ ] **7. Manual swap still works**: `model-manager gpu1 swap media` then
       `model-manager gpu1 swap copywriter` — clean both ways. (Matrix-side;
-      deferred — no Thor→Matrix ssh.)
+      deferred — no Thor→Matrix ssh: re-tested 2026-11-26 16:23 UTC, `Permission
+      denied (publickey,password)`. `model-manager` is GPU-host-local only —
+      no remote-callable path exists (docs/media-mcp-handoff.md).)
 
 ## Step 5 — Doc updates
 
@@ -226,10 +241,10 @@ running on Matrix — deliberately, to prove coexistence. Findings:
 - **No interference with the render**: task 13 stayed `running` with no
   failures throughout the test window.
 
-**Deferred checks (quiet window / Matrix console):** 3 (full ~22 GB footprint +
-GPU index via `nvidia-smi -i 1` — loaded state confirmed from Thor 2026-11-26),
-4 (idle unload), 6 (new-job eviction), 7 (`model-manager gpu1 swap`).
-Check 5 (live fallback) completed 2026-11-26 — see below.
+**Deferred checks:** 3 (full ~22 GB footprint + GPU index via `nvidia-smi -i 1` —
+loaded state confirmed from Thor 2026-11-26), 7 (`model-manager gpu1 swap` —
+Matrix console; Thor→Matrix ssh re-tested and denied 2026-11-26).
+Checks 4, 5, 6 completed 2026-11-26 — see below.
 
 ---
 
@@ -285,9 +300,18 @@ same prompt returns the correct reply ("COPYWRITER-OK"). Confirms the existing
   twin → router fallback fired, 200 from `qwen38-27b` in ~0.5 s, no 5xx.
 - **3 (loaded on GPU 1): PARTIAL** — loaded + VRAM slice confirmed from Thor via
   `/api/ps`; full footprint + GPU index still need the Matrix console.
-- **4/6/7: still deferred** — idle unload (the keep_alive expiry kept resetting
-  while Ollama rescheduled VRAM), evict-on-media (needs a NEW media job starting
-  while the model is loaded), manual swap (Matrix console; Thor→Matrix ssh denied).
+- **4 (idle unload): PASS** (16:30:47 UTC) — loaded state with expiry 16:30:10
+  (one one-off expiry reset ~16:25 with no proxy copywriter traffic — logs
+  checked; expiry then stable across two 3-min-spaced samples) → model GONE
+  37 s past expiry. `nomic-embed-text` retained on its own keep_alive.
+- **6 (evict-on-media): PASS** (16:31 UTC) — copywriter loaded cold (20.5 s,
+  1353 MB VRAM) → TTS job `1f3f3b62ef93` submitted ~16:31:20 → model already
+  evicted at 16:31:29 (guard fired at job start) → job `done`, `vo.wav`
+  produced, no OOM. Pipeline log line not observable from Thor — the eviction +
+  clean completion is the behavior check.
+- **7 (manual swap): still deferred** — Matrix console; Thor→Matrix ssh
+  re-tested 2026-11-26 16:23 UTC (`Permission denied (publickey,password)`);
+  `model-manager` is GPU-host-local with no remote path.
 
 ---
 
