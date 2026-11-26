@@ -349,7 +349,10 @@ Validation:
 
 ## Phase 17 - Matrix 8189 → LAN-only (post-P12-A file-bridge cutover)
 
-> **✅ DONE 2026-11-26 (validated from thor).** LAN `192.168.4.55:8189/health`
+> **✅ DONE 2026-11-26 (validated from thor).** Mechanism: pipeline service
+> rebound `0.0.0.0:8189` → `192.168.4.55:8189` (LAN IP only; the ufw
+> deny-from-any + allow-LAN layer is deferred as an optional extra — the
+> rebind alone achieves LAN-only). Validation: LAN `192.168.4.55:8189/health`
 > → 200; external vantage points (check-host.net US + IL) TCP
 > `104.5.56.59:8189` → connection timeout (filtered); public download via the
 > bridge → 200 + sha256 identical (full path CF → tunnel → Caddy → bridge →
