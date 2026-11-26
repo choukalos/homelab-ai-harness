@@ -11,8 +11,9 @@
 > found broken during verification (bypasses the router, 500s on group
 > aliases) and replaced with router-level `router_settings.fallbacks` (config
 > applied + proxy recreated 2026-11-26 15:53 UTC with `--force-recreate`;
-> verified live). Residual (Matrix console only): the Matrix-side doc updates
-> in Step 5 (contract v1.2, profile comment, Matrix TODO.md).
+> verified live). Matrix-side doc updates (contract v1.2, profile comment,
+> Matrix TODO.md) completed on Matrix 2026-11-26 (user-confirmed; committed +
+> pushed in the Matrix repo). No residuals.
 > Option A from the 2026-11-25 GPU-1 sidecar discussion: Ollama tenant on GPU 1,
 > exposed through Thor LiteLLM with a fallback to `matrix-coder`.
 
@@ -186,9 +187,8 @@ GPU *index* is not visible from Thor — the profile pins `device_ids: ['1']`).
   verified via `GET /v1/models`)
 - This plan doc — status APPLIED + observed-behavior section
 
-**Matrix side — PENDING (the only residual after the 2026-11-26 close;
-needs the Matrix console; Thor has no ssh to Matrix, `chuck@192.168.4.55`
-key-auth denied, re-tested 2026-11-26 16:23 UTC):**
+**Matrix side — DONE 2026-11-26** (user-confirmed on the Matrix console;
+committed + pushed in the Matrix repo):
 
 1. **`docs/matrix_thor_contract.md` → v1.2**: add the row to §3 alias table:
    ```
@@ -200,6 +200,11 @@ key-auth denied, re-tested 2026-11-26 16:23 UTC):**
    `alias: matrix-copywriter  # NEW LiteLLM alias (Phase 3/4 adds the Thor entry)`
    → `alias: matrix-copywriter  # LIVE in Thor LiteLLM since 2026-11-25 (fallback → matrix-coder)`.
 3. **`TODO.md` (Matrix)**: close the "Thor entry" checkbox.
+
+(Note: item 1's fallback note referenced the per-entry idiom as originally
+specified — the applied state uses the router-level fallback
+(`router_settings.fallbacks`) per the 2026-11-26 fix; the Matrix docs record
+the fallback → `matrix-coder` behavior either way.)
 
 ## Observed behavior (applied 2026-11-25, render running)
 
@@ -239,8 +244,8 @@ running on Matrix — deliberately, to prove coexistence. Findings:
   failures throughout the test window.
 
 **All checks closed 2026-11-26** (1–6 PASS; 3 closed with the
-operator-confirmed footprint; 7 closed without a live test). Residual:
-the Matrix-side doc updates in Step 5 (Matrix console only).
+operator-confirmed footprint; 7 closed without a live test). No residuals —
+the Matrix-side doc updates in Step 5 were completed on Matrix 2026-11-26.
 
 ---
 
