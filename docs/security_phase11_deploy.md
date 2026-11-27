@@ -1,10 +1,14 @@
 # SEC Phase 11 deploy — public-surface security monitoring
 
 **Date:** 2026-11-27 (built on `task/security-phase11`; branch base `b60c01b`)
-**Status:** DEPLOYING 2026-11-27 — merged to `main` + pushed (`edd1c51`);
-non-sudo steps 4 (status) + 5 (metrics symlink) done; **sudo steps 1–3
-(timer install, first daily scan, first weekly schema baseline) pending
-user execution** (no passwordless sudo on this host).
+**Status:** DEPLOYED 2026-11-27 — merged to `main` (`edd1c51`); all 6
+steps executed and verified: 4 timers live (surface daily ~01:15 /
+weekly Sun 04:40, offset from Phase 10's 00:30 / 04:30), first daily
+scan 7 notes / 0 anomalies (2026-11-27 14:01 UTC), first weekly run
+BASELINE CAPTURED (26 tables / 244 cols / 18 privs), `security
+surface` status verified, surface metrics scrape-verified via the
+auto-synced copy (post-deploy fixes: `9d229df` — status marker EACCES
++ node_exporter symlink blind spot).
 **Design source of truth:** `security_todo.md` §Phase 11.
 **Task report (evidence):** `docs/security_phase11_report.md`.
 
