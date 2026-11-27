@@ -328,15 +328,24 @@ check_account_cron_timer_drift() {
 
   base_cron="$(baseline_section CRON | sort)"
   lc="$(live_cron | sort)"
-  local line
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    add_finding anomaly cron-drift "cron state changed: $line" "live cron state vs baseline"
-  done < <(comm -13 <(printf '%s\n' "$base_cron") <(printf '%s\n' "$lc"))
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    add_finding note cron-drift "cron entry gone from live: $line"
-  done < <(comm -23 <(printf '%s\n' "$base_cron") <(printf '%s\n' "$lc"))
+  local line spool_live spool_base
+  # Privilege guard: a non-root scan sees the cron spool as UNREADABLE while
+  # a root-captured baseline has real entries — diffing them produces
+  # spurious drift. Be honest: note it and skip the cron diff.
+  spool_live="$(printf '%s\n' "$lc" | grep -c '^UNREADABLE /var/spool/cron/crontabs$' || true)"
+  spool_base="$(printf '%s\n' "$base_cron" | grep -c '^UNREADABLE /var/spool/cron/crontabs$' || true)"
+  if (( spool_live == 1 && spool_base == 0 )); then
+    add_finding note cron-drift "cron spool unreadable (non-root scan) vs root baseline — cron diff skipped; re-run as root for the full check"
+  else
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      add_finding anomaly cron-drift "cron state changed: $line" "live cron state vs baseline"
+    done < <(comm -13 <(printf '%s\n' "$base_cron") <(printf '%s\n' "$lc"))
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      add_finding note cron-drift "cron entry gone from live: $line"
+    done < <(comm -23 <(printf '%s\n' "$base_cron") <(printf '%s\n' "$lc"))
+  fi
 
   base_timers="$(baseline_section TIMERS | sort -u)"
   lt="$(live_timers)"
@@ -399,32 +408,35 @@ check_sensitive_files() {
 }
 
 check_processes() {
-  # Long-running (>24h) host processes not attributable to a container or a
-  # running systemd service -> note. Containerized processes are attributed
-  # via the cgroup docker id (container drift covers them); kernel threads
-  # have cgroup "-".
-  local units
-  units="$(systemctl list-units --type=service --state=running --no-legend --plain 2>/dev/null | awk '{ print $1 }' || true)"
-  local -A unit_set=()
-  local u
-  while IFS= read -r u; do
-    [[ -n "$u" ]] || continue
-    unit_set["$u"]=1
-    unit_set["${u%.service}"]=1
-  done < <(printf '%s\n' "$units")
-  local line pid etimes comm cgroup
+  # Long-running (>24h) host processes not attributable to a container,
+  # a system.slice unit, a user session, or init -> note. Attribution is
+  # CGROUP-BASED: the kernel truncates comm to 15 chars and unit names
+  # often differ from process names (systemd-journal != systemd-journald,
+  # dbus-daemon != dbus.service, pid 1 is not a service at all), so
+  # name-matching against 'systemctl list-units' produces mass false
+  # positives. Kernel threads have cgroup "-".
+  local line pid etimes comm ppid cgroup path
   while IFS= read -r line; do
     pid="$(printf '%s' "$line" | awk '{ print $1 }')"
     etimes="$(printf '%s' "$line" | awk '{ print $2 }')"
     comm="$(printf '%s' "$line" | awk '{ print $3 }')"
-    cgroup="$(printf '%s' "$line" | awk '{ print $4 }')"
+    ppid="$(printf '%s' "$line" | awk '{ print $4 }')"
     (( etimes > 86400 )) || continue
     [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
-    [[ "$cgroup" == "-" ]] && continue        # kernel thread
-    [[ "$cgroup" == *docker* ]] && continue   # containerized
-    if [[ -n "${unit_set[$comm]:-}" ]]; then continue; fi
-    add_finding note processes "long-running host process not attributable to a container or running service: $comm (pid $pid, up $((etimes / 3600))h)" "$line"
-  done < <(ps -eo pid=,etimes=,comm=,cgroup= --no-headers 2>/dev/null || true)
+    cgroup="$(awk -F: '/^0::/{ print $3; exit }' "/proc/$pid/cgroup" 2>/dev/null)"
+    [[ -n "$cgroup" ]] || continue          # raced away
+    [[ "$cgroup" == "-" ]] && continue      # kernel thread (ps view)
+    path="${cgroup#0::}"
+    # Kernel threads sit in the ROOT cgroup ("/", not "-" in /proc/pid/cgroup)
+    # and are parented to kthreadd (pid 2) or init (0). A userspace process
+    # in the root cgroup with any other parent falls through to the note.
+    [[ "$path" == "/" && ( "$ppid" == "2" || "$ppid" == "0" ) ]] && continue
+    [[ "$path" == *docker* || "$path" == *containerd* || "$path" == *libpod* ]] && continue  # containerized
+    [[ "$path" == "/init.scope" ]] && continue   # systemd itself
+    [[ "$path" == /system.slice/* ]] && continue # system service (unit active iff cgroup exists)
+    [[ "$path" == /user.slice/* ]] && continue   # user session/service (incl. Chuck's TUI sessions)
+    add_finding note processes "long-running host process not attributable to a container, system unit, or user session: $comm (pid $pid, cgroup $path, up $((etimes / 3600))h)" "$line"
+  done < <(ps -eo pid=,etimes=,comm=,ppid= --no-headers 2>/dev/null || true)
   return 0
 }
 
