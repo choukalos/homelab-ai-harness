@@ -1,0 +1,19 @@
+[Unit]
+Description=Public-surface weekly check (Sundays) — SEC Phase 11
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# root for consistency with the daily scan: the schema-diff reads the
+# investorhub DB with the app credential from /home/chuck/homelab/.env
+# (INVEST_DATABASE_URL) and writes /home/chuck/data/security-surface
+WorkingDirectory=/home/chuck/homelab
+ExecStart=/home/chuck/homelab/scripts/security-surface-weekly.sh
+# one information_schema snapshot + a digest of <=7 report files
+TimeoutStartSec=300
+Nice=10
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

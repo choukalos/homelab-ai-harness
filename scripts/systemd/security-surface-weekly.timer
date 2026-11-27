@@ -1,0 +1,15 @@
+[Unit]
+Description=Public-surface weekly check — run Sunday 04:40 (after the daily scan window)
+
+[Timer]
+# 04:40: after the Phase 10 weekly digest (04:30) and the daily surface
+# scan window, so the digest covers a complete week of daily reports
+OnCalendar=Sun *-*-* 04:40:00
+# if the host was off Sunday morning, run it on next boot
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=security-surface-weekly.service
+
+[Install]
+WantedBy=timers.target
