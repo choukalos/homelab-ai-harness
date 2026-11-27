@@ -1,8 +1,10 @@
 # SEC Phase 11 deploy — public-surface security monitoring
 
 **Date:** 2026-11-27 (built on `task/security-phase11`; branch base `b60c01b`)
-**Status:** BUILT 2026-11-27 — pending deploy (units written, not installed;
-no host state changed by the build)
+**Status:** DEPLOYING 2026-11-27 — merged to `main` + pushed (`edd1c51`);
+non-sudo steps 4 (status) + 5 (metrics symlink) done; **sudo steps 1–3
+(timer install, first daily scan, first weekly schema baseline) pending
+user execution** (no passwordless sudo on this host).
 **Design source of truth:** `security_todo.md` §Phase 11.
 **Task report (evidence):** `docs/security_phase11_report.md`.
 
@@ -130,7 +132,9 @@ Expected: `security_surface_anomalies_total`, `security_surface_notes_total`,
 `OBSERVATION_MODE=1` in `scripts/security-surface-scan.conf` is already the
 default. Record the start date here and in `security_todo.md` §Phase 11:
 
-- **Observation mode started: ____-__-__** (deploy day)
+- **Observation mode started: 2026-11-27** (deploy day; first real scans
+  land when sudo steps 2–3 are run — the 2-week tuning window runs from
+  the first completed daily+weekly cycle)
 
 For the first 2 weeks: reports only, nothing escalated. Then:
 

@@ -18,7 +18,8 @@
 > runbook `docs/security_phase10_deploy.md`, evidence
 > `docs/security_phase10_report.md`. Phase 11 (public-surface security
 > monitoring — CF tunnel, InvestHub, blog, extensible registry) added
-> 2026-11-24; **BUILT 2026-11-27 (pending deploy)** — registry-driven
+> 2026-11-24; **DEPLOYING 2026-11-27** (merged to `main` `edd1c51`; sudo
+> activation steps 1–3 pending) — registry-driven
 > daily/weekly public-surface scans + registry lint + CVE cross-check +
 > InvestHub schema-diff + timers + `homelab.sh security surface`; deploy
 > runbook `docs/security_phase11_deploy.md`, evidence
@@ -614,7 +615,7 @@ Rollback: `systemctl disable --now security-scan-daily.timer` (+ weekly); script
 
 ---
 
-### Phase 11 — Public-surface security monitoring (tunnel + InvestHub + blog, extensible) — **BUILT 2026-11-27 (pending deploy)**
+### Phase 11 — Public-surface security monitoring (tunnel + InvestHub + blog, extensible) — **DEPLOYING 2026-11-27** (merged `edd1c51`; sudo steps 1–3 pending)
 
 > Trigger: the 2026-11-24 security check exposed the gap — Phase 10 covers the
 > host, but the **internet-facing surface** (7 Caddy hostnames behind the
@@ -625,7 +626,8 @@ Rollback: `systemctl disable --now security-scan-daily.timer` (+ weekly); script
 > (11.0) — every check below reads the registry. The §11.6 runbook is the
 > contract for future sites.
 
-> **BUILT 2026-11-27 (pending deploy)** — registry-driven probe layer + weekly
+> **DEPLOYING 2026-11-27** (merged to `main` `edd1c51`; sudo steps 1–3
+> pending) — registry-driven probe layer + weekly
 > InvestHub schema-diff + registry lint + daily CVE cross-check + timers +
 > `homelab.sh security surface`, built + verified in
 > `/home/chuck/homelab-worktrees/security-phase11` (branch
