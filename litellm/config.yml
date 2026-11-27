@@ -320,8 +320,8 @@ mcp_servers:
   # deploy runbook (docs/filebridge_p12bc_deploy.md — restart severs active
   # proxy sessions; user timing). The family-mcp-full access group
   # (07c1acf8-...) must be extended with mcp_filebridge for the chuck/dylan
-  # keys (PUT /v1/unified_access_group/<id> — deploy step, NOT executed
-  # here; per-key MCP access is group-granted, default-deny).
+  # keys (PUT /v1/unified_access_group/<id> — **executed 2026-11-27**;
+  # per-key MCP access is group-granted, default-deny).
   mcp_filebridge:
     transport: http
     url: http://mcp_filebridge:8000/mcp

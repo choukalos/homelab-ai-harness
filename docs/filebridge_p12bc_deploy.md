@@ -157,7 +157,7 @@ docker logs litellm-proxy --since 2m 2>&1 | grep -i "mcp_filebridge" | head   # 
 curl -s -o /dev/null -w "%{http_code}\n" http://192.168.4.54:4000/health/liveliness   # → 200
 ```
 
-## Step 3 — Access-group API update (exact command — NOT executed in this run)
+## Step 3 — Access-group API update (exact command — **executed 2026-11-27**)
 
 Mechanism (verified against installed litellm **v1.104.0** source,
 `proxy/management_endpoints/access_group_endpoints.py`):

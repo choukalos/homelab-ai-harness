@@ -6,8 +6,9 @@ TODO 1), §2/§3/§4/§6 (P12-B, TODO 3), §5 (P12-C, TODO 4), §7 (security
 properties, TODO 7), §8 (test & deploy plan, TODO 6/7).
 **Design source of truth:** `security_todo.md` Phase 12 (registry YAML,
 phasing, security properties). **Deploy runbook:**
-`docs/filebridge_p12bc_deploy.md` (TODO 7, NOT executed — pending user
-timing). **Final report:** `docs/filebridge_p12bc_final_report.md`.
+`docs/filebridge_p12bc_deploy.md` (TODO 7 — **EXECUTED 2026-11-27**, all
+steps green). **Final report:** `docs/filebridge_p12bc_final_report.md`.
+**Status: LIVE 2026-11-27** (deployed + verified per the runbook).
 
 **User-approved decisions (2026-11-26):**
 
@@ -564,7 +565,7 @@ siri_outputs / non-allowlisted / traversal / directory 404),
 `mcp_filebridge_p12bc_test` kept (distinct tag — the live
 `ai-mcp-mcp_filebridge` image untouched).
 
-### Deploy (runbook — NOT executed in this run)
+### Deploy (runbook — **EXECUTED 2026-11-27**, all steps green)
 
 `docs/filebridge_p12bc_deploy.md` (task-16 style): baselines + rollback
 anchors → build + recreate live `mcp_filebridge` (env gate 0, no
@@ -572,7 +573,7 @@ ports, health, in-container lint) → litellm-proxy restart (**user
 timing — severs active proxy sessions**; applies the `mcp_servers`
 entry) → `family-mcp-full` access-group update (exact
 `PUT /v1/access_group/{id}` command, fetch-union-PUT, idempotent;
-verified against installed litellm v1.104.0 source; NOT executed) →
+verified against installed litellm v1.104.0 source; **executed 2026-11-27**) →
 public E2E battery (1b token route via Caddy: mint → fetch 200 +
 sha256 + Range 206 + cf-cache-status DYNAMIC, bad token 404, TTL
 bounds, second host; full P12-A regression battery: dl relay sha256,
