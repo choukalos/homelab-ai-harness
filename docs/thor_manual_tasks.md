@@ -400,10 +400,11 @@ Validation:
 
 ## Phase 6 - Install key-watch timers (one-time, sudo)
 
-> **WHEN:** Now (2026-11-27) — the Phase 6 scripts are live and verified,
-> but the systemd timers need a sudo install (this session has no
-> passwordless sudo). ~30 seconds. Until then the watch scripts can be
-> run on demand: `./scripts/key-auth-watch.sh` + `./scripts/key-spend-watch.sh`.
+> **✅ DONE 2026-11-27 23:23 UTC.** `sudo scripts/key-watch-install-timers.sh`
+> run by chuck. Verified: `key-watch.timer` active (5-min cadence, first
+> service run clean — `key-auth-watch: ok (0 401(s) in window)` +
+> `key-spend-watch: ok (7 key(s) tracked)`, exit 0) + `key-audit-monthly.timer`
+> active (next run 2026-12-01 06:00 UTC).
 
 ```text
 MANUAL TASK FOR CHUCK (owner: chuck; host: thor):
@@ -486,5 +487,5 @@ Validation:
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
 | 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | **OPEN** — High — **LAN session only (at home), not via OpenVPN** |
 | 13 | 12 (file bridge) | Matrix 8189 → LAN-only (rebind/ufw on matrix after P12-A cutover is live) | ✅ DONE 2026-11-26 — validated from thor: LAN 200, external vantage timeout, public chain via bridge 200 + sha256 identical |
-| 14 | 6 | Install key-watch timers (one-time sudo: `sudo scripts/key-watch-install-timers.sh`) | **OPEN** — High — 30s; until then the watch scripts run on demand |
+| 14 | 6 | Install key-watch timers (one-time sudo: `sudo scripts/key-watch-install-timers.sh`) | ✅ DONE 2026-11-27 23:23 UTC — both timers active, first service run clean |
 | 15 | 6 | Post-absence log review (401s + spend + alerts) | **OPEN — habit** — ~2 min after any trip/absence (commands in the Phase 6 section above) |

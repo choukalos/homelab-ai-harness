@@ -7,8 +7,13 @@
 > removed), LAN exposure shrunk (all rebinds/mapping removals applied +
 > verified; `ss -tlnp` matches expected survivors; device-side confirmations
 > done from Mac Studio 2026-11-15). **Phase 7 DONE 2026-11-21** (docs sync —
-> see §5). Phases 5–6 + 8
-> not started (Phase 5 blocked on D4). Open WebUI removed 2026-11-15
+> see §5). Phases 5 + 8
+> not started (Phase 5 blocked on D4). **Phase 6 DONE 2026-11-27** (monitoring
+> & detection — 401 spike + per-key spend alerts via the Phase 10 pattern,
+> `scripts/audit-litellm-keys.sh` + `./homelab.sh key audit`, quarterly
+> rotation cadence via the audit's >90d flag, Caddy access logging + log
+> rotation; systemd timers installed + verified 2026-11-27 23:23 UTC;
+> commit `937bb4c`). Open WebUI removed 2026-11-15
 > (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
 > program) added as a **grooming stub** 2026-11-21. Phase 10 (host security
 > monitoring & reporting) added 2026-11-24 after the `url565.planning.com`
@@ -413,7 +418,7 @@ deny does **not** break it.)
 
 Rollback: `sudo ufw disable`.
 
-### Phase 6 — Monitoring & detection — **DEPLOYED 2026-11-27** (timer install pending — sudo, see `docs/thor_manual_tasks.md`)
+### Phase 6 — Monitoring & detection — **DEPLOYED 2026-11-27** (timers installed + verified 2026-11-27 23:23 UTC; commit `937bb4c`)
 
 **Design (2026-11-27, built on the Phase 10 pattern — D7 decision: metrics via node-exporter
 TextFile → VM → Grafana; alerts to `alerts.log` + on-demand status; Siri push later):**
@@ -452,7 +457,7 @@ On-demand: ./homelab.sh security status (existing — counts alerts.log unread)
 - `OBSERVATION_MODE=1` for the first 2 weeks (Phase 10 convention): threshold breaches
   log at `note` severity instead of `alert`; metrics always recorded.
 
-- [x] **401 spike alert** on `llm.choukalos.com` + `siri.choukalos.com` — **done 2026-11-27**: `log { output stdout; format json }` in the `:80` site block (Caddy 2.11 server-level access log — captures gate 401s; Authorization REDACTED by default; per-host scoping rejected: `log_name` Caddyfile directive sets a `[]string` var that `wrapLogger` only accepts as `[]any` — JSON config would be required, not worth it) + `compose.core.yml` caddy log rotation (was unbounded) + `scripts/key-auth-watch.sh` (5-min cadence; episode alerting — one line per breach, not per run) + `key_auth.prom` + Grafana panels. **Verified live 2026-11-27**: caddy recreated (all 4 public routes identical pre/post), access logs flowing, real 401 counted in metrics + alert fired at test threshold, VM series live (`caddy_unauthorized_total{host=...}`), dashboard row provisioned. Timer: `sudo scripts/key-watch-install-timers.sh` (manual).
+- [x] **401 spike alert** on `llm.choukalos.com` + `siri.choukalos.com` — **done 2026-11-27**: `log { output stdout; format json }` in the `:80` site block (Caddy 2.11 server-level access log — captures gate 401s; Authorization REDACTED by default; per-host scoping rejected: `log_name` Caddyfile directive sets a `[]string` var that `wrapLogger` only accepts as `[]any` — JSON config would be required, not worth it) + `compose.core.yml` caddy log rotation (was unbounded) + `scripts/key-auth-watch.sh` (5-min cadence; episode alerting — one line per breach, not per run) + `key_auth.prom` + Grafana panels. **Verified live 2026-11-27**: caddy recreated (all 4 public routes identical pre/post), access logs flowing, real 401 counted in metrics + alert fired at test threshold, VM series live (`caddy_unauthorized_total{host=...}`), dashboard row provisioned. Timer installed + verified 2026-11-27 23:23 UTC (`key-watch.timer` next-run cadence + `key-audit-monthly.timer` 1st of month 06:00 UTC; first service run clean: `key-auth-watch: ok` + `key-spend-watch: ok (7 key(s) tracked)`).
 - [x] **Spend alert** per LiteLLM key — **done 2026-11-27**: `key-spend-watch.sh` (same timer): `/spend/keys` totals diffed against a state file → 24h rolling window → `key_spend.prom` (24h/limit/total per key) + alerts. Verified: baseline run + real delta (chuck $0.16 in 2 min) + simulated $60 spike → alert fired, episode dedup confirmed. (Note: `/spend/keys` exposes totals only — the window is built from deltas; first run establishes the baseline. Unaliased keys labeled by token prefix — `/spend/keys` hash field is `token`, not `key_hash`.)
 - [x] **Key audit script** `scripts/audit-litellm-keys.sh` — **done 2026-11-27**: live inventory (via `lib/litellm-keys.sh` `_key_fetch_all` + MCP group resolution) diffed against the snapshot (`/home/chuck/data/security/key-inventory-snapshot.json`, Phase 10 baseline pattern; `--update-snapshot` after review) + rotation-due flag (>90d) + spend totals + blocked-key flags → report + alerts. `./homelab.sh key audit` wrapper + `--json`. Verified: first run (7 NEW), snapshot, clean run (0 findings, exit 0), simulated drift (removed key + model change both detected). Monthly timer in the same installer (manual, sudo).
 - [x] **Quarterly key rotation** cadence — **done 2026-11-27**: the flow already existed (`./homelab.sh key rotate`, Phase 13.2); this item = the cadence, now operational: audit script flags keys >90d old (rotation due), documented in `docs/thor_manual_tasks.md` (Phase 6 section). GitHub PAT rotation: `scripts/rotate-github-tokens.sh` (see `docs/thor_public_access_model.md` § Key Strategy → GitHub Tokens).
