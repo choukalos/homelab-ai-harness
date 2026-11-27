@@ -1,10 +1,9 @@
-# Charter draft — product (PM)
+# Charter — product (PM)
 
-> **DRAFT — all 7 sections, pending chuck's review.** Objectives + Key results
-> from the okr S13 first pass (2026-11-26); Identity / Projects / Constraints /
-> Autonomy tiers / Quality metrics completed 2026-11-27 at the WS3 step-6
-> stand-up (product-first, Q13 revised 2026-11-27). The agent suggests, chuck
-> approves. **Not approved** — pending chuck's review/approval.
+> **APPROVED 2026-11-27 (chuck).** Objectives + Key results from the okr S13
+> first pass (2026-11-26); Identity / Projects / Constraints / Autonomy tiers
+> / Quality metrics completed 2026-11-27 at the WS3 step-6 stand-up
+> (product-first, Q13 revised 2026-11-27). The agent suggests, chuck approves.
 
 ## Identity
 
@@ -144,8 +143,8 @@ check on the board card).
   (fully machine-checkable, no proxy) for the product-define KRs.
 
 ---
-updated 2026-11-27 — completed all 7 sections as a **DRAFT** (Identity /
-Projects / Constraints / Autonomy tiers / Quality metrics added at the WS3
-step-6 stand-up, product-first per Q13 revised 2026-11-27). Objectives + Key
-results unchanged from the 2026-11-26 okr first pass. **Pending chuck's
-review** — not approved.
+updated 2026-11-27 — completed all 7 sections (Identity / Projects /
+Constraints / Autonomy tiers / Quality metrics added at the WS3 step-6
+stand-up, product-first per Q13 revised 2026-11-27). Objectives + Key results
+unchanged from the 2026-11-26 okr first pass. **APPROVED by chuck 2026-11-27**
+(all 7 sections; no changes requested).

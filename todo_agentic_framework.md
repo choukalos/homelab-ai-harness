@@ -7,7 +7,9 @@
   — `docs/org/goals.md` (cycle 2026-12: homelab O1 content; bluebovine O1
   trust+traffic, O2 product-define), alignment report
   `docs/org/alignment/2026-11-26-first-pass.md`, 4 charter drafts
-  `docs/agents/<slug>/charter.md` (pending chuck's review); Q13 decided
+  `docs/agents/<slug>/charter.md` — **product charter APPROVED 2026-11-27**
+  (all 7 sections, no changes requested); the other 3 remain drafts pending
+  activation; Q13 decided
   2026-11-26, **revised 2026-11-27 (chuck): stand up `product` first** (product
   first; `strategist`/`marketing`/`analyst` stand up but stay OFF — keys +
   workspaces only, no cron targeting, no board cards, charters not approved —
@@ -641,7 +643,8 @@ New from the 2026-11-24 interview:
    `skill-hub-register.sh` — "1 added, 0 failed"; gateway list verified).
 3. ~~First org-goals pass~~ — **done 2026-11-26** (`docs/org/goals.md` cycle
    2026-12; alignment report `docs/org/alignment/2026-11-26-first-pass.md`;
-   4 charter drafts `docs/agents/<slug>/charter.md` — pending chuck's review).
+   4 charter drafts `docs/agents/<slug>/charter.md` — product **APPROVED
+   2026-11-27**; the other 3 pending activation).
    The monthly cycle starts; Q13 first-agent decision pending (recommendation:
    `product`).
 4. ~~First agent (Q13)~~ — **decided 2026-11-26, revised 2026-11-27 (chuck):
@@ -651,13 +654,15 @@ New from the 2026-11-24 interview:
    only, no cron targeting, no board cards, charters not approved — until
    chuck activates them). Charter drafts in `docs/agents/<slug>/charter.md` —
    reviewed with chuck 2026-11-26 (slow-burn targets, 6-pillar set, market =
-   PM consulting, O2-before-O1).
+   PM consulting, O2-before-O1); **product charter completed (all 7 sections)
+   + APPROVED 2026-11-27**.
    **Prerequisite: security Phase 13 (automated key management) lands first**
    (chuck 2026-11-26) — **MET 2026-11-26** (Phase 13 DONE 2026-11-26): agent
    keys via the new `key add-agent`/`key rotate` ops layer, not the manual
    5-step loop.
-5. First agent's charter draft: agent suggests from the org goals → chuck
-   approves.
+5. ~~First agent's charter draft~~ — **done 2026-11-27**: product charter
+   completed (all 7 sections) and **approved by chuck 2026-11-27** (no changes
+   requested) — `docs/agents/product/charter.md`.
 6. Stand up the first agent: `pi-agent-<slug>` workspace, LiteLLM key
    (model assignment per work type), `AGENT_CONCURRENT_TASKS` slot,
    `weekly-agent-reviews` + `monthly-org-review` cron jobs, its domain KB
@@ -701,9 +706,8 @@ New from the 2026-11-24 interview:
          `pi-agent-{product,analyst,strategist,marketing}` created
    - [x] Charter names the agent's domain KB ownership (Q15) — the collection
          creates on first write, nothing to pre-create — **done 2026-11-27**:
-         product charter completed as a DRAFT (all 7 sections; owns
-         `kb_bluebovine` — creates on first write); pending chuck's
-         review/approval
+         product charter completed (all 7 sections; owns `kb_bluebovine` —
+         creates on first write) and **APPROVED by chuck 2026-11-27**
 7. First weekly review cycle — and the monthly clock starts.
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
