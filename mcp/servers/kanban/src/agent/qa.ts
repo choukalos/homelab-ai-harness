@@ -116,16 +116,21 @@ export function buildQaPrompt(ctx: QaRunContext, diff: string): string {
   lines.push(`# QA round ${ctx.round} — task ${ctx.taskId}`);
   lines.push("");
   lines.push("## Task spec");
-  lines.push(`Goal: ${ctx.spec.goal}`);
-  if (ctx.spec.steps.length > 0) {
+  // The spec is JSON from the DB — treat every field as runtime-untrusted
+  // (a task can carry a minimal spec, e.g. {goal} only): never crash the
+  // QA gate on a missing field, degrade to a placeholder instead.
+  const steps = Array.isArray(ctx.spec.steps) ? ctx.spec.steps : [];
+  const acceptance = Array.isArray(ctx.spec.acceptance) ? ctx.spec.acceptance : [];
+  lines.push(`Goal: ${ctx.spec.goal ?? "(not specified — derive it from the completion summary and diff)"}`);
+  if (steps.length > 0) {
     lines.push("Steps:");
-    ctx.spec.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
   }
-  if (ctx.spec.acceptance.length > 0) {
+  if (acceptance.length > 0) {
     lines.push("Acceptance criteria:");
-    ctx.spec.acceptance.forEach((a) => lines.push(`- ${a}`));
+    acceptance.forEach((a) => lines.push(`- ${a}`));
   }
-  lines.push(`Kind: ${ctx.spec.kind}`);
+  lines.push(`Kind: ${ctx.spec.kind ?? "(unspecified)"}`);
   lines.push("");
   lines.push("## Completion summary (from the task agent)");
   lines.push(ctx.completionSummary || "(none)");

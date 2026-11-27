@@ -114,7 +114,7 @@ export const deployBlog: DeployHandler = async (ctx, git) => {
   }
   const body = readFileSync(src, "utf8");
   const date = postDate();
-  const slug = slugify(ctx.spec.goal);
+  const slug = slugify(ctx.spec.goal ?? ""); // minimal spec (no goal) -> "post"
   const fileName = `${date}-${slug}.md`;
 
   const cloneDir = path.join(ctx.workspace, `../publish-blog-${ctx.taskId}`);
