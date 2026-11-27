@@ -602,7 +602,7 @@ intentional change — silent drift is the signal.
 - [x] **Alert delivery (D7 — decide before wiring):** decided **(c) + (a) now, (b) later** — metrics wired via `node_exporter_textfile` (`security_scan_anomalies_total`, `security_scan_notes_total`, `security_scan_last_run_timestamp_seconds` → `metrics/security_scan.prom`, node-exporter textfile collector in compose.monitoring.yml); file-only `alerts.log` + `./homelab.sh security status` on demand; Siri/Shortcuts push remains net-new (later)
 - [x] **On-demand status:** `./homelab.sh security status` — latest report verdict, unread alert count, baseline age (stale baseline is itself a warning) — **built + verified 2026-11-27**
 - [x] **Retention:** prune daily reports > 90d, weekly digests > 52w (inside the scan) — **built + verified 2026-11-27** (synthetic aged-report test)
-- [ ] **False-positive tuning:** first 2 weeks = observation mode (report only, nothing escalated); then set thresholds from observed noise (apt upgrades, container recreates, Chuck's own LAN logins) — **`OBSERVATION_MODE=1` is the conf default; the 2-week tuning step is post-deploy** (runbook §6)
+- [ ] **False-positive tuning:** first 2 weeks = observation mode (report only, nothing escalated); then set thresholds from observed noise (apt upgrades, container recreates, Chuck's own LAN logins) — **`OBSERVATION_MODE=1` is the conf default; observation mode started 2026-11-27 (deployed); the 2-week tuning step is due ~2026-12-11** (runbook §6)
 
 Rollback: `systemctl disable --now security-scan-daily.timer` (+ weekly); scripts are additive (new files only) — deletion is the full rollback. No service changes.
 

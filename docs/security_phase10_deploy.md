@@ -1,7 +1,10 @@
 # SEC Phase 10 deploy — host security monitoring & reporting
 
 **Date:** 2026-11-27 (built on `task/security-phase10`; branch base `49faa59`)
-**Status:** READY TO DEPLOY — all steps below are the deploy stage.
+**Status:** DEPLOYED 2026-11-27 — all steps executed and verified
+(2026-11-27: timers installed, root baseline captured 03:59 UTC, first
+root scan CLEAN/notes-only, node-exporter scrape verified,
+`security status` verified).
 **Design source of truth:** `security_todo.md` §Phase 10.
 **Task report (evidence):** `docs/security_phase10_report.md`.
 
@@ -102,7 +105,8 @@ again — the "unread since last status" count resets (marker file
 `OBSERVATION_MODE=1` in `scripts/security-scan.conf` is already the
 default. Record the start date here and in `security_todo.md` §Phase 10:
 
-- **Observation mode started: ____ (fill in on deploy day)**
+- **Observation mode started: 2026-11-27** (deploy day; first root scan
+  2026-11-27 — 2 notes, both dpkg/snap churn, 0 anomalies)
 
 For the first 2 weeks: reports only, nothing escalated. Then:
 
