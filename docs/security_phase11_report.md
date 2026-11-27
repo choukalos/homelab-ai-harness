@@ -273,3 +273,26 @@ sudo scripts/security-surface-weekly.sh    # schema-diff baseline capture
 #    start date in docs/security_phase11_deploy.md §6 and security_todo.md;
 #    2-week tuning due ~2026-12-11, then flip OBSERVATION_MODE=0.
 ```
+
+## Deploy closeout (2026-11-27, post-hoc)
+
+Deployed the same day: merged to `main` (`edd1c51`), all runbook steps
+executed and verified — 4 timers live (surface daily ~01:15 / weekly Sun
+04:40 UTC, offset from Phase 10's 00:30 / 04:30), first daily scan
+`verdict=7 notes, 0 anomalies` (6 HSTS header notes + 1 CF-lint skip),
+first weekly run `schema-diff: BASELINE CAPTURED` (26 tables / 244 cols /
+18 privileges), `security surface` status verified, observation mode
+started 2026-11-27 (tuning due ~2026-12-11).
+
+Two post-deploy failures found on first live use and fixed (`9d229df`):
+1. `security surface` exited 1 on the root-owned data dir (unread-marker
+   write not best-effort) — now best-effort with correct redirect order;
+   `sudo chown -R chuck:chuck /home/chuck/data/security-surface` (runbook
+   step 2) makes the marker writable so the unread count resets.
+2. node-exporter served 0 `security_surface_*` metrics — the step-5
+   symlink was invisible to the textfile collector (it does not follow
+   symlinks); the daily scan now auto-syncs a real copy to the Phase 10
+   collector dir (`SEC_METRICS_SYNC_DIR`), scrape-verified.
+
+Worktree/branch cleanup done 2026-11-27; status lines flipped to
+DEPLOYED (`aaf46e7`).
