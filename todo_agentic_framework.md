@@ -32,16 +32,18 @@
   path for agent artifacts), session loud-fail hardening (item 14 — with
   item 13), per-owner pipeline models (item 15 — `KANBAN_OWNER_MODELS`),
   per-model usage surfacing (item 16 — `byModel` alongside `byRole`),
-  fresh-context QA reviewer designed in two phases (item 17 — Phase 1 =
-  cross-model + skeptic-prompt QA upgrade; Phase 2 = separate reviewer
-  session, decision pending); no agent-to-agent delegation (item 18 —
-  permanent, depth-1 topology). **Items 13-16 BUILT + LIVE 2026-11-27**
-  (dev clone `task/19` — `c47f87b`/`7df1c1e`/`f3a8d36`, pushed; `mcp_kanban`
-  rebuilt, 29 MCP tools, 288-test suite green); merge_task E2E'd (admin
-  gate + merge commit + idempotency + audit); task/21 (strategist strategy)
-  merged to main during the E2E; task/20 + task/22 + task/23 pending
-  chuck's review + merge; item 17's Phase-1 cross-model claim corrected
-  (QA runs on the owner model as built). Goal model + S13 acceptance
+  fresh-context QA reviewer DECIDED (item 17 — separate-reviewer item
+  DROPPED: one model with capacity; the QA gate itself made fresh-context
+  + requirements-only instead); no agent-to-agent delegation (item 18 —
+  permanent, depth-1 topology). **Items 13-16 + the item-17 QA change
+  BUILT + LIVE 2026-11-27** (dev clone `task/19` — `c47f87b`/`7df1c1e`/
+  `f3a8d36`/`625206d`, pushed; `mcp_kanban` rebuilt, 29 MCP tools, 288-test
+  suite green); merge_task E2E'd (admin gate + merge commit + idempotency
+  + audit); **all 4 first-run agent artifacts merged to main** (task/21
+  strategist strategy during the E2E; task/20 + task/22 + task/23 merged
+  via merge_task 2026-11-27 — market analysis, content inventory, KPI
+  digest); QA now a fresh-context requirements-only reviewer (worker's
+  completion summary removed from the QA prompt). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -1015,15 +1017,37 @@ New from the 2026-11-24 interview:
      cost) at every `byRole` level in reports + task_status + GUI report;
      the first live agent run's usage rows (tasks 20-23: task/qa roles,
      per-model split) confirm the recording path end-to-end.
-17. **Fresh-context QA reviewer (chuck: "let's think about that" — DESIGN
-    2026-11-27, not built)** — research implication 4b: critics who saw
-    the worker's reasoning rubber-stamp it (documented LLM sycophancy).
-    Current state: the QA session is ALREADY fresh-context in the narrow
-    sense (mission brief + diff + completion summary — no worker
-    transcript), but it (a) runs on the SAME model as the worker
-    (pre-item-15), (b) verifies the acceptance criteria mechanically
-    without judging quality beyond them, and (c) receives the worker's
-    completion summary as an unmarked claim (a sycophancy vector).
+17. **Fresh-context QA reviewer (DECIDED 2026-11-27: item dropped — the
+    QA gate itself made fresh-context + requirements-only)** — research
+    implication 4b: critics who saw the worker's reasoning rubber-stamp it
+    (documented LLM sycophancy). **chuck's decision 2026-11-27: drop the
+    separate-reviewer item for now** (one model with capacity to do a lot
+    at once — a second reviewer session doubles the cost for marginal
+    benefit), **but make sure QA is a separate turn with fresh context —
+    just the requirements for what's being built**, so it isn't biased by
+    the worker's claims.
+    **DONE 2026-11-27** (dev clone `task/19`, `625206d`, pushed; synced +
+    `mcp_kanban` rebuilt): the QA gate was already a separate turn (a
+    fresh session per round, its own `QA_SYSTEM_PROMPT`, no worker
+    transcript) — the one bias vector was the worker's **completion
+    summary** in the QA prompt. Now:
+   - `buildQaPrompt`: the prompt carries ONLY the requirements (spec:
+     goal/steps/acceptance/kind) + the diff. The diff is the evidence;
+     the spec is the requirements. The completion-summary section is
+     gone; `QaRunContext.completionSummary` removed (the orchestrator no
+     longer passes it — a dead field carrying the worker's claims invites
+     re-adding them; the task's own summary still flows to `completeTask`).
+   - `QA_SYSTEM_PROMPT` states the fresh-context contract explicitly:
+     the reviewer was given only requirements + diff, has NOT seen the
+     task agent's reasoning or claims, and must judge the work on the
+     evidence in the diff alone.
+   - Tests: buildQaPrompt asserts requirements + diff present AND the
+     summary/claims absent; the orchestrator-deploy test asserts QA
+     received the spec (not the summary). Suite green (288 tests).
+   - The separate-reviewer-session design (Phase 2 below) is RETIRED
+     with the item — if revisited, it would be a new decision.
+    **Retired design (for the record) — two phases, decision point
+    between them.**
     **Design — two phases, decision point between them.**
     **CORRECTION 2026-11-27 (item 15 as built):** the Phase-1(a) cross-model
     claim does NOT hold — item 15 routes ALL sessions for an owned task

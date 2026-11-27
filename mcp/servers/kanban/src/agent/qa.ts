@@ -91,8 +91,6 @@ export interface QaRunContext {
   /** Project default branch (the diff base ref). */
   defaultBranch: string | null;
   spec: IdeaSpec;
-  /** The task session's completion summary (last assistant message). */
-  completionSummary: string;
   /** 1-based QA round number. */
   round: number;
   /** Owner (USER_KEYS name) the session's LLM calls bill to (Phase 2). */
@@ -104,6 +102,7 @@ export interface QaRunContext {
 export const QA_SYSTEM_PROMPT = [
   "You are the QA gate for ai-kanban, an LLM task board.",
   "A task agent just finished work in this workspace (its task branch).",
+  "You are reviewing FRESH CONTEXT: you were given only the task requirements (spec + acceptance criteria) and the diff — you have NOT seen the task agent's reasoning or claims, and you are given none of them. Judge the work on the evidence in the diff alone; do not assume the work is complete or correct beyond what the diff shows.",
   "Verify the work against the task spec and acceptance criteria you are given.",
   "You have full tools: inspect files, run tests, run builds — use them.",
   "Be strict: FAIL if any acceptance criterion is not met, the work is broken, or it violates the project constraints.",
@@ -113,7 +112,14 @@ export const QA_SYSTEM_PROMPT = [
   '{"pass": false, "feedback": "<specific, actionable description of what must be fixed>"}',
 ].join("\n");
 
-/** The QA round kickoff (user message): spec + acceptance + diff + summary. */
+/**
+ * The QA round kickoff (user message): requirements (spec + acceptance) +
+ * diff ONLY. The worker's completion summary is deliberately NOT included
+ * (chuck 2026-11-27, item 17): the QA reviewer is a fresh-context critic —
+ * giving it the worker's claims is a sycophancy vector (critics who saw the
+ * worker's reasoning rubber-stamp it). The diff is the evidence; the spec
+ * is the requirements.
+ */
 export function buildQaPrompt(ctx: QaRunContext, diff: string): string {
   const lines: string[] = [];
   lines.push(`# QA round ${ctx.round} — task ${ctx.taskId}`);
@@ -124,7 +130,7 @@ export function buildQaPrompt(ctx: QaRunContext, diff: string): string {
   // QA gate on a missing field, degrade to a placeholder instead.
   const steps = Array.isArray(ctx.spec.steps) ? ctx.spec.steps : [];
   const acceptance = Array.isArray(ctx.spec.acceptance) ? ctx.spec.acceptance : [];
-  lines.push(`Goal: ${ctx.spec.goal ?? "(not specified — derive it from the completion summary and diff)"}`);
+  lines.push(`Goal: ${ctx.spec.goal ?? "(not specified — derive it from the diff)"}`);
   if (steps.length > 0) {
     lines.push("Steps:");
     steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
@@ -134,9 +140,6 @@ export function buildQaPrompt(ctx: QaRunContext, diff: string): string {
     acceptance.forEach((a) => lines.push(`- ${a}`));
   }
   lines.push(`Kind: ${ctx.spec.kind ?? "(unspecified)"}`);
-  lines.push("");
-  lines.push("## Completion summary (from the task agent)");
-  lines.push(ctx.completionSummary || "(none)");
   lines.push("");
   lines.push(`## Diff (base..HEAD${ctx.branch ? `, branch ${ctx.branch}` : ""})`);
   lines.push("```");

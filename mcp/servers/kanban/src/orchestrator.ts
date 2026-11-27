@@ -839,7 +839,6 @@ export class Orchestrator {
             branch: fresh.branch,
             defaultBranch: ctx.project.defaultBranch,
             spec: ctx.spec,
-            completionSummary: result.summary,
             round,
             owner: task.owner, // Phase 2: bill the QA session to the owner's key
             onLog: (line) => void this.appendEvent(taskId, "log", { line }),

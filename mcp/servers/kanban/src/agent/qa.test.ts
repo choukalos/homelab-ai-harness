@@ -51,23 +51,26 @@ test("parseQaVerdict: rejects non-verdict JSON, prose, and empty text", () => {
   assert.equal(parseQaVerdict("the verdict is {pass: true} (not JSON)"), null);
 });
 
-test("buildQaPrompt: spec, acceptance, diff, completion summary, round", () => {
+test("buildQaPrompt: requirements + diff only — the worker's claims are excluded", () => {
+  // Fresh-context QA (chuck 2026-11-27, item 17): the prompt carries ONLY
+  // the requirements (spec + acceptance) and the diff. The worker's
+  // completion summary is a sycophancy vector and must not appear.
   const ctx: QaRunContext = {
     taskId: 7,
     workspace: "/workspace/task-7",
     branch: "task/7",
     defaultBranch: "main",
     spec: { goal: "Build the widget API", steps: ["scaffold"], acceptance: ["tests pass"], kind: "code" },
-    completionSummary: "The widget API is complete.",
     round: 2,
   };
   const prompt = buildQaPrompt(ctx, "diff --git a/x b/x");
   assert.ok(prompt.includes("# QA round 2 — task 7"));
   assert.ok(prompt.includes("Goal: Build the widget API"));
   assert.ok(prompt.includes("- tests pass"), "acceptance criteria");
-  assert.ok(prompt.includes("The widget API is complete."), "completion summary");
   assert.ok(prompt.includes("diff --git a/x b/x"), "git diff base..HEAD");
   assert.ok(prompt.includes("branch task/7"));
+  assert.ok(!prompt.includes("Completion summary"), "no completion-summary section");
+  assert.ok(!prompt.includes("The widget API is complete."), "worker's claims excluded");
 });
 
 test("buildQaPrompt: minimal spec ({goal} only) degrades, never crashes", () => {
@@ -79,7 +82,6 @@ test("buildQaPrompt: minimal spec ({goal} only) degrades, never crashes", () => 
     branch: "task/19",
     defaultBranch: "main",
     spec: { goal: "Do the thing" } as QaRunContext["spec"],
-    completionSummary: "Done.",
     round: 1,
   };
   const prompt = buildQaPrompt(ctx, "(no diff)");
@@ -162,7 +164,6 @@ function qaCtx(overrides: Partial<QaRunContext> = {}): QaRunContext {
     branch: "task/7",
     defaultBranch: "main",
     spec: { goal: "Build the widget API", steps: ["scaffold"], acceptance: ["tests pass"], kind: "code" },
-    completionSummary: "The widget API is complete.",
     round: 1,
     ...overrides,
   };
