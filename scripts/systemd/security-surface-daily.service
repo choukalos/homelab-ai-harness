@@ -1,0 +1,26 @@
+[Unit]
+Description=Public-surface security scan (daily) — SEC Phase 11
+Wants=network-online.target
+After=network-online.target
+# probes the live public surface (https via public DNS + TLS handshakes)
+# — genuinely needs the network, unlike the Phase 10 host scan
+
+[Service]
+Type=oneshot
+# root for consistency with the Phase 10 units: reads /home/chuck/homelab/.env
+# (LITELLM_KEY_CHUCK for the chuck-key probes) and writes
+# /home/chuck/data/security-surface (755/644 — readable by the non-root
+# `homelab.sh security surface` status subcommand)
+WorkingDirectory=/home/chuck/homelab
+ExecStart=/home/chuck/homelab/scripts/security-surface-scan.sh
+# 17 registry probes (30s timeout each worst case) + 8 TLS handshakes;
+# a normal run takes ~5s, 10 min is generous headroom
+TimeoutStartSec=600
+# be a good citizen: low CPU/nice, best-effort I/O
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

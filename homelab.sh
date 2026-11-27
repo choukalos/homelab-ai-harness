@@ -54,6 +54,9 @@ Commands:
 
   security status  Show latest scan verdict, unread alert count, baseline age
                    (SEC Phase 10; reads /home/chuck/data/security)
+  security surface Show latest public-surface scan verdicts, unread alert
+                   count, schema-snapshot age (SEC Phase 11; reads
+                   /home/chuck/data/security-surface)
 
 Stacks:
   core        Caddy only
@@ -351,11 +354,70 @@ _security() {
       fi
       echo "$now" > "$marker"
       ;;
+    surface)
+      # SEC Phase 11 on-demand status. Host data dir, overridable via
+      # SEC_SURFACE_STATUS_DIR for testing (default matches the scan
+      # scripts' SEC_SURFACE_DATA_DIR).
+      local surf_dir="${SEC_SURFACE_STATUS_DIR:-/home/chuck/data/security-surface}"
+      local latest weekly verdict mode alerts marker last_read now unread last_read_iso snap snap_epoch age
+      latest="$(ls -1 "$surf_dir"/reports/security-surface-report-*.md 2>/dev/null | sort | tail -n 1 || true)"
+      if [[ -z "$latest" ]]; then
+        echo "latest daily report: none yet (run: sudo scripts/security-surface-scan.sh)"
+      else
+        echo "latest daily report: $latest"
+        verdict="$(grep -m1 '^verdict: ' "$latest" 2>/dev/null || true)"
+        [[ -n "$verdict" ]] && echo "  $verdict"
+        mode="$(grep -m1 '^- mode: ' "$latest" 2>/dev/null | sed 's/^- //' || true)"
+        [[ -n "$mode" ]] && echo "  $mode"
+      fi
+      weekly="$(ls -1 "$surf_dir"/reports/security-surface-weekly-*.md 2>/dev/null | sort | tail -n 1 || true)"
+      if [[ -n "$weekly" ]]; then
+        echo "latest weekly digest: $weekly"
+        verdict="$(grep -m1 '^verdict: ' "$weekly" 2>/dev/null || true)"
+        [[ -n "$verdict" ]] && echo "  $verdict"
+      else
+        echo "latest weekly digest: none yet (run: sudo scripts/security-surface-weekly.sh)"
+      fi
+      alerts=0
+      [[ -f "$surf_dir/alerts.log" ]] && alerts="$(wc -l < "$surf_dir/alerts.log")"
+      marker="$surf_dir/.last-status-ts"
+      last_read=0
+      [[ -f "$marker" ]] && last_read="$(cat "$marker" 2>/dev/null || echo 0)"
+      now="$(date -u +%s)"
+      unread=0
+      if [[ -f "$surf_dir/alerts.log" && $last_read -gt 0 ]]; then
+        # alerts.log lines: "ts | severity | check | detail" (ISO ts sorts)
+        last_read_iso="$(date -u -d "@$last_read" +%Y-%m-%dT%H:%M:%S)"
+        unread="$(awk -F' \\| ' -v lr="$last_read_iso" '$1 > lr { n++ } END { print n + 0 }' "$surf_dir/alerts.log")"
+      elif [[ -f "$surf_dir/alerts.log" ]]; then
+        unread="$alerts"   # never status-checked: everything is unread
+      fi
+      echo "alerts: $alerts total, $unread unread since last status"
+      # InvestHub schema-diff snapshot age (weekly cadence — the Phase 11
+      # equivalent of Phase 10's baseline-age line; >8 days = a full
+      # missed weekly cycle)
+      snap="$(ls -1 "$surf_dir"/db-snapshots/investorhub-*.txt 2>/dev/null | sort | tail -n 1 || true)"
+      if [[ -n "$snap" ]]; then
+        snap_epoch="$(date -u -r "$snap" +%s)"
+        age=$(( (now - snap_epoch) / 86400 ))
+        if (( age > 8 )); then
+          echo "schema snapshot: STALE — $age days old (weekly cadence — check the timer)"
+        else
+          echo "schema snapshot: $age days old ($(basename "$snap"))"
+        fi
+      else
+        echo "schema snapshot: MISSING — run scripts/security-surface-weekly.sh (first run captures the baseline)"
+      fi
+      # unread marker (only if the data dir exists — pre-deploy it doesn't)
+      if [[ -d "$surf_dir" ]]; then
+        echo "$now" > "$marker"
+      fi
+      ;;
     help|-h|--help|"")
-      echo "Usage: ./homelab.sh security status"
+      echo "Usage: ./homelab.sh security status|surface"
       ;;
     *)
-      echo "unknown security subcommand: $sub (try: status)" >&2
+      echo "unknown security subcommand: $sub (try: status|surface)" >&2
       exit 2
       ;;
   esac

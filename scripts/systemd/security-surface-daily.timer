@@ -1,0 +1,15 @@
+[Unit]
+Description=Public-surface security scan (daily) — run at 01:15
+
+[Timer]
+# 01:15: after the Phase 10 host scan (00:30) so the two don't overlap
+OnCalendar=*-*-* 01:15:00
+# if the host was off at 01:15, run it on next boot (don't skip a day)
+Persistent=true
+# spread load a few minutes past the scheduled time
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=security-surface-daily.service
+
+[Install]
+WantedBy=timers.target
