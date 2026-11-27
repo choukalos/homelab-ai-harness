@@ -79,6 +79,13 @@ CF terminates TLS, HSTS is an edge concern tracked at `note` severity — plus
 the CF-lint skip note when `CF_API_TOKEN` is unset). 17/17 probes OK, 8×
 TLSv1.3, registry lint 8=8 were the 2026-11-27 build-time results.
 
+The data dir is created root-owned by the root scan — make it writable by
+`chuck` so `./homelab.sh security surface` can write its unread marker:
+
+```bash
+sudo chown -R chuck:chuck /home/chuck/data/security-surface
+```
+
 Verify the artifacts:
 
 ```bash
@@ -116,10 +123,11 @@ age (`STALE` after 8 days = a full missed weekly cycle).
 # CF tunnel ingress side of the registry lint (11.1 hostname diff):
 export CF_API_TOKEN=...        # or add CF_API_TOKEN=... to /home/chuck/homelab/.env
 
-# Surface metrics into the Phase 10 node-exporter textfile collector
-# (node_exporter takes one textfile directory — symlink the file in):
-ln -s /home/chuck/data/security-surface/metrics/security_surface.prom \
-      /home/chuck/data/security/metrics/security_surface.prom
+# Surface metrics into the Phase 10 node-exporter textfile collector:
+# the daily scan auto-syncs a REAL copy to /home/chuck/data/security/metrics/
+# (node_exporter's textfile collector does NOT follow symlinks — a manual
+# symlink is invisible to it; the scan keeps the copy fresh every run).
+# Verify after the first scan:
 curl -s http://192.168.4.54:9100/metrics | grep '^security_surface_'
 ```
 
@@ -155,7 +163,7 @@ For the first 2 weeks: reports only, nothing escalated. Then:
 sudo systemctl disable --now security-surface-daily.timer security-surface-weekly.timer
 sudo rm /etc/systemd/system/security-surface-{daily,weekly}.{service,timer}
 sudo systemctl daemon-reload
-rm -f /home/chuck/data/security/metrics/security_surface.prom   # if the step-5 symlink was made
+rm -f /home/chuck/data/security/metrics/security_surface.prom   # if the step-5 copy exists
 ```
 
 The registry + scripts are additive (new files + one `homelab.sh`

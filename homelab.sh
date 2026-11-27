@@ -408,9 +408,11 @@ _security() {
       else
         echo "schema snapshot: MISSING — run scripts/security-surface-weekly.sh (first run captures the baseline)"
       fi
-      # unread marker (only if the data dir exists — pre-deploy it doesn't)
+      # unread marker (best-effort: the data dir is root-owned after the
+      # root scans — a failed write must not break the status output;
+      # 'sudo chown -R chuck:chuck <data dir>' makes it writable)
       if [[ -d "$surf_dir" ]]; then
-        echo "$now" > "$marker"
+        echo "$now" 2>/dev/null > "$marker" || true
       fi
       ;;
     help|-h|--help|"")

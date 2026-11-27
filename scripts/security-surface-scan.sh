@@ -61,6 +61,7 @@ fi
 
 # Defaults if the conf is absent (or omits them).
 SEC_SURFACE_DATA_DIR="${SEC_SURFACE_DATA_DIR:-/home/chuck/data/security-surface}"
+SEC_METRICS_SYNC_DIR="${SEC_METRICS_SYNC_DIR:-/home/chuck/data/security/metrics}"
 CADDYFILE_PATH="${CADDYFILE_PATH:-/home/chuck/homelab/caddy/Caddyfile}"
 ENV_FILE="${ENV_FILE:-/home/chuck/homelab/.env}"
 OBSERVATION_MODE="${OBSERVATION_MODE:-1}"
@@ -99,6 +100,7 @@ REPORTS_DIR="$DATA_DIR/reports"
 ALERTS_LOG="$DATA_DIR/alerts.log"
 METRICS_DIR="$DATA_DIR/metrics"
 METRICS_FILE="$METRICS_DIR/security_surface.prom"
+METRICS_SYNC_DIR="${SEC_METRICS_SYNC_DIR:-}"
 SNAP_DIR="$DATA_DIR/db-snapshots"
 TODAY="$(date -u +%Y-%m-%d)"
 NOW_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -593,6 +595,13 @@ main() {
     echo "# TYPE security_surface_last_run_timestamp_seconds gauge"
     echo "security_surface_last_run_timestamp_seconds $NOW_EPOCH"
   } > "$METRICS_FILE"
+
+  # node_exporter's textfile collector does NOT follow symlinks — keep a
+  # real copy in the Phase 10 collector dir so the surface metrics are
+  # scrape-ready (best-effort: a failed sync must not fail the scan).
+  if [[ -n "$METRICS_SYNC_DIR" && -d "$METRICS_SYNC_DIR" ]]; then
+    cp -f "$METRICS_FILE" "$METRICS_SYNC_DIR/$(basename "$METRICS_FILE")" 2>/dev/null || true
+  fi
 
   # --- retention (90d daily / 52w weekly; snapshots keep the newest) ---
   if [[ $PRUNE -eq 1 ]]; then
