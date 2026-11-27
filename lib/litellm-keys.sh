@@ -40,7 +40,8 @@ LiteLLM Key Management
 
   ./homelab.sh key add-agent <slug> [options]
       Stand up an agent key end-to-end (Phase 13.5, framework step 6):
-      mint with the per-work-type model default, then wire .env in one
+      mint with the work-type model + the kanban pipeline model (KANBAN_MODEL),
+      then wire .env in one
       atomic pass — LITELLM_KEY_<SLUG>, MEMORY_USER_KEYS entry,
       KANBAN_MCP_KEY_CAPABILITIES entry (alias-keyed, 13.3) — recreate
       skill-runner + mcp_kanban, run scripts/key-sync-check.sh.
@@ -984,7 +985,9 @@ for s, body in services.items():
 
 # ── key add-agent (Phase 13.5) ──
 # One command to stand up an agent key (framework step 6): mint with the
-# per-work-type model default, then wire the three .env surfaces in one
+# work-type model + the kanban pipeline model (KANBAN_MODEL — the pipeline
+# runs all sessions on it, so the key must have access), then wire the three
+# .env surfaces in one
 # atomic pass:
 #   1. LITELLM_KEY_<SLUG>=<key>          (the key itself)
 #   2. MEMORY_USER_KEYS += ,<slug>=LITELLM_KEY_<SLUG>   (identity/spend map —
@@ -994,9 +997,15 @@ for s, body in services.items():
 # Then recreate the consumers (skill-runner: MEMORY_USER_KEYS;
 # mcp_kanban: the capability map) and run scripts/key-sync-check.sh.
 # Conventions (todo_agentic_framework.md step-6 checklist): alias = slug
-# (product/analyst/strategist/marketing); model default by work type
-# (coding → matrix-coder, writing → matrix-copywriter); default
-# capability = control (board mutation without project admin).
+# (product/analyst/strategist/marketing); model access = the work-type model
+# (coding → matrix-coder, writing → matrix-copywriter) PLUS the kanban
+# pipeline model (KANBAN_MODEL, default matrix-coder) — the kanban pipeline
+# runs ALL sessions (task work + QA) on KANBAN_MODEL regardless of the
+# agent's work type, so a work-type key without pipeline access 403s on
+# every LLM call (empty session → QA "no parseable verdict" →
+# needs_attention; found 2026-11-27 on the strategist/marketing first-work
+# cards). The work-type model stays for the agent's direct (non-kanban) key
+# usage; default capability = control (board mutation without project admin).
 
 _key_add_agent() {
   local slug="${1:?Usage: ./homelab.sh key add-agent <slug> [--work-type coding|writing] [--capability read|control|admin]}"
@@ -1013,12 +1022,19 @@ _key_add_agent() {
   [[ -n "${LITELLM_MASTER}" ]] || { echo "❌ LITELLM_MASTER_KEY not set (source .env first)." >&2; exit 1; }
   [[ "${slug}" =~ ^[a-z][a-z0-9_-]*$ ]] || { echo "❌ slug must be lowercase (letters/digits/-/_), e.g. 'strategist'." >&2; exit 1; }
   case "${capability}" in read|control|admin) ;; *) echo "❌ --capability must be read|control|admin." >&2; exit 1 ;; esac
-  local models
+  local models pipeline_model
   case "${work_type}" in
     coding)  models="matrix-coder" ;;
     writing) models="matrix-copywriter" ;;
     *) echo "❌ --work-type must be coding|writing." >&2; exit 1 ;;
   esac
+  # The kanban pipeline model (KANBAN_MODEL env, default matrix-coder) must
+  # be accessible from every agent key — the pipeline runs all sessions on
+  # it. Dedupe when the work-type model IS the pipeline model.
+  pipeline_model="${KANBAN_MODEL:-matrix-coder}"
+  if [[ "${models}" != "${pipeline_model}" ]]; then
+    models="${models},${pipeline_model}"
+  fi
 
   local repo_root env_file env_var
   repo_root=$(cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd)
@@ -1034,7 +1050,7 @@ _key_add_agent() {
   fi
   grep -q "^${env_var}=" "${env_file}" && { echo "❌ ${env_var} already present in .env." >&2; exit 1; }
 
-  # 1. Mint (per-work-type model default).
+  # 1. Mint (work-type model + kanban pipeline model).
   local payload resp new_key
   payload=$(python3 -c "
 import json, sys

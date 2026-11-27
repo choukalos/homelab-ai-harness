@@ -21,7 +21,13 @@
   fail-safe OFF, admin-only `agents_switch` MCP tool, **live state ON
   (all 4 agents active)**;
   **switch v2 (hard-kill + per-agent switches) + mission-brief hardening
-  done 2026-11-27**). Goal model + S13 acceptance
+  done 2026-11-27**;
+  **agent-key model access fix 2026-11-27** — the first live agent run
+  exposed the work-type key vs kanban pipeline model mismatch (strategist/
+  marketing keys 403'd on KANBAN_MODEL=matrix-coder → empty sessions → QA
+  no-verdict → needs_attention on tasks 21/22); both live keys now have
+  work-type + pipeline model access, `key add-agent` mints both for future
+  agents, tasks 21/22 restarted (item 12). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -485,7 +491,7 @@ implications not yet in the plan — to be folded into the tasking design:
   outputs get schemas/structure before we ever consider agent-to-agent
   debate or mutual adjustment.
 
-## S13 — `okr` skill (ACCEPTED 2026-11-24 — not yet built)
+## S13 — `okr` skill (ACCEPTED 2026-11-24 — BUILT 2026-11-25, registered)
 
 **Purpose**: help chuck (or an agent) write org + agent OKRs, and verify the
 ladder — that agent OKRs line up to the org's OKRs.
@@ -700,15 +706,18 @@ New from the 2026-11-24 interview:
    - [x] Per-agent LiteLLM key — mint via `./homelab.sh key add-agent <slug>
          [--work-type coding|writing] [--capability read|control|admin]`
          (Phase 13 delivered `key add-agent` 2026-11-26; proxy API; token →
-         `.env` as `LITELLM_KEY_<SLUG>`); per-key default model by work type
-         (`matrix-coder` for product/analyst, `matrix-copywriter` for
-         strategist/marketing); key lifecycle per security_todo.md **Phase 13**
+         `.env` as `LITELLM_KEY_<SLUG>`); per-key model access = work-type
+         model (`matrix-coder` for product/analyst, `matrix-copywriter` for
+         strategist/marketing) **plus the kanban pipeline model**
+         (`KANBAN_MODEL`, default `matrix-coder` — the pipeline runs all
+         sessions on it; see item 12 for the 403 bug this prevents); key
+         lifecycle per security_todo.md **Phase 13**
          (one `.env`, `key rotate`, alias-based kanban capability map,
          `MEMORY_USER_KEYS` entry) — **done 2026-11-27**: 4 keys active in
          LiteLLM (product/analyst → matrix-coder; strategist/marketing →
-         matrix-copywriter); `.env` wired; skill-runner + mcp_kanban in sync
-         per key-sync-check (20 pre-existing drifts in 8 other containers —
-         see build report)
+         matrix-copywriter + matrix-coder); `.env` wired; skill-runner +
+         mcp_kanban in sync per key-sync-check (20 pre-existing drifts in 8
+         other containers — see build report)
    - [x] Cron jobs in `scheduler/schedules.json` (hot-reload,
          America/Chicago): `weekly-agent-reviews` Fri 15:00, `monthly-org-review`
          first Fri 15:00 — **done 2026-11-27**: both jobs registered (12
@@ -844,6 +853,39 @@ New from the 2026-11-24 interview:
    - Agents switch: **global ON** (setBy: chuck) — all 4 agents active;
      per-slug switches available for pausing any single agent
      (`agents_switch({slug, state})`).
+12. **Agent-key model access — kanban pipeline model (bug fix, 2026-11-27)**
+    — the first live agent run exposed a key-model mismatch: the
+    strategist/marketing keys were minted with `models=[matrix-copywriter]`
+    only (work-type default), but the kanban pipeline runs **all** sessions
+    (task work + QA) on `KANBAN_MODEL=matrix-coder`. Every LLM call for
+    those two agents 403'd (`key_model_access_denied`); the session SDK
+    swallowed the error and returned empty content, so the task "completed"
+    with nothing and QA got "no parseable verdict" → 2 rounds →
+    needs_attention (tasks 21 + 22; product/analyst — matrix-coder keys —
+    were unaffected). **Fix** (2026-11-27):
+   - Live keys: `key update strategist|marketing --models
+     matrix-copywriter,matrix-coder` — the work-type model stays for direct
+     (non-kanban) key usage; the pipeline model is added for the kanban
+     pipeline. Verified: both keys now complete a matrix-coder chat call.
+   - `key add-agent` (lib/litellm-keys.sh): the mint payload now includes
+     the work-type model **plus** the kanban pipeline model (`KANBAN_MODEL`
+     env, default `matrix-coder`), deduped when they're the same — future
+     agent keys can't hit this again.
+   - Tasks 21 + 22 restarted via `restart_task` with a resolution note
+     (root cause + fix); no work was done on the failed runs (empty
+     sessions), so they resumed fresh from the mission brief.
+   - Design note: the work-type model assignment governs the agent's
+     **direct** key usage (skill-runner, etc.); the kanban pipeline is a
+     coding pipeline (git/commits/QA/deploy) and runs on matrix-coder for
+     every agent. Per-owner pipeline models (writing agents' task work on
+     matrix-copywriter inside the pipeline) would be a harness change
+     (per-profile model selection in `sessions.ts`) — not built; the keys
+     have access to both models either way.
+   - Secondary robustness gap (not fixed — noted): a session whose first
+     LLM call fails with an auth error should fail loudly (needs_attention
+     with the real error) rather than surface as an empty completion. The
+     key fix removes the trigger; the loud-fail hardening is a follow-up
+     harness improvement.
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
 revised 2026-11-27 — product first; all 4 agents activated 2026-11-27).
