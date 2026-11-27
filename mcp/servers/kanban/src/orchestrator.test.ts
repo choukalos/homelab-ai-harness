@@ -443,6 +443,7 @@ test("slots: mixed — 1 media + 2 non-media run, third non-media waits", async 
 
 test("slots: agent-owned cards count against the agent slot (default 1); non-agent cards unaffected", async () => {
   const { q, services, runner, orch } = await setup({ agentSlugs: ["product"] });
+  await services.setAgentsSwitch("on", "test"); // switch on — this test covers slots, not the switch
   const p = await services.createProject({ name: "Alpha" });
   const a1 = await makeBacklogTask(q, services, p.id, "Agent one", [], "product");
   const a2 = await makeBacklogTask(q, services, p.id, "Agent two", [], "product");
@@ -483,6 +484,7 @@ test("slots: agent-owned cards count against the agent slot (default 1); non-age
 
 test("slots: agent-owned media-kind card counts against the agent slot, not the media slot", async () => {
   const { q, services, runner, orch } = await setup({ mediaSlots: 1, agentSlugs: ["product"] });
+  await services.setAgentsSwitch("on", "test"); // switch on — this test covers slots, not the switch
   const p = await services.createProject({ name: "Alpha" });
   // A media-kind card owned by a standing agent + a media-kind board card:
   // different slots, so both run (no media/media contention).
@@ -504,6 +506,7 @@ test("slots: agent-owned media-kind card counts against the agent slot, not the 
 
 test("slots: agent slot is env-tunable; owners outside AGENT_SLUGS stay board work", async () => {
   const { q, services, runner, orch } = await setup({ agentSlots: 2, agentSlugs: ["product", "analyst"] });
+  await services.setAgentsSwitch("on", "test"); // switch on — this test covers slots, not the switch
   const p = await services.createProject({ name: "Alpha" });
   const a1 = await makeBacklogTask(q, services, p.id, "Product card", [], "product");
   const a2 = await makeBacklogTask(q, services, p.id, "Analyst card", [], "analyst");
@@ -524,6 +527,79 @@ test("slots: agent slot is env-tunable; owners outside AGENT_SLUGS stay board wo
   runner.abort(a1.task.id);
   runner.abort(a2.task.id);
   runner.abort(a3.task.id);
+  await orch.settled();
+});
+
+test("master switch: OFF (default) blocks agent starts; board work unaffected", async () => {
+  const { q, services, runner, orch } = await setup({ agentSlugs: ["product"] });
+  const p = await services.createProject({ name: "Alpha" });
+  const a1 = await makeBacklogTask(q, services, p.id, "Agent one", [], "product");
+  const c1 = await makeBacklogTask(q, services, p.id, "Board worker");
+
+  // Fail-safe default: no kv row -> OFF. (Assert the default, then proceed.)
+  assert.deepEqual(await services.getAgentsSwitch(), { state: "off", setAt: null, setBy: null });
+
+  runner.behavior.set(a1.task.id, "hang");
+  runner.behavior.set(c1.task.id, "hang");
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [c1.task.id]);
+  assert.equal((await getTask(q, c1.task.id)).state, "running", "board work runs with the switch off");
+  assert.equal(
+    (await getTask(q, a1.task.id)).state,
+    "backlog",
+    "agent card stays in the backlog while the switch is off",
+  );
+
+  // Explicit start of the agent card is refused with the switch message.
+  await assert.rejects(
+    orch.startTask(a1.task.id),
+    (err: unknown) =>
+      err instanceof Error && /agents master switch is OFF/.test(err.message),
+  );
+
+  // Flip ON -> the agent card starts on the next tick.
+  const on = await services.setAgentsSwitch("on", "test");
+  assert.equal(on.state, "on");
+  await orch.tick();
+  await awaitRuns(runner, [a1.task.id]);
+  assert.equal((await getTask(q, a1.task.id)).state, "running", "switch on -> agent card starts");
+
+  runner.abort(a1.task.id);
+  runner.abort(c1.task.id);
+  await orch.settled();
+});
+
+test("master switch: OFF gates tick pickup AND in-flight agent tasks continue (v1)", async () => {
+  const { q, services, runner, orch } = await setup({ agentSlugs: ["product"] });
+  await services.setAgentsSwitch("on", "test"); // start ON so a1 can launch, then flip OFF mid-flight
+  const p = await services.createProject({ name: "Alpha" });
+  const a1 = await makeBacklogTask(q, services, p.id, "Agent one", [], "product");
+  const a2 = await makeBacklogTask(q, services, p.id, "Agent two", [], "product");
+
+  runner.behavior.set(a1.task.id, "hang");
+  runner.behavior.set(a2.task.id, "hang");
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [a1.task.id]);
+  assert.equal((await getTask(q, a1.task.id)).state, "running");
+
+  // Flip OFF with a1 in flight: a1 keeps running (the switch gates starts,
+  // not mid-session kills — v1), a2 does not start.
+  await services.setAgentsSwitch("off", "test");
+  await orch.tick();
+  assert.equal(
+    (await getTask(q, a1.task.id)).state,
+    "running",
+    "in-flight agent task continues after the switch flips off",
+  );
+  assert.equal((await getTask(q, a2.task.id)).state, "backlog", "no new agent starts while off");
+  await assert.rejects(
+    orch.startTask(a2.task.id),
+    (err: unknown) => err instanceof Error && /agents master switch is OFF/.test(err.message),
+  );
+
+  runner.abort(a1.task.id);
   await orch.settled();
 });
 

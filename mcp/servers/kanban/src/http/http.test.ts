@@ -550,7 +550,7 @@ test("POST /mcp auth: actions require a key; discovery is open (proxy registry)"
   assert.equal(noAuthList.statusCode, 200);
   const rpc = parseRpc(noAuthList.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  assert.equal(names.length, 27, `expected the full 27-tool set, got ${names.length}`);
+  assert.equal(names.length, 28, `expected the full 28-tool set, got ${names.length}`);
   // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
@@ -600,6 +600,7 @@ test("POST /mcp tools/list returns the 27-tool set", async () => {
   const names = rpc.result.tools.map((t: any) => t.name).sort();
   assert.deepEqual(names, [
     "add_idea",
+    "agents_switch",
     "board_status",
     "create_project",
     "delete_project",
@@ -1408,6 +1409,64 @@ test("MCP: scoped key (read) sees only read tools and cannot call control tools"
   await app.close();
 });
 
+test("MCP: agents_switch is admin-only — control keys rejected, admin reads/sets", async () => {
+  const ctx = await makeApp({
+    mcpKeyCapabilities: new Map([
+      ["ctrl999", new Set(["control"])],
+      ["admin88", new Set(["admin"])],
+    ]),
+    userKeys: { admin88: "sk-admin-admin88" },
+  });
+  const { app } = ctx;
+  const call = (auth: string, name: string, args: Record<string, unknown>) =>
+    app.inject({
+      method: "POST",
+      url: "/mcp",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${auth}`,
+      },
+      payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    });
+
+  // control key: the tool is invisible in tools/list and rejected at call time.
+  const ctrlList = await app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-user-ctrl999",
+    },
+    payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  const ctrlNames = parseRpc(ctrlList.payload).result.tools.map((t: any) => t.name);
+  assert.ok(!ctrlNames.includes("agents_switch"), "control key does not see agents_switch");
+  const ctrlCall = await call("sk-user-ctrl999", "agents_switch", {});
+  const ctrlRpc = parseRpc(ctrlCall.payload);
+  assert.equal(ctrlRpc.result.isError, true, "agents_switch rejected for the control key");
+  assert.match(ctrlRpc.result.content[0].text, /not available for this key/);
+
+  // admin key: read (fail-safe default off), set on, set off — durable round-trip.
+  const read1 = parseRpc((await call("sk-admin-admin88", "agents_switch", {})).payload).result;
+  assert.ok(!read1.isError, `read failed: ${JSON.stringify(read1)}`);
+  assert.deepEqual(JSON.parse(read1.content[0].text), { state: "off", setAt: null, setBy: null },
+    "missing row -> fail-safe OFF");
+  const setOn = parseRpc((await call("sk-admin-admin88", "agents_switch", { state: "on" })).payload).result;
+  assert.ok(!setOn.isError, `set on failed: ${JSON.stringify(setOn)}`);
+  assert.deepEqual(JSON.parse(setOn.content[0].text), {
+    state: "on",
+    setAt: JSON.parse(setOn.content[0].text).setAt,
+    setBy: "admin88",
+  }, "set attributes the caller");
+  const read2 = parseRpc((await call("sk-admin-admin88", "agents_switch", {})).payload).result;
+  assert.equal(JSON.parse(read2.content[0].text).state, "on", "state persists (durable kv)");
+  const setOff = parseRpc((await call("sk-admin-admin88", "agents_switch", { state: "off" })).payload).result;
+  assert.equal(JSON.parse(setOff.content[0].text).state, "off");
+  await app.close();
+});
+
 test("MCP: kanban key still gets the full tool set (no regression)", async () => {
   const { app } = await makeApp();
   const res = await app.inject({
@@ -1417,7 +1476,7 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
     payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const rpc = parseRpc(res.payload);
-  assert.equal(rpc.result.tools.length, 27, "kanban key sees all 27 tools");
+  assert.equal(rpc.result.tools.length, 28, "kanban key sees all 28 tools");
   await app.close();
 });
 
