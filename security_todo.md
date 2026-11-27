@@ -12,7 +12,7 @@
 > (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
 > program) added as a **grooming stub** 2026-11-21. Phase 10 (host security
 > monitoring & reporting) added 2026-11-24 after the `url565.planning.com`
-> alert investigation; **BUILT 2026-11-27 (pending deploy)** — baseline
+> alert investigation; **DEPLOYED 2026-11-27** — baseline
 > capture + daily baseline-diff scan + weekly digest + systemd units +
 > `homelab.sh security status` + node-exporter textfile metrics; deploy
 > runbook `docs/security_phase10_deploy.md`, evidence
@@ -557,7 +557,7 @@ breach runbook + table-top done.
 
 ---
 
-### Phase 10 — Host security monitoring & reporting — **BUILT 2026-11-27 (pending deploy)**
+### Phase 10 — Host security monitoring & reporting — **DEPLOYED 2026-11-27**
 
 > Trigger: the 2026-11-24 manual investigation (company security alert about
 > `url565.planning.com` — result: **clean**; no mail stack on the host, no SMTP
