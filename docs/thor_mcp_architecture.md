@@ -9,13 +9,22 @@
 > transport migrated streamable-http → SSE 2026-09-20). This doc is the design
 > baseline; the "Current state" notes reflect the live system.
 
-**Current state (2026-11-21)**
-- 14 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
+**Current state (2026-11-27)**
+- 15 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
   `mcp_media` (27), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (16)
-  — **110 tools total** (verified live 2026-11-21: LiteLLM
-  `/mcp-rest/tools/list` + per-server `tools/list`). `mcp_sessions` added
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (16),
+  `mcp_filebridge` (5)
+  — **115 tools total** (verified live 2026-11-27: LiteLLM
+  `/mcp-rest/tools/list` + per-server `tools/list`). `mcp_filebridge` added
+  2026-11-27 (Phase 12 P12-B/C — the homelab's single public file edge;
+  streamable HTTP at `POST /mcp`, port 8000, `transport: http` +
+  `extra_headers: [Authorization]` — the second non-SSE entry after
+  `mcp_kanban`; tools: `file_pull`, `file_push`, `file_publish`,
+  `file_work_areas`, `file_targets`; default-deny work-area/publish-target
+  registry `filebridge.yaml`; 1b bridge-minted path-bound TTL'd tokens at
+  `GET /media/files/dl/{token}`; granted to the `family-mcp-full` access
+  group — chuck + dylan). `mcp_sessions` added
   2026-11-21 (mcp_sessions Phase 1 — remote session ingest + owner-scoped
   read-back; `sessions_ingest`, `sessions_list`, `sessions_get`).
   `mcp_kanban` added 2026-11-21 (LLM task queue + grooming + execution;
@@ -128,6 +137,7 @@ Skills compose multiple MCP tools. MCP servers do not know about skills or chann
 | `mcp_vision` | Image/video analysis via matrix-coder vision (5 tools, live 2026-08-28) | LiteLLM `matrix-coder` + ffmpeg + yt-dlp |
 | `mcp_skills` | Cross-client skill gateway: list/run/get skill jobs (3 tools, live 2026-08-29) | skill-runner `:8091` |
 | `mcp_memory` | Long-term memory search/list/remember (mem0 + Qdrant `mem0_memories`), live 2026-09-02 (`memory_remember` added 2026-10-21; hybrid BM25+dense search since 2026-11-14) | skill-runner memory API `:8091` |
+| `mcp_filebridge` | Homelab file edge (Phase 12, live 2026-11-27): `file_pull`/`file_push`/`file_publish`/`file_work_areas`/`file_targets` + 1b public tokens (`/media/files/dl/{token}`) | `filebridge.yaml` registry (work areas + publish targets); Matrix `:8189` relay |
 | `mcp_stocks` | ~~Stock market data~~ (never implemented) | — |
 | `mcp_home` | Home automation (future, read-only) | Homebridge on Lego |
 
@@ -372,9 +382,10 @@ Queue model: **1 concurrent GPU job + 5 queued** (max pending 6); a full queue r
 
 ## Rules
 
-- **Implemented.** All 14 servers run as containers on `ai-net` (13 on SSE
-  transport, path `/sse`, port 8000; `mcp_kanban` is the exception —
-  streamable HTTP at `POST /mcp`, port 3000, `transport: http`)
+- **Implemented.** All 15 servers run as containers on `ai-net` (13 on SSE
+  transport, path `/sse`, port 8000; `mcp_kanban` + `mcp_filebridge` are the
+  exceptions — streamable HTTP at `POST /mcp`, ports 3000 / 8000,
+  `transport: http`)
   and are registered in `litellm/config.yml` (`mcp_servers`, `transport: sse`).
   **MCP key access — superseded 2026-11-15 (security Phase 2):** the
   2026-08-25 `allow_all_keys: true` decision (every valid key may call every

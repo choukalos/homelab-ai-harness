@@ -811,9 +811,11 @@ publish_targets:
     subdirs: [ai, images, audio, video, tabs]
     url_base: https://choukalos.com/files
     source_roots: [/home/chuck/data/media, /home/chuck/workspace]
-    size_cap_mb: <confirm from publish-file impl>
-  nas:         # publish to the NAS media store (D14)
-    root: /mnt/lego-media-store/<subdir — decide>
+    size_cap_mb: 500
+  nas:         # publish to the NAS media store (D14; decision 4-published: /published/)
+    root: /mnt/lego-media-store/published
+    subdirs: []                # flat — no subdirs
+    url_base: ""               # not public — access via work-area tools / 1b tokens
   # bluebovine: (future — adapter interface defined in P12-C, no impl now (D14))
 ```
 
