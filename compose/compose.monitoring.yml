@@ -118,7 +118,7 @@ services:
   # Admin UI: LAN-only at http://192.168.4.54:8082
   # Script & API: public via Caddy at https://plausible.choukalos.com
   plausible:
-    image: ghcr.io/plausible/community-edition:v3.2.0
+    image: ghcr.io/plausible/community-edition:v3.2.2
     container_name: plausible
     restart: unless-stopped
     command: sh -c "/entrypoint.sh db createdb && /entrypoint.sh db migrate && /entrypoint.sh run"
@@ -137,7 +137,18 @@ services:
         hard: 65535
     environment:
       - TMPDIR=/var/lib/plausible/tmp
-      - BASE_URL=https://plausible.choukalos.com
+      # BASE_URL is the LAN address, NOT the public hostname: the admin UI is
+      # only reachable on-LAN (Caddy 404s it publicly), and Plausible derives
+      # two things from BASE_URL that break over public-https + LAN-http:
+      #   1) secure_cookie (session cookie is Secure -> never sent over HTTP)
+      #   2) LiveView check_origin (WS Origin must match the endpoint host)
+      # With BASE_URL=http://192.168.4.54:8082 the cookie is non-secure and
+      # the LAN Origin is accepted, so the register form's LiveView join works.
+      # The public tracker is unaffected: script.plausible.js derives its
+      # event endpoint from the script's src (plausible.choukalos.com), not
+      # BASE_URL. (2026-11-27: fixes the "stale" LiveView join that hung
+      # first-user registration.)
+      - BASE_URL=http://192.168.4.54:8082
       - SECRET_KEY_BASE=${PLAUSIBLE_SECRET_KEY}
       - DATABASE_URL=postgresql://${PLAUSIBLE_DB_USER:-plausible}:${PLAUSIBLE_DB_PASS}@plausible-db:5432/${PLAUSIBLE_DB_NAME:-plausible}
       - CLICKHOUSE_DATABASE_URL=http://plausible-events-db:8123/plausible

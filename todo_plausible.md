@@ -1,8 +1,9 @@
 # Todo — Plausible: get analytics working (workstream 1)
 
 - date: 2026-11-22
-- status: open — **current blocker: first-user bootstrap (ingest broken until a
-  user exists)**
+- status: open — **registration unblocked 2026-11-27 (LiveView join fix); P1
+  first-user bootstrap is the current step (ingest stays broken until a user
+  exists)**
 - target: chuck + pi
 - source: WS1 (engagement/usage instrumentation) of the agent-skills plan
   (`todo_agent_skills.md`). Chuck's call 2026-11-22: Plausible "is in itself its
@@ -53,9 +54,53 @@ won't. So Plausible gets working correctly first, and the data clock starts.
   first-time-setup entry point, working as designed); the "ingest broken"
   symptom is **real** and has the same cause.
 
+## Diagnosis 2 — registration hang (2026-11-27)
+
+**Symptom:** `/register` loads in a browser but the LiveView form never
+activates — no errors, just a frozen page; first-user creation impossible.
+
+**Root cause:** `BASE_URL=https://plausible.choukalos.com` while the admin UI
+is only reachable over plain HTTP on the LAN. Plausible derives two things
+from `BASE_URL`, and both broke the LiveView WebSocket join:
+
+1. `secure_cookie` (from the https scheme) — the `_plausible_key` session
+   cookie was set `Secure`; browsers drop Secure cookies over HTTP, so the WS
+   connection arrived with no session cookie → `connect_info[:session] = nil`
+   → LiveView answers `"stale"` → the form hangs.
+2. `check_origin` on the LiveView socket (from the endpoint host) — the LAN
+   browser sends `Origin: http://192.168.4.54:8082`, which the server
+   rejected (403 on the WS handshake) because it only accepted
+   `https://plausible.choukalos.com`.
+
+**Fix (one env change):** `BASE_URL=http://192.168.4.54:8082`
+(`compose/compose.monitoring.yml`). The public tracker is unaffected —
+`script.plausible.js` derives its event endpoint from the script's `src`
+attribute, not `BASE_URL`.
+
+Also bumped the image `v3.2.0 → v3.2.2` (patch release, already pulled and
+verified running) while in there.
+
+**Verified end-to-end (2026-11-27):** cookie no longer `Secure`; WS handshake
+101 with the LAN Origin; LiveView `phx_join` on the register form returns
+`status: ok` with the rendered form (replayed the exact browser join payload
+— top-level `url`, `?vsn=2.0.0&_csrf_token=...` query, session cookie).
+
+**Gotchas found while tracing (for the record):**
+
+- The register form is a LiveView, not a plain POST form — `POST /register`
+  404s by design.
+- The WS URL needs `?vsn=2.0.0` (server otherwise uses the V1 map serializer)
+  and `?_csrf_token=<meta tag>` (session is only honored with a valid CSRF
+  token in the query).
+- The join payload's `url` key is **top-level** (not inside `params`); without
+  it the server mounts with `:not_mounted_at_router` params and the register
+  view's `assign_new(:invitation, ...)` crashes.
+- Plug.Crypto 1.2.5 tokens are JWT-style (HMAC over `protected.payload`),
+  which trips up naive HMAC verification when debugging tokens.
+
 ## Plan
 
-### P1 — Create the first user (chuck) ← current blocker
+### P1 — Create the first user (chuck) ← current step (unblocked 2026-11-27)
 
 - `http://192.168.4.54:8082/register` — create the account (email + password)
 - Verify: `/` serves the login page (no more `/register` redirect);
@@ -95,8 +140,10 @@ won't. So Plausible gets working correctly first, and the data clock starts.
 
 ## Architecture (as deployed)
 
-- `plausible` — `ghcr.io/plausible/community-edition:v3.2.0`,
-  `192.168.4.54:8082→8000` (LAN-only bind), `BASE_URL=https://plausible.choukalos.com`,
+- `plausible` — `ghcr.io/plausible/community-edition:v3.2.2`,
+  `192.168.4.54:8082→8000` (LAN-only bind),
+  `BASE_URL=http://192.168.4.54:8082` (LAN address by design — see
+  Diagnosis 2; drives `secure_cookie` + `check_origin`),
   `DISABLE_REGISTRATION=true`, on `monitoring-net` + `public-net`
 - `plausible-db` — postgres:16-alpine (healthcheck `pg_isready`)
 - `plausible-events-db` — clickhouse 24.12-alpine (low-resource overrides,
