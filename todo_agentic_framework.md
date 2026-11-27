@@ -1,7 +1,8 @@
 # Todo — agentic framework + agents (workstreams 3–4)
 
 - date: 2026-11-24
-- status: open (planning complete 2026-11-25 — all framework design
+- status: **LIVE — verification window (2026-11-27)** (planning complete
+  2026-11-25 — all framework design
   questions decided; S13 `okr` skill built + registered 2026-11-25; Q15
   domain knowledge decided 2026-11-26; **first org-goals pass done 2026-11-26**
   — `docs/org/goals.md` (cycle 2026-12: homelab O1 content; bluebovine O1
@@ -64,7 +65,19 @@
   weekly review `docs/agents/product/reviews/2026-W48.md`, both skills
   registered in the Skill Hub, the first real cron fire (2026-11-27 15:00
   CT) will now run the real skills — evidence below +
-  `todo_agentic_framework_review-skills-report-2026-11-27.md`)
+  `todo_agentic_framework_review-skills-report-2026-11-27.md`).
+  **FRAMEWORK LIVE — VERIFICATION WINDOW (2026-11-27):** all 4 agents
+  ACTIVE (chuck activated strategist/marketing/analyst 2026-11-27 — the
+  "product first, rest OFF" state above is superseded), all 4 first-run
+  artifacts merged to main (tasks 20–23), board clean (20 done, 0 open),
+  board items 13–17 live (merge_task, loud-fail, per-owner models, byModel
+  usage, fresh-context QA), monthly org review consumes byModel + window
+  fixed. This doc is now a **verification-period record, not an active
+  build plan** — chuck's call 2026-11-27: keep it, verify the org over the
+  first week/month (W49 weekly reviews + the 2026-12-04 first monthly org
+  review), then retire it to `proposals/archive/`-style docs if the org is
+  holding. Nothing here is a pending build; the open questions below are
+  the ones that survive into the verification window.
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents

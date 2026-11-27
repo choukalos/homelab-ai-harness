@@ -25,9 +25,10 @@ the Kano pass) and S9's no-fabrication discipline.
 
 1. **The signal** — a PM-1 opportunity brief, a BA report/insight, user
    feedback, or an incident/blocker pattern. Name the source(s) explicitly —
-   every idea below traces to one. (Product analytics from Plausible are not
-   wired yet — gap G3; until then the BA reports and board state are the data
-   sources.)
+   every idea below traces to one. Product analytics are wired (G3 closed
+   2026-11-27 — Plausible → data-hub + Grafana); the PM reads them through
+   PM-6 `pm-analytics-review` (the data pack + the latest `plausible-kpi`
+   artifact), alongside the BA reports and board state.
 2. **Board state** — `list_ideas` on the relevant project (the dedupe base).
 3. **Strategy context** — the current goals, so ideas can be framed against
    what the org is optimizing for.

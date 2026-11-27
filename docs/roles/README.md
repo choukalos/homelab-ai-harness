@@ -18,6 +18,7 @@ shape.
 docs/roles/
 ├── pm/                        # Product Manager
 │   ├── market-analysis-<area>-<YYYY-MM-DD>.md   # PM-1 opportunity briefs
+│   ├── analytics-review-<YYYY-MM-DD>.md         # PM-6 analytics reviews (prioritization input)
 │   ├── prioritization-<YYYY-MM-DD>.md           # PM-5 prioritization passes
 │   ├── prds/<feature>.md                        # PM-2 PRDs (durable copy)
 │   └── pitches/<opportunity>-<YYYY-MM-DD>.md    # PM-3 exec pitches
@@ -27,6 +28,7 @@ docs/roles/
 ├── content-marketer/          # Content Marketer
 │   └── inventory.md           # CM-2 — the registry of published content (single table)
 └── business-analyst/          # Business Analyst
+    ├── report-contract.md     # G4 — the BA→role report contract (format, location, routing, cadence)
     └── reports/<topic>-<YYYY-MM-DD>.md          # BA reports (BA-1, Phase 3)
 ```
 

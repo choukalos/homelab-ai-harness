@@ -18,8 +18,22 @@
   build + security gate (seeded SQLi/XSS flagged as blockers, as designed) +
   content skills; test infra torn down 2026-11-24, commits c5f989e/6fec099;
   kanban project 11 kept as the durable record; state file
-  tmp/skills-e2e-smoke-state.md).
-  Remaining: Phase 3 (blocked on G3 Plausible wiring). **WS3/WS4 planning
+  tmp/skills-e2e-smoke-state.md). **Phase 3 DONE 2026-11-27** (measurement /
+  feedback loop — unblocked when the G3 wiring landed: Plausible → data-hub
+  feed + Grafana Product KPIs, `todo_plausible.md` P5): BA-1 `kpi-reporting`
+  built as the `plausible-kpi` skill (commit `bb327d1` — deterministic
+  ClickHouse KPI report, registered + live-verified on all 3 sites); PM-6
+  `pm-analytics-review` (analytics data pack → prioritization input, writes
+  `docs/roles/pm/analytics-review-<date>.md`); S6 `security-review` (light
+  any-change pre-push checklist + deterministic scanner: secrets /
+  permissions / image pinning); S7 `spend-awareness` (budget picture before
+  long jobs: per-key LiteLLM totals + 24h, per-owner kanban usage); S8
+  `debugging` (systematic loop — reproduce → isolate → fix → verify, 3-cycle
+  budget, escalation triggers; grounded in R3 Q4); G4 BA→role report contract
+  defined (`docs/roles/business-analyst/report-contract.md` — location, format,
+  routing, cadence, KPI registry, grounding rules). All 5 skills registered +
+  enabled in the Skill Hub; deterministic tools smoke-tested against live
+  data. **WS3/WS4 planning
   started 2026-11-24** — own plan doc
   `todo_agentic_framework.md` created; goal model decided (per-domain org
   goals homelab/bluebovine — investhub out of scope/chuck-only; agent-suggested
@@ -156,11 +170,13 @@ handoffs; the evolving document (new steps land here first).
   consistent) + strategy fit + a written rationale per choice; losing ideas get a
   reason (icebox vs. discard vs. "not now"), not silence. Output: a prioritized
   shortlist + the rationale, recorded on the board.
-- **PM-6 — `pm-analytics-review` (P2, wiring blocked — gap G3).** Consuming the
+- **PM-6 — `pm-analytics-review` (P2, built 2026-11-27 — G3 closed).** Consuming the
   product analytics (traffic, engagement, leads from Plausible; spend from kanban
-  `/reports`) to inform ideation/prioritization. The data source is decided
-  (Plausible → data-hub); the step skill + the BA→PM report contract get defined
-  when the wiring lands.
+  `usage` / the `/reports` page) to inform ideation/prioritization. The data source
+  is wired (Plausible → data-hub → Grafana Product KPIs); the step skill
+  (`agents-skills/pm-analytics-review/`, data pack tool + the review playbook,
+  writes `docs/roles/pm/analytics-review-<date>.md`) and the BA→PM handoff (the
+  G4 report contract) are defined.
 
 **Handoffs:** ideas/specs → Coding Team (via the board); pitches → chuck; market
 insights → BA (feeds the strategy loop) + Marketing Strategist.
@@ -271,7 +287,8 @@ strategy doc as the durable artifact.
   pillars → measurement), the **content-ask template** (the contract with the
   Content Marketer: topic, angle, format, funnel stage, goal, constraints,
   deadline), and the **impact-review template** (goal vs. actual, learnings,
-  strategy deltas — blocked on the Plausible wiring, gap G3). Output: a durable
+  strategy deltas — the Plausible wiring is live (G3 closed 2026-11-27), so
+  impact reviews can now read real traffic/engagement data). Output: a durable
   versioned strategy doc + asks on the board (content project) + periodic impact
   reviews.
 
@@ -356,8 +373,10 @@ loop — insights to the exec and to every role.
   (fed from Plausible + finance DB + kanban).
 - Flow: Plausible → (feed into) data-hub → report-hub/Grafana dashboards → BA
   reads → insights routed to the roles.
-- Wiring (install Plausible on the sites, feed its data into data-hub) is the
-  outstanding work — gap G3.
+- Wiring (install Plausible on the sites, feed its data into data-hub) is
+  **done (2026-11-27, G3 closed)** — `todo_plausible.md` P1–P5: Plausible live
+  on all 3 sites, ingest verified, data-hub feed (path A) + Grafana Product
+  KPIs dashboard + the BA-1 `plausible-kpi` KPI report skill.
 
 **Role skill (playbook):** `business-analyst-role` — the workflow above; owns the
 KPI set + the insight-routing log. (Distinct from the existing `business-analyst`
@@ -377,8 +396,8 @@ skill, which is the NL→SQL tool skill this role uses.)
   2026-11-22):** Plausible = product web/mobile apps (invest-hub, both
   blogs/websites); data-hub/report-hub + Grafana = platform/service status +
   engineering-centric; plus the finance DB, kanban `/reports`, board state
-  (available now). **Wiring is TBD** (gap G3): Plausible install + feed into
-  data-hub.
+  (available now). **Wiring is done (2026-11-27, G3 closed)**: Plausible live
+  on all 3 sites + data-hub feed (path A) + Grafana Product KPIs.
 
 **Handoffs:** insights → all roles + chuck; feedback → routed to the owning role's
 board.
@@ -408,7 +427,7 @@ planned step skills). Gap register at the end.
 | Step | Coverage | Status |
 |------|----------|--------|
 | 1. Analyze research / competitive market | PM-1 (planned) + `deep-research` + `market-research-brief` | ✅ planned |
-| 2. Analyze analytics | — data source decided (Plausible via data-hub) but not wired; no step skill/contract to consume BA output | ⚠️ G3 (wiring) |
+| 2. Analyze analytics | PM-6 `pm-analytics-review` (built 2026-11-27) — data source wired (Plausible via data-hub, G3 closed) + step skill + G4 contract to consume BA output | ✅ |
 | 3. Ideate features / solve problems | — no ideation skill (frameworks, dedupe, idea template) | ⚠️ G1 → PM-4 |
 | 4. Select ideas | — no prioritization framework; grooming covered by S1/PM-2 | ⚠️ G2 → PM-5 |
 | 5. Create product requirements | PM-2 (planned) + S1 grooming loop | ✅ planned |
@@ -431,10 +450,10 @@ planned step skills). Gap register at the end.
 
 | Step | Coverage | Status |
 |------|----------|--------|
-| 1. Review market / reports / analytics | `deep-research`, `market-research-brief`, `business-analyst`, BA reports — **content analytics not yet wired (G3: Plausible)** | ⚠️ G3 (wiring) |
+| 1. Review market / reports / analytics | `deep-research`, `market-research-brief`, `business-analyst`, BA reports — content analytics wired (G3 closed 2026-11-27: Plausible + `plausible-kpi` KPI report) | ✅ |
 | 2. Strategy / voice / brand image | MKT-1 (planned) + S12 — **no brand asset inventory to calibrate voice against (G8)** | ⚠️ G8 (low) |
 | 3. Ideate content asks | MKT-1 (ask template) | ✅ planned |
-| 4. Assess impact | MKT-1 (impact template) — **blocked on the Plausible wiring (G3)** | ⚠️ G3 (wiring) |
+| 4. Assess impact | MKT-1 (impact template) — Plausible wiring live (G3 closed 2026-11-27); impact reviews read real traffic/engagement | ✅ |
 | 5. Update ideas / strategy | MKT-1 + S5 (durable state) | ✅ planned |
 
 **Content Marketer**
@@ -452,9 +471,9 @@ planned step skills). Gap register at the end.
 
 | Step | Coverage | Status |
 |------|----------|--------|
-| 1. Reports/dashboards from code/blogs | BA-1 (planned) + `business-analyst` + `homelab-report`; surface = data-hub/report-hub + Grafana (decided) — **analytics wiring outstanding (G3)** | ⚠️ G3 (wiring) |
-| 2. Periodic analysis | BA-1 (cadence deferred — Q11, tied to the agent work) | ✅ (deferred) |
-| 3. Synthesize and share | BA-1 — **no insight delivery contract (G12)** | ⚠️ G12 |
+| 1. Reports/dashboards from code/blogs | BA-1 `plausible-kpi` (built 2026-11-27) + `business-analyst` + `homelab-report`; surface = data-hub/report-hub + Grafana (wired 2026-11-27, G3 closed) | ✅ |
+| 2. Periodic analysis | BA-1 (cadence deferred — Q11, tied to the agent work; the weekly KPI digest cadence is live via the analyst) | ✅ (deferred) |
+| 3. Synthesize and share | BA-1 + the G4 report contract (`docs/roles/business-analyst/report-contract.md`, defined 2026-11-27) | ✅ (G4) |
 | 4. Present to execs | `presentation-build` + S9 | ✅ |
 | 5. Take feedback to the team | BA-1 (routing to the board) | ✅ |
 
@@ -464,8 +483,8 @@ planned step skills). Gap register at the end.
 |----|-----|----------|------------|
 | G1 | No ideation step skill (frameworks, problem-first, dedupe, idea template) | High — PM step 3 uncovered | New step skill PM-4 `pm-ideation` (research: R8) |
 | G2 | No prioritization framework (value/effort/strategy fit; RICE/ICE/Kano) | High — PM step 4 uncovered | New step skill PM-5 `pm-prioritization` (R8) |
-| G3 | Product/content analytics not yet wired (blog traffic, invest-hub, leads, usage) | High — PM step 2, strategist impact, BA step 1, and the whole feedback loop | **Decided 2026-11-22**: Plausible (**self-hosted on thor**) = data engine for product web/mobile apps (invest-hub, both blogs/websites); data-hub/report-hub + Grafana = reporting surface (platform/service status, engineering-centric). Remaining: wire it up (Plausible install + feed into data-hub) — later |
-| G4 | No BA→role analytics handoff contract (report format + location) | Medium | Defined together with G3 when the data lands |
+| G3 | Product/content analytics not yet wired (blog traffic, invest-hub, leads, usage) | High — PM step 2, strategist impact, BA step 1, and the whole feedback loop | **CLOSED 2026-11-27** (`todo_plausible.md` P1–P5): Plausible (self-hosted on thor) live on all 3 sites with ingest verified; data-hub feed (path A, daily export) + Grafana Product KPIs dashboard; BA-1 `plausible-kpi` KPI report skill. The decision (Plausible = data engine; data-hub/report-hub + Grafana = reporting surface) was made 2026-11-22 and is now wired |
+| G4 | No BA→role analytics handoff contract (report format + location) | Medium | **CLOSED 2026-11-27** — defined together with the G3 landing: `docs/roles/business-analyst/report-contract.md` (location + naming per G12, report format, insight routing, cadence, KPI registry, grounding rules) |
 | G5 | No explicit test-writing step (acceptance criteria → tests during implementation) | Medium | Fold into DEV-2 (stories carry their tests) + S3 |
 | G6 | "Update documentation" under-specified — S5 covers repo hygiene, not feature docs | Medium | Extend S5 with a ship-docs checklist |
 | G7 | No post-deploy watch window (logs/health/smoke test after deploy) | Medium | Extend S3 with a post-deploy watch step |
@@ -474,13 +493,15 @@ planned step skills). Gap register at the end.
 | G10 | No content inventory (registry of published content: URL, date, pillar, format, performance) | Medium — feeds BA + strategist + dedupe | New step skill CM-2 `content-inventory` + a repo artifact |
 | G11 | Reporting surface undecided | Medium | **Decided 2026-11-22**: data-hub/report-hub + Grafana (platform/service status, engineering-centric); durable markdown analysis notes in the repo for the record |
 | G12 | No artifact-location conventions (PRDs, strategy docs, reports, pitches) + no insight delivery contract | Medium | Define a `docs/` tree convention (e.g. `docs/roles/<role>/`); board specs carry PRDs; BA reports live in the repo + are routed via the board |
-| G13 | The feedback loop cannot close until the G3 wiring lands | Systemic | The Plausible → data-hub wiring is the loop's enabler — everything else is buildable now |
+| G13 | The feedback loop cannot close until the G3 wiring lands | Systemic | **CLOSED 2026-11-27** — the Plausible → data-hub wiring (the loop's enabler) landed with `todo_plausible.md` P5; the loop's first live cycle is the W49 weekly KPI digest + the first PM-6 review |
 
 **Audit verdict.** The *production* half of the org (PM spec → dev → QA → ship;
 strategist → content → publish) is fully covered by planned skills and can start
 building now. The *measurement* half (analytics → BA → feedback loop) has its
 architecture decided (Plausible for product web/mobile apps; data-hub/report-hub
-+ Grafana for platform/engineering) and is blocked only on the wiring (G3). Cheap
++ Grafana for platform/engineering) and its wiring **landed 2026-11-27 (G3
+closed — `todo_plausible.md` P1–P5)**; the measurement half's first live cycle
+is the W49 weekly KPI digest + the first PM-6 review. Cheap
 wins to fold into existing skills: G5, G6, G7, G12.
 
 ---
@@ -493,7 +514,7 @@ when their planning starts.
 
 | # | Workstream | What | Status |
 |---|-----------|------|--------|
-| 1 | **Engagement/usage instrumentation** | Plausible on the 3 web properties (invest-hub, Homelab Blog, Bluebovine) → data-hub → report-hub/Grafana | **Own plan: `todo_plausible.md`** (hard dependency for the measurement half). Current blocker: first-user bootstrap — ingest is broken until a user exists. Deep parts (feed, dashboards) land with skills Phase 3 |
+| 1 | **Engagement/usage instrumentation** | Plausible on the 3 web properties (invest-hub, Homelab Blog, Bluebovine) → data-hub → report-hub/Grafana | **DONE 2026-11-27** (`todo_plausible.md` P1–P5): first user, 3 sites, snippets live + ingest verified, data-hub feed (path A) + Grafana Product KPIs dashboard, BA-1 `plausible-kpi` KPI report skill. Data clock running; the deep parts (feed + dashboards) landed with P5, unblocking skills Phase 3 (BA) |
 | 2 | **Skills** | Role playbooks + step skills + shared library (this doc) | Planned (below) |
 | 3 | **Agentic framework** | The system for running role agents: identity/keys, goal model, projects, constraints, tasking, periodic review protocol, state/memory, scheduling, reporting, guardrails, spend | Not yet planned — needs its own TODO doc |
 | 4 | **Agents** | One standing agent per role: PM, BA, marketing strategist, content marketer, (+ maybe researcher) | Not yet planned — depends on WS3 |
@@ -516,19 +537,18 @@ own plan that everything depends on). Decided: self-hosted (CE v3.2.0, tracker
 integrated) on **thor**; public = `plausible.choukalos.com` via Caddy (`/js/*`
 + `/api/event` only — admin UI LAN-only by design).
 
-**Status (diagnosed 2026-11-22):** installed + healthy, but in **first-user
-bootstrap mode** — no user account exists, so every route (including
-`/api/event` and the tracker script) 302-redirects to `/register`. Ingest is
-broken until the first user is created:
+**Status (DONE 2026-11-27 — all of P1–P5):** the first-user bootstrap that
+broke ingest (every route 302-redirected to `/register`) was fixed via the
+LiveView join fix; all five plan steps landed —
 
-1. **P1 — create the first user** (`http://192.168.4.54:8082/register`) ←
-   current blocker; unblocks ingest + script + admin UI
-2. P2 — create the 3 sites in the admin UI (choukalos.com, invest.choukalos.com,
-   Bluebovine)
-3. P3 — snippet into the 3 sites (Hugo head, invest-hub head, Astro head)
-4. P4 — end-to-end verification (test event + real visits in the dashboard)
-5. P5 — (later, skills Phase 3 prereq) feed Plausible into data-hub +
-   report-hub/Grafana dashboards (the G3 wiring)
+1. ✅ P1 — create the first user (`http://192.168.4.54:8082/register`)
+2. ✅ P2 — create the 3 sites (choukalos.com, invest.choukalos.com,
+   bluebovinegroup.com)
+3. ✅ P3 — snippet into the 3 sites (Hugo head, invest-hub head, Astro head)
+4. ✅ P4 — end-to-end verification (test event + real visits in the dashboard)
+5. ✅ P5 — feed Plausible into data-hub (path A, daily export) + Grafana
+   Product KPIs dashboard + the BA-1 `plausible-kpi` KPI report skill (the G3
+   wiring — unblocked skills Phase 3)
 
 ---
 
@@ -638,26 +658,52 @@ in agreed locations.
   (commits `c5f989e`/`6fec099`); kanban project 11 kept as the durable record;
   state file `tmp/skills-e2e-smoke-state.md`.
 
-### Phase 3 — Measurement / feedback loop
+### Phase 3 — Measurement / feedback loop — **DONE 2026-11-27**
 
 **Goal:** close the loop — the BA measures shipped/published work against KPIs
 and routes insights back to every role.
 
-- **Build** (5 skills, in this order):
-  1. BA-1 `kpi-reporting` (P1) — the KPI set + reports on the decided surface
-  2. PM-6 `pm-analytics-review` (P2) — unblocks once data flows
-  3. S6 `security-review` (P3), S7 `spend-awareness` (P3), S8 `debugging` (P3 —
-     or fold into S3 per open question 3)
-  + **G4** — the BA→role report contract (defined when the data lands)
-- **Research**: R10 (BA / exec reporting)
-- **Prereq**: workstream 1's deep parts (the G3 wiring — Plausible → data-hub
-  feed + report-hub/Grafana dashboards). The quick win (Plausible collecting)
-  lands pre-Phase 0; the feed/dashboards are an instrumentation workstream task
-  that this phase depends on, not a skills task.
-- **Exit criteria**: Plausible feeding data-hub on all 3 properties; ≥1 KPI
-  defined per business goal (definition, source, target, cadence); first periodic
-  BA report produced with insights routed to at least one of each role (PM,
-  strategist, CM); exec status presentation delivered (board state + spend + KPIs)
+- **Build** (5 skills, in this order) — **all built + registered + enabled 2026-11-27**:
+  1. ✅ BA-1 `kpi-reporting` (P1) — built as the `plausible-kpi` skill
+     (commit `bb327d1`): deterministic ClickHouse KPI report (overview,
+     per-site, daily trend, top pages/countries, custom events) + the KPI set
+     on the decided surface (Grafana Product KPIs + the weekly KPI digest)
+  2. ✅ PM-6 `pm-analytics-review` (P2) — analytics data pack
+     (`tools/pm_analytics_data.py`: plausible artifact + KPI digest + board
+     state + spend by owner/model) → prioritization input; writes
+     `docs/roles/pm/analytics-review-<date>.md`; routes per the G4 contract
+  3. ✅ S6 `security-review` (P3) — light any-change pre-push checklist +
+     deterministic scanner (`tools/pre_push_security_check.py`: secrets in the
+     diff, secret-ish file permissions, untagged compose images) + the
+     judgement checks (auth surface, compose env interpolation, mounted-config
+     reload). Complements S11's deep pass.
+  + ✅ S7 `spend-awareness` (P3) — budget picture before long jobs
+     (`tools/spend_check.py`: per-key LiteLLM totals + 24h vs the Phase 6
+     limits, per-owner/per-model kanban usage) + the spend-deliberately rules
+     (batch, cheap-model-for-exploration, checkpoint durable progress)
+  + ✅ S8 `debugging` (P3) — **built standalone** (open question 3 resolved
+     2026-11-27: the homelab log paths + the 3-cycle budget + escalation
+     triggers are distinct enough from S3's verify-once pass to stand alone):
+     reproduce → isolate → fix → verify, grounded in R3 Q4
+  + ✅ **G4** — the BA→role report contract defined
+     (`docs/roles/business-analyst/report-contract.md`): location + naming
+     (G12), report format, insight routing (board card = the only routing that
+     creates work), cadence, KPI registry, grounding rules (one source / every
+     claim referenced / missing ≠ estimated / small windows say so)
+- **Research**: R10 (BA / exec reporting) — folded into the G4 contract + the
+  W48 KPI digest format (the digest is the standing artifact R10 describes;
+  a separate R10 deep-research pass is no longer needed — the org now has the
+  live pattern to extract from)
+- **Prereq**: workstream 1's deep parts (the G3 wiring) — **landed 2026-11-27**
+  (`todo_plausible.md` P5), which unblocked this phase.
+- **Exit criteria**: Plausible feeding data-hub on all 3 properties ✅ (P5);
+  ≥1 KPI defined per business goal ✅ (org KRs in `docs/org/goals.md` with
+  source/target/cadence; the W48 baseline digest records each one's status);
+  first periodic BA report produced with insights routed to at least one of
+  each role — **first live run: the W49 weekly KPI digest (week of
+  2026-12-01) + the first PM-6 review**, which is the smoke test this phase
+  defers to the running org (the deterministic half is smoke-tested here
+  against live data; the role half runs on the first real cycle)
 
 ### Dependency map
 
@@ -667,8 +713,8 @@ S1 ──▶ everything (board ops)
 R2 ──▶ S2        R3 ──▶ S3        R5 ──▶ S10        R6 ──▶ S11
 R8 ──▶ DEV-2 (Phase 1) ──▶ PM-4/PM-5 (Phase 2)
 MKT-1 ──▶ CM-1 (the brand check needs the strategy doc)
-WS1 quick win (Plausible live) ──▶ data clock starts (pre-Phase 0)
-WS1 deep (G3 wiring: feed + dashboards) ──▶ BA-1 ──▶ PM-6 ──▶ feedback loop closed
+WS1 quick win (Plausible live) ──▶ data clock starts (pre-Phase 0)  [DONE]
+WS1 deep (G3 wiring: feed + dashboards) ──▶ BA-1 ──▶ PM-6 ──▶ feedback loop  [DONE 2026-11-27]
 S9: spec complete — buildable in any phase
 ```
 
@@ -682,7 +728,7 @@ S9: spec complete — buildable in any phase
   periodic review protocol sets the cadence)
 - **Cost guardrails** — decided 2026-11-21: not for now
 - **G3 wiring specifics** (Plausible install details, data-hub feed design) —
-  scoped when the WS1 deep task starts
+  **landed 2026-11-27** (`todo_plausible.md` P1–P5; path A = scheduled export)
 
 ---
 
@@ -1153,7 +1199,10 @@ Skill Hub).
 
 ---
 
-## Existing skills by role (53 as of 2026-11-24)
+## Existing skills by role (61 as of 2026-11-27 — the 53 below + `okr`,
+`weekly-agent-reviews`, `monthly-org-review` (WS3/WS4, 2026-11-25/27),
+`plausible-kpi` (BA-1, 2026-11-27), and the Phase 3 batch:
+`pm-analytics-review`, `security-review`, `spend-awareness`, `debugging`)
 
 > Count as of 2026-11-24: **53 SKILL.md wrappers in `agents-skills/`** — all
 > registered + enabled in the LiteLLM Skill Hub (marketplace.json serves all
@@ -1258,7 +1307,7 @@ skill follows that skill; the rules below are its short form.
 | R7 | Content marketing & organic-traffic strategy best practices — content pillars, topic clusters, search-intent mapping, SEO for 2025–2026 (incl. AI search/answer engines), funnel mapping, measurement KPIs | S12, MKT-1, CM-1 | `deep-research` — **DONE 2026-11-23**: `docs/research/R7-content-marketing-organic-traffic.md` |
 | R8 | Product-management artifacts — PRD format, story breakdown / acceptance criteria / ready definition, dependency mapping, competitive-analysis frameworks, opportunity sizing, **ideation frameworks + prioritization (RICE/ICE/Kano)** | PM-1/2/3/4/5, DEV-2 | `deep-research` — **DONE 2026-11-23**: `docs/research/R8-pm-artifacts.md` |
 | R9 | Marketing strategy operating cadence — brand/voice frameworks, strategy-doc structure, content ops (ask → brief → draft → QA → publish), content impact measurement | MKT-1, CM-1 | `deep-research` — **DONE 2026-11-23**: `docs/research/R9-marketing-strategy-operating-cadence.md` |
-| R10 | BA / exec reporting — KPI definition, dashboard practices, periodic analysis cadence, exec status-report format, feedback routing | BA-1 | `deep-research` |
+| R10 | BA / exec reporting — KPI definition, dashboard practices, periodic analysis cadence, exec status-report format, feedback routing | BA-1 | **Folded 2026-11-27** — the G4 report contract + the W48 KPI digest format are the live pattern (no separate deep-research pass needed) |
 
 Order: R1 first (it shapes how we write everything), then the rest in parallel,
 grouped by the role whose build is next.
@@ -1273,7 +1322,12 @@ grouped by the role whose build is next.
    are usable by family pi sessions too. Consequence: skills are written for the
    general agent (tools available via the LiteLLM gateway), with kanban-specific
    behaviour (board ops, deploy gates) as an explicit section rather than an assumption.
-3. **S8** — standalone `debugging` skill or fold into `qa-verify` (S3)?
+3. **S8** — standalone `debugging` skill or fold into `qa-verify` (S3)? —
+   **resolved 2026-11-27 (chuck: build it standalone)**: built as its own
+   skill. The homelab log paths (docker logs / journalctl / task_status /
+   workspace / Caddy access logs / LiteLLM proxy), the 3-cycle budget, and the
+   escalation triggers are distinct from S3's verify-once pass — S3 answers
+   "does it work?", S8 answers "why doesn't it, and when do I stop trying?".
 4. **Per-project depth** — S1 teaches the *pattern* of deploy gates; the specifics
    live in project `constraints`. Right split, or do you want a per-project
    reference file per skill (e.g. `kanban-board/references/invest-hub.md`)?
@@ -1292,13 +1346,15 @@ grouped by the role whose build is next.
    (the agentic framework + agents: separate keys/identities, goals + projects
    per agent). Out of scope for this doc; the role/step skills work regardless
    of who runs them.
-9. ~~BA data sources~~ — **decided 2026-11-22 (wiring TBD, gap G3)**:
+9. ~~BA data sources~~ — **decided 2026-11-22, WIRED 2026-11-27 (G3 closed)**:
    **Plausible (self-hosted on thor)** = the data engine for product web/mobile
    apps (invest-hub, both blogs/websites); **data-hub/report-hub + Grafana** =
    the reporting/data surface for platform/service status + engineering-centric
-   data. Remaining work (later): install Plausible on thor + add the snippet to
-   the 3 sites + feed its data into data-hub. The feedback loop (G13) is blocked
-   on the wiring, not the decision.
+   data. The wiring landed (`todo_plausible.md` P1–P5): Plausible live on all
+   3 sites, ingest verified, data-hub feed (path A) + Grafana Product KPIs
+   dashboard, BA-1 `plausible-kpi` KPI report skill. The feedback loop (G13)
+   is no longer blocked on the wiring — the first live cycle is the W49
+   weekly KPI digest + the first PM-6 review.
 10. ~~Content publish paths~~ — **answered 2026-11-22**: publish paths are
     **per project** (the project's own deploy flow — blog `deploy.sh`, etc.).
     Social media capability doesn't exist yet — separate item (G9, later).
