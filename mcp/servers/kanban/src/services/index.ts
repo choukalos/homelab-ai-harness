@@ -14,6 +14,12 @@ import { ServiceError, type Db } from "./common.js";
 import { addIdea, editIdea, getIdea, listIdeas, type Idea } from "./ideas.js";
 import { moveIceboxToBacklog, type IceboxMoveResult } from "./icebox.js";
 import {
+  getAgentsSwitch as readAgentsSwitch,
+  setAgentsSwitch as writeAgentsSwitch,
+  type AgentsSwitchState,
+  type AgentsSwitchView,
+} from "./agents-switch.js";
+import {
   createProject,
   deleteProject,
   getProject,
@@ -58,6 +64,7 @@ export type { StageFileResult, StageRefResult } from "./files.js";
 export type { Idea } from "./ideas.js";
 export type { BoardData, BoardCard, BoardStatus, BoardStatusFilters } from "./board.js";
 export type { IceboxMoveResult } from "./icebox.js";
+export type { AgentsSwitchState, AgentsSwitchView } from "./agents-switch.js";
 export type { TaskDetail, TaskStatus, DependencyStatus } from "./tasks.js";
 export type {
   SpendReport,
@@ -120,6 +127,12 @@ export interface KanbanServices {
   restartTask(taskId: number, note?: string): Promise<TaskRow>;
   /** Icebox → Backlog: create the 1:1 task per idea (owner inherited), flip idea to `moved`. */
   moveIceboxToBacklog(ideaIds: number[]): Promise<IceboxMoveResult>;
+
+  // -- Agents master switch (admin; kv `agents_master_switch`) ------------
+  /** Read the agents master switch (missing/malformed row -> off, fail-safe). */
+  getAgentsSwitch(): Promise<AgentsSwitchView>;
+  /** Set the agents master switch; `setBy` = caller identity (audit). */
+  setAgentsSwitch(state: AgentsSwitchState, setBy: string): Promise<AgentsSwitchView>;
 
   // -- Interactive grooming (MCP tools; the web UI is read-only) -----------
   /**
@@ -265,6 +278,10 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     retryDeploy: (taskId) => orchestrator().then((o) => o.retryDeploy(taskId)),
     restartTask: (taskId, note) => orchestrator().then((o) => o.restartTask(taskId, note)),
     moveIceboxToBacklog: (ideaIds) => moveIceboxToBacklog(db, ideaIds),
+
+    // Agents master switch (admin gate for all standing agents).
+    getAgentsSwitch: () => readAgentsSwitch(db),
+    setAgentsSwitch: (state, setBy) => writeAgentsSwitch(db, state, setBy),
 
     // Interactive grooming (thin wrappers over the GroomingManager state
     // machine — the web UI is read-only, MCP is the mutation path).

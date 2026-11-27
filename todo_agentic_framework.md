@@ -13,7 +13,8 @@
   2026-11-26, **revised 2026-11-27 (chuck): stand up `product` first** (product
   first; `strategist`/`marketing`/`analyst` stand up but stay OFF — keys +
   workspaces only, no cron targeting, no board cards, charters not approved —
-  until chuck activates them). Goal model + S13 acceptance
+  until chuck activates them); **agents master switch built 2026-11-27** —
+  fail-safe OFF, admin-only `agents_switch` MCP tool, live state OFF). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -740,6 +741,30 @@ New from the 2026-11-24 interview:
    `next_run_at` 2026-11-27T15:00 CT per the skill-runner API) — will now
    run the real skills. Evidence:
    `todo_agentic_framework_review-skills-report-2026-11-27.md`.
+8. **Agents master switch (chuck's ask, 2026-11-27)** — one global on/off
+   for ALL standing agents, flippable from any client session via MCP.
+   **DONE 2026-11-27** (dev clone `task/18`, `03f08dc`, pushed; live build
+   context synced; `mcp_kanban` rebuilt + healthy):
+   - Durable kv state (`agents_master_switch`), **fail-safe default OFF** —
+     a missing or malformed row means agents are disabled; only an
+     explicit `on` enables them. Survives restarts.
+   - Admin-only MCP tool `agents_switch` (28th tool): no args reads the
+     state; `state: on|off` sets it, stamped with the caller's USER_KEYS
+     alias (`setBy`) for the audit trail. Flippable from any client
+     session through the LiteLLM proxy.
+   - Orchestrator gate: when OFF the agent slot is zeroed on tick (no
+     agent-owned cards picked up) and explicit `start_task` on an agent
+     card → 409. In-flight agent tasks run to completion (v1: the switch
+     gates starts, not mid-session kills). Non-agent board work is
+     unaffected.
+   - **Initial state: OFF** (chuck's ask) — live-verified 2026-11-27:
+     read → `{state: off, setBy: chuck}`; a probe agent card (owner=product)
+     stayed in backlog across 3 ticks with the switch OFF and an explicit
+     `start_task` was rejected with the switch message; flip ON → the card
+     started (backlog → running); probe data cleaned up, board back to
+     16 done. Full suite green (244 pass, 0 fail, 1 pre-existing skip).
+   - To activate the agent org: `agents_switch({state: "on"})` from a
+     client session (admin key).
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
 revised 2026-11-27 — product first).

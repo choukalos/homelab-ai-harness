@@ -68,8 +68,8 @@ export const MCP_CAPABILITY_SETS = {
     "stage_file",
     "stage_ref",
   ],
-  /** control + project administration. */
-  admin: ["control", "create_project", "update_project", "delete_project"],
+  /** control + project administration + the agents master switch. */
+  admin: ["control", "create_project", "update_project", "delete_project", "agents_switch"],
 } as const;
 
 export type McpCapability = keyof typeof MCP_CAPABILITY_SETS;
@@ -103,6 +103,7 @@ export const MCP_TOOL_NAMES: readonly string[] = [
   "project_status",
   "stage_file",
   "stage_ref",
+  "agents_switch",
 ];
 
 function expandCapabilities(set: readonly string[]): Set<string> {
@@ -399,6 +400,27 @@ export function registerMcpTools(
       inputSchema: { project_id: z.number().int().positive() },
     },
     ({ project_id }) => run(async () => ok(await services.deleteProject(project_id))),
+  );
+
+  reg(
+    "agents_switch",
+    {
+      description:
+        "Master on/off switch for ALL standing agents (product/strategist/" +
+        "marketing/analyst). No args: read the current state. " +
+        "state='on'|'off': set it (admin-only). When OFF the orchestrator " +
+        "does not start agent-owned cards (the agent slot is zeroed each " +
+        "tick; start_task on an agent card returns 409); in-flight agent " +
+        "tasks run to completion. Fail-safe default is OFF (missing/malformed " +
+        "state row). Durable (kv) — survives restarts.",
+      inputSchema: { state: z.enum(["on", "off"]).optional() },
+    },
+    ({ state }) =>
+      run(async () =>
+        state === undefined
+          ? ok(await services.getAgentsSwitch())
+          : ok(await services.setAgentsSwitch(state, owner || "mcp")),
+      ),
   );
 
   reg(

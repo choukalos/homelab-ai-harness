@@ -13,10 +13,12 @@
 - 15 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
   `mcp_media` (27), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (16),
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (28),
   `mcp_filebridge` (5)
-  — **115 tools total** (verified live 2026-11-27: LiteLLM
-  `/mcp-rest/tools/list` + per-server `tools/list`). `mcp_filebridge` added
+  — **127 tools total** (verified live 2026-11-27: LiteLLM
+  `/mcp-rest/tools/list` + per-server `tools/list`; the kanban count was
+  stale at 16 in the prior revision — the grooming suite + Phase 13 work
+  had grown it to 27, and `agents_switch` (below) brings it to 28). `mcp_filebridge` added
   2026-11-27 (Phase 12 P12-B/C — the homelab's single public file edge;
   streamable HTTP at `POST /mcp`, port 8000, `transport: http` +
   `extra_headers: [Authorization]` — the second non-SSE entry after
@@ -32,7 +34,15 @@
   `thor.local:3000`, streamable-HTTP MCP at `POST /mcp` — the only
   non-SSE MCP entry; tools surface bare, no server prefix; per-key tool
   scoping chuck=admin / dylan=control via `MCP_KEY_CAPABILITIES`; MySQL
-  `ai_kanban` on Thor). `mcp_media` 25 → 27 with the M1–M5
+  `ai_kanban` on Thor). `agents_switch` added 2026-11-27 (28th tool;
+  **admin-only** — the operator's master switch for all standing agents:
+  no args reads the durable state, `state: on|off` sets it, stamped with
+  the caller's USER_KEYS alias for the audit trail; kv-backed, fail-safe
+  default **OFF** — a missing/malformed row means agents disabled; when
+  OFF the orchestrator picks up no agent-owned cards and explicit
+  `start_task` on one is rejected 409; in-flight agent tasks run to
+  completion — the switch gates starts, not mid-session kills; non-agent
+  board work unaffected). `mcp_media` 25 → 27 with the M1–M5
   client layer (2026-11-19 pipeline, deployed 2026-11-21): `media_kill_job`
   (queued-only kill, frees the FIFO slot) + `media_queue_status` (queue
   summary + feature list); `media_job_result` now surfaces in-flight

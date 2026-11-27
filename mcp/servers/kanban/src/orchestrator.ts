@@ -70,6 +70,7 @@ import {
 import { ideas, projects, taskEvents, tasks, tablesUseMysql } from "./db/tables.js";
 import type { Db } from "./services/common.js";
 import { ServiceError } from "./services/common.js";
+import { getAgentsSwitch } from "./services/agents-switch.js";
 import { appendTaskEvent, taskDependencyStatus } from "./services/tasks.js";
 import { recordUsage } from "./services/usage.js";
 import {
@@ -306,6 +307,12 @@ export class Orchestrator {
     let freeAgent = Math.max(0, cfg.agentConcurrentTasks - counts.agent);
     let freeMedia = Math.max(0, cfg.mediaConcurrentTasks - counts.media);
     let freeNonMedia = Math.max(0, cfg.nonMediaConcurrentTasks - counts.nonMedia);
+    // Agents master switch (kv `agents_master_switch`): OFF -> no agent cards
+    // start this pass (zero the agent slot). In-flight agent tasks continue;
+    // the switch gates starts, not mid-session kills (v1).
+    if (freeAgent > 0 && (await getAgentsSwitch(this.db)).state === "off") {
+      freeAgent = 0;
+    }
     if (freeAgent === 0 && freeMedia === 0 && freeNonMedia === 0) return;
     for (const task of await this.listEligibleBacklog(freeAgent + freeMedia + freeNonMedia)) {
       const cat = slotCategory(task, cfg.agentSlugs);
@@ -354,6 +361,15 @@ export class Orchestrator {
     }
     const counts = await this.countRunningBySlot();
     const cat = slotCategory(task, this.deps.cfg.agentSlugs);
+    // Agents master switch: OFF -> agent-owned cards cannot start (409).
+    // Non-agent cards are unaffected; in-flight agent tasks continue (the
+    // switch gates starts, not mid-session kills — v1).
+    if (cat === "agent" && (await getAgentsSwitch(this.db)).state === "off") {
+      throw new ServiceError(
+        409,
+        "agents master switch is OFF — agent work is disabled; flip it on with the agents_switch MCP tool (admin)",
+      );
+    }
     const cap =
       cat === "agent"
         ? this.deps.cfg.agentConcurrentTasks
