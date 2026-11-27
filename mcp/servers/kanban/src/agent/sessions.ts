@@ -52,11 +52,18 @@ export interface ModelCostRates {
 
 /**
  * Rates to price usage with. Sourced at startup from the LiteLLM proxy's
- * /model/info (loadConfig → cfg.modelCost) — the same data the Grafana
- * dashboards use. Undefined → all-zero (cost estimates stay $0; tokens
- * are still tracked and reports show $0.00).
+ * /model/info (loadConfig → cfg.modelCost for the pipeline model,
+ * cfg.ownerModelCosts for mapped owner models, item 15). `model` selects the
+ * per-model rates: the pipeline model (cfg.model) uses cfg.modelCost; a
+ * mapped owner model uses its own rates — or all-zero when the proxy has no
+ * costs configured for it (never the pipeline model's rates, which would
+ * price one model at another's rate). Undefined → all-zero (cost estimates
+ * stay $0; tokens are still tracked and reports show $0.00).
  */
-export function modelCostRates(cfg: KanbanConfig): ModelCostRates {
+export function modelCostRates(cfg: KanbanConfig, model?: string): ModelCostRates {
+  if (model !== undefined && model !== cfg.model) {
+    return cfg.ownerModelCosts?.[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  }
   return cfg.modelCost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 }
 
@@ -100,6 +107,13 @@ export interface CreateSessionOptions {
    * owner → the service key profile (default).
    */
   owner?: string;
+  /**
+   * Run the session on the pipeline model (cfg.model) instead of the
+   * profile's model (item 15): service sessions (summary, ...) run on
+   * KANBAN_MODEL even when the owner is mapped to another model — billing
+   * still goes to the profile's key.
+   */
+  useServiceModel?: boolean;
   /** Called with usage for each completed assistant message. */
   onUsage?: (usage: UsageSample) => void;
 }
@@ -121,30 +135,42 @@ export interface KeyProfile {
   /** App-owned agent dir for this profile. */
   dir: string;
   modelRuntime: ModelRuntime;
+  /** The profile's pipeline model (the owner model for mapped owners, item 15). */
   model: Model<any>;
+  /**
+   * The pipeline model (cfg.model) on this profile's runtime (item 15):
+   * service sessions (summary, ...) run on KANBAN_MODEL even for a mapped
+   * owner, billed to the owner's key. === `model` for the service profile
+   * and unmapped owners.
+   */
+  serviceModel: Model<any>;
 }
 
-/** models.json for the LiteLLM provider (SDK_NOTES.md §1 shape). */
-export function buildModelsJson(cfg: KanbanConfig): Record<string, unknown> {
+/**
+ * models.json for the LiteLLM provider (SDK_NOTES.md §1 shape). Carries the
+ * profile's model PLUS the pipeline model (cfg.model) — deduped when they're
+ * the same — so a profile's ModelRuntime can also serve service sessions
+ * (item 15: summary & co. run on KANBAN_MODEL, billed to the owner's key).
+ */
+export function buildModelsJson(cfg: KanbanConfig, model?: string): Record<string, unknown> {
+  const ids = model === undefined || model === cfg.model ? [cfg.model] : [model, cfg.model];
   return {
     providers: {
       [LITELLM_PROVIDER]: {
         baseUrl: cfg.litellm.baseUrl,
         api: "openai-completions",
-        models: [
-          {
-            id: cfg.model,
-            name: cfg.model,
-            reasoning: true,
-            input: ["text"],
-            contextWindow: 200000,
-            maxTokens: 32768,
-            // Catalog rates from the proxy's /model/info (see modelCostRates);
-            // zero = no cost estimate available (reports show $0.00, tokens
-            // still tracked).
-            cost: modelCostRates(cfg),
-          },
-        ],
+        models: ids.map((id) => ({
+          id,
+          name: id,
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 200000,
+          maxTokens: 32768,
+          // Catalog rates from the proxy's /model/info (see modelCostRates);
+          // zero = no cost estimate available (reports show $0.00, tokens
+          // still tracked).
+          cost: modelCostRates(cfg, id),
+        })),
       },
     },
   };
@@ -193,11 +219,11 @@ export class AgentRuntime {
     const skillsPath = path.join(dataDir, "harness", cfg.harness.skillsPath);
     mkdirSync(sessionsDir, { recursive: true });
 
-    const buildProfile = async (name: string, apiKey: string): Promise<KeyProfile> => {
+    const buildProfile = async (name: string, apiKey: string, model: string): Promise<KeyProfile> => {
       const dir =
         name === "service" ? path.join(dataDir, "pi-agent") : path.join(dataDir, `pi-agent-${name}`);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(path.join(dir, "models.json"), JSON.stringify(buildModelsJson(cfg), null, 2) + "\n");
+      writeFileSync(path.join(dir, "models.json"), JSON.stringify(buildModelsJson(cfg, model), null, 2) + "\n");
       writeFileSync(
         path.join(dir, "auth.json"),
         JSON.stringify({ [LITELLM_PROVIDER]: { type: "api_key", key: apiKey } }, null, 2) + "\n",
@@ -208,20 +234,32 @@ export class AgentRuntime {
         modelsStorePath: path.join(dir, "models-store.json"),
         refreshOnCreate: false, // static models, no network refresh at boot
       });
-      const model = modelRuntime.getModel(LITELLM_PROVIDER, cfg.model);
-      if (!model) {
+      const profileModel = modelRuntime.getModel(LITELLM_PROVIDER, model);
+      if (!profileModel) {
+        throw new Error(
+          `model ${model} not available in the ${LITELLM_PROVIDER} provider config ` +
+            `(see ${path.join(dir, "models.json")})`,
+        );
+      }
+      // The pipeline model is always in this profile's models.json (item 15):
+      // service sessions run on cfg.model, billed to this profile's key.
+      const serviceModel = modelRuntime.getModel(LITELLM_PROVIDER, cfg.model);
+      if (!serviceModel) {
         throw new Error(
           `model ${cfg.model} not available in the ${LITELLM_PROVIDER} provider config ` +
             `(see ${path.join(dir, "models.json")})`,
         );
       }
-      return { name, dir, modelRuntime, model };
+      return { name, dir, modelRuntime, model: profileModel, serviceModel };
     };
 
-    const service = await buildProfile("service", cfg.litellm.apiKey);
+    const service = await buildProfile("service", cfg.litellm.apiKey, cfg.model);
     const profiles = new Map<string, KeyProfile>([["service", service]]);
     for (const [name, key] of Object.entries(cfg.userKeys)) {
-      profiles.set(name, await buildProfile(name, key));
+      // Per-owner pipeline model (item 15): a mapped owner runs on its own
+      // model (billed to the owner's key); unmapped owners stay on the
+      // pipeline model.
+      profiles.set(name, await buildProfile(name, key, cfg.ownerModels[name] ?? cfg.model));
     }
 
     const u = new URL(cfg.litellm.baseUrl);
@@ -280,6 +318,9 @@ export class AgentRuntime {
   async createSession(opts: CreateSessionOptions): Promise<AgentSessionHandle> {
     const thinking = this.thinkingLevel(opts.role);
     const profile = this.profileFor(opts.owner);
+    // Item 15: service sessions (summary, ...) run on the pipeline model
+    // even for a mapped owner (billed to the owner's key).
+    const sessionModel = opts.useServiceModel ? profile.serviceModel : profile.model;
     const loader = new DefaultResourceLoader({
       cwd: opts.cwd,
       agentDir: profile.dir,
@@ -299,7 +340,7 @@ export class AgentRuntime {
     const { session } = await createAgentSession({
       cwd: opts.cwd,
       modelRuntime: profile.modelRuntime,
-      model: profile.model,
+      model: sessionModel,
       thinkingLevel: thinking,
       ...(opts.tools !== undefined ? { tools: opts.tools } : {}),
       resourceLoader: loader,
@@ -314,11 +355,13 @@ export class AgentRuntime {
         if (msg.role !== "assistant" || !msg.usage) return;
         // The openai-completions API (LiteLLM proxy) prices usage at the
         // model's catalog cost. Our models.json carries the rates fetched
-        // from the proxy's /model/info at startup (cfg.modelCost); if those
-        // were unavailable the catalog is all-zero and the SDK's estimate
-        // is $0 — recompute only when rates are actually configured.
-        const rates = modelCostRates(this.cfg);
-        if (rates.input > 0 || rates.output > 0) calculateCost(profile.model, msg.usage);
+        // from the proxy's /model/info at startup (cfg.modelCost for the
+        // pipeline model, cfg.ownerModelCosts for mapped owner models —
+        // item 15); if those were unavailable the catalog is all-zero and
+        // the SDK's estimate is $0 — recompute only when rates are actually
+        // configured for THIS session's model.
+        const rates = modelCostRates(this.cfg, sessionModel.id);
+        if (rates.input > 0 || rates.output > 0) calculateCost(sessionModel, msg.usage);
         onUsage({
           role: opts.role,
           model: msg.model,
@@ -402,6 +445,70 @@ export class TaskAbortedError extends Error {
     super(`task ${taskId} run aborted`);
     this.name = "TaskAbortedError";
   }
+}
+
+/**
+ * A session's LLM call failed with an API error (auth/4xx/5xx/stream error)
+ * and the run produced no substantive assistant completion (item 14,
+ * loud-fail hardening). The Pi SDK does not reject on API errors — it
+ * encodes them as the final assistant message with stopReason "error" +
+ * errorMessage (or, rarely, a rejecting prompt()); without this the failure
+ * would surface as an empty completion (item 12's 403 bug: task "completes"
+ * with nothing, QA gets no parseable verdict, 2 rounds burned, misleading
+ * needs_attention reason). The orchestrator catches this and moves the task
+ * to needs_attention with the REAL error. Abort is NOT a failure — an
+ * aborted run throws TaskAbortedError instead.
+ */
+export class SessionApiError extends Error {
+  /** HTTP status of the failed LLM call (when extractable from the error). */
+  readonly status: number | undefined;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "SessionApiError";
+    this.status = status;
+  }
+}
+
+/**
+ * Shape a provider error into the loud-fail message. pi-ai's
+ * formatProviderError encodes HTTP failures as "<status>: <body>" (e.g.
+ * "403: The requested model 'matrix-coder' is not available for this API
+ * key"); when the status is extractable the message becomes
+ * "HTTP <status> — <body>", otherwise the raw message is kept.
+ */
+export function formatApiError(message: string): { message: string; status?: number } {
+  const m = /^(\d{3})(?=$|\s|:)/.exec(message.trim());
+  if (!m) return { message: message.trim() };
+  const status = Number(m[1]);
+  const body = message.trim().slice(3).replace(/^\s*:?\s*/, "").trim();
+  return { message: body ? `HTTP ${status} — ${body}` : `HTTP ${status}`, status };
+}
+
+/**
+ * Retry prompt for an empty-but-successful completion (HTTP 200, zero
+ * content — the matrix-copywriter reasoning quirk): the session settled
+ * without any assistant text, so ask for the completion summary (or to
+ * continue the work) once before treating the run as complete.
+ */
+export const EMPTY_RETRY_PROMPT = [
+  "Your previous turn ended without any assistant text.",
+  "If the task is complete, end your turn now with the short completion summary",
+  "(what was done, where the result lives, what the QA gate should check) and STOP.",
+  "If more work remains, continue it now.",
+].join(" ");
+
+/**
+ * Read the API error out of a message_end event, if any: the SDK surfaces a
+ * failed LLM call as an assistant message with stopReason "error" +
+ * errorMessage (StreamFn contract). Returns the raw errorMessage, or
+ * undefined when the event is not an error-bearing assistant message.
+ * (stopReason "aborted" is NOT an API error — aborts are not failures.)
+ */
+export function apiErrorFromEvent(event: TaskSessionEvent): string | undefined {
+  if (event.type !== "message_end") return undefined;
+  const m = event.message as { role?: string; stopReason?: string; errorMessage?: string } | undefined;
+  if (!m || m.role !== "assistant" || m.stopReason !== "error") return undefined;
+  return m.errorMessage ?? "LLM API error (no message)";
 }
 
 /**
@@ -888,7 +995,12 @@ export class TaskSessionRunner implements TaskRunner {
    *   3. run the Pi session (TASK_THINKING) with the kickoff prompt,
    *   4. track commits (heartbeat) + live log tail + usage,
    *   5. checkpoint any uncommitted work, return the completion summary.
-   * Throws TaskAbortedError when the run was aborted (stop/pause).
+   * Throws TaskAbortedError when the run was aborted (stop/pause) — abort is
+   * not a failure. Throws SessionApiError when the run's LLM calls failed
+   * with an API error (auth/4xx/5xx/stream) and produced no substantive
+   * assistant completion (item 14 loud-fail); an empty-but-successful
+   * completion (HTTP 200, zero content) retries the prompt ONCE before
+   * completing (model behavior, not an API failure).
    */
   async run(ctx: TaskRunContext): Promise<TaskRunResult> {
     const workspace = this.workspacePath(ctx.taskId);
@@ -916,6 +1028,8 @@ export class TaskSessionRunner implements TaskRunner {
     });
     const entry = { session, aborted: false };
     this.active.set(ctx.taskId, entry);
+    /** First API error seen during the run (item 14 loud-fail). */
+    let firstApiError: string | undefined;
 
     // Commit tracking: the agent commits after each meaningful step; we
     // detect new HEADs after tool results / assistant messages.
@@ -936,11 +1050,75 @@ export class TaskSessionRunner implements TaskRunner {
     const unsubscribe = session.subscribe((event) => {
       const line = formatTaskLogLine(event);
       if (line) ctx.onLog?.(line);
+      // Loud-fail tracking (item 14): an API error surfaces as an assistant
+      // message with stopReason "error" + errorMessage; remember the first
+      // one so the run can fail loudly instead of completing empty.
+      const apiError = apiErrorFromEvent(event);
+      if (apiError) firstApiError ??= apiError;
       if (event.type === "tool_execution_end" || event.type === "message_end") scheduleHeadCheck();
     });
 
     try {
-      await session.prompt(ctx.prompt ?? TASK_KICKOFF_PROMPT);
+      let summary: string | undefined;
+      try {
+        await session.prompt(ctx.prompt ?? TASK_KICKOFF_PROMPT);
+      } catch (err) {
+        if (!entry.aborted) {
+          // prompt() rejected (stream/runtime failure) — loud-fail too.
+          const f = formatApiError(err instanceof Error ? err.message : String(err));
+          ctx.onLog?.(`[session] LLM API error — failing loudly: ${f.message}`);
+          throw new SessionApiError(f.message, f.status);
+        }
+        // Aborted mid-prompt: the rejection is the abort surfacing —
+        // TaskAbortedError is thrown below (abort is not a failure).
+      }
+      if (!entry.aborted) {
+        // Loud-fail + empty-completion handling (item 14): after the run
+        // settles, distinguish an API error (fail loudly) from an
+        // empty-but-successful completion (retry once, then complete).
+        summary = lastAssistantText(session.messages);
+        if (summary === undefined) {
+          if (firstApiError) {
+            const f = formatApiError(firstApiError);
+            ctx.onLog?.(`[session] LLM API error with no assistant completion — failing loudly: ${f.message}`);
+            throw new SessionApiError(f.message, f.status);
+          }
+          // Empty-but-successful (HTTP 200, zero content — the
+          // matrix-copywriter reasoning quirk): retry the prompt ONCE before
+          // treating the run as complete.
+          ctx.onLog?.("[session] empty completion (HTTP 200, no content) — retrying the prompt once");
+          try {
+            await session.prompt(EMPTY_RETRY_PROMPT);
+          } catch (err) {
+            if (!entry.aborted) {
+              // prompt() rejected (stream/runtime failure) — loud-fail too.
+              const f = formatApiError(err instanceof Error ? err.message : String(err));
+              ctx.onLog?.(`[session] LLM API error — failing loudly: ${f.message}`);
+              throw new SessionApiError(f.message, f.status);
+            }
+            // Aborted during the retry: TaskAbortedError is thrown below
+            // (abort is not a failure).
+          }
+          if (!entry.aborted) {
+            summary = lastAssistantText(session.messages);
+            if (summary === undefined) {
+              if (firstApiError) {
+                // The retry's LLM call failed with an API error (the SDK
+                // resolves with an error-bearing assistant message) — fail
+                // loudly with the REAL error, not a silent empty completion.
+                const f = formatApiError(firstApiError);
+                ctx.onLog?.(
+                  `[session] LLM API error with no assistant completion — failing loudly: ${f.message}`,
+                );
+                throw new SessionApiError(f.message, f.status);
+              }
+              ctx.onLog?.(
+                "[session] retry also empty — completing with no summary (model behavior, not an API failure)",
+              );
+            }
+          }
+        }
+      }
       await headChain; // settle in-flight commit checks
       // Safety net: checkpoint any uncommitted work (git is the source of truth).
       const committed = await this.git.commitAll(workspace, `task ${ctx.taskId}: checkpoint after run`).catch(() => null);
@@ -951,8 +1129,7 @@ export class TaskSessionRunner implements TaskRunner {
       const head = await this.git.headCommit(workspace).catch(() => null);
       if (head) lastHead = head;
       if (entry.aborted) throw new TaskAbortedError(ctx.taskId);
-      const summary = lastAssistantText(session.messages) ?? "(no completion summary)";
-      return { summary, lastCommit: lastHead };
+      return { summary: summary ?? "(no completion summary)", lastCommit: lastHead };
     } finally {
       unsubscribe();
       this.active.delete(ctx.taskId);

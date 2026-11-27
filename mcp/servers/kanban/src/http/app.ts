@@ -116,6 +116,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     agentConcurrentTasks: deps.cfg.agentConcurrentTasks,
     /** Standing-agent slugs (cards owned by one of them count against the agent slot). */
     agentSlugs: deps.cfg.agentSlugs,
+    /** Per-owner pipeline model map (KANBAN_OWNER_MODELS; owner → model). */
+    ownerModels: deps.cfg.ownerModels,
     /** Owner names with a dedicated LLM key profile (USER_KEYS; Phase 2). */
     userKeys: Object.keys(deps.cfg.userKeys),
   }));
@@ -192,6 +194,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       waitingOn: detail.waitingOn,
       usageTotal: detail.usageTotal,
       usageByRole: detail.usageByRole,
+      usageByModel: detail.usageByModel,
       log: taskLogLines(detail),
       live: t.state === "running",
       lastActivityAt: detail.log.length > 0 ? detail.log[detail.log.length - 1]!.ts : null,

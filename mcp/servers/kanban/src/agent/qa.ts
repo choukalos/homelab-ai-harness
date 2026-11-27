@@ -20,7 +20,10 @@ import type { IdeaSpec } from "../db/schema.js";
 import { lastAssistantText } from "./grooming.js";
 import {
   createGitOps,
+  formatApiError,
   formatTaskLogLine,
+  SessionApiError,
+  apiErrorFromEvent,
   type AgentRuntime,
   type AgentSessionHandle,
   type GitOps,
@@ -212,7 +215,14 @@ export class QaGate {
     this.maxRounds = opts.maxRounds ?? 2;
   }
 
-  /** Run one QA round in the task workspace. */
+  /**
+   * Run one QA round in the task workspace. Returns the verdict (never
+   * throws for a "fail" — only for infrastructure errors). Throws
+   * SessionApiError when the QA session's LLM calls failed with an API
+   * error and produced no parseable verdict (item 14 loud-fail — the
+   * orchestrator consumes the round with the REAL error instead of
+   * "no parseable verdict").
+   */
   async run(ctx: QaRunContext): Promise<QaVerdict> {
     // Diff base: the project's default branch (the clone base).
     const base = ctx.defaultBranch
@@ -226,15 +236,34 @@ export class QaGate {
       owner: ctx.owner, // Phase 2: bill to the task owner's key (else service key)
       onUsage: ctx.onUsage,
     });
+    /** First API error seen during the round (item 14 loud-fail). */
+    let firstApiError: string | undefined;
     const unsubscribe = session.subscribe((event) => {
       const line = formatTaskLogLine(event);
       if (line) ctx.onLog?.(`[qa] ${line}`);
+      const apiError = apiErrorFromEvent(event);
+      if (apiError) firstApiError ??= apiError;
     });
     try {
-      await session.prompt(buildQaPrompt(ctx, diff));
+      try {
+        await session.prompt(buildQaPrompt(ctx, diff));
+      } catch (err) {
+        // prompt() rejected (stream/runtime failure) — loud-fail too.
+        const f = formatApiError(err instanceof Error ? err.message : String(err));
+        ctx.onLog?.(`[qa] LLM API error — failing loudly: ${f.message}`);
+        throw new SessionApiError(f.message, f.status);
+      }
       const text = lastAssistantText(session.messages) ?? "";
       const verdict = parseQaVerdict(text);
       if (verdict) return verdict;
+      // No parseable verdict: an API error with no output is a loud failure
+      // (the real error, not "no parseable verdict"); an empty-but-
+      // successful response keeps today's behavior (a failed round).
+      if (firstApiError) {
+        const f = formatApiError(firstApiError);
+        ctx.onLog?.(`[qa] LLM API error with no verdict — failing loudly: ${f.message}`);
+        throw new SessionApiError(f.message, f.status);
+      }
       return {
         pass: false,
         feedback: `QA session returned no parseable verdict (last message: ${text.slice(0, 300) || "(empty)"})`,

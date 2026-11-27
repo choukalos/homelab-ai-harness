@@ -8,10 +8,14 @@ import type { KanbanConfig } from "../config.js";
 import type { IdeaSpec } from "../db/schema.js";
 import {
   AgentRuntime,
+  EMPTY_RETRY_PROMPT,
   LITELLM_PROVIDER,
+  SessionApiError,
   TaskAbortedError,
   TaskSessionRunner,
+  apiErrorFromEvent,
   buildMissionBrief,
+  formatApiError,
   formatTaskLogLine,
   buildModelsJson,
   modelCostRates,
@@ -39,6 +43,8 @@ const cfg: KanbanConfig = {
   nonMediaConcurrentTasks: 1,
   agentConcurrentTasks: 1,
   agentSlugs: [],
+  ownerModels: {},
+  ownerModelCosts: {},
   workspaceCleanupDays: 7,
   server: { bindAddr: "127.0.0.1", port: 3000 },
 };
@@ -61,6 +67,69 @@ test("modelCostRates: rates from cfg.modelCost (fetched from /model/info) or all
     modelCost: { input: 0.75, output: 4.5, cacheRead: 0, cacheWrite: 0.075 },
   };
   assert.deepEqual(modelCostRates(withCost), { input: 0.75, output: 4.5, cacheRead: 0, cacheWrite: 0.075 });
+});
+
+test("modelCostRates: a mapped owner model uses its own rates — never the pipeline model's (item 15)", () => {
+  const withOwner: KanbanConfig = {
+    ...cfg,
+    modelCost: { input: 0.75, output: 4.5, cacheRead: 0, cacheWrite: 0.075 },
+    ownerModelCosts: {
+      "writer-model": { input: 0.5, output: 2.0, cacheRead: 0, cacheWrite: 0 },
+    },
+  };
+  // The pipeline model keeps its own rates (explicit or default selection).
+  assert.deepEqual(modelCostRates(withOwner, cfg.model), {
+    input: 0.75,
+    output: 4.5,
+    cacheRead: 0,
+    cacheWrite: 0.075,
+  });
+  assert.deepEqual(modelCostRates(withOwner), {
+    input: 0.75,
+    output: 4.5,
+    cacheRead: 0,
+    cacheWrite: 0.075,
+  });
+  // A mapped model with configured rates uses them.
+  assert.deepEqual(modelCostRates(withOwner, "writer-model"), {
+    input: 0.5,
+    output: 2.0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  });
+  // A mapped model WITHOUT configured rates → all-zero, NOT the pipeline
+  // model's rates (pricing one model at another's rate would be wrong).
+  assert.deepEqual(modelCostRates(withOwner, "unmapped-model"), {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  });
+});
+
+test("formatApiError: pi-ai '<status>: <body>' → 'HTTP <status> — <body>' + status (item 14)", () => {
+  assert.deepEqual(
+    formatApiError("403: The requested model 'matrix-coder' is not available for this API key"),
+    {
+      message: "HTTP 403 — The requested model 'matrix-coder' is not available for this API key",
+      status: 403,
+    },
+  );
+  assert.deepEqual(formatApiError("500"), { message: "HTTP 500", status: 500 });
+  // No status prefix → the raw message is kept (status stays undefined).
+  assert.deepEqual(formatApiError("stream interrupted"), { message: "stream interrupted" });
+});
+
+test("apiErrorFromEvent: error-bearing assistant message_end → the raw error; else undefined (item 14)", () => {
+  const errMsg = { role: "assistant", content: [], stopReason: "error", errorMessage: "403: no key" } as unknown as AgentMessage;
+  assert.equal(apiErrorFromEvent({ type: "message_end", message: errMsg }), "403: no key");
+  // A normal completion is not an API error.
+  assert.equal(apiErrorFromEvent({ type: "message_end", message: mockAssistantMsg("ok") }), undefined);
+  // An aborted run is NOT an API error (abort is not a failure).
+  const abortedMsg = { role: "assistant", content: [], stopReason: "aborted" } as unknown as AgentMessage;
+  assert.equal(apiErrorFromEvent({ type: "message_end", message: abortedMsg }), undefined);
+  // Non-message events never carry an API error.
+  assert.equal(apiErrorFromEvent({ type: "tool_execution_end", toolName: "bash", isError: true }), undefined);
 });
 
 test("buildModelsJson: catalog cost from cfg.modelCost (else all-zero)", () => {
@@ -167,6 +236,65 @@ test("AgentRuntime without USER_KEYS: service profile only", async () => {
     try {
       assert.deepEqual(rt.userProfileNames(), []);
       assert.equal(rt.profileFor("chuck").name, "service");
+    } finally {
+      rt.dispose();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("AgentRuntime: per-owner pipeline model (item 15) — mapped → mapped model; unmapped/no owner → cfg.model", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-agent-"));
+  try {
+    const rt = await AgentRuntime.create(
+      {
+        ...cfg,
+        userKeys: { strategist: "sk-strategist", dylan: "sk-dylan" },
+        ownerModels: { strategist: "writer-model" },
+        ownerModelCosts: {
+          "writer-model": { input: 0.5, output: 2.0, cacheRead: 0, cacheWrite: 0 },
+        },
+      },
+      { dataDir: dir },
+    );
+    try {
+      // Mapped owner → the mapped model; the pipeline model is still
+      // available on the same profile (serviceModel) for service sessions.
+      const mapped = rt.profileFor("strategist");
+      assert.equal(mapped.model.id, "writer-model");
+      assert.equal(mapped.serviceModel.id, "test-model");
+
+      // Unmapped owner with a key profile → the pipeline model.
+      const unmapped = rt.profileFor("dylan");
+      assert.equal(unmapped.model.id, "test-model");
+      assert.equal(unmapped.serviceModel.id, "test-model");
+
+      // No owner → the service profile on the pipeline model.
+      const service = rt.profileFor();
+      assert.equal(service.name, "service");
+      assert.equal(service.model.id, "test-model");
+      assert.equal(service.serviceModel.id, "test-model");
+
+      // models.json: the mapped profile carries BOTH models (owner model +
+      // pipeline model) with per-model rates; the unmapped profile carries
+      // only the pipeline model.
+      const mappedModels = JSON.parse(
+        await readFile(path.join(mapped.dir, "models.json"), "utf8"),
+      ) as any;
+      const mappedIds = mappedModels.providers[LITELLM_PROVIDER].models.map((m: any) => m.id).sort();
+      assert.deepEqual(mappedIds, ["test-model", "writer-model"]);
+      const writerEntry = mappedModels.providers[LITELLM_PROVIDER].models.find(
+        (m: any) => m.id === "writer-model",
+      );
+      assert.deepEqual(writerEntry.cost, { input: 0.5, output: 2.0, cacheRead: 0, cacheWrite: 0 });
+      const unmappedModels = JSON.parse(
+        await readFile(path.join(unmapped.dir, "models.json"), "utf8"),
+      ) as any;
+      assert.deepEqual(
+        unmappedModels.providers[LITELLM_PROVIDER].models.map((m: any) => m.id),
+        ["test-model"],
+      );
     } finally {
       rt.dispose();
     }
@@ -493,6 +621,191 @@ test("TaskSessionRunner.run: session failure propagates and disposes the session
     });
     await assert.rejects(runner.run(taskCtx()), /model exploded/);
     assert.equal(failing.disposed, true, "session disposed on failure");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Mocked Pi task session scripted per prompt (item 14): each entry is
+ * "empty" (HTTP 200, zero assistant content), an API-error string (the SDK
+ * resolves the prompt; the failure is encoded in the final assistant
+ * message with stopReason "error" + errorMessage), or the assistant text.
+ */
+class ScriptedTaskSession implements TaskSessionLike {
+  readonly messages: AgentMessage[] = [];
+  readonly prompts: string[] = [];
+  aborted = false;
+  disposed = false;
+  private listeners = new Set<(e: TaskSessionEvent) => void>();
+
+  constructor(
+    readonly sessionFile: string | undefined,
+    private readonly replies: Array<string | "empty">,
+  ) {}
+
+  subscribe(fn: (e: TaskSessionEvent) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private fire(e: TaskSessionEvent): void {
+    for (const l of this.listeners) l(e);
+  }
+
+  async prompt(text: string): Promise<void> {
+    this.prompts.push(text);
+    const reply = this.replies[Math.min(this.prompts.length - 1, this.replies.length - 1)] ?? "empty";
+    if (reply === "empty") return; // HTTP 200, no assistant content at all
+    if (reply.startsWith("api-error:")) {
+      // The SDK does not reject on API errors — it encodes them in the
+      // final assistant message (stopReason "error" + errorMessage).
+      const msg = {
+        role: "assistant",
+        content: [],
+        stopReason: "error",
+        errorMessage: reply.slice("api-error:".length),
+      } as unknown as AgentMessage;
+      this.messages.push(msg);
+      this.fire({ type: "message_end", message: msg });
+      return;
+    }
+    const msg = mockAssistantMsg(reply);
+    this.messages.push(msg);
+    this.fire({ type: "message_end", message: msg });
+  }
+
+  abort(): void {
+    this.aborted = true;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+  }
+}
+
+test("TaskSessionRunner.run: API error with no assistant completion → SessionApiError (item 14 loud-fail)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-task-"));
+  try {
+    const { ops } = mockGit();
+    const session = new ScriptedTaskSession(path.join(dir, "x.jsonl"), [
+      "api-error:403: The requested model 'matrix-coder' is not available for this API key",
+    ]);
+    const runner = new TaskSessionRunner({
+      sessionFactory: () => Promise.resolve(session),
+      git: ops,
+      workspaceRoot: path.join(dir, "workspace"),
+      sessionsDir: path.join(dir, "sessions"),
+      missionsDir: path.join(dir, "missions"),
+    });
+    const log: string[] = [];
+    await assert.rejects(
+      runner.run(taskCtx({ onLog: (line) => log.push(line) })),
+      (err: unknown) =>
+        err instanceof SessionApiError &&
+        err.status === 403 &&
+        /HTTP 403 — The requested model 'matrix-coder' is not available for this API key/.test(err.message),
+    );
+    // The real error is logged, not an empty completion.
+    assert.ok(log.some((l) => l.includes("failing loudly") && l.includes("HTTP 403")), "loud-fail log line");
+    assert.equal(session.disposed, true, "session disposed on failure");
+    // No retry prompt for an API error (the retry is for 200-empty only).
+    assert.equal(session.prompts.length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("TaskSessionRunner.run: prompt() rejecting with an API error → SessionApiError (item 14 loud-fail)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-task-"));
+  try {
+    const { ops } = mockGit();
+    class RejectingSession implements TaskSessionLike {
+      readonly messages: AgentMessage[] = [];
+      readonly sessionFile: string | undefined = undefined;
+      readonly prompts: string[] = [];
+      aborted = false;
+      disposed = false;
+      private listeners = new Set<(e: TaskSessionEvent) => void>();
+      subscribe(fn: (e: TaskSessionEvent) => void): () => void {
+        this.listeners.add(fn);
+        return () => this.listeners.delete(fn);
+      }
+      async prompt(): Promise<void> {
+        throw new Error("401: Invalid API key");
+      }
+      abort(): void {
+        this.aborted = true;
+      }
+      dispose(): void {
+        this.disposed = true;
+      }
+    }
+    const session = new RejectingSession();
+    const runner = new TaskSessionRunner({
+      sessionFactory: () => Promise.resolve(session),
+      git: ops,
+      workspaceRoot: path.join(dir, "workspace"),
+      sessionsDir: path.join(dir, "sessions"),
+      missionsDir: path.join(dir, "missions"),
+    });
+    await assert.rejects(
+      runner.run(taskCtx()),
+      (err: unknown) =>
+        err instanceof SessionApiError && err.status === 401 && /HTTP 401 — Invalid API key/.test(err.message),
+    );
+    assert.equal(session.disposed, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("TaskSessionRunner.run: empty completion (HTTP 200, no content) → one EMPTY_RETRY_PROMPT retry, then completes (item 14)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-task-"));
+  try {
+    const { ops } = mockGit();
+    const session = new ScriptedTaskSession(path.join(dir, "x.jsonl"), [
+      "empty",
+      "Done after the retry.",
+    ]);
+    const runner = new TaskSessionRunner({
+      sessionFactory: () => Promise.resolve(session),
+      git: ops,
+      workspaceRoot: path.join(dir, "workspace"),
+      sessionsDir: path.join(dir, "sessions"),
+      missionsDir: path.join(dir, "missions"),
+    });
+    const log: string[] = [];
+    const result = await runner.run(taskCtx({ onLog: (line) => log.push(line) }));
+    // Retried ONCE with the retry prompt, then completed with the text.
+    assert.equal(session.prompts.length, 2, "exactly one retry");
+    assert.equal(session.prompts[1], EMPTY_RETRY_PROMPT, "the retry uses EMPTY_RETRY_PROMPT");
+    assert.equal(result.summary, "Done after the retry.");
+    assert.ok(log.some((l) => l.includes("empty completion") && l.includes("retrying")), "retry log line");
+    assert.equal(session.disposed, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("TaskSessionRunner.run: retry also empty → completes with the placeholder (exactly one retry, item 14)", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-task-"));
+  try {
+    const { ops } = mockGit();
+    const session = new ScriptedTaskSession(path.join(dir, "x.jsonl"), ["empty", "empty"]);
+    const runner = new TaskSessionRunner({
+      sessionFactory: () => Promise.resolve(session),
+      git: ops,
+      workspaceRoot: path.join(dir, "workspace"),
+      sessionsDir: path.join(dir, "sessions"),
+      missionsDir: path.join(dir, "missions"),
+    });
+    const log: string[] = [];
+    const result = await runner.run(taskCtx({ onLog: (line) => log.push(line) }));
+    // Model behavior, not an API failure: completes (no error) after ONE retry.
+    assert.equal(session.prompts.length, 2, "no second retry");
+    assert.equal(result.summary, "(no completion summary)");
+    assert.ok(log.some((l) => l.includes("retry also empty")), "retry-also-empty log line");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

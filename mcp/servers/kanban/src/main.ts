@@ -10,6 +10,7 @@ import type { Db } from "./services/common.js";
 import { Orchestrator } from "./orchestrator.js";
 import { buildApp } from "./http/app.js";
 import { createKanbanServices } from "./services/index.js";
+import { createMergeGit } from "./services/merge-task.js";
 
 async function main(): Promise<void> {
   const cfg = await loadConfig();
@@ -20,6 +21,11 @@ async function main(): Promise<void> {
       `nonMediaSlots=${cfg.nonMediaConcurrentTasks} ` +
       `cleanupDays=${cfg.workspaceCleanupDays}` +
       (cfg.agentSlugs.length > 0 ? ` agentSlugs=${cfg.agentSlugs.join(",")}` : "") +
+      (Object.keys(cfg.ownerModels).length > 0
+        ? ` ownerModels=${Object.entries(cfg.ownerModels)
+            .map(([a, m]) => `${a}:${m}`)
+            .join(",")}`
+        : "") +
       (Object.keys(cfg.userKeys).length > 0 ? ` userKeys=${Object.keys(cfg.userKeys).join(",")}` : ""),
   );
 
@@ -48,6 +54,7 @@ async function main(): Promise<void> {
     grooming,
     orchestrator,
     agentSlugs: cfg.agentSlugs,
+    mergeGit: createMergeGit({ token: cfg.githubToken }),
   });
   await orchestrator.start();
 

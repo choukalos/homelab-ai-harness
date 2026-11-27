@@ -178,6 +178,13 @@ const envSchema = z
         "against AGENT_CONCURRENT_TASKS regardless of work kind (unset/empty = " +
         "no agent slot in use)",
     ),
+    KANBAN_OWNER_MODELS: optionalNonEmpty().describe(
+      "per-owner pipeline models (item 15): comma-separated alias:model pairs " +
+        "(e.g. strategist:matrix-copywriter,marketing:matrix-copywriter); all " +
+        "sessions for a task owned by a mapped alias (task work + QA + retries) " +
+        "run on that model, billed to the owner's USER_KEYS key (absent/empty = " +
+        "every session on MODEL)",
+    ),
     WORKSPACE_CLEANUP_DAYS: z.coerce
       .number()
       .int("WORKSPACE_CLEANUP_DAYS must be an integer")
@@ -246,6 +253,18 @@ export interface KanbanConfig {
   agentConcurrentTasks: number;
   /** Standing-agent slugs (cards owned by one of them count against the agent slot). */
   agentSlugs: string[];
+  /**
+   * Per-owner pipeline model map (KANBAN_OWNER_MODELS, item 15): owner alias →
+   * model. All sessions for a task owned by a mapped alias (task work + QA +
+   * retries) run on that model, billed to the owner's key; empty = every
+   * session on `model`.
+   */
+  ownerModels: Record<string, string>;
+  /**
+   * Cost rates per mapped model (from /model/info at boot, keyed by model
+   * name; undefined = $0 cost estimates, like the pipeline model's fallback).
+   */
+  ownerModelCosts: Record<string, ModelCostRates | undefined>;
   /** Age (days) before workspace scratch dirs are swept (default 7). */
   workspaceCleanupDays: number;
   server: { bindAddr: string; port: number };
@@ -303,6 +322,8 @@ export function parseConfig(
     nonMediaConcurrentTasks: v.NON_MEDIA_CONCURRENT_TASKS,
     agentConcurrentTasks: v.AGENT_CONCURRENT_TASKS,
     agentSlugs: parseAgentSlugs(v.AGENT_SLUGS),
+    ownerModels: parseOwnerModels(v.KANBAN_OWNER_MODELS),
+    ownerModelCosts: {}, // populated by loadConfig from /model/info
     workspaceCleanupDays: v.WORKSPACE_CLEANUP_DAYS,
     server: { bindAddr: v.BIND_ADDR, port: v.PORT },
   };
@@ -378,6 +399,40 @@ export function parseAgentSlugs(value: string | undefined): string[] {
       throw new ConfigError(`AGENT_SLUGS has duplicate slug ${JSON.stringify(slug)}`);
     }
     out.push(slug);
+  }
+  return out;
+}
+
+/**
+ * Parse KANBAN_OWNER_MODELS (`alias:model,alias2:model2`, comma-separated,
+ * item 15). Aliases and models are trimmed and must be non-empty; duplicate
+ * aliases throw a ConfigError (fail fast, PLAN.md §1 — a typo'd map must not
+ * silently re-route an owner's sessions). Empty/unset → {} (every session
+ * runs on MODEL).
+ */
+export function parseOwnerModels(value: string | undefined): Record<string, string> {
+  if (!value || value.trim() === "") return {};
+  const out: Record<string, string> = {};
+  for (const part of value.split(",")) {
+    const entry = part.trim();
+    if (entry === "") continue;
+    const colon = entry.indexOf(":");
+    if (colon <= 0) {
+      throw new ConfigError(
+        `KANBAN_OWNER_MODELS entry ${JSON.stringify(entry)} is malformed (expected alias:model)`,
+      );
+    }
+    const alias = entry.slice(0, colon).trim();
+    const model = entry.slice(colon + 1).trim();
+    if (alias === "" || model === "") {
+      throw new ConfigError(
+        `KANBAN_OWNER_MODELS entry ${JSON.stringify(entry)} has an empty alias or model`,
+      );
+    }
+    if (alias in out) {
+      throw new ConfigError(`KANBAN_OWNER_MODELS has duplicate alias ${JSON.stringify(alias)}`);
+    }
+    out[alias] = model;
   }
   return out;
 }
@@ -539,22 +594,22 @@ export interface ModelCostRates {
   cacheWrite: number;
 }
 
+/** One entry of the LiteLLM proxy's /model/info `data` array. */
+export interface ModelInfoEntry {
+  model_name?: string;
+  model_info?: Record<string, unknown>;
+}
+
 /**
- * Fetch the cost rates the LiteLLM proxy has configured for a model from
- * `GET {LITELLM_BASE_URL}/model/info` (the same data the Grafana dashboards
- * use). Returns $/M-token rates, or undefined when the endpoint is
- * unavailable, the model is unknown, or it has no configured costs
- * (costs then stay $0 — tokens are still tracked, reports show $0.00).
- *
- * Note: `model_info` only carries `input_cost_per_token`,
- * `output_cost_per_token`, and `cache_creation_input_token_cost` — there is
- * no cache-read price, so cacheRead is 0 (cache-heavy runs slightly
- * under-count spend).
+ * Fetch the LiteLLM proxy's /model/info `data` array (the same data the
+ * Grafana dashboards use). Returns the entries, or undefined when the
+ * endpoint is unavailable (cost estimates + owner-model validation then
+ * degrade to the $0 fallback — tokens are still tracked).
  */
-export async function fetchModelCostRates(
-  cfg: Pick<KanbanConfig, "litellm" | "model">,
+export async function fetchModelInfo(
+  cfg: Pick<KanbanConfig, "litellm">,
   fetchImpl: FetchLike = fetch,
-): Promise<ModelCostRates | undefined> {
+): Promise<ModelInfoEntry[] | undefined> {
   const url = `${cfg.litellm.baseUrl.replace(/\/v1\/?$/, "")}/model/info`;
   let res: Response;
   try {
@@ -564,29 +619,44 @@ export async function fetchModelCostRates(
     });
   } catch (err) {
     console.warn(
-      `[config] cannot fetch model cost rates from ${url} (${(err as Error).message}) — cost estimates will be $0`,
+      `[config] cannot fetch model info from ${url} (${(err as Error).message}) — cost estimates will be $0`,
     );
     return undefined;
   }
   if (!res.ok) {
-    console.warn(`[config] model cost rates fetch failed (HTTP ${res.status}) — cost estimates will be $0`);
+    console.warn(`[config] model info fetch failed (HTTP ${res.status}) — cost estimates will be $0`);
     return undefined;
   }
   let payload: unknown;
   try {
     payload = await res.json();
   } catch (err) {
-    console.warn(`[config] model cost rates returned invalid JSON — cost estimates will be $0`);
+    console.warn(`[config] model info returned invalid JSON — cost estimates will be $0`);
     return undefined;
   }
   const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) return undefined;
-  const entry = data.find(
-    (m) => typeof m === "object" && m !== null && (m as { model_name?: unknown }).model_name === cfg.model,
-  ) as { model_info?: Record<string, unknown> } | undefined;
+  return Array.isArray(data) ? (data as ModelInfoEntry[]) : undefined;
+}
+
+/**
+ * Extract $/M-token rates for one model from a /model/info `data` array.
+ * Returns the rates, or undefined when the model is unknown or has no
+ * configured costs (costs then stay $0 — tokens are still tracked, reports
+ * show $0.00).
+ *
+ * Note: `model_info` only carries `input_cost_per_token`,
+ * `output_cost_per_token`, and `cache_creation_input_token_cost` — there is
+ * no cache-read price, so cacheRead is 0 (cache-heavy runs slightly
+ * under-count spend).
+ */
+export function extractModelCostRates(
+  data: ModelInfoEntry[],
+  model: string,
+): ModelCostRates | undefined {
+  const entry = data.find((m) => m.model_name === model);
   const info = entry?.model_info;
   if (!info) {
-    console.warn(`[config] MODEL=${cfg.model} not found in /model/info — cost estimates will be $0`);
+    console.warn(`[config] MODEL=${model} not found in /model/info — cost estimates will be $0`);
     return undefined;
   }
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
@@ -598,10 +668,79 @@ export async function fetchModelCostRates(
     cacheWrite: toPerM(num(info.cache_creation_input_token_cost)),
   };
   if (rates.input === 0 && rates.output === 0) {
-    console.warn(`[config] MODEL=${cfg.model} has no cost configured in /model/info — cost estimates will be $0`);
+    console.warn(`[config] MODEL=${model} has no cost configured in /model/info — cost estimates will be $0`);
     return undefined;
   }
   return rates;
+}
+
+/**
+ * Fetch the cost rates the LiteLLM proxy has configured for a model from
+ * `GET {LITELLM_BASE_URL}/model/info` (the same data the Grafana dashboards
+ * use). Returns $/M-token rates, or undefined when the endpoint is
+ * unavailable, the model is unknown, or it has no configured costs
+ * (costs then stay $0 — tokens are still tracked, reports show $0.00).
+ */
+export async function fetchModelCostRates(
+  cfg: Pick<KanbanConfig, "litellm" | "model">,
+  fetchImpl: FetchLike = fetch,
+): Promise<ModelCostRates | undefined> {
+  const data = await fetchModelInfo(cfg, fetchImpl);
+  return data ? extractModelCostRates(data, cfg.model) : undefined;
+}
+
+/**
+ * Validate the per-owner pipeline model map (KANBAN_OWNER_MODELS, item 15)
+ * at boot, and populate cfg.ownerModelCosts from the /model/info data:
+ * - a mapped model unknown to the /model/info response fails startup with a
+ *   clear error — a typo'd map must not surface mid-session as a 403 / empty
+ *   completion (item 12's failure mode);
+ * - an alias with no USER_KEYS entry is WARNED + IGNORED (decision: the map
+ *   only changes which model an owner's sessions run on; without a USER_KEYS
+ *   entry there is no owner key profile to bill to — profileFor falls back
+ *   to the service profile + service model with its own warning. Failing
+ *   startup on a stale alias (e.g. a removed agent) would be harsher than
+ *   the degradation it protects against, so the pipeline keeps running);
+ * - /model/info unavailable (modelInfo undefined) → validation is skipped
+ *   with a warning and mapped models fall back to $0 rates (same soft
+ *   fallback as the pipeline model's cost rates).
+ */
+export async function validateOwnerModelsAtBoot(
+  cfg: Pick<KanbanConfig, "litellm" | "model" | "userKeys" | "ownerModels" | "ownerModelCosts">,
+  modelInfo: ModelInfoEntry[] | undefined,
+  fetchImpl: FetchLike = fetch,
+): Promise<void> {
+  const entries = Object.entries(cfg.ownerModels);
+  if (entries.length === 0) return;
+  if (modelInfo === undefined) {
+    console.warn(
+      `[config] /model/info unavailable — cannot validate KANBAN_OWNER_MODELS ` +
+        `(${entries.map(([a, m]) => `${a}:${m}`).join(", ")}); mapped models will ` +
+        `fall back to $0 cost rates`,
+    );
+    return;
+  }
+  for (const [alias, model] of entries) {
+    if (!(alias in cfg.userKeys)) {
+      console.warn(
+        `[config] KANBAN_OWNER_MODELS alias ${JSON.stringify(alias)} has no USER_KEYS entry ` +
+          `— ignored (sessions for that owner run on the service key + ${cfg.model})`,
+      );
+      continue;
+    }
+    if (!modelInfo.some((m) => m.model_name === model)) {
+      const available = modelInfo
+        .map((m) => m.model_name)
+        .filter((n): n is string => typeof n === "string")
+        .slice(0, 20)
+        .join(", ");
+      throw new ConfigError(
+        `KANBAN_OWNER_MODELS maps ${alias} to ${model}, which the LiteLLM proxy ` +
+          `does not serve (unknown to /model/info). Available models: ${available || "(none)"}`,
+      );
+    }
+    cfg.ownerModelCosts[model] = extractModelCostRates(modelInfo, model);
+  }
 }
 
 export interface LoadConfigOptions {
@@ -635,7 +774,11 @@ export async function loadConfig(opts: LoadConfigOptions = {}): Promise<KanbanCo
   }
   if (opts.validateModel !== false) {
     await validateModelAtBoot(cfg, opts.fetchImpl);
-    cfg.modelCost = await fetchModelCostRates(cfg, opts.fetchImpl);
+    // One /model/info fetch covers the pipeline model's cost rates AND the
+    // per-owner model map (validation + per-model rates, item 15).
+    const modelInfo = await fetchModelInfo(cfg, opts.fetchImpl);
+    cfg.modelCost = modelInfo ? extractModelCostRates(modelInfo, cfg.model) : undefined;
+    await validateOwnerModelsAtBoot(cfg, modelInfo, opts.fetchImpl);
     await validateUserKeysAtBoot(cfg, opts.fetchImpl);
   }
   return cfg;

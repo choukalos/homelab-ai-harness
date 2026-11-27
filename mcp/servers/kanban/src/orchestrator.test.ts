@@ -16,6 +16,7 @@ import type { KanbanConfig } from "./config.js";
 import { initDb } from "./db/index.js";
 import { ideas, projects, taskEvents, tasks, usage, type TaskRow } from "./db/schema.js";
 import type { AgentRuntime, TaskRunContext, TaskRunResult, TaskRunner, UsageSample } from "./agent/sessions.js";
+import { SessionApiError } from "./agent/sessions.js";
 import type { QaRunContext, QaVerdict } from "./agent/qa.js";
 import type { SummaryUpdateContext } from "./agent/summary.js";
 import type { DeployContext, DeployResult } from "./deploy/index.js";
@@ -48,6 +49,8 @@ function testCfg(
     nonMediaConcurrentTasks: slots.nonMedia ?? 2,
     agentConcurrentTasks: 1,
     agentSlugs: [],
+    ownerModels: {},
+    ownerModelCosts: {},
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -127,7 +130,35 @@ class FixedSummaryUpdater implements SummaryUpdaterLike {
   }
 }
 
-async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; agentSlots?: number; agentSlugs?: string[]; tickMs?: number; noTimer?: boolean } = {}) {
+/** Task pipeline whose run fails with an LLM API error (item 14 loud-fail). */
+class ApiErrorTaskRunner implements TaskRunner {
+  runs: TaskRunContext[] = [];
+  error = new SessionApiError(
+    "HTTP 403 — The requested model 'matrix-coder' is not available for this API key",
+    403,
+  );
+  run(ctx: TaskRunContext): Promise<TaskRunResult> {
+    this.runs.push(ctx);
+    return Promise.reject(this.error);
+  }
+  abort(_taskId: number): void {}
+}
+
+/** QA gate whose session fails with an LLM API error (item 14 loud-fail). */
+class ApiErrorQaGate implements QaGateLike {
+  readonly maxRounds = 2;
+  runs: QaRunContext[] = [];
+  error = new SessionApiError(
+    "HTTP 403 — The requested model 'matrix-coder' is not available for this API key",
+    403,
+  );
+  run(ctx: QaRunContext): Promise<QaVerdict> {
+    this.runs.push(ctx);
+    return Promise.reject(this.error);
+  }
+}
+
+async function setup<R extends TaskRunner = MockTaskRunner, Q extends QaGateLike = PassQaGate>(opts: { mediaSlots?: number; nonMediaSlots?: number; agentSlots?: number; agentSlugs?: string[]; tickMs?: number; noTimer?: boolean; runner?: R; qa?: Q } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-orch-"));
   const cfg = testCfg(path.join(dir, "kanban.db"), {
     media: opts.mediaSlots,
@@ -139,8 +170,8 @@ async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; agentS
   const db = await initDb(cfg);
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const services = createKanbanServices(db, { agentSlugs: cfg.agentSlugs });
-  const runner = new MockTaskRunner();
-  const qa = new PassQaGate();
+  const runner = opts.runner ?? new MockTaskRunner();
+  const qa = opts.qa ?? new PassQaGate();
   const deploy = new OkDeployRunner();
   const summary = new FixedSummaryUpdater();
   const workspaceRoot = path.join(dir, "workspace");
@@ -703,6 +734,57 @@ test("session failure → needs_attention with the failure reason", async () => 
   assert.equal(last.payload!.from, "running");
   assert.equal(last.payload!.to, "needs_attention");
   assert.match(String(last.payload!.reason), /mock session crashed/);
+});
+
+test("task run SessionApiError → needs_attention with the REAL error (item 14 loud-fail)", async () => {
+  const runner = new ApiErrorTaskRunner();
+  const { q, services, orch } = await setup({ runner });
+  const p = await services.createProject({ name: "Alpha" });
+  const { task } = await makeBacklogTask(q, services, p.id, "API-failing task");
+
+  await orch.start();
+  await orch.tick();
+  await orch.settled();
+  const t = await getTask(q, task.id);
+  assert.equal(t.state, "needs_attention");
+  const events = await eventsFor(q, task.id);
+  const last = events[events.length - 1]!;
+  assert.equal(last.type, "state");
+  assert.equal(last.payload!.from, "running");
+  assert.equal(last.payload!.to, "needs_attention");
+  // The REAL error (HTTP status + message) — not an empty-completion path.
+  assert.match(
+    String(last.payload!.reason),
+    /task session failed: HTTP 403 — The requested model 'matrix-coder' is not available for this API key/,
+  );
+  assert.equal(runner.runs.length, 1, "no silent re-run after an API error");
+});
+
+test("QA run SessionApiError → needs_attention after ONE round, not 2 silent rounds (item 14 loud-fail)", async () => {
+  const qa = new ApiErrorQaGate();
+  const { q, services, runner, orch } = await setup({ qa });
+  const p = await services.createProject({ name: "Alpha" });
+  const { task } = await makeBacklogTask(q, services, p.id, "QA API-failing task");
+
+  await orch.start();
+  await orch.tick();
+  await orch.settled();
+  const t = await getTask(q, task.id);
+  assert.equal(t.state, "needs_attention");
+  // The task run itself succeeded — the QA session is what failed.
+  assert.equal(runner.runs.length, 1);
+  // ONE QA round consumed with the real error — not two silent
+  // "no parseable verdict" rounds.
+  assert.equal(qa.runs.length, 1, "the API error consumes exactly one QA round");
+  const events = await eventsFor(q, task.id);
+  const qaEvent = events.find((e) => e.type === "qa")!;
+  assert.equal(qaEvent.payload!.pass, false);
+  assert.match(String(qaEvent.payload!.feedback), /QA session failed: HTTP 403/);
+  const last = events[events.length - 1]!;
+  assert.equal(last.type, "state");
+  assert.equal(last.payload!.from, "running");
+  assert.equal(last.payload!.to, "needs_attention");
+  assert.match(String(last.payload!.reason), /QA session failed: HTTP 403/);
 });
 
 test("paused backlog tasks are not picked up", async () => {

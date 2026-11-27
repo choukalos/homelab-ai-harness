@@ -34,6 +34,8 @@ function testCfg(sqlitePath: string, userKeys: Record<string, string> = {}): Kan
     nonMediaConcurrentTasks: 1,
     agentConcurrentTasks: 1,
     agentSlugs: ["product", "analyst"],
+    ownerModels: {},
+    ownerModelCosts: {},
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -104,9 +106,11 @@ async function makeApp(opts: {
   groomSlowMs?: number;
   mcpKeyCapabilities?: Map<string, Set<string>>;
   userKeys?: Record<string, string>;
+  ownerModels?: Record<string, string>;
 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-http-"));
   const cfg = testCfg(path.join(dir, "kanban.db"), opts.userKeys);
+  if (opts.ownerModels) cfg.ownerModels = opts.ownerModels;
   const db = await initDb(cfg);
   const mock: MockGrooming = createMockGrooming(undefined, { slowMs: opts.groomSlowMs });
   const grooming = new GroomingManager({
@@ -282,6 +286,23 @@ test("GET /health returns ok with model + db driver + user key profiles", async 
   assert.equal(body.model, "test-model");
   assert.equal(body.db, "sqlite");
   assert.deepEqual(body.userKeys.sort(), ["chuck", "dylan"], "USER_KEYS profile names exposed");
+  await app.close();
+});
+
+test("GET /health surfaces the owner-model map (item 15)", async () => {
+  const { app } = await makeApp({
+    userKeys: { strategist: "sk-strategist", marketing: "sk-marketing" },
+    ownerModels: { strategist: "matrix-copywriter", marketing: "matrix-copywriter" },
+  });
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  // The KANBAN_OWNER_MODELS map (owner → model) alongside agentSlugs.
+  assert.deepEqual(body.ownerModels, {
+    strategist: "matrix-copywriter",
+    marketing: "matrix-copywriter",
+  });
+  assert.deepEqual(body.agentSlugs, ["product", "analyst"], "agentSlugs still present");
   await app.close();
 });
 
@@ -551,7 +572,7 @@ test("POST /mcp auth: actions require a key; discovery is open (proxy registry)"
   assert.equal(noAuthList.statusCode, 200);
   const rpc = parseRpc(noAuthList.payload);
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  assert.equal(names.length, 28, `expected the full 28-tool set, got ${names.length}`);
+  assert.equal(names.length, 29, `expected the full 29-tool set, got ${names.length}`);
   // Unknown key → 401 (even for discovery — only the no-key case is open).
   const wrongAuth = await app.inject({
     method: "POST",
@@ -588,7 +609,7 @@ test("POST /mcp answers the initialize handshake", async () => {
   await app.close();
 });
 
-test("POST /mcp tools/list returns the 27-tool set", async () => {
+test("POST /mcp tools/list returns the 29-tool set", async () => {
   const { app } = await makeApp();
   const res = await app.inject({
     method: "POST",
@@ -615,6 +636,7 @@ test("POST /mcp tools/list returns the 27-tool set", async () => {
     "groom_status",
     "list_ideas",
     "list_projects",
+    "merge_task",
     "move_to_backlog",
     "pause_task",
     "project_status",
@@ -963,13 +985,26 @@ test("MCP tools: start_task / task_status / restart_task / retry_deploy", async 
   const ctx = await makeApp();
   const { app, db, orchestrator } = ctx;
   const q = db.db as unknown as BetterSQLite3Database<any>;
-  const { task } = await makeTaskFixture(ctx, { state: "backlog", log: true, usage: true });
+  const { projectId, task } = await makeTaskFixture(ctx, { state: "backlog", log: true, usage: true });
 
-  // task_status: state + log tail + usage, no failure reason yet.
+  // A second model on the same task (item 16: byModel aggregation).
+  await q.insert(usage).values([
+    { projectId, taskId: task.id, ts: Date.now(), role: "task", model: "m2", thinking: "medium", tokensIn: 40, tokensOut: 20, cost: 0.5 },
+  ]);
+
+  // task_status: state + log tail + usage (total + by role + by model),
+  // no failure reason yet.
   let status = mcpText(await mcpCall(app, "task_status", { task_id: task.id }));
   assert.equal(status.state, "backlog");
   assert.ok(status.logTail.length > 0, "log tail");
   assert.ok(status.usageTotal > 0, "usage total");
+  // byRole: the fixture's task row (1.5) + the m2 task row (0.5); byModel:
+  // the fixture's task+qa rows (model m) + the m2 row.
+  assert.deepEqual(status.usageByRole, { task: 2.0, qa: 0.25 }, "usage by role");
+  assert.deepEqual(status.usageByModel, {
+    m: { tokensIn: 110, tokensOut: 55, cost: 1.75 },
+    m2: { tokensIn: 40, tokensOut: 20, cost: 0.5 },
+  });
   assert.equal(status.failureReason, null);
 
   // start_task: backlog → running (the mock pipeline then completes it).
@@ -1139,6 +1174,7 @@ test("GET /tasks/<id> renders the read-only task detail with log tail, usage, ow
   assert.ok(html.includes("$1.75"), "usage so far (1.50 + 0.25)");
   assert.ok(html.includes("task $1.50"), "usage by role: task");
   assert.ok(html.includes("qa $0.25"), "usage by role: qa");
+  assert.ok(html.includes("m $1.75"), "usage by model (1.50 + 0.25 on model m)");
   assert.ok(html.includes("[tool] bash: {&quot;command&quot;:&quot;npm test&quot;}"), "log tail: tool line");
   assert.ok(html.includes("[agent] scaffolding the engine"), "log tail: agent line");
   assert.ok(html.includes("commit abc1234"), "log tail: heartbeat");
@@ -1503,7 +1539,7 @@ test("MCP: kanban key still gets the full tool set (no regression)", async () =>
     payload: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const rpc = parseRpc(res.payload);
-  assert.equal(rpc.result.tools.length, 28, "kanban key sees all 28 tools");
+  assert.equal(rpc.result.tools.length, 29, "kanban key sees all 29 tools");
   await app.close();
 });
 
