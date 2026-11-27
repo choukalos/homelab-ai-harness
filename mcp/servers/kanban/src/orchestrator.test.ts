@@ -138,7 +138,7 @@ async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; agentS
   cfg.agentSlugs = opts.agentSlugs ?? [];
   const db = await initDb(cfg);
   const q = db.db as unknown as BetterSQLite3Database<any>;
-  const services = createKanbanServices(db);
+  const services = createKanbanServices(db, { agentSlugs: cfg.agentSlugs });
   const runner = new MockTaskRunner();
   const qa = new PassQaGate();
   const deploy = new OkDeployRunner();
@@ -212,6 +212,23 @@ async function awaitRuns(runner: MockTaskRunner, taskIds: number[], timeoutMs = 
     if (taskIds.every((id) => have.has(id))) return;
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting for runs of ${taskIds} (have ${[...have].join(",")})`);
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+/**
+ * Wait until a task's SECOND run is registered with the mock runner (its
+ * hang-resolver is only set once tasks.run is called — aborting before that
+ * is a no-op and the run would hang forever).
+ */
+async function awaitSecondRun(runner: MockTaskRunner, taskId: number, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const count = runner.runs.filter((c) => c.taskId === taskId).length;
+    if (count >= 2) return;
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for the second run of ${taskId} (have ${count})`);
     }
     await new Promise((r) => setTimeout(r, 10));
   }
@@ -537,7 +554,10 @@ test("master switch: OFF (default) blocks agent starts; board work unaffected", 
   const c1 = await makeBacklogTask(q, services, p.id, "Board worker");
 
   // Fail-safe default: no kv row -> OFF. (Assert the default, then proceed.)
-  assert.deepEqual(await services.getAgentsSwitch(), { state: "off", setAt: null, setBy: null });
+  assert.deepEqual(await services.getAgentsSwitch(), {
+    global: { state: "off", setAt: null, setBy: null },
+    slugs: {},
+  });
 
   runner.behavior.set(a1.task.id, "hang");
   runner.behavior.set(c1.task.id, "hang");
@@ -560,7 +580,7 @@ test("master switch: OFF (default) blocks agent starts; board work unaffected", 
 
   // Flip ON -> the agent card starts on the next tick.
   const on = await services.setAgentsSwitch("on", "test");
-  assert.equal(on.state, "on");
+  assert.equal(on.global.state, "on");
   await orch.tick();
   await awaitRuns(runner, [a1.task.id]);
   assert.equal((await getTask(q, a1.task.id)).state, "running", "switch on -> agent card starts");
@@ -570,7 +590,7 @@ test("master switch: OFF (default) blocks agent starts; board work unaffected", 
   await orch.settled();
 });
 
-test("master switch: OFF gates tick pickup AND in-flight agent tasks continue (v1)", async () => {
+test("master switch: OFF hard-kills in-flight agent tasks (v2) — back to backlog, resume on ON", async () => {
   const { q, services, runner, orch } = await setup({ agentSlugs: ["product"] });
   await services.setAgentsSwitch("on", "test"); // start ON so a1 can launch, then flip OFF mid-flight
   const p = await services.createProject({ name: "Alpha" });
@@ -584,22 +604,85 @@ test("master switch: OFF gates tick pickup AND in-flight agent tasks continue (v
   await awaitRuns(runner, [a1.task.id]);
   assert.equal((await getTask(q, a1.task.id)).state, "running");
 
-  // Flip OFF with a1 in flight: a1 keeps running (the switch gates starts,
-  // not mid-session kills — v1), a2 does not start.
+  // Flip OFF with a1 in flight: v2 hard-kill — a1's session is aborted and
+  // the task returns to the backlog; a2 does not start.
   await services.setAgentsSwitch("off", "test");
   await orch.tick();
-  assert.equal(
-    (await getTask(q, a1.task.id)).state,
-    "running",
-    "in-flight agent task continues after the switch flips off",
-  );
+  const killed = await getTask(q, a1.task.id);
+  assert.equal(killed.state, "backlog", "in-flight agent task killed + back to the backlog");
+  assert.equal(killed.paused, false, "kill returns a clean backlog task (not paused)");
   assert.equal((await getTask(q, a2.task.id)).state, "backlog", "no new agent starts while off");
   await assert.rejects(
     orch.startTask(a2.task.id),
     (err: unknown) => err instanceof Error && /agents master switch is OFF/.test(err.message),
   );
 
+  // Flip back ON -> a1 is picked up again (resume) on the next tick.
+  await services.setAgentsSwitch("on", "test");
+  await orch.tick();
+  assert.equal(
+    (await getTask(q, a1.task.id)).state,
+    "running",
+    "switch back on -> the killed task resumes from the backlog",
+  );
+  // The resumed run's resolver is only registered once tasks.run is called —
+  // wait for the second run to be in flight before aborting it.
+  await awaitSecondRun(runner, a1.task.id);
   runner.abort(a1.task.id);
+  await orch.settled();
+});
+
+test("master switch: per-slug OFF kills only that slug; other slugs keep running", async () => {
+  const { q, services, runner, orch } = await setup({ agentSlots: 2, agentSlugs: ["product", "analyst"] });
+  await services.setAgentsSwitch("on", "test");
+  const p = await services.createProject({ name: "Alpha" });
+  const prod = await makeBacklogTask(q, services, p.id, "Product card", [], "product");
+  const anal = await makeBacklogTask(q, services, p.id, "Analyst card", [], "analyst");
+
+  runner.behavior.set(prod.task.id, "hang");
+  runner.behavior.set(anal.task.id, "hang");
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [prod.task.id, anal.task.id]);
+  assert.equal((await getTask(q, prod.task.id)).state, "running");
+  assert.equal((await getTask(q, anal.task.id)).state, "running");
+
+  // Per-slug OFF for product only: product's in-flight task is killed, the
+  // analyst task keeps running.
+  const view = await services.setAgentsSwitchSlug("product", "off", "test");
+  assert.equal(view.global.state, "on", "global untouched by a slug write");
+  await orch.tick();
+  assert.equal(
+    (await getTask(q, prod.task.id)).state,
+    "backlog",
+    "product's in-flight task killed by the per-slug switch",
+  );
+  assert.equal(
+    (await getTask(q, anal.task.id)).state,
+    "running",
+    "analyst's in-flight task keeps running",
+  );
+
+  // Explicit start of a product card is refused with the per-slug message;
+  // a new analyst card would be allowed (the slot is free after the kill).
+  await assert.rejects(
+    orch.startTask(prod.task.id),
+    (err: unknown) =>
+      err instanceof Error && /agent switch is OFF for 'product'/.test(err.message),
+  );
+
+  // Flip product back on -> its card resumes on the next tick.
+  await services.setAgentsSwitchSlug("product", "on", "test");
+  await orch.tick();
+  assert.equal(
+    (await getTask(q, prod.task.id)).state,
+    "running",
+    "per-slug switch back on -> the card resumes",
+  );
+  // The resumed run's resolver is only registered once tasks.run is called.
+  await awaitSecondRun(runner, prod.task.id);
+  runner.abort(prod.task.id);
+  runner.abort(anal.task.id);
   await orch.settled();
 });
 

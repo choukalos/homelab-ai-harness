@@ -684,17 +684,22 @@ export function buildMissionBrief(ctx: TaskRunContext, workspace: string): strin
   lines.push("");
   lines.push("## Task");
   lines.push(`Idea: ${ctx.ideaText}`);
-  lines.push(`Goal: ${ctx.spec.goal}`);
-  if (ctx.spec.steps.length > 0) {
+  // The spec is JSON from the DB — treat every field as runtime-untrusted
+  // (a task can carry a minimal spec, e.g. {goal} only): never crash the
+  // session pipeline on a missing field, degrade to a placeholder instead.
+  const steps = Array.isArray(ctx.spec.steps) ? ctx.spec.steps : [];
+  const acceptance = Array.isArray(ctx.spec.acceptance) ? ctx.spec.acceptance : [];
+  lines.push(`Goal: ${ctx.spec.goal ?? "(not specified — derive it from the idea text and project context)"}`);
+  if (steps.length > 0) {
     lines.push("Steps:");
-    ctx.spec.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
   }
-  if (ctx.spec.acceptance.length > 0) {
+  if (acceptance.length > 0) {
     lines.push("Acceptance criteria:");
-    ctx.spec.acceptance.forEach((a) => lines.push(`- ${a}`));
+    acceptance.forEach((a) => lines.push(`- ${a}`));
   }
-  lines.push(`Kind: ${ctx.spec.kind}`);
-  if (ctx.spec.publish_targets && ctx.spec.publish_targets.length > 0) {
+  lines.push(`Kind: ${ctx.spec.kind ?? "(unspecified — treat as general code work)"}`);
+  if (Array.isArray(ctx.spec.publish_targets) && ctx.spec.publish_targets.length > 0) {
     lines.push(`Publish targets: ${ctx.spec.publish_targets.join(", ")}`);
   }
   if (ctx.spec.notes) lines.push(`Notes: ${ctx.spec.notes}`);

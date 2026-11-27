@@ -70,6 +70,33 @@ test("buildQaPrompt: spec, acceptance, diff, completion summary, round", () => {
   assert.ok(prompt.includes("branch task/7"));
 });
 
+test("buildQaPrompt: minimal spec ({goal} only) degrades, never crashes", () => {
+  // A task can carry a minimal spec (no steps/acceptance/kind) — the QA
+  // prompt must degrade to placeholders, not crash the QA gate.
+  const ctx: QaRunContext = {
+    taskId: 19,
+    workspace: "/workspace/task-19",
+    branch: "task/19",
+    defaultBranch: "main",
+    spec: { goal: "Do the thing" } as QaRunContext["spec"],
+    completionSummary: "Done.",
+    round: 1,
+  };
+  const prompt = buildQaPrompt(ctx, "(no diff)");
+  assert.ok(prompt.includes("Goal: Do the thing"));
+  assert.ok(!prompt.includes("Steps:"), "no steps section for a missing field");
+  assert.ok(!prompt.includes("Acceptance criteria:"), "no acceptance section for a missing field");
+  assert.ok(prompt.includes("Kind: (unspecified)"), "kind degrades to a placeholder");
+  assert.ok(!prompt.includes("undefined"), "no 'undefined' leaks into the prompt");
+
+  // An empty spec object must not crash either.
+  const empty = buildQaPrompt(
+    { ...ctx, spec: {} as QaRunContext["spec"] },
+    "(no diff)",
+  );
+  assert.ok(empty.includes("Goal: (not specified"), "missing goal degrades to a placeholder");
+});
+
 // ---------------------------------------------------------------------------
 // QaGate over a mocked session
 // ---------------------------------------------------------------------------

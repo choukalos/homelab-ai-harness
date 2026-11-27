@@ -14,7 +14,9 @@
   first; `strategist`/`marketing`/`analyst` stand up but stay OFF — keys +
   workspaces only, no cron targeting, no board cards, charters not approved —
   until chuck activates them); **agents master switch built 2026-11-27** —
-  fail-safe OFF, admin-only `agents_switch` MCP tool, live state OFF). Goal model + S13 acceptance
+  fail-safe OFF, admin-only `agents_switch` MCP tool, live state OFF;
+  **switch v2 (hard-kill + per-agent switches) + mission-brief hardening
+  done 2026-11-27**). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -765,6 +767,42 @@ New from the 2026-11-24 interview:
      16 done. Full suite green (244 pass, 0 fail, 1 pre-existing skip).
    - To activate the agent org: `agents_switch({state: "on"})` from a
      client session (admin key).
+9. **Switch v2 — hard-kill semantics + per-agent switches (chuck's ask,
+   2026-11-27)** — extends item 8: (a) flipping OFF now also STOPS
+   in-flight agent work (session abort + task back to the backlog, where
+   it auto-resumes when the switch is on); (b) per-agent (per-slug)
+   switches alongside the global. **DONE 2026-11-27** (dev clone
+   `task/18`, `c056d6f` + `e03e26c`, pushed; `mcp_kanban` rebuilt +
+   healthy):
+   - kv document is now `{global, slugs}` — a per-slug entry overrides the
+     global for that agent only (global OFF dominates; absent slug entry
+     -> global governs; malformed slug entry -> OFF, fail-closed). v1 rows
+     read as the global entry — no migration.
+   - `agents_switch({slug, state})` — per-slug set; the slug must be a
+     known AGENT_SLUGS entry (no phantom entries). No args still reads the
+     full state (global + slugs).
+   - Hard-kill: the orchestrator's tick runs a kill pass — running,
+     non-paused agent tasks with a live pipeline whose effective switch is
+     OFF get their session aborted and are returned to the backlog (audit
+     event with the scope-specific reason). A missed kill (session not yet
+     launched) is retried on the next tick — the gate is enforced every
+     pass.
+   - Live-verified 2026-11-27: the v1 row read as global (backward
+     compat); global + slug round-trip with cross-preservation; unknown
+     slug rejected; a running probe task killed by a per-slug OFF (backlog
+     + audit reason), auto-resumed on the slug ON, then killed again by a
+     global OFF (global reason). Full suite: 254 pass, 0 fail, 1
+     pre-existing skip.
+10. **Mission-brief hardening (bug fix, 2026-11-27)** — the live probe
+    (item 9's E2E) exposed the unguarded spec-field pattern in three
+    consumers: `buildMissionBrief` (sessions.ts), `buildQaPrompt` (qa.ts —
+    the probe's task session ran fine, then crashed in QA with the same
+    `Cannot read properties of undefined (reading 'length')`), and
+    `slugify(spec.goal)` in the blog deploy handler. All now treat the DB
+    spec as runtime-untrusted (Array.isArray guards + placeholder
+    degradation) — a minimal spec ({goal} only) or corrupt
+    steps/acceptance no longer crashes the session pipeline or the QA
+    gate. **DONE 2026-11-27** (same commits as item 9).
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
 revised 2026-11-27 — product first).

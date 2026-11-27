@@ -35,14 +35,17 @@
   non-SSE MCP entry; tools surface bare, no server prefix; per-key tool
   scoping chuck=admin / dylan=control via `MCP_KEY_CAPABILITIES`; MySQL
   `ai_kanban` on Thor). `agents_switch` added 2026-11-27 (28th tool;
-  **admin-only** — the operator's master switch for all standing agents:
-  no args reads the durable state, `state: on|off` sets it, stamped with
-  the caller's USER_KEYS alias for the audit trail; kv-backed, fail-safe
-  default **OFF** — a missing/malformed row means agents disabled; when
-  OFF the orchestrator picks up no agent-owned cards and explicit
-  `start_task` on one is rejected 409; in-flight agent tasks run to
-  completion — the switch gates starts, not mid-session kills; non-agent
-  board work unaffected). `mcp_media` 25 → 27 with the M1–M5
+  **admin-only** — the operator's master switch for the standing agents:
+  no args reads the durable state (global + per-slug), `state: on|off`
+  sets the GLOBAL switch, `{slug, state}` sets one agent's switch (slug
+  must be a known AGENT_SLUGS entry); stamped with the caller's USER_KEYS
+  alias for the audit trail; kv-backed, fail-safe default **OFF** — a
+  missing/malformed row means agents disabled; **v2 hard-kill
+  (2026-11-27):** when OFF (global or per-slug) the orchestrator not only
+  refuses new agent starts (409) but also kills in-flight agent tasks in
+  that scope — session aborted, task returned to the backlog, auto-
+  resuming when the switch is flipped back on; global OFF dominates
+  per-slug entries; non-agent board work unaffected). `mcp_media` 25 → 27 with the M1–M5
   client layer (2026-11-19 pipeline, deployed 2026-11-21): `media_kill_job`
   (queued-only kill, frees the FIFO slot) + `media_queue_status` (queue
   summary + feature list); `media_job_result` now surfaces in-flight

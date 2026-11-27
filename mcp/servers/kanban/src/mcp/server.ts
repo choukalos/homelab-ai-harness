@@ -406,21 +406,35 @@ export function registerMcpTools(
     "agents_switch",
     {
       description:
-        "Master on/off switch for ALL standing agents (product/strategist/" +
-        "marketing/analyst). No args: read the current state. " +
-        "state='on'|'off': set it (admin-only). When OFF the orchestrator " +
-        "does not start agent-owned cards (the agent slot is zeroed each " +
-        "tick; start_task on an agent card returns 409); in-flight agent " +
-        "tasks run to completion. Fail-safe default is OFF (missing/malformed " +
-        "state row). Durable (kv) — survives restarts.",
-      inputSchema: { state: z.enum(["on", "off"]).optional() },
+        "Master on/off switch for the standing agents (product/strategist/" +
+        "marketing/analyst) — global plus per-agent. No args: read the full " +
+        "state (global + per-slug). state='on'|'off': set the GLOBAL switch. " +
+        "{slug, state}: set one agent's switch (slug must be a known agent). " +
+        "When OFF (global or per-slug) the orchestrator does not start " +
+        "agent-owned cards in that scope (start_task returns 409) AND kills " +
+        "in-flight agent tasks in that scope — the session is aborted and the " +
+        "task returns to the backlog, resuming automatically when the switch " +
+        "is flipped back on. Global OFF dominates per-slug entries. " +
+        "Fail-safe default is OFF (missing/malformed row). Durable (kv) — " +
+        "survives restarts. Admin-only.",
+      inputSchema: {
+        state: z.enum(["on", "off"]).optional(),
+        slug: z.string().min(1).optional(),
+      },
     },
-    ({ state }) =>
-      run(async () =>
-        state === undefined
-          ? ok(await services.getAgentsSwitch())
-          : ok(await services.setAgentsSwitch(state, owner || "mcp")),
-      ),
+    ({ state, slug }) =>
+      run(async () => {
+        if (state === undefined && slug === undefined) {
+          return ok(await services.getAgentsSwitch());
+        }
+        if (state === undefined) {
+          throw new Error("state ('on'|'off') is required when slug is given");
+        }
+        if (slug === undefined) {
+          return ok(await services.setAgentsSwitch(state, owner || "mcp"));
+        }
+        return ok(await services.setAgentsSwitchSlug(slug, state, owner || "mcp"));
+      }),
   );
 
   reg(

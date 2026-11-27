@@ -44,7 +44,11 @@ async function main(): Promise<void> {
     workspaceRoot: cfg.workspace.dir,
     cleanupAgeMs: cfg.workspaceCleanupDays * 86_400_000,
   });
-  const services = createKanbanServices(db, { grooming, orchestrator });
+  const services = createKanbanServices(db, {
+    grooming,
+    orchestrator,
+    agentSlugs: cfg.agentSlugs,
+  });
   await orchestrator.start();
 
   const app = buildApp({ cfg, db, agent, services, orchestrator, grooming });

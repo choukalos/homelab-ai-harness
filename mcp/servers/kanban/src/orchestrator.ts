@@ -70,7 +70,11 @@ import {
 import { ideas, projects, taskEvents, tasks, tablesUseMysql } from "./db/tables.js";
 import type { Db } from "./services/common.js";
 import { ServiceError } from "./services/common.js";
-import { getAgentsSwitch } from "./services/agents-switch.js";
+import {
+  effectiveSwitchState,
+  getAgentsSwitch,
+  type AgentsSwitchView,
+} from "./services/agents-switch.js";
 import { appendTaskEvent, taskDependencyStatus } from "./services/tasks.js";
 import { recordUsage } from "./services/usage.js";
 import {
@@ -302,15 +306,23 @@ export class Orchestrator {
    */
   async tick(): Promise<void> {
     if (!this.running) return;
-    const counts = await this.countRunningBySlot();
     const cfg = this.deps.cfg;
+    // Agents master switch (kv `agents_master_switch`, global + per-slug):
+    // read once per pass. v2 hard-kill: running agent tasks whose effective
+    // switch is OFF are aborted + returned to the backlog (they resume when
+    // the switch is flipped back on). Killed first so the freed slot can be
+    // reused by another agent card in the same pass.
+    const sw = await getAgentsSwitch(this.db);
+    if (cfg.agentSlugs.length > 0) {
+      await this.killSwitchedOffAgentTasks(sw);
+    }
+    const counts = await this.countRunningBySlot();
     let freeAgent = Math.max(0, cfg.agentConcurrentTasks - counts.agent);
     let freeMedia = Math.max(0, cfg.mediaConcurrentTasks - counts.media);
     let freeNonMedia = Math.max(0, cfg.nonMediaConcurrentTasks - counts.nonMedia);
-    // Agents master switch (kv `agents_master_switch`): OFF -> no agent cards
-    // start this pass (zero the agent slot). In-flight agent tasks continue;
-    // the switch gates starts, not mid-session kills (v1).
-    if (freeAgent > 0 && (await getAgentsSwitch(this.db)).state === "off") {
+    // Global switch OFF -> no agent cards start this pass (zero the agent
+    // slot). Per-slug gating happens per card below.
+    if (freeAgent > 0 && sw.global.state === "off") {
       freeAgent = 0;
     }
     if (freeAgent === 0 && freeMedia === 0 && freeNonMedia === 0) return;
@@ -318,6 +330,9 @@ export class Orchestrator {
       const cat = slotCategory(task, cfg.agentSlugs);
       const free = cat === "agent" ? freeAgent : cat === "media" ? freeMedia : freeNonMedia;
       if (free === 0) continue; // category full
+      // Per-slug gate: a card for a slug whose switch is OFF is skipped
+      // (the slot stays free for other slugs' cards).
+      if (cat === "agent" && effectiveSwitchState(sw, task.owner) === "off") continue;
       try {
         await this.startTask(task.id);
         if (cat === "agent") freeAgent--;
@@ -328,6 +343,39 @@ export class Orchestrator {
         if (!(err instanceof ServiceError)) {
           console.error(`[orchestrator] failed to start task ${task.id}:`, err);
         }
+      }
+    }
+  }
+
+  /**
+   * v2 hard-kill pass: for each RUNNING, non-paused agent task with a live
+   * pipeline whose effective switch is OFF (global or per-slug), abort the
+   * session and return the task to the backlog — it resumes automatically
+   * (from last_commit) when the switch is flipped back on. The pipeline's
+   * abort path appends an event and settles without a state write, so the
+   * concurrent transition is race-safe (the conditional WHERE 409s if the
+   * task moved in between).
+   */
+  private async killSwitchedOffAgentTasks(sw: AgentsSwitchView): Promise<void> {
+    const rows = await this.db
+      .select({ id: tasks.id, owner: tasks.owner })
+      .from(tasks)
+      .where(and(eq(tasks.state, "running"), eq(tasks.paused, false)));
+    for (const row of rows) {
+      if (!this.deps.cfg.agentSlugs.includes(row.owner)) continue; // board work
+      if (!this.pipelines.has(row.id)) continue; // no live session to kill
+      if (effectiveSwitchState(sw, row.owner) !== "off") continue;
+      const reason =
+        sw.global.state === "off"
+          ? "agents master switch OFF (global) — paused by the operator; resumes when the switch is on"
+          : `agent switch OFF for '${row.owner}' — paused by the operator; resumes when the switch is on`;
+      console.log(`[orchestrator] master switch: killing agent task ${row.id} (${row.owner})`);
+      this.tasks.abort(row.id);
+      try {
+        await this.transition(row.id, "running", "backlog", undefined, { reason });
+      } catch (err) {
+        if (err instanceof ServiceError) continue; // already moved concurrently
+        console.error(`[orchestrator] master switch: kill of task ${row.id} failed:`, err);
       }
     }
   }
@@ -361,14 +409,22 @@ export class Orchestrator {
     }
     const counts = await this.countRunningBySlot();
     const cat = slotCategory(task, this.deps.cfg.agentSlugs);
-    // Agents master switch: OFF -> agent-owned cards cannot start (409).
-    // Non-agent cards are unaffected; in-flight agent tasks continue (the
-    // switch gates starts, not mid-session kills — v1).
-    if (cat === "agent" && (await getAgentsSwitch(this.db)).state === "off") {
-      throw new ServiceError(
-        409,
-        "agents master switch is OFF — agent work is disabled; flip it on with the agents_switch MCP tool (admin)",
-      );
+    // Agents master switch (global + per-slug): OFF for this scope -> the
+    // card cannot start (409). Non-agent cards are unaffected.
+    if (cat === "agent") {
+      const sw = await getAgentsSwitch(this.db);
+      if (sw.global.state === "off") {
+        throw new ServiceError(
+          409,
+          "agents master switch is OFF — agent work is disabled; flip it on with the agents_switch MCP tool (admin)",
+        );
+      }
+      if (effectiveSwitchState(sw, task.owner) === "off") {
+        throw new ServiceError(
+          409,
+          `agent switch is OFF for '${task.owner}' (global switch is on); flip it on with agents_switch({slug: '${task.owner}', state: 'on'}) (admin)`,
+        );
+      }
     }
     const cap =
       cat === "agent"
