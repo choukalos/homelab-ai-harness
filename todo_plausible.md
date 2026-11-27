@@ -1,11 +1,12 @@
 # Todo — Plausible: get analytics working (workstream 1)
 
 - date: 2026-11-22
-- status: **P1–P4 DONE 2026-11-27; P5 feed + dashboard DONE 2026-11-27** —
+- status: **P1–P5 DONE 2026-11-27** —
   first user created, 3 sites created, snippet wired + deployed on all 3 live
   sites, end-to-end ingest verified. P5: Plausible → data-hub feed (daily
-  scheduled export, path A) + Grafana Product KPIs dashboard are live. Only
-  the KPI *definitions* (with BA-1, skills Phase 3) remain.
+  scheduled export, path A) + Grafana Product KPIs dashboard + the `plausible-kpi`
+  KPI report skill (BA-1 `kpi-reporting`) are all live. Only the final KPI
+  *set* is still refined with BA-1 (skills Phase 3).
 - target: chuck + pi
 - source: WS1 (engagement/usage instrumentation) of the agent-skills plan
   (`todo_agent_skills.md`). Chuck's call 2026-11-22: Plausible "is in itself its
@@ -147,7 +148,7 @@ verified running) while in there.
   invest.choukalos.com, bluebovinegroup.com).
 - Note: events land in `events_v2` (not the legacy `events` table).
 
-### P5 — WS1 deep (feed + dashboard DONE 2026-11-27; KPI defs w/ BA-1 pending)
+### P5 — WS1 deep (feed + dashboard + KPI report skill — DONE 2026-11-27)
 
 - ✅ **Feed Plausible into data-hub** (path A — the plan's intended flow).
   Uses data-hub's existing **v2 generic-datasets** framework (the robust,
@@ -166,9 +167,14 @@ verified running) while in there.
   Panels: 7-day stats (pageviews / unique visitors / custom events), 30-day
   pageview trend, per-site breakdown. (report-hub can also read `hub.*` via
   `dh_reports`; its UX organization is a separate follow-up.)
-- ⏳ **KPI definitions with BA-1** (skills Phase 3) — the final KPI set is
-  locked in as BA-1 (`kpi-reporting`) is built. This is the only remaining
-  P5 item and it couples to the active agents work.
+- ✅ **KPI report skill** (`agents-skills/plausible-kpi/`, registered + enabled
+  in the LiteLLM Skill Hub) — the BA-1 `kpi-reporting` step. A deterministic
+  script (`tools/plausible_kpi_report.py`) queries Plausible ClickHouse for a
+  lookback window and writes a Markdown KPI report (overview, per-site
+  breakdown, daily trend, top pages, top countries, custom events). Runs on
+  thor via `docker exec`; `--days` / `--sites` / `--top` / `--out` flags.
+  The final KPI *set* is still refined with BA-1, but the report artifact
+  step is built and live — P5 is complete.
 
 ## Architecture (as deployed)
 
