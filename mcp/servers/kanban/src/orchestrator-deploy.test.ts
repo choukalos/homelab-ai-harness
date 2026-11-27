@@ -235,10 +235,11 @@ test("QA pass → deploy → done: events, usage (task/qa/summary), project summ
   assert.equal(t.lastCommit, "c0ffee");
   assert.equal(t.qaRounds, 0, "no failed QA rounds");
 
-  // QA saw the completion summary + workspace + round 1.
+  // QA saw the requirements (spec) + workspace + round 1 — and NOT the
+  // worker's completion summary (fresh-context QA, item 17 decision).
   assert.equal(qa.runs.length, 1);
   assert.equal(qa.runs[0]!.round, 1);
-  assert.equal(qa.runs[0]!.completionSummary, `task ${task.id} done`);
+  assert.equal(qa.runs[0]!.spec.goal, "g");
   assert.ok(qa.runs[0]!.workspace.endsWith(`task-${task.id}`), "QA in the task workspace");
 
   // Deploy got the routed context (kind code, branch, workspace).
