@@ -1,0 +1,17 @@
+[Unit]
+Description=Security weekly digest (Sundays) — SEC Phase 10
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# root for consistency with the daily scan (the digest only reads reports,
+# but a non-root unit would need the data dir world-readable)
+WorkingDirectory=/home/chuck/homelab
+ExecStart=/home/chuck/homelab/scripts/security-digest-weekly.sh
+TimeoutStartSec=300
+Nice=10
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
