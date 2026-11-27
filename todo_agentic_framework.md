@@ -6,15 +6,20 @@
   domain knowledge decided 2026-11-26; **first org-goals pass done 2026-11-26**
   — `docs/org/goals.md` (cycle 2026-12: homelab O1 content; bluebovine O1
   trust+traffic, O2 product-define), alignment report
-  `docs/org/alignment/2026-11-26-first-pass.md`, 4 charter drafts
-  `docs/agents/<slug>/charter.md` — **product charter APPROVED 2026-11-27**
-  (all 7 sections, no changes requested); the other 3 remain drafts pending
-  activation; Q13 decided
+  `docs/org/alignment/2026-11-26-first-pass.md`, 4 charters
+  `docs/agents/<slug>/charter.md` — **ALL 4 APPROVED 2026-11-27** (product
+  first — all 7 sections, no changes requested; strategist/marketing/analyst
+  completed + approved the same day at activation — "get that done & in
+  place"); Q13 decided
   2026-11-26, **revised 2026-11-27 (chuck): stand up `product` first** (product
-  first; `strategist`/`marketing`/`analyst` stand up but stay OFF — keys +
+  first; `strategist`/`marketing`/`analyst` stood up but stayed OFF — keys +
   workspaces only, no cron targeting, no board cards, charters not approved —
-  until chuck activates them); **agents master switch built 2026-11-27** —
-  fail-safe OFF, admin-only `agents_switch` MCP tool, live state OFF;
+  **until chuck activated them 2026-11-27: all 4 agents now ACTIVE** —
+  charters complete + approved, cron targeting all 4 (hot-reload verified),
+  first-work cards on the board (tasks 20–23, project 12, agent-owned),
+  global switch ON); **agents master switch built 2026-11-27** —
+  fail-safe OFF, admin-only `agents_switch` MCP tool, **live state ON
+  (all 4 agents active)**;
   **switch v2 (hard-kill + per-agent switches) + mission-brief hardening
   done 2026-11-27**). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
@@ -653,8 +658,9 @@ New from the 2026-11-24 interview:
    `skill-hub-register.sh` — "1 added, 0 failed"; gateway list verified).
 3. ~~First org-goals pass~~ — **done 2026-11-26** (`docs/org/goals.md` cycle
    2026-12; alignment report `docs/org/alignment/2026-11-26-first-pass.md`;
-   4 charter drafts `docs/agents/<slug>/charter.md` — product **APPROVED
-   2026-11-27**; the other 3 pending activation).
+   4 charters `docs/agents/<slug>/charter.md` — product **APPROVED
+   2026-11-27**; the other 3 pending activation — **activated 2026-11-27,
+   see item 11**).
    The monthly cycle starts; Q13 first-agent decision pending (recommendation:
    `product`).
 4. ~~First agent (Q13)~~ — **decided 2026-11-26, revised 2026-11-27 (chuck):
@@ -803,9 +809,44 @@ New from the 2026-11-24 interview:
     degradation) — a minimal spec ({goal} only) or corrupt
     steps/acceptance no longer crashes the session pipeline or the QA
     gate. **DONE 2026-11-27** (same commits as item 9).
+11. **Activate the other 3 agents (chuck: "get that done & in place",
+    2026-11-27)** — the Q13-revised hold is lifted: `strategist` /
+    `marketing` / `analyst` are now ACTIVE alongside `product`.
+    **DONE 2026-11-27**:
+   - Charters completed (all 7 sections — Identity / Projects /
+     Constraints / Autonomy tiers / Quality metrics added; Objectives +
+     Key results unchanged from the 2026-11-26 okr first pass, reviewed
+     with chuck that day) and **APPROVED 2026-11-27**:
+     `docs/agents/{strategist,marketing,analyst}/charter.md`. Domain-KB
+     allocation (Q15): strategist owns `kb_market-pm-consulting`,
+     marketing owns `kb_homelab-content`, analyst owns no domain KB
+     (measurement layer). Product charter got a one-line clarification:
+     role artifacts land in the homelab repo via the project-12 workspace
+     (G12).
+   - `weekly_agent_reviews` skill: `INACTIVE_AGENTS` is now empty (all 4
+     active; the gate is retained for future deactivations), `AGENT_KB`
+     maps all 4 (analyst → None, handled with an honest KB line),
+     `DEFAULT_AGENTS` = all 4; `skill.yml` description + defaults updated.
+     Suite 84/84 (3 tests updated for the new activation state).
+   - `scheduler/schedules.json`: `weekly-agent-reviews` `agents` param now
+     `[product, strategist, marketing, analyst]` — hot-reload verified via
+     the skill-runner API (all 4 targeted, next fire 2026-11-27 15:00 CT).
+   - First-work cards on the board (project 12 — the G12 role-artifact
+     repo; task owner = idea owner per `services/icebox.ts`): task 20
+     product (Bluebovine market analysis — O1 KR1), task 21 strategist
+     (homelab content strategy — O2 first per the 2026-11-26 sequencing),
+     task 22 marketing (content inventory bootstrap — O1 KR3
+     prerequisite), task 23 analyst (KPI digest baseline — O1 KR1). All
+     backlog with full specs (goal + serves: tag, 5 steps, 5 acceptance
+     criteria, notes with charter/goals/G12 context). The agent slot (1)
+     serializes them — task 20 (product) started running on the first tick
+     after the switch flip.
+   - Agents switch: **global ON** (setBy: chuck) — all 4 agents active;
+     per-slug switches available for pausing any single agent
+     (`agents_switch({slug, state})`).
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
-revised 2026-11-27 — product first).
+revised 2026-11-27 — product first; all 4 agents activated 2026-11-27).
 
 ## Step-6 build evidence (2026-11-27 — product-first stand-up)
 

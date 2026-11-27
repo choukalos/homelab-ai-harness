@@ -5,9 +5,10 @@ weekly_agent_reviews skill — 7-part weekly review for ACTIVE agents.
 Purpose:
   Every Friday (15:00 America/Chicago — see the `weekly-agent-reviews`
   schedule in scheduler/schedules.json), produce the 7-part weekly review
-  for each ACTIVE agent (Q13: `product` is the only active agent;
-  `strategist`/`marketing`/`analyst` are OFF — never targeted, even if
-  passed in params):
+  for each ACTIVE agent (all 4 standing agents active since 2026-11-27 —
+  Q13 revised: product stood up first, strategist/marketing/analyst
+  activated the same day; the INACTIVE_AGENTS set is retained for future
+  deactivations):
 
     1. prior-week accomplishments WITH evidence/links (board card ids +
        states, commit hashes, artifact file paths — only real refs)
@@ -107,12 +108,21 @@ LLM_TIMEOUT = int(os.environ.get("WEEKLY_AGENT_REVIEWS_LLM_TIMEOUT", "120"))
 SPEND_TIMEOUT = int(os.environ.get("WEEKLY_AGENT_REVIEWS_SPEND_TIMEOUT", "15"))
 
 WINDOW_DAYS = 7
-DEFAULT_AGENTS = ["product"]
-# Q13 (revised 2026-11-27): product is the only ACTIVE agent. These are
-# OFF — keys + workspaces only; never targeted, even if passed in params.
-INACTIVE_AGENTS = {"strategist", "marketing", "analyst"}
-# Q15 domain-KB ownership (charter): product owns kb_bluebovine.
-AGENT_KB = {"product": "kb_bluebovine"}
+DEFAULT_AGENTS = ["product", "strategist", "marketing", "analyst"]
+# Activation gate (Q13 revised 2026-11-27): all 4 standing agents are
+# ACTIVE. This set is retained for future deactivations — a slug listed
+# here is skipped even if passed in params (keys + workspaces stay in
+# place; cron targeting is what turns the reviews on/off).
+INACTIVE_AGENTS = set()
+# Q15 domain-KB ownership (charter): product owns kb_bluebovine, strategist
+# owns kb_market-pm-consulting, marketing owns kb_homelab-content; the
+# analyst owns NO domain KB (measurement layer — consumes, does not own).
+AGENT_KB = {
+    "product": "kb_bluebovine",
+    "strategist": "kb_market-pm-consulting",
+    "marketing": "kb_homelab-content",
+    "analyst": None,
+}
 DEFAULT_OUTPUT_TEMPLATE = "docs/agents/<slug>/reviews/YYYY-WW.md"
 
 MAX_TASKS = 50
@@ -583,7 +593,8 @@ def _parse_org_goals() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _kb_name_for(slug: str) -> str:
+def _kb_name_for(slug: str):
+    """The agent's owned domain-KB collection (None = owns no KB — Q15)."""
     return AGENT_KB.get(slug, f"kb_{slug}")
 
 
@@ -642,6 +653,10 @@ def _collect_kb(client: Any, slug: str, window_start: datetime) -> dict:
         "docs_in_window": [],
         "note": "",
     }
+    if kb is None:
+        out["note"] = ("agent owns no domain KB (measurement layer — Q15); "
+                       "consumes board/inventory/artifacts instead")
+        return out
     if client is None:
         out["note"] = "no MCP client injected — KB unavailable"
         return out
@@ -692,6 +707,8 @@ def _collect_kb(client: Any, slug: str, window_start: datetime) -> dict:
 
 def _kb_line(kb: dict) -> str:
     """The deterministic domain-KB line for part 6."""
+    if kb.get("kb") is None:
+        return f"KB: n/a ({kb.get('note') or 'agent owns no domain KB'})"
     if kb.get("exists") is False:
         return f"KB ({kb['kb']}): collection does not exist yet — no facts (creates on first write)"
     if not kb.get("available"):

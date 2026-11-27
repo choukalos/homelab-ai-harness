@@ -112,11 +112,11 @@
     },
     {
       "id": "weekly-agent-reviews",
-      "name": "Weekly Agent Reviews (active agents only — product for now)",
+      "name": "Weekly Agent Reviews (all 4 standing agents — active since 2026-11-27)",
       "cron": "0 15 * * 5",
       "skill": "weekly_agent_reviews",
       "params": {
-        "agents": ["product"],
+        "agents": ["product", "strategist", "marketing", "analyst"],
         "output": "docs/agents/<slug>/reviews/YYYY-WW.md",
         "parts": [
           "prior-week accomplishments with evidence/links",
@@ -128,7 +128,7 @@
           "chuck's feedback (appended after he responds)"
         ],
         "non_stacking": true,
-        "note": "Generate the 7-part weekly review for each ACTIVE agent (Q13: product is the only active agent; strategist/marketing/analyst are OFF — do not target them). Non-stacking rule: if the previous week's review doc has no part-7 feedback (or explicit ack) appended, skip this cycle for that agent until chuck interacts."
+        "note": "Generate the 7-part weekly review for each ACTIVE agent (all 4 standing agents active since 2026-11-27 — Q13 revised; the skill's INACTIVE_AGENTS set is the deactivation gate). Non-stacking rule: if the previous week's review doc has no part-7 feedback (or explicit ack) appended, skip this cycle for that agent until chuck interacts. Same-week idempotency: a re-fire in the same ISO week skips (doc untouched, no LLM call) unless force=true."
       },
       "enabled": true,
       "timezone": "America/Chicago"

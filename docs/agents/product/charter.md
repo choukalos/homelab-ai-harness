@@ -52,6 +52,11 @@ Kanban projects this agent works (creates cards in):
   content pipeline: personal-interest content ideas (arcade/guitar/songs/RPGs/
   cars) groomed to buildable board specs the coding team picks up.
 
+Role artifacts (`docs/roles/pm/`) land in the homelab repo — the product
+agent runs that work from the **Homelab** project-12 workspace (the board
+carries the work item, the repo carries the artifact — G12); project 6/5
+cards are for work whose deliverable lives in those repos.
+
 Read access to all projects is autonomous (Q7); the product agent creates
 board cards only in its own projects.
 

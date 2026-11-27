@@ -1,14 +1,14 @@
 ---
 name: weekly-agent-reviews
-description: "Weekly 7-part review for each ACTIVE agent (product only — Q13; strategist/marketing/analyst are OFF and never targeted): prior-week accomplishments with real evidence refs, KR progress vs trajectory, work-mix check (bau vs OKR vs exec + agent-key spend line), machine-checked quality KR status, upcoming plan (suggestions only), learnings + domain-KB line, and a placeholder part 7 for chuck's feedback. Non-stacking gate: skips an agent when the most recent prior review's part 7 has no feedback/ack; bootstrap (no prior doc) runs unconditionally. One LLM synthesis call (matrix-coder) with deterministic guardrails (evidence refs must match real board card ids / commit shas / file paths; KRs restricted to the charter; window dates enforced; deterministic skeleton on LLM failure). Writes docs/agents/<slug>/reviews/YYYY-WW.md."
+description: "Weekly 7-part review for each ACTIVE agent (all 4 standing agents active since 2026-11-27 — Q13 revised): prior-week accomplishments with real evidence refs, KR progress vs trajectory, work-mix check (bau vs OKR vs exec + agent-key spend line), machine-checked quality KR status, upcoming plan (suggestions only), learnings + domain-KB line, and a placeholder part 7 for chuck's feedback. Non-stacking gate: skips an agent when the most recent prior review's part 7 has no feedback/ack; bootstrap (no prior doc) runs unconditionally. One LLM synthesis call (matrix-coder) with deterministic guardrails (evidence refs must match real board card ids / commit shas / file paths; KRs restricted to the charter; window dates enforced; deterministic skeleton on LLM failure). Writes docs/agents/<slug>/reviews/YYYY-WW.md."
 ---
 
 # Weekly Agent Reviews — 7-part weekly review for active agents
 
 Scheduled skill (`weekly-agent-reviews` in `scheduler/schedules.json`,
 Friday 15:00 America/Chicago). Produces the 7-part weekly review for each
-ACTIVE agent (Q13: `product` is the only active agent;
-`strategist`/`marketing`/`analyst` are OFF and never targeted).
+ACTIVE agent (all 4 standing agents active since 2026-11-27 — Q13
+revised; the skill's `INACTIVE_AGENTS` set is the deactivation gate).
 
 The doc (one per agent per ISO week) has exactly these parts:
 

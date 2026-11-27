@@ -664,6 +664,8 @@ def test_quality_machine_check():
 
 
 def test_inactive_agents_never_targeted():
+    """The deactivation gate (INACTIVE_AGENTS) is retained for future OFF
+    slugs — all 4 standing agents are active by default (2026-11-27)."""
     print("test_inactive_agents_never_targeted")
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
@@ -671,20 +673,29 @@ def test_inactive_agents_never_targeted():
         write_fixtures(tmp)
         wire_fakes(mod, FakeBoardConn(), GOOD_LLM, FakeClient())
         job = FakeJob()
+        # default: all 4 standing agents are ACTIVE (Q13 revised 2026-11-27)
         res = mod.run(
-            {"agents": ["strategist", "marketing", "analyst"], "non_stacking": True},
+            {"agents": ["product", "strategist", "marketing", "analyst"],
+             "non_stacking": True},
             job,
             FakeClient(),
         )
         check("no error", "error" not in res, str(res.get("error")))
-        check("all three skipped",
-              all(a["status"] == "skipped" for a in res["agents"]), str(res["agents"]))
+        check("all four active by default",
+              all(a["status"] == "generated" for a in res["agents"]), str(res["agents"]))
+        # future deactivation: a slug in INACTIVE_AGENTS is skipped even if
+        # listed (keys + workspaces stay in place; the gate is the switch)
+        mod.INACTIVE_AGENTS = {"strategist", "marketing", "analyst"}
+        res2 = mod.run(
+            {"agents": ["strategist", "marketing", "analyst"], "non_stacking": True},
+            job,
+            FakeClient(),
+        )
+        check("no error (deactivated)", "error" not in res2, str(res2.get("error")))
+        check("all three skipped when deactivated",
+              all(a["status"] == "skipped" for a in res2["agents"]), str(res2["agents"]))
         check("skip reason says OFF",
-              all("OFF" in a.get("skip_reason", "") for a in res["agents"]))
-        check("nothing written for inactive agents",
-              not (tmp / "repo" / "docs" / "agents" / "strategist" / "reviews").exists()
-              and not (tmp / "repo" / "docs" / "agents" / "marketing" / "reviews").exists()
-              and not (tmp / "repo" / "docs" / "agents" / "analyst" / "reviews").exists())
+              all("OFF" in a.get("skip_reason", "") for a in res2["agents"]))
 
 
 def test_mixed_agents_and_board_down():
@@ -705,7 +716,8 @@ def test_mixed_agents_and_board_down():
         check("honest zero-activity line (board down — unverified, nothing claimed)",
               "Board data unavailable this run" in doc and "nothing is claimed" in doc)
         check("KB line degrades honestly", "KB (kb_bluebovine)" in doc)
-        check("strategist skipped", by_slug["strategist"]["status"] == "skipped")
+        check("strategist generated too (active since 2026-11-27)",
+              by_slug["strategist"]["status"] == "generated", str(by_slug["strategist"]))
 
 
 def test_kb_window_facts():
@@ -777,8 +789,9 @@ def test_bad_params():
         # comma-separated string is accepted
         res3 = mod.run({"agents": "product, strategist"}, job, FakeClient())
         check("string agents accepted", "error" not in res3, str(res3))
-        check("strategist still skipped from a string list",
-              next(a for a in res3["agents"] if a["agent"] == "strategist")["status"] == "skipped")
+        check("strategist generated from a string list (active)",
+              next(a for a in res3["agents"] if a["agent"] == "strategist")["status"]
+              == "generated")
 
 
 def test_same_week_doc_guard():
