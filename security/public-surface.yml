@@ -1,0 +1,114 @@
+# =====================================================================
+# public-surface.yml — SEC Phase 11 public-surface registry.
+#
+# Single source of truth for the internet-facing surface (the Caddy
+# hostnames behind the Cloudflare Tunnel). Every 11.x check reads this
+# file:
+#   scripts/security-surface-scan.sh    daily: probes, TLS, headers,
+#                                        CVE cross-check, registry lint
+#   scripts/security-surface-weekly.sh  weekly: InvestHub DB schema-diff
+#
+# FORMAT CONTRACT (parsed by the scan scripts — keep it stable):
+#   * domain keys at exactly 2-space indent under `domains:`
+#   * probes as inline maps: {path: /x, expect: 200, with: none}
+#       - expect: single code or comma list ("301,302")
+#       - with: none | chuck-key | wrong-key | expired-jwt
+#       - redirect_to: optional — Location header must contain it
+#   * stack / db_stack: inline maps of component: version — feed the
+#     CVE cross-check (11.5). db_stack = backend components that are
+#     not container images (e.g. the host MySQL under investorhub).
+#   * log_sources: containers whose logs feed 11.3-style anomaly
+#     detection; db: schema-diff target for the weekly check.
+#
+# ADDING A PUBLIC SITE (the extensibility contract — spec 11.6, 6 steps):
+#   1. Registry entry: domain, backend, stack versions, auth model,
+#      probes (incl. at least one negative canary), log_sources, db
+#   2. Caddy route + CF tunnel ingress via the existing deploy path
+#   3. Baseline capture (registry lint green on the next daily scan)
+#   4. External probe live from the D8 vantage point
+#   5. Negative-path canary defined (which route must 401/404)
+#   6. Verify: §7 checklist + first daily report shows the domain CLEAN
+#
+# Version provenance: verified 2026-11-27 against the live Caddyfile
+# (/home/chuck/homelab/caddy/Caddyfile, incl. the P12-A mcp_filebridge
+# cutover of 2026-11-26) and the running containers (docker exec
+# version checks: litellm 1.104.0, caddy 2.11.7, fastapi 0.165.0,
+# nginx 1.31.7, express 5.2.1, prisma 7.8.0, MySQL 8.4.13).
+# =====================================================================
+
+tunnel:
+  name: UNCONFIRMED        # CF tunnel name — needs a CF API read
+                           # (CF_API_TOKEN is intentionally not in .env;
+                           # see 11.1 tunnel ingress audit)
+  id_env: CF_TUNNEL_ID     # tunnel id, in /home/chuck/homelab/.env
+  account_env: CF_ACCOUNT_ID
+
+domains:
+  llm.choukalos.com:
+    backend: "caddy → litellm-proxy:4000 (Caddy key gate: chuck/dylan LiteLLM keys, X-Api-Key or Authorization: Bearer)"
+    stack: {litellm: "1.104.0", caddy: "2.11.7"}
+    auth: caddy-key-gate
+    probes:
+      - {path: /v1/models, expect: 200, with: chuck-key}
+      - {path: /v1/models, expect: 401, with: none}        # canary: gate must hold
+      - {path: /v1/models, expect: 401, with: wrong-key}
+      # DEVIATION FROM SPEC SEED (2026-11-27): the spec assumed "no admin
+      # UI" (expect 404). Live LiteLLM 1.104.0 serves its admin UI at /ui/
+      # — verified 2026-11-27: 200 with the chuck key, 401 without (the
+      # Caddy gate holds; only the two family keys reach it). Expectation
+      # set to the verified live state; if the UI should be off, disable it
+      # in the litellm config and flip this back to expect: 404.
+      - {path: /ui/, expect: 200, with: chuck-key}        # admin UI behind the key gate (risk note above)
+  siri.choukalos.com:
+    backend: "caddy → skill-runner:8091 (/health, /siri/*, /api/*); /media/files/* + /media/pipeline/* → mcp_filebridge:8000 (P12-A cutover 2026-11-26 — Matrix 192.168.4.55:8189 no longer an internet origin)"
+    stack: {fastapi: "0.165.0", caddy: "2.11.7"}
+    auth: "X-Api-Key on /siri/*, /api/*, /media/pipeline/upload (chuck/dylan keys at Caddy)"
+    probes:
+      - {path: /health, expect: 200, with: none}
+      # DEVIATION FROM SPEC SEED (2026-11-27): the spec probed /api/schedule
+      # (expect 200 with chuck-key). Caddy strips the /api prefix before
+      # proxying (uri strip_prefix /api) while skill-runner's routes live
+      # under /api/*, so the public /api/schedule is 404 even with a valid
+      # key — verified 2026-11-27. /api/skills is the live-verified gated
+      # route (401 none / 200 chuck-key / 401 wrong-key).
+      - {path: /api/skills, expect: 401, with: none}      # canary: gate must hold
+      - {path: /api/skills, expect: 200, with: chuck-key}
+      - {path: /api/skills, expect: 401, with: wrong-key}
+  api.choukalos.com:
+    backend: "caddy → invest-hub-server:4000"
+    stack: {express: "5.2.1", prisma: "7.8.0", caddy: "2.11.7"}
+    db_stack: {mysql: "8.4.13"}   # host mysql-server (LAN-only, 9.3-M1)
+    auth: "JWT on protected routes (router-level authRequired)"
+    data: "public user input + investorhub DB"
+    probes:
+      - {path: /api/famous-portfolios/1, expect: 200, with: none}
+      - {path: /api/portfolios, expect: 401, with: none}  # canary: JWT gate must hold
+      - {path: /api/portfolios, expect: 401, with: expired-jwt}
+    log_sources: [invest-hub-server]
+    db: {name: investorhub, url_env: INVEST_DATABASE_URL, schema_diff: weekly}
+  invest.choukalos.com:
+    backend: "caddy → invest-hub-client:80 (static) + invest-hub-server:4000 (/api/*)"
+    stack: {nginx: "1.31.7", caddy: "2.11.7"}
+    probes: [{path: /, expect: 200, with: none}]
+  choukalos.com:
+    backend: "caddy → portal:8080 (Hugo static); /media/files/* → mcp_filebridge:8000 (P12-A); /media/files/siri_outputs/* → 404 (12.4)"
+    stack: {hugo: "0.165.0"}
+    notes: "hugo 0.165.0 deployed (build-time, §9.2); requirement >=0.168.0 (9.3-H1 open)"
+    integrity: "content-hash vs blog repo deploy commit (11.4 — separate check)"
+    probes: [{path: /, expect: 200, with: none}]
+  www.choukalos.com:
+    backend: "caddy redir → https://choukalos.com (301 permanent)"
+    probes: [{path: /, expect: "301,302", redirect_to: "choukalos.com", with: none}]
+  plausible.choukalos.com:
+    backend: "caddy → plausible:8000 (/js/* + /api/event only; everything else 404)"
+    stack: {plausible: "3.2.0", caddy: "2.11.7"}
+    probes:
+      - {path: /js/script.js, expect: 200, with: none}
+      - {path: /admin/, expect: 404, with: none}          # canary: admin block must hold
+  test.choukalos.com:
+    # Reserved public hostname (Caddyfile, 2026-11-24): handler + CF
+    # tunnel/DNS kept warm on purpose; no backend running → 502 expected.
+    # A change here (e.g. 200) is a public-surface change = signal.
+    reserved: true
+    backend: "caddy → tipcalc:8080 (no backend running — 502 expected)"
+    probes: [{path: /, expect: 502, with: none}]
