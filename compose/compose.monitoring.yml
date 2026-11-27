@@ -105,6 +105,10 @@ services:
       # Applies to users without a personal home-dashboard preference (incl. anonymous).
       - GF_USERS_HOME_PAGE=/d/homelab-overview-dashboard
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      # Read-only data-hub creds for the MySQL datasource (product-KPI
+      # dashboards over hub.*). dh_reports is SELECT-only on finance/hub/reports.
+      - DH_REPORTS_USER=${DH_REPORTS_USER}
+      - DH_REPORTS_PASS=${DH_REPORTS_PASS}
     depends_on:
       - victoria-metrics
     healthcheck:

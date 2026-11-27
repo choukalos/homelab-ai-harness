@@ -1,9 +1,11 @@
 # Todo — Plausible: get analytics working (workstream 1)
 
 - date: 2026-11-22
-- status: **DONE 2026-11-27** — first user created, 3 sites created, snippet
-  wired + deployed on all 3 live sites, end-to-end ingest verified (P1–P4
-  complete). P5 (WS1 deep) is the only remaining item.
+- status: **P1–P4 DONE 2026-11-27; P5 feed + dashboard DONE 2026-11-27** —
+  first user created, 3 sites created, snippet wired + deployed on all 3 live
+  sites, end-to-end ingest verified. P5: Plausible → data-hub feed (daily
+  scheduled export, path A) + Grafana Product KPIs dashboard are live. Only
+  the KPI *definitions* (with BA-1, skills Phase 3) remain.
 - target: chuck + pi
 - source: WS1 (engagement/usage instrumentation) of the agent-skills plan
   (`todo_agent_skills.md`). Chuck's call 2026-11-22: Plausible "is in itself its
@@ -145,12 +147,28 @@ verified running) while in there.
   invest.choukalos.com, bluebovinegroup.com).
 - Note: events land in `events_v2` (not the legacy `events` table).
 
-### P5 — WS1 deep (later; skills Phase 3 prereq)
+### P5 — WS1 deep (feed + dashboard DONE 2026-11-27; KPI defs w/ BA-1 pending)
 
-- Feed Plausible into data-hub (API with per-site token, or scheduled export —
-  decide at P5 start)
-- report-hub/Grafana dashboards (product KPIs)
-- KPI definitions with BA-1 (skills Phase 3)
+- ✅ **Feed Plausible into data-hub** (path A — the plan's intended flow).
+  Uses data-hub's existing **v2 generic-datasets** framework (the robust,
+  reusable ingest path for any project/report — see `docs/data-hub-ingest.md`):
+  - `scripts/plausible-export.sh` — daily aggregates (pageviews, unique
+    visitors, custom events) per site → `plausible-daily-YYYY-MM-DD.csv` into
+    the data-hub inbox.
+  - `scripts/plausible-register-dataset.sh` — registers the `plausible`
+    dataset (target `hub.ds_plausible`, key `(date, site_id)`, explicit
+    schema; idempotent upserts verified: re-run = `new=0, upd=N`).
+  - `scripts/systemd/plausible-export-daily.{service,timer}` +
+    `scripts/plausible-install-timer.sh` — daily 02:00 UTC export.
+- ✅ **Grafana Product KPIs dashboard** (`grafana/dashboards/product-kpis.json`,
+  uid `product-kpis-dashboard`) on a new read-only **MySQL** datasource
+  (`dh_reports` on `hub.*`; `grafana/provisioning/datasources/mysql.yml`).
+  Panels: 7-day stats (pageviews / unique visitors / custom events), 30-day
+  pageview trend, per-site breakdown. (report-hub can also read `hub.*` via
+  `dh_reports`; its UX organization is a separate follow-up.)
+- ⏳ **KPI definitions with BA-1** (skills Phase 3) — the final KPI set is
+  locked in as BA-1 (`kpi-reporting`) is built. This is the only remaining
+  P5 item and it couples to the active agents work.
 
 ## Architecture (as deployed)
 
