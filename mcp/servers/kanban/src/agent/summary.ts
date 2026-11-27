@@ -95,6 +95,9 @@ export class SummaryUpdater {
             cwd: process.cwd(),
             systemPrompt: o.systemPrompt,
             owner: o.owner, // Phase 2: bill to the task owner's key (else service key)
+            // Item 15: the summary session is a service session — it runs on
+            // the pipeline model (KANBAN_MODEL) even for a mapped owner.
+            useServiceModel: true,
             onUsage: o.onUsage,
           })
           .then((h: AgentSessionHandle) => h.session as unknown as SummarySessionLike);

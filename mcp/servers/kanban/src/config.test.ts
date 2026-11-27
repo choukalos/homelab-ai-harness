@@ -13,10 +13,13 @@ import {
   parseAgentSlugs,
   parseConfig,
   parseDotEnv,
+  parseOwnerModels,
   parseUserKeys,
   validateModelAtBoot,
+  validateOwnerModelsAtBoot,
   validateUserKeysAtBoot,
   type FetchLike,
+  type KanbanConfig,
 } from "./config.js";
 
 const baseEnv = {
@@ -145,6 +148,34 @@ test("AGENT_SLUGS: comma-separated slugs (trimmed, unique); empty/unset = []", (
   );
   assert.deepEqual(parseAgentSlugs(undefined), []);
   assert.deepEqual(parseAgentSlugs("   "), []);
+});
+
+test("parseOwnerModels: alias:model pairs (trimmed); empty/unset = {} (item 15)", () => {
+  assert.deepEqual(parseOwnerModels(undefined), {});
+  assert.deepEqual(parseOwnerModels(""), {});
+  assert.deepEqual(parseOwnerModels("   "), {});
+  assert.deepEqual(
+    parseOwnerModels("strategist:matrix-copywriter,marketing:matrix-copywriter"),
+    { strategist: "matrix-copywriter", marketing: "matrix-copywriter" },
+  );
+  assert.deepEqual(parseOwnerModels(" strategist : matrix-copywriter , , dylan:coder "), {
+    strategist: "matrix-copywriter",
+    dylan: "coder",
+  });
+});
+
+test("parseOwnerModels: malformed entries + duplicate alias fail fast (item 15)", () => {
+  assert.throws(() => parseOwnerModels("no-colon"), /malformed/);
+  assert.throws(() => parseOwnerModels(":matrix-coder"), /malformed/);
+  assert.throws(() => parseOwnerModels("strategist:"), /empty alias or model/);
+  assert.throws(() => parseOwnerModels("a:m1,a:m2"), /duplicate alias/);
+});
+
+test("parseConfig: KANBAN_OWNER_MODELS lands in cfg.ownerModels (absent → {})", () => {
+  const withMap = parseConfig({ ...baseEnv, KANBAN_OWNER_MODELS: "strategist:matrix-copywriter" });
+  assert.deepEqual(withMap.ownerModels, { strategist: "matrix-copywriter" });
+  assert.deepEqual(parseConfig({ ...baseEnv }).ownerModels, {});
+  assert.deepEqual(parseConfig({ ...baseEnv }).ownerModelCosts, {});
 });
 
 test("PORT must be a valid port", () => {
@@ -517,6 +548,118 @@ test("loadConfig fetches model cost rates alongside model validation", async () 
       }) as FetchLike,
     });
     assert.deepEqual(cfg.modelCost, { input: 0.75, output: 4.5, cacheRead: 0, cacheWrite: 0.075 });
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// --- per-owner pipeline model map (KANBAN_OWNER_MODELS, item 15) -----------
+
+const ownerModelInfo = [
+  {
+    model_name: "matrix-coder",
+    model_info: { input_cost_per_token: 7.5e-7, output_cost_per_token: 4.5e-6 },
+  },
+  {
+    model_name: "matrix-copywriter",
+    model_info: { input_cost_per_token: 3e-7, output_cost_per_token: 1.2e-6 },
+  },
+];
+
+test("validateOwnerModelsAtBoot: known mapped model passes + per-model rates populated", async () => {
+  const cfg: Pick<KanbanConfig, "litellm" | "model" | "userKeys" | "ownerModels" | "ownerModelCosts"> = {
+    litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-x" },
+    model: "matrix-coder",
+    userKeys: { strategist: "sk-strategist" },
+    ownerModels: { strategist: "matrix-copywriter" },
+    ownerModelCosts: {},
+  };
+  await validateOwnerModelsAtBoot(cfg, ownerModelInfo);
+  assert.deepEqual(cfg.ownerModelCosts["matrix-copywriter"], {
+    input: 0.3,
+    output: 1.2,
+    cacheRead: 0,
+    cacheWrite: 0,
+  });
+  // Empty map → no-op (no fetch, no error).
+  await validateOwnerModelsAtBoot({ ...cfg, ownerModels: {} }, undefined);
+});
+
+test("validateOwnerModelsAtBoot: unknown mapped model fails at boot (not mid-session)", async () => {
+  const cfg: Pick<KanbanConfig, "litellm" | "model" | "userKeys" | "ownerModels" | "ownerModelCosts"> = {
+    litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-x" },
+    model: "matrix-coder",
+    userKeys: { strategist: "sk-strategist" },
+    ownerModels: { strategist: "ghost-model" },
+    ownerModelCosts: {},
+  };
+  await assert.rejects(
+    validateOwnerModelsAtBoot(cfg, ownerModelInfo),
+    (err: unknown) =>
+      err instanceof ConfigError &&
+      /strategist/.test(err.message) &&
+      /ghost-model/.test(err.message) &&
+      /matrix-coder, matrix-copywriter/.test(err.message),
+  );
+});
+
+test("validateOwnerModelsAtBoot: alias without a USER_KEYS entry is ignored; /model/info unavailable → skipped", async () => {
+  const cfg: Pick<KanbanConfig, "litellm" | "model" | "userKeys" | "ownerModels" | "ownerModelCosts"> = {
+    litellm: { baseUrl: "https://llm.example.com/v1", apiKey: "sk-x" },
+    model: "matrix-coder",
+    userKeys: { strategist: "sk-strategist" },
+    ownerModels: { strategist: "matrix-copywriter", ghost: "matrix-coder" },
+    ownerModelCosts: {},
+  };
+  // Stale alias (no USER_KEYS entry) → warned + ignored, not a startup failure.
+  await validateOwnerModelsAtBoot(cfg, ownerModelInfo);
+  assert.deepEqual(Object.keys(cfg.ownerModelCosts), ["matrix-copywriter"], "ignored alias sets no rates");
+  // /model/info unavailable → validation skipped (soft fallback, like the
+  // pipeline model's cost rates — the proxy-unreachable case already fails
+  // in validateModelAtBoot).
+  await validateOwnerModelsAtBoot(cfg, undefined);
+});
+
+test("loadConfig: an unknown KANBAN_OWNER_MODELS model fails at boot", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-cfg-"));
+  const keys = ["LITELLM_BASE_URL", "LITELLM_API_KEY", "MODEL", "USER_KEYS", "KANBAN_OWNER_MODELS"];
+  const saved: Record<string, string | undefined> = {};
+  try {
+    for (const k of keys) saved[k] = process.env[k];
+    const envFile = path.join(dir, ".env");
+    await writeFile(
+      envFile,
+      [
+        "LITELLM_BASE_URL=https://llm.example.com/v1",
+        "LITELLM_API_KEY=sk-file",
+        "MODEL=matrix-coder",
+        "USER_KEYS=strategist=sk-strategist",
+        "KANBAN_OWNER_MODELS=strategist:ghost-model",
+      ].join("\n"),
+    );
+    await assert.rejects(
+      loadConfig({
+        envFile,
+        fetchImpl: (async (input) => {
+          const url = String(input);
+          if (url.endsWith("/models")) {
+            return new Response(JSON.stringify({ data: [{ id: "matrix-coder" }] }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify(modelInfoBody), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }) as FetchLike,
+      }),
+      (err: unknown) => err instanceof ConfigError && /ghost-model/.test(err.message),
+    );
   } finally {
     for (const k of keys) {
       if (saved[k] === undefined) delete process.env[k];

@@ -4,13 +4,14 @@
  * transport-agnostic service functions the REST API uses.
  *
  * MCP-first (2026-11-21): the web UI is read-only; the MCP surface is the
- * only mutation interface. Tools (27): list_projects, get_project,
+ * only mutation interface. Tools (29): list_projects, get_project,
  * create_project, update_project, delete_project, list_ideas, add_idea,
  * edit_idea, board_status, interactive grooming (start_grooming,
  * groom_message, groom_status, groom_accept, groom_cancel, groom_re_groom),
  * discard_idea, move_to_backlog, start_task, pause/resume/stop_task,
- * retry_deploy, restart_task, task_status, project_status, file intake
- * (stage_file, stage_ref — remote client file intake, 2026-11-23).
+ * retry_deploy, restart_task, merge_task (item 13, admin), task_status,
+ * project_status, file intake (stage_file, stage_ref — remote client file
+ * intake, 2026-11-23).
  *
  * Owner attribution: the caller's LiteLLM key resolves to a user name via
  * USER_KEYS (full-key match); create_project / add_idea stamp it on the
@@ -68,8 +69,8 @@ export const MCP_CAPABILITY_SETS = {
     "stage_file",
     "stage_ref",
   ],
-  /** control + project administration + the agents master switch. */
-  admin: ["control", "create_project", "update_project", "delete_project", "agents_switch"],
+  /** control + project administration + the agents master switch + merge_task. */
+  admin: ["control", "create_project", "update_project", "delete_project", "agents_switch", "merge_task"],
 } as const;
 
 export type McpCapability = keyof typeof MCP_CAPABILITY_SETS;
@@ -99,6 +100,7 @@ export const MCP_TOOL_NAMES: readonly string[] = [
   "stop_task",
   "retry_deploy",
   "restart_task",
+  "merge_task",
   "task_status",
   "project_status",
   "stage_file",
@@ -750,11 +752,37 @@ export function registerMcpTools(
   );
 
   reg(
+    "merge_task",
+    {
+      description:
+        "Merge a done task's branch into the project's default branch (admin — " +
+        "the single-approval merge gate; call it after reviewing the diff). " +
+        "Eligibility: task state 'done' + kind 'code' + a branch + the project " +
+        "has repo_url + default_branch (a non-done task is rejected, naming its " +
+        "state). Uses the task's existing workspace if present, else a fresh " +
+        "temp clone. Merges with a MERGE commit (not squash) — 'merge " +
+        "task/<id>: <idea text>' + optional note + ' (merged via merge_task by " +
+        "<by>)' — and pushes the default branch. Idempotent: if the branch is " +
+        "already merged, returns {alreadyMerged: true} (a no-op, never a " +
+        "failure). A merge conflict is rejected with a clear message (nothing " +
+        "partial; the task stays done and the branch stays pushed — resolve " +
+        "manually or restart the task). Records a 'merge' task_event " +
+        "(branch, defaultBranch, mergeCommit, note, by).",
+      inputSchema: {
+        task_id: z.number().int().positive(),
+        note: z.string().min(1).optional(),
+      },
+    },
+    ({ task_id, note }) =>
+      run(async () => ok(await services.mergeTask(task_id, note, owner || "mcp"))),
+  );
+
+  reg(
     "task_status",
     {
       description:
-        "Task state, log tail, usage (total + by role), failure reason " +
-        "(needs_attention), and the accepted resolution plan if any.",
+        "Task state, log tail, usage (total + by role + by model), failure " +
+        "reason (needs_attention), and the accepted resolution plan if any.",
       inputSchema: { task_id: z.number().int().positive() },
     },
     ({ task_id }) =>

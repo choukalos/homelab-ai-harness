@@ -13,12 +13,13 @@
 - 15 servers live: `mcp_search` (3), `mcp_crawl` (1), `mcp_knowledge` (16),
   `mcp_filesystem_readonly` (3), `mcp_filesystem` (5), `mcp_homelab_status` (4),
   `mcp_media` (27), `mcp_mysql` (11), `mcp_vision` (5), `mcp_skills` (3),
-  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (28),
+  `mcp_memory` (3), `mcp_datahub` (10), `mcp_sessions` (3), `mcp_kanban` (29),
   `mcp_filebridge` (5)
-  — **127 tools total** (verified live 2026-11-27: LiteLLM
+  — **128 tools total** (verified live 2026-11-27: LiteLLM
   `/mcp-rest/tools/list` + per-server `tools/list`; the kanban count was
   stale at 16 in the prior revision — the grooming suite + Phase 13 work
-  had grown it to 27, and `agents_switch` (below) brings it to 28). `mcp_filebridge` added
+  had grown it to 27, `agents_switch` brought it to 28, and `merge_task`
+  (item 13, 2026-11-27) brings it to 29). `mcp_filebridge` added
   2026-11-27 (Phase 12 P12-B/C — the homelab's single public file edge;
   streamable HTTP at `POST /mcp`, port 8000, `transport: http` +
   `extra_headers: [Authorization]` — the second non-SSE entry after
@@ -45,7 +46,21 @@
   refuses new agent starts (409) but also kills in-flight agent tasks in
   that scope — session aborted, task returned to the backlog, auto-
   resuming when the switch is flipped back on; global OFF dominates
-  per-slug entries; non-agent board work unaffected). `mcp_media` 25 → 27 with the M1–M5
+  per-slug entries; non-agent board work unaffected). `merge_task` added
+  2026-11-27 (29th tool; **admin-only** — the deploy gate for agent
+  artifacts, item 13): merges a `done` task's pushed branch into the
+  project's default branch with a merge commit (`merge task/<id>: ...` +
+  note + `by`), already-merged → `{alreadyMerged: true}` no-op, conflict
+  → clear rejection (nothing partial, task stays done); audit `merge`
+  task_event `{by, note, branch, mergeCommit, defaultBranch}`; the Q7
+  single-approval gate made mechanical — chuck reviews the diff, then
+  merges from any client session. Board improvements 2026-11-27 (items
+  14-16, same rebuild): session loud-fail (an LLM API error inside a
+  session → needs_attention with the REAL error, not an empty completion;
+  200-empty → one retry), per-owner pipeline models (`KANBAN_OWNER_MODELS`
+  — sessions for an owned task run on the mapped model, billed to the
+  owner key; `/health` surfaces the map), per-model usage surfacing
+  (`byModel` alongside `byRole` in reports + task_status). `mcp_media` 25 → 27 with the M1–M5
   client layer (2026-11-19 pipeline, deployed 2026-11-21): `media_kill_job`
   (queued-only kill, frees the FIFO slot) + `media_queue_status` (queue
   summary + feature list); `media_job_result` now surfaces in-flight

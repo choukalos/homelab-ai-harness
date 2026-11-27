@@ -84,6 +84,7 @@ import {
 } from "./services/files.js";
 import {
   createGitOps,
+  SessionApiError,
   TaskAbortedError,
   TaskSessionRunner,
   type TaskRunContext,
@@ -830,18 +831,41 @@ export class Orchestrator {
 
         // QA gate (fresh session, same workspace) — the task stays `running`.
         const round = fresh.qaRounds + 1;
-        const verdict = await this.qa.run({
-          taskId,
-          workspace: this.workspacePath(taskId),
-          branch: fresh.branch,
-          defaultBranch: ctx.project.defaultBranch,
-          spec: ctx.spec,
-          completionSummary: result.summary,
-          round,
-          owner: task.owner, // Phase 2: bill the QA session to the owner's key
-          onLog: (line) => void this.appendEvent(taskId, "log", { line }),
-          onUsage: (u) => this.recordUsageFor(taskId, task.projectId, "qa", u, task.owner),
-        });
+        let verdict: QaVerdict;
+        try {
+          verdict = await this.qa.run({
+            taskId,
+            workspace: this.workspacePath(taskId),
+            branch: fresh.branch,
+            defaultBranch: ctx.project.defaultBranch,
+            spec: ctx.spec,
+            completionSummary: result.summary,
+            round,
+            owner: task.owner, // Phase 2: bill the QA session to the owner's key
+            onLog: (line) => void this.appendEvent(taskId, "log", { line }),
+            onUsage: (u) => this.recordUsageFor(taskId, task.projectId, "qa", u, task.owner),
+          });
+        } catch (err) {
+          // QA API error (item 14 loud-fail): consume ONE round with the real
+          // error — needs_attention immediately, not two silently burned
+          // "no parseable verdict" rounds.
+          if (err instanceof SessionApiError) {
+            await this.db.update(tasks).set({ qaRounds: round }).where(eq(tasks.id, taskId));
+            await this.appendEvent(taskId, "qa", {
+              round,
+              pass: false,
+              feedback: `QA session failed: ${err.message}`,
+            });
+            const stopped = await this.getTask(taskId);
+            if (stopped.state !== "running") return; // already moved (e.g. stopped)
+            console.error(`[orchestrator] task ${taskId} QA session failed:`, err);
+            await this.transition(taskId, "running", "needs_attention", undefined, {
+              reason: `QA session failed: ${err.message}`,
+            });
+            return;
+          }
+          throw err;
+        }
         await this.appendEvent(taskId, "qa", { round, pass: verdict.pass, feedback: verdict.feedback });
 
         if (verdict.pass) break;
@@ -877,7 +901,15 @@ export class Orchestrator {
       }
       const fresh = await this.getTask(taskId);
       if (fresh.state !== "running") return; // already moved (e.g. stopped)
-      const reason = err instanceof Error ? err.message : String(err);
+      // A task-run API error (item 14 loud-fail) lands in needs_attention
+      // with the REAL error (HTTP status + message), not an empty-completion
+      // path. (QA-run API errors are handled at the QA call site.)
+      const reason =
+        err instanceof SessionApiError
+          ? `task session failed: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
       console.error(`[orchestrator] task ${taskId} failed:`, err);
       await this.transition(taskId, "running", "needs_attention", undefined, { reason });
     }

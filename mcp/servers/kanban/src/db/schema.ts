@@ -38,7 +38,7 @@ export type IdeaState = (typeof IDEA_STATES)[number];
 export const TASK_STATES = ["backlog", "running", "deploy", "done", "needs_attention"] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 
-export const TASK_EVENT_TYPES = ["log", "heartbeat", "state", "qa", "usage", "deploy", "resolve"] as const;
+export const TASK_EVENT_TYPES = ["log", "heartbeat", "state", "qa", "usage", "deploy", "resolve", "merge"] as const;
 export type TaskEventType = (typeof TASK_EVENT_TYPES)[number];
 
 export const USAGE_ROLES = ["groom", "task", "qa", "summary", "resolve"] as const;

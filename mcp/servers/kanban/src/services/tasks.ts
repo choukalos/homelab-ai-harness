@@ -12,7 +12,7 @@ import {
   type TaskRow,
 } from "../db/schema.js";
 import { ideas, projects, taskEvents, tasks, usage } from "../db/tables.js";
-import { type Db } from "./common.js";
+import { type Db, type ModelUsage } from "./common.js";
 
 /** Append one task_event row (log tail + audit trail, PLAN.md §2). */
 export async function appendTaskEvent(
@@ -60,6 +60,8 @@ export interface TaskDetail {
   usageTotal: number;
   /** Cost per role (task/qa/...). */
   usageByRole: Record<string, number>;
+  /** Tokens in/out + cost per model. */
+  usageByModel: Record<string, ModelUsage>;
   /** Last `logLimit` task_events, chronological. */
   log: TaskEventRow[];
   /** Texts of ideas this task is still waiting on (empty = deps satisfied). */
@@ -83,14 +85,26 @@ export async function getTaskDetail(db: Db, taskId: number, logLimit = 200): Pro
     .limit(1);
 
   const usageRows = await db
-    .select({ role: usage.role, total: sql<number>`coalesce(sum(${usage.cost}), 0)` })
+    .select({
+      role: usage.role,
+      model: usage.model,
+      total: sql<number>`coalesce(sum(${usage.cost}), 0)`,
+      tokensIn: sql<number>`coalesce(sum(${usage.tokensIn}), 0)`,
+      tokensOut: sql<number>`coalesce(sum(${usage.tokensOut}), 0)`,
+    })
     .from(usage)
     .where(eq(usage.taskId, taskId))
-    .groupBy(usage.role);
+    .groupBy(usage.role, usage.model);
   const usageByRole: Record<string, number> = {};
+  const usageByModel: Record<string, ModelUsage> = {};
   let usageTotal = 0;
   for (const r of usageRows) {
-    usageByRole[r.role] = r.total;
+    usageByRole[r.role] = (usageByRole[r.role] ?? 0) + r.total;
+    const m = usageByModel[r.model] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
+    m.tokensIn += r.tokensIn;
+    m.tokensOut += r.tokensOut;
+    m.cost += r.total;
+    usageByModel[r.model] = m;
     usageTotal += r.total;
   }
 
@@ -118,6 +132,7 @@ export async function getTaskDetail(db: Db, taskId: number, logLimit = 200): Pro
     idea: idea ?? { id: task.ideaId, text: `task ${taskId}`, dependsOn: null },
     usageTotal,
     usageByRole,
+    usageByModel,
     log,
     waitingOn,
   };
@@ -172,6 +187,8 @@ export interface TaskStatus {
   resolution: string | null;
   usageTotal: number;
   usageByRole: Record<string, number>;
+  /** Tokens in/out + cost per model. */
+  usageByModel: Record<string, ModelUsage>;
   /** `reason` of the last state event that moved the task to needs_attention. */
   failureReason: string | null;
   /** Last log lines (display text, chronological). */
@@ -208,6 +225,7 @@ export async function getTaskStatus(db: Db, taskId: number, logLimit = 50): Prom
     resolution: t.resolution,
     usageTotal: detail.usageTotal,
     usageByRole: detail.usageByRole,
+    usageByModel: detail.usageByModel,
     failureReason,
     logTail,
   };

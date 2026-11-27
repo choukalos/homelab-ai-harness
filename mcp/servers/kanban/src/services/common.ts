@@ -14,6 +14,17 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 export type Db = BetterSQLite3Database<any>;
 
 /**
+ * Per-model usage aggregate (item 16): tokens in/out + $ cost summed over
+ * the usage rows that matched (the `usage.model` column, varchar 128 — no
+ * schema change). Surfaced alongside the per-role aggregates.
+ */
+export interface ModelUsage {
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+}
+
+/**
  * Service-layer error carrying the HTTP status the REST layer should
  * respond with (400 validation, 404 not found, 409 conflict, ...).
  */

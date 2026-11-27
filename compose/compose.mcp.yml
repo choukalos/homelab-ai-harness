@@ -370,6 +370,9 @@ services:
       - NON_MEDIA_CONCURRENT_TASKS=${KANBAN_NON_MEDIA_CONCURRENT_TASKS:-2}
       - AGENT_CONCURRENT_TASKS=${KANBAN_AGENT_CONCURRENT_TASKS:-1}
       - AGENT_SLUGS=${KANBAN_AGENT_SLUGS:-product,analyst,strategist,marketing}
+      # Per-owner pipeline models (item 15): sessions for an owned task run on
+      # the mapped model, billed to the owner key (absent/empty = MODEL for all).
+      - KANBAN_OWNER_MODELS=${KANBAN_OWNER_MODELS:-}
       # git push auth (deploy stage) — unset until chuck provides it.
       - GITHUB_TOKEN=${KANBAN_GITHUB_TOKEN:-}
       # MySQL on Thor (DB pre-created; app runs migrations — tables only).

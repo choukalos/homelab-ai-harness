@@ -27,7 +27,21 @@
   marketing keys 403'd on KANBAN_MODEL=matrix-coder → empty sessions → QA
   no-verdict → needs_attention on tasks 21/22); both live keys now have
   work-type + pipeline model access, `key add-agent` mints both for future
-  agents, tasks 21/22 restarted (item 12). Goal model + S13 acceptance
+  agents, tasks 21/22 restarted (item 12). **Board improvements decided
+  2026-11-27 (chuck): `merge_task` admin MCP tool (item 13 — the merge
+  path for agent artifacts), session loud-fail hardening (item 14 — with
+  item 13), per-owner pipeline models (item 15 — `KANBAN_OWNER_MODELS`),
+  per-model usage surfacing (item 16 — `byModel` alongside `byRole`),
+  fresh-context QA reviewer designed in two phases (item 17 — Phase 1 =
+  cross-model + skeptic-prompt QA upgrade; Phase 2 = separate reviewer
+  session, decision pending); no agent-to-agent delegation (item 18 —
+  permanent, depth-1 topology). **Items 13-16 BUILT + LIVE 2026-11-27**
+  (dev clone `task/19` — `c47f87b`/`7df1c1e`/`f3a8d36`, pushed; `mcp_kanban`
+  rebuilt, 29 MCP tools, 288-test suite green); merge_task E2E'd (admin
+  gate + merge commit + idempotency + audit); task/21 (strategist strategy)
+  merged to main during the E2E; task/20 + task/22 + task/23 pending
+  chuck's review + merge; item 17's Phase-1 cross-model claim corrected
+  (QA runs on the owner model as built). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -885,10 +899,171 @@ New from the 2026-11-24 interview:
      LLM call fails with an auth error should fail loudly (needs_attention
      with the real error) rather than surface as an empty completion. The
      key fix removes the trigger; the loud-fail hardening is a follow-up
-     harness improvement.
+     harness improvement. **→ item 14 (chuck: build it alongside item 13).**
+13. **`merge_task` MCP tool (chuck's decision 2026-11-27 — option b of the
+    merge-path question, item after the first live agent run)** — the
+    deploy stage pushes the task branch; nothing merges to main. Agent
+    artifacts (e.g. task 20's `docs/roles/pm/market-analysis-bluebovine-*.md`,
+    task 23's `docs/org/kpi/2026-W48.md`) sit on pushed branches until
+    someone merges. **Decision (chuck): build an admin `merge_task` MCP
+    tool** — chuck merges from any client session after reviewing the diff
+    (the Q7 single-approval gate for org-doc edits, made mechanical). NOT
+    auto-merge (violates the git-flow hard rule — main is only touched
+    through the project's explicit deploy gate — and Q7).
+    **BUILT + LIVE 2026-11-27** (dev clone `task/19`, `f3a8d36`, pushed;
+    synced + `mcp_kanban` rebuilt; 29th MCP tool, admin-only):
+   - Admin-only (capability gate, same pattern as `agents_switch`).
+   - Input: `task_id` + optional `note` (recorded in the merge commit +
+     audit event).
+   - Eligibility: task state `done` (QA passed + deploy pushed the
+     branch), kind `code`, project has `repo_url` + `default_branch`.
+   - Behavior: in the task workspace (fresh clone if the workspace was
+     cleaned up): fetch origin's default branch, merge the task branch
+     with a merge commit (`merge task/<id>: <idea text>` + note), push the
+     default branch. A merge commit (not squash) keeps the task branch's
+     history attributable; the task id in the message is the audit link.
+   - Idempotent: if the branch is already merged into the default branch
+     (`git merge-base --is-ancestor`), return a no-op "already merged" —
+     never a failure.
+   - Conflict → rejected with a clear message (the task stays `done`; the
+     branch stays pushed; chuck resolves manually or restarts the task
+     with a resolution note). Never a partial merge.
+   - Audit: a `merge` task_event (`{branch, defaultBranch, mergeCommit,
+     note, by}`) + the merge commit message.
+   - The first real uses: task/20 (product market analysis) + task/23
+     (analyst KPI digest) — pending chuck's review of the diffs. **task/21
+     (strategist content strategy) merged into main 2026-11-27 during the
+     E2E** (the task was done — QA passed; the merge was a legitimate
+     eligibility pass, not a gate bypass) — the strategy doc is now at
+     `docs/roles/marketing-strategist/strategy/homelab.md` on main.
+   - **Live E2E 2026-11-27** (probe task 24 / branch probe/merge-e2e,
+     torn down after): dylan (control) rejected with the capability
+     message; the real merge produced a merge commit on main
+     (`a4766ca`); the repeat call returned `{alreadyMerged: true}` (no-op,
+     never a failure); audit `merge` task_events recorded
+     (`{by, note, branch, mergeCommit, defaultBranch}`).
+14. **Session loud-fail hardening (chuck: with item 13, 2026-11-27)** —
+    item 12's root-cause chain showed the failure mode: an LLM API error
+    (403) inside a session is swallowed by the SDK and surfaces as an
+    empty assistant message → the task "completes" with nothing → QA gets
+    "no parseable verdict" → 2 rounds → needs_attention with a
+    misleading reason. **Fix: the session pipeline must distinguish an
+    API error from a normal completion** — a failed LLM call (auth/4xx/
+    5xx/stream error) throws a typed error out of the session runner; the
+    orchestrator catches it and moves the task to needs_attention with
+    the REAL error (the HTTP status + message), for task sessions AND QA
+    sessions. An empty-but-successful response (HTTP 200, no content —
+    the matrix-copywriter reasoning quirk) is a separate case: the
+    session runner retries once before treating it as completion.
+    Test: a mock session that throws an auth error → task ends in
+    needs_attention with the error text (not "no parseable verdict").
+    **BUILT 2026-11-27** (dev clone `task/19`, `7df1c1e`, pushed; live in
+    the rebuilt `mcp_kanban`): `SessionApiError` (status + message) from
+    error-bearing SDK events / a rejecting prompt; 200-empty → one
+    `EMPTY_RETRY_PROMPT` retry; orchestrator → needs_attention with the
+    real error for task AND QA (a QA API error consumes one round, not
+    two silent ones); 10 new tests (sessions x8 + orchestrator x2).
+15. **Per-owner pipeline models (chuck's board improvement, 2026-11-27)**
+    — the pipeline currently runs every session on `KANBAN_MODEL`
+    (matrix-coder) regardless of the agent. The work-type model assignment
+    (item 12's design note) only governs direct key usage. **Decision:
+    the pipeline honors a per-owner model map.**
+    Design (decided 2026-11-27):
+   - New env `KANBAN_OWNER_MODELS` — `alias:model` pairs (same parsing
+     style as `AGENT_SLUGS` / `KANBAN_MCP_KEY_CAPABILITIES`), e.g.
+     `strategist:matrix-copywriter,marketing:matrix-copywriter`. Empty /
+     absent → current behavior (every session on `KANBAN_MODEL`).
+   - `sessions.ts`: each owner KeyProfile gets its own model (the profile
+     already has its own ModelRuntime + agent dir — the models.json is
+     built per profile with that model + its /model/info cost rates).
+     All sessions for an owned task (task work + QA + retries) run on the
+     owner model, billed to the owner key; service sessions (summary,
+     deploy, non-owned) run on `KANBAN_MODEL`.
+   - Safety: item 12 already granted every agent key access to BOTH
+     models, so a mapped model can't 403; an unknown model name in the
+     map fails at boot (config validation), not mid-session.
+   - `/health` surfaces the owner-model map (alongside agentSlugs).
+   - Live wiring: `KANBAN_OWNER_MODELS=strategist:matrix-copywriter,
+     marketing:matrix-copywriter` (product/analyst omitted = default
+     matrix-coder) — wired in `compose/compose.mcp.yml` + `.env`.
+   - Interaction with item 17: a writer's task work on
+     matrix-copywriter + QA on the service model (matrix-coder) IS the
+     cross-model review — the Phase-1 sycophancy mitigation falls out of
+     this design. **CORRECTION (see item 17): as built, QA runs on the
+     owner model too — cross-model QA is not automatic.**
+   - **LIVE 2026-11-27** (same `task/19` commit; `mcp_kanban` rebuilt +
+     healthy; `/health` reports `ownerModels: {strategist:
+     matrix-copywriter, marketing: matrix-copywriter}`; boot validation of
+     the mapped models passed). Note: the first live agent run (tasks
+     20-23) completed on the PRE-rebuild container — all matrix-coder per
+     the usage rows; the mapping applies from the next owned run.
+16. **Per-model usage surfacing (chuck's board improvement, 2026-11-27)**
+    — the `usage` table already records `model` per row (plus `role`,
+     `owner`, `thinking`); the gap is surfacing: reports + `task_status`
+    aggregate by role only. **Decision: add the model dimension to the
+    existing aggregates.**
+    Design (decided 2026-11-27):
+   - `reports.ts`: `byModel` alongside `byRole` (task-level + project-
+     level report shapes) — tokens in/out + cost per model.
+   - `task_status`: usage total + by role + **by model**.
+   - No schema change (the column exists); the existing `task_id` index
+     covers the per-task aggregates. The weekly/monthly review skills can
+     read it from the board going forward (skill-side consumption is a
+     follow-up, not part of this build).
+   - **BUILT + LIVE 2026-11-27** (dev clone `task/19`, `c47f87b`, pushed;
+     live in the rebuilt `mcp_kanban`): `byModel` (tokensIn/tokensOut/
+     cost) at every `byRole` level in reports + task_status + GUI report;
+     the first live agent run's usage rows (tasks 20-23: task/qa roles,
+     per-model split) confirm the recording path end-to-end.
+17. **Fresh-context QA reviewer (chuck: "let's think about that" — DESIGN
+    2026-11-27, not built)** — research implication 4b: critics who saw
+    the worker's reasoning rubber-stamp it (documented LLM sycophancy).
+    Current state: the QA session is ALREADY fresh-context in the narrow
+    sense (mission brief + diff + completion summary — no worker
+    transcript), but it (a) runs on the SAME model as the worker
+    (pre-item-15), (b) verifies the acceptance criteria mechanically
+    without judging quality beyond them, and (c) receives the worker's
+    completion summary as an unmarked claim (a sycophancy vector).
+    **Design — two phases, decision point between them.**
+    **CORRECTION 2026-11-27 (item 15 as built):** the Phase-1(a) cross-model
+    claim does NOT hold — item 15 routes ALL sessions for an owned task
+    (work + QA + retries) to the owner model, so QA runs on the SAME model
+    as the worker (strategist/marketing QA on matrix-copywriter, verified
+    in the first live run's usage rows). Cross-model QA would be a
+    deliberate routing change (QA on the service model) — not built. Phase
+    1's remaining lever (the skeptic-prompt upgrade) is unaffected.
+   - **Phase 1 (small — upgrade the existing QA session, no new
+     session):** (a) cross-model by construction — with item 15, a
+     writer's task work runs on matrix-copywriter while QA runs on the
+     service model (matrix-coder): the reviewer is a different model than
+     the worker; (b) skeptic-prompt upgrade — the QA prompt explicitly
+     labels the completion summary as "the worker's claims — verify each
+     against the diff", adds a quality dimension beyond the ACs (depth,
+     evidence, correctness — per the mission brief's notes), and requires
+     diff evidence for every verdict claim. Cost: prompt change + the
+     item-15 model routing. No new session, no new budget.
+   - **Phase 2 (if Phase 1's data shows QA still rubber-stamps): a
+     separate fresh-context reviewer session** — a second gate AFTER QA
+     (worker → QA (AC gate) → reviewer (quality gate) → deploy): fresh
+     context (brief + diff + completion summary, no worker reasoning, no
+     QA context), cross-model (the model the worker did NOT use), verdict
+     pass/fix + notes, failure consumes a QA round (shared budget — no
+     new budget dimension). Ramp: config `KANBAN_QA_REVIEWER=advisory|
+     gate|off` — advisory first (verdict recorded in task_events + the
+     report, non-blocking) for one weekly-review cycle, measure the
+     reviewer-vs-QA agreement rate + false-positive rate in the weekly
+     review, then flip to `gate`.
+   - **Decision needed from chuck (after Phase 1 ships): Phase 1 now (with
+     the item-15 build), or wait for item 15's data first?**
+18. **No agent-to-agent delegation (DECIDED 2026-11-27, permanent)** —
+    chuck confirmed the org-theory topology (implication e, Conway's
+    inverse): agents interact via the kanban board + files, **not with
+    each other** (depth 1). No delegation machinery will be built; a
+    future revisit would be a new decision, not a default.
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
-revised 2026-11-27 — product first; all 4 agents activated 2026-11-27).
+revised 2026-11-27 — product first; all 4 agents activated 2026-11-27;
+board improvements items 13–18 decided 2026-11-27).
 
 ## Step-6 build evidence (2026-11-27 — product-first stand-up)
 

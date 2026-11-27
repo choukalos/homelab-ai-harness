@@ -40,6 +40,8 @@ function testCfg(sqlitePath: string): KanbanConfig {
     nonMediaConcurrentTasks: 1,
     agentConcurrentTasks: 1,
     agentSlugs: [],
+    ownerModels: {},
+    ownerModelCosts: {},
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -123,9 +125,10 @@ async function seed(q: BetterSQLite3Database<any>, now: number): Promise<Fixture
   const alphaOldDone = await mkTask(i4.id, alpha.id, "done", months[0]!.start - 86400_000);
 
   await q.insert(usage).values([
-    // Alpha done task: task + qa usage, current month (owner chuck).
+    // Alpha done task: task + qa usage, current month (owner chuck; the qa
+    // row runs on a different model to exercise byModel aggregation).
     { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 1000, tokensOut: 500, cost: 2.0, owner: "chuck" },
-    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 2000, role: "qa", model: "m", thinking: "xhigh", tokensIn: 100, tokensOut: 50, cost: 0.5, owner: "chuck" },
+    { projectId: alpha.id, taskId: alphaDone.id, ts: cur.start + 2000, role: "qa", model: "m-qa", thinking: "xhigh", tokensIn: 100, tokensOut: 50, cost: 0.5, owner: "chuck" },
     // Alpha running task: task usage, previous month (owner dylan).
     { projectId: alpha.id, taskId: alphaRunning.id, ts: prev.start + 1000, role: "task", model: "m", thinking: "medium", tokensIn: 2000, tokensOut: 800, cost: 4.0, owner: "dylan" },
     // Beta done task: task usage, current month (unattributed).
@@ -275,6 +278,14 @@ test("taskUsageTable: per-task totals, by-role breakdown, and filters", async ()
   assert.equal(done.tokensOut, 550);
   assert.equal(done.cost, 2.5);
   assert.deepEqual(done.byRole, { task: 2.0, qa: 0.5 });
+  // byModel: tokens in/out + cost per model (the qa row ran on m-qa).
+  assert.deepEqual(done.byModel, {
+    m: { tokensIn: 1000, tokensOut: 500, cost: 2.0 },
+    "m-qa": { tokensIn: 100, tokensOut: 50, cost: 0.5 },
+  });
+  // Single-model task: one byModel entry with the task's totals.
+  const runningRow = all.find((t) => t.taskId === f.alphaRunning)!;
+  assert.deepEqual(runningRow.byModel, { m: { tokensIn: 2000, tokensOut: 800, cost: 4.0 } });
   assert.equal(done.project, "Alpha");
   assert.equal(done.title, "Alpha done item");
   assert.equal(done.state, "done");
@@ -295,6 +306,7 @@ test("taskUsageTable: per-task totals, by-role breakdown, and filters", async ()
   assert.equal(qa[0]!.taskId, f.alphaDone);
   assert.equal(qa[0]!.cost, 0.5);
   assert.deepEqual(qa[0]!.byRole, { qa: 0.5 });
+  assert.deepEqual(qa[0]!.byModel, { "m-qa": { tokensIn: 100, tokensOut: 50, cost: 0.5 } });
 
   // Text filter (case-insensitive substring on the task title).
   const search = await taskUsageTable(db, { q: "beta DONE" });
