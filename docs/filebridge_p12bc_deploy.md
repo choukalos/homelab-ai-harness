@@ -1,12 +1,29 @@
 # P12-B + P12-C deploy runbook — `mcp_filebridge` (thor)
 
 **Date:** 2026-11-26 · **Written by:** pi-long-task run `10f37f65` (TODO 7)
-**Status:** **NOT EXECUTED** — pending user timing. This run did NO live
-cutover (side test container only — TODO 6, 43/43 green).
-**Base:** `main` @ `79c39d5` + the uncommitted P12-B/C working tree
-(12 modified + 10 new files — see the final report,
-`docs/filebridge_p12bc_final_report.md`).
-**Design:** `docs/filebridge_p12bc.md` · **Decisions:** 1b / 2a / 3a /
+**Status:** **EXECUTED 2026-11-27 02:05–02:15 UTC (pi, thor)** — all steps green:
+bridge recreate (env gate 0, no host ports, healthy, boot lint OK in-container),
+litellm restart (15th server registered; note: the access-group API 405'd
+intermittently during the proxy's MCP-client init window post-restart —
+transient, cleared within minutes; curl was reliable throughout), access group
+14 → 15 servers (fetch-union-PUT), public E2E battery all green (4.1 1b token:
+mint → public 200 + sha256 identical + DYNAMIC + Range 206 + bad-token 404 +
+both hosts; 4.2 P12-A regression: dl sha256 match + Range 206 + bad-token 404
++ upload 401/401/200 + /media/files policy both hosts + pipeline admin 404s +
+DYNAMIC; 4.3 MCP via litellm: 5 tools visible to chuck + dylan, `file_work_areas`
+returned the registry, D13 negatives rejected — dest=siri_outputs + siri-file
+client-token; 4.4 publish wrapper hot: real skill run published + served 200
++ idempotent republish no-op; 4.5 kill switch 502s with Matrix/skill-runner
+200 + clean recovery + `ss` diff no new host port). One runbook correction:
+the step-1 standalone lint check (`docker run --rm --entrypoint python … lint`)
+cannot pass without the work-area mounts — verify with `docker exec
+mcp_filebridge python app.py lint` instead (the live container's boot lint is
+the real gate). One battery correction: 4.1's mint source must be under a
+registered work area (used `pipeline_fetch`); the runbook's example path
+(`/home/chuck/data/media/generated/…`) is not a work area. **Base:** `main` @
+`b8d615f` (P12-B/C committed 2026-11-26; this runbook was written against the
+pre-commit tree — `git status` is clean at deploy time). **Design:**
+`docs/filebridge_p12bc.md` · **Decisions:** 1b / 2a / 3a /
 4-published (user-approved 2026-11-26).
 
 ## What this deploys
