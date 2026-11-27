@@ -28,7 +28,7 @@ cd "${BASE_DIR}"
 source "${BASE_DIR}/lib/litellm-keys.sh"
 
 usage() {
-  cat <<EOF
+  cat <<'EOF'
 Usage:
   ./homelab.sh <command> <stack> [extra docker compose args]
 
