@@ -32,6 +32,12 @@ Non-stacking gate (params.non_stacking, default true):
   continue). No prior doc (first cycle) -> run unconditionally
   (bootstrap).
 
+Same-week idempotency guard (params.force, default false):
+  If THIS week's review doc already exists, the run is skipped (one
+  review per week — a same-week re-fire must not overwrite the doc and
+  lose part-7 feedback appended since generation). force=true
+  regenerates (overwrites) the current week's doc.
+
 Data collection (deterministic, best-effort — a missing source degrades
 to an honest "no data" line, never a failure):
   - board: MySQL `ai_kanban` (KANBAN_DB_* env; harness_reflection
@@ -238,6 +244,16 @@ def _output_path(slug: str, week_label: str, template: str) -> Path:
     t = str(template or DEFAULT_OUTPUT_TEMPLATE)
     t = t.replace("<slug>", slug).replace("YYYY-WW", week_label)
     return REPO_ROOT / t
+
+
+def _existing_week_doc(slug: str, week_label: str, template: str) -> Optional[Path]:
+    """The current week's review doc, if it already exists (same-week
+    idempotency guard — one review per week unless force=true)."""
+    try:
+        path = _output_path(slug, week_label, template)
+        return path if path.is_file() else None
+    except (OSError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1336,7 +1352,8 @@ def _write_doc(slug: str, week: str, doc: str, template: str) -> Optional[str]:
 
 
 def _review_one_agent(
-    slug: str, non_stacking: bool, template: str, client: Any, now: datetime
+    slug: str, non_stacking: bool, template: str, client: Any, now: datetime,
+    force: bool = False,
 ) -> dict:
     week = _iso_week_label(now)
     current_week = (now.isocalendar()[0], now.isocalendar()[1])
@@ -1351,6 +1368,21 @@ def _review_one_agent(
             "week": week,
             "skip_reason": reason,
             "path": None,
+        }
+
+    # --- same-week idempotency guard (one review per week; force to regenerate) ---
+    existing = _existing_week_doc(slug, week, template)
+    if existing is not None and not force:
+        logger.info(
+            "weekly_agent_reviews: %s — this week's review already exists (%s); "
+            "force=true to regenerate", slug, existing,
+        )
+        return {
+            "agent": slug,
+            "status": "skipped",
+            "week": week,
+            "skip_reason": f"this week's review already exists ({existing}) — pass force=true to regenerate",
+            "path": str(existing),
         }
 
     window_start = now - timedelta(days=WINDOW_DAYS)
@@ -1438,6 +1470,7 @@ def run(params: dict, job: Any, client: Any = None) -> dict:
     if not agents:
         return {"error": "no agents to review (params.agents empty)"}
     non_stacking = bool(params.get("non_stacking", True))
+    force = bool(params.get("force", False))
     template = str(params.get("output") or DEFAULT_OUTPUT_TEMPLATE)
     now = _now()
     week = _iso_week_label(now)
@@ -1445,7 +1478,7 @@ def run(params: dict, job: Any, client: Any = None) -> dict:
     if job is not None and hasattr(job, "add_log"):
         job.add_log(
             f"weekly_agent_reviews: agents={agents} week={week} "
-            f"non_stacking={non_stacking} output={template}"
+            f"non_stacking={non_stacking} force={force} output={template}"
         )
 
     results: list[dict] = []
@@ -1465,7 +1498,7 @@ def run(params: dict, job: Any, client: Any = None) -> dict:
             )
             continue
         try:
-            results.append(_review_one_agent(slug, non_stacking, template, client, now))
+            results.append(_review_one_agent(slug, non_stacking, template, client, now, force))
         except Exception as exc:  # noqa: BLE001 - one agent's failure never kills the run
             logger.exception("weekly_agent_reviews: unhandled error for %s", slug)
             results.append(

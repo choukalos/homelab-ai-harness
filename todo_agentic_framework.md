@@ -818,7 +818,14 @@ tree). Full per-item evidence + the conservative-apply rationale:
   restricted to the charter, window dates, zero-activity → honest doc),
   output `docs/agents/<slug>/reviews/YYYY-WW.md`. `python3
   skills/weekly_agent_reviews/test_skill.py` → **PASS: 75 FAIL: 0**
-  (re-verified 2026-11-27 by TODO 4).
+  (re-verified 2026-11-27 by TODO 4). **Same-week idempotency guard added
+  2026-11-27 (main session, post-build)**: the non-stacking gate only looks
+  at weeks strictly before the current one, so a same-week re-fire (e.g. the
+  2026-11-27 15:00 CT cron fire after the bootstrap doc was already
+  generated) would have overwritten `2026-W48.md` and clobbered any part-7
+  feedback appended since generation. Now: this week's doc already exists →
+  skip (no LLM call, doc byte-identical — verified live); `force=true`
+  regenerates. Suite now **PASS: 83 FAIL: 0** (8 new checks).
 - **monthly_org_review** — `skills/monthly_org_review/` (same layout):
   first-Friday gate (the cron `0 15 1-7 * 5` fires every Friday under
   standard-cron OR semantics — the skill owns the gate; any other Friday →

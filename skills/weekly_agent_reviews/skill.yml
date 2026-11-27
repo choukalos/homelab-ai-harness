@@ -21,6 +21,11 @@ inputs:
     required: false
     default: true
     description: "Non-stacking rule: if the most recent prior YYYY-WW.md has no part-7 feedback (or explicit ack), skip this agent this cycle until chuck interacts. No prior doc (first cycle) -> run unconditionally (bootstrap)."
+  - name: force
+    type: boolean
+    required: false
+    default: false
+    description: "Regenerate (overwrite) THIS week's review doc even if it already exists. Default false: one review per week — a same-week re-fire skips so part-7 feedback appended since generation is never clobbered."
 config:
   # Inputs (all best-effort; the run works with any subset present).
   repo_root: /home/chuck/homelab        # rw for docs/agents/<slug>/reviews/ only

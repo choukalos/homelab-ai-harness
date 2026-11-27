@@ -5,6 +5,8 @@ Covers:
   - non-stacking gate: prior doc with part-7 feedback -> run; prior doc
     with placeholder-only part 7 -> skip (nothing written); no prior doc
     -> bootstrap run; explicit "ack" -> run
+  - same-week idempotency guard: this week's doc already exists -> skip
+    (doc untouched, no LLM call); force=true -> regenerate
   - guardrail validation: fake evidence refs (task:99999, file that does
     not exist) dropped + noted; real refs kept
   - KR restriction: invented KRs dropped; every charter KR still covered
@@ -779,6 +781,42 @@ def test_bad_params():
               next(a for a in res3["agents"] if a["agent"] == "strategist")["status"] == "skipped")
 
 
+def test_same_week_doc_guard():
+    print("test_same_week_doc_guard")
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        mod = load_skill(tmp)
+        write_fixtures(tmp)
+        state = wire_fakes(mod, FakeBoardConn(), GOOD_LLM, FakeClient(),
+                           {"calls": 0, "messages": None})
+        job = FakeJob()
+        # first run this week: bootstrap -> generated
+        res1 = mod.run({"agents": ["product"], "non_stacking": True}, job, FakeClient())
+        a1 = res1["agents"][0]
+        check("first run generated", a1["status"] == "generated", str(a1))
+        first_doc = Path(a1["path"]).read_text()
+        # same-week re-fire (no force): skipped, doc untouched, no LLM call
+        state2 = wire_fakes(mod, FakeBoardConn(), GOOD_LLM, FakeClient(),
+                            {"calls": 0, "messages": None})
+        res2 = mod.run({"agents": ["product"], "non_stacking": True}, job, FakeClient())
+        a2 = res2["agents"][0]
+        check("same-week re-fire skipped", a2["status"] == "skipped", str(a2))
+        check("skip reason names the existing doc",
+              "already exists" in a2.get("skip_reason", ""), a2.get("skip_reason"))
+        check("no LLM call on same-week skip", state2["calls"] == 0)
+        check("doc untouched (part-7 feedback safe)",
+              Path(a2["path"]).read_text() == first_doc)
+        # force=true: regenerates (overwrites) with one LLM call
+        state3 = wire_fakes(mod, FakeBoardConn(), GOOD_LLM, FakeClient(),
+                            {"calls": 0, "messages": None})
+        res3 = mod.run({"agents": ["product"], "non_stacking": True, "force": True},
+                       job, FakeClient())
+        a3 = res3["agents"][0]
+        check("force=true regenerates", a3["status"] == "generated", str(a3))
+        check("force run made exactly one LLM call", state3["calls"] == 1)
+        check("regenerated doc exists", Path(a3["path"]).is_file())
+
+
 def main():
     tests = [
         test_bootstrap_no_prior_doc,
@@ -786,6 +824,7 @@ def main():
         test_non_stacking_skip,
         test_non_stacking_ack,
         test_non_stacking_disabled_by_params,
+        test_same_week_doc_guard,
         test_output_path_and_format,
         test_guardrail_fake_evidence_dropped,
         test_charter_target_date_allowed,
