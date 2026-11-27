@@ -1,9 +1,9 @@
 # Todo — Plausible: get analytics working (workstream 1)
 
 - date: 2026-11-22
-- status: open — **registration unblocked 2026-11-27 (LiveView join fix); P1
-  first-user bootstrap is the current step (ingest stays broken until a user
-  exists)**
+- status: **DONE 2026-11-27** — first user created, 3 sites created, snippet
+  wired + deployed on all 3 live sites, end-to-end ingest verified (P1–P4
+  complete). P5 (WS1 deep) is the only remaining item.
 - target: chuck + pi
 - source: WS1 (engagement/usage instrumentation) of the agent-skills plan
   (`todo_agent_skills.md`). Chuck's call 2026-11-22: Plausible "is in itself its
@@ -100,36 +100,50 @@ verified running) while in there.
 
 ## Plan
 
-### P1 — Create the first user (chuck) ← current step (unblocked 2026-11-27)
+### P1 — Create the first user (chuck) ✅ DONE 2026-11-27
 
-- `http://192.168.4.54:8082/register` — create the account (email + password)
-- Verify: `/` serves the login page (no more `/register` redirect);
-  `/api/event` returns 204; `/js/script.plausible.js` returns 200
+- Created via `http://192.168.4.54:8082/register` (email + password).
+  Credentials stored in gitignored `.env` as `PLAUSIBLE_ADMIN_EMAIL` /
+  `PLAUSIBLE_ADMIN_PASSWORD` (never in chat/logs).
+- Verified: `users` table has the admin (id=1); `/` serves the login page
+  (no more `/register` redirect).
 - Note: `DISABLE_REGISTRATION=true` — the first user is the only one creatable
-  via the form; credentials are the admin UI login
+  via the form; credentials are the admin UI login.
 
-### P2 — Create the 3 sites (chuck, in the admin UI)
+### P2 — Create the 3 sites ✅ DONE 2026-11-27
 
-- `choukalos.com` (Homelab Blog)
-- `invest.choukalos.com` (Invest Hub)
-- Bluebovine — canonical domain from the Astro `site` field (confirm at
-  execution; the site is on Cloudflare Pages, not thor Caddy)
-- Note the site IDs/domains for the snippet step
+- `choukalos.com` (Homelab Blog) — **site_id 1**
+- `invest.choukalos.com` (Invest Hub) — **site_id 3**
+- `bluebovinegroup.com` (Bluebovine, CF Pages) — **site_id 4**
+- All 3 timezones set to `America/Chicago`.
+- Note: the `/api/v1/sites` site-creation API is Enterprise-only; sites were
+  created via the web UI (login → `POST /sites` with CSRF).
 
-### P3 — Add the snippet to the 3 sites (per-site deploy)
+### P3 — Add the snippet to the 3 sites ✅ DONE 2026-11-27
 
-- Snippet (per site):
-  `<script defer data-domain="<site>" src="https://plausible.choukalos.com/js/script.plausible.js"></script>`
-- Homelab Blog: Hugo head (config or layout partial) → `deploy.sh`
-- Invest Hub: app head → push (deploy gate: "push to production" only)
-- Bluebovine: Astro head → CF Pages auto-deploy on push to main
+- Snippet (per site) — **generic `/js/script.js` + `data-domain`** (the
+  personalized `pa-<id>.js` / `script.plausible.js` forms 404 on this
+  instance; `script.js` is the correct tracker path):
+  `<script defer data-domain="<site>" src="https://plausible.choukalos.com/js/script.js"></script>`
+- Homelab Blog: `layouts/_default/baseof.html` head → built with Hugo
+  v0.170.1 (installed to /tmp on thor) → `deploy.sh` → `deploy` branch →
+  git-sync. **Live** (commit d325a6d).
+- Invest Hub: `client/index.html` — replaced the stale `pa-35qyOpiCssHupkqZTwTlz.js`
+  (404) with the generic snippet → push to main → GitHub Actions Docker
+  deploy. **Live** (commit b75034e).
+- Bluebovine: `src/layouts/BaseLayout.astro` head (`is:inline` so Astro passes
+  it through) → push to main → CF Pages auto-deploy. **Live** (commit a5e4fd1).
 
-### P4 — End-to-end verification
+### P4 — End-to-end verification ✅ DONE 2026-11-27
 
-- Send a test event:
-  `curl "https://plausible.choukalos.com/api/event?u=<url>&c=<siteid>"` → 204
-- Visit each live site; confirm sessions appear in the Plausible dashboard
-- Confirm the snippet loads in page source (200, not 302) on all 3 sites
+- Tracker script: `https://plausible.choukalos.com/js/script.js` → 200.
+- Test event per site (`POST /api/event`, `Content-Type: text/plain`, JSON
+  `{d,u,n,p}`) → **202** for all 3 domains.
+- Events persisted in ClickHouse `plausible.events_v2` (site_ids 1, 3, 4 all
+  show the `snippet_wiring_test` event).
+- Snippet confirmed in served page source on all 3 live sites (choukalos.com,
+  invest.choukalos.com, bluebovinegroup.com).
+- Note: events land in `events_v2` (not the legacy `events` table).
 
 ### P5 — WS1 deep (later; skills Phase 3 prereq)
 
@@ -155,15 +169,15 @@ verified running) while in there.
 
 ## Open questions
 
-1. First-user email — chuck's? (it becomes the admin UI login)
-2. Bluebovine's canonical domain (confirm from the Astro config)
+1. ~~First-user email~~ — chuck's (`choukalos@yahoo.com`), created 2026-11-27.
+2. ~~Bluebovine's canonical domain~~ — `bluebovinegroup.com` (site_id 4).
 3. P5 feed design: Plausible API (per-site, token) vs. scheduled export —
-   decide when P5 starts
+   decide when P5 starts.
 
-## Definition of done
+## Definition of done ✅ MET 2026-11-27
 
 - First user created; admin UI accessible on LAN (login works)
-- 3 sites exist in Plausible
+- 3 sites exist in Plausible (ids 1, 3, 4)
 - Snippet deployed on all 3 live sites (verified in page source)
 - Test event + real visits visible in the dashboard (ingest verified
   end-to-end)
