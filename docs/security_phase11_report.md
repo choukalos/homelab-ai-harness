@@ -4,9 +4,9 @@
 **Branch:** `task/security-phase11` (worktree `/home/chuck/homelab-worktrees/security-phase11`, base `b60c01b`)
 **Spec:** `security_todo.md` §Phase 11 (registry-driven design)
 **Deploy runbook:** `docs/security_phase11_deploy.md`
-**Status:** BUILT + VERIFIED — pending deploy (timer install and the
-2-week observation window are deploy-stage steps, deliberately not
-executed; all changes left uncommitted for review).
+**Status:** DEPLOYED 2026-11-27 (timers live ~01:15 / Sunday 04:40 UTC, first
+daily + weekly scans run, `security_surface_*` metrics confirmed scraping from
+VictoriaMetrics; observation mode on for the 2-week tuning window).
 
 ## Scope of this build
 

@@ -4,8 +4,9 @@
 **Branch:** `task/security-phase10` (worktree `/home/chuck/homelab-worktrees/security-phase10`)
 **Spec:** `security_todo.md` §Phase 10 (baseline-diff design)
 **Deploy runbook:** `docs/security_phase10_deploy.md`
-**Status:** BUILT + VERIFIED — pending deploy (timer install, root baseline,
-node-exporter recreate are deploy-stage steps, deliberately not executed).
+**Status:** DEPLOYED 2026-11-27 (timers live ~00:30 / Sunday 04:30 UTC, root
+baseline captured, node-exporter textfile collector live; `security_scan_*`
+metrics confirmed scraping from VictoriaMetrics).
 
 ## Context: the 2026-11-26 crash
 
