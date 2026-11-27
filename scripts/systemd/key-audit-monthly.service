@@ -1,0 +1,19 @@
+[Unit]
+Description=SEC Phase 6 LiteLLM key audit (monthly)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# exit 1 on drift findings is INTENTIONAL: the service shows "failed"
+# until the drift is reviewed (--update-snapshot after review).
+ExecStart=/home/chuck/homelab/scripts/audit-litellm-keys.sh
+WorkingDirectory=/home/chuck/homelab
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

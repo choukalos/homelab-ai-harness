@@ -3,6 +3,21 @@
 }
 
 :80 {
+	# SEC Phase 6 (2026-11-27): access logging (JSON, stdout) — source for
+	# the 401-spike watch (scripts/key-auth-watch.sh). Server-level access
+	# log (Caddy 2.11 logging model): captures every response incl. gate
+	# 401s; the Authorization header is REDACTED by default (verified
+	# 2026-11-27). All hosts in this site block are logged — volume is
+	# dominated by the llm route; capped by the compose json-file rotation
+	# (10m x 3). NOTE: per-host scoping (log_name / logger_names) does not
+	# work from the Caddyfile in 2.11 (log_name sets a []string var that
+	# wrapLogger only accepts as []any) — JSON config would be required;
+	# not worth the complexity for a homelab.
+	log {
+		output stdout
+		format json
+	}
+
 	encode gzip
 
 	header {

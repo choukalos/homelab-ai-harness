@@ -93,6 +93,17 @@ LiteLLM Key Management
       Examples:
         ./homelab.sh key rotate chuck
         ./homelab.sh key rotate strategist --env-var LITELLM_KEY_STRATEGIST
+
+  ./homelab.sh key audit [--update-snapshot] [--json]
+      SEC Phase 6 key inventory audit: live inventory (keys, users,
+      models, MCP groups, budgets, limits) diffed against the snapshot
+      at /home/chuck/data/security/key-inventory-snapshot.json, plus
+      rotation-due flags (created >90d — the quarterly cadence) and
+      blocked-key flags. Writes a report to
+      /home/chuck/data/security/reports/key-audit-<date>.md and appends
+      drift findings to alerts.log. Run monthly (systemd timer) and
+      after any key change; --update-snapshot refreshes the baseline
+      AFTER reviewing drift.
 HELP
       ;;
 
@@ -106,6 +117,7 @@ HELP
     unblock) shift; _key_unblock "$@" ;;
     inventory) shift; _key_inventory "$@" ;;
     rotate)  shift; _key_rotate "$@" ;;
+    audit)   shift; _key_audit "$@" ;;
     *)
       echo "Unknown key subcommand: ${subcmd}" >&2
       _litellm help
@@ -554,6 +566,18 @@ print('ok' if 'blocked' in d or 'key_name' in d else 'error')
     echo "❌ Failed to unblock key. Response: ${resp}" >&2
     exit 1
   fi
+}
+
+# ── key audit (SEC Phase 6) ──
+# Thin wrapper around scripts/audit-litellm-keys.sh: live inventory
+# diffed against the snapshot (drift) + rotation-due (>90d) + blocked
+# keys + spend totals. --update-snapshot refreshes the baseline AFTER
+# reviewing drift; --json dumps the live inventory.
+
+_key_audit() {
+  local repo_root
+  repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  exec bash "$repo_root/scripts/audit-litellm-keys.sh" "$@"
 }
 
 # ── key inventory (Phase 13.4) ──

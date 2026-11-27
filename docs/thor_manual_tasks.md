@@ -398,6 +398,77 @@ Validation:
 
 ---
 
+## Phase 6 - Install key-watch timers (one-time, sudo)
+
+> **WHEN:** Now (2026-11-27) — the Phase 6 scripts are live and verified,
+> but the systemd timers need a sudo install (this session has no
+> passwordless sudo). ~30 seconds. Until then the watch scripts can be
+> run on demand: `./scripts/key-auth-watch.sh` + `./scripts/key-spend-watch.sh`.
+
+```text
+MANUAL TASK FOR CHUCK (owner: chuck; host: thor):
+Reason:
+SEC Phase 6 — install + enable the 5-min key/auth watch timer (401 spike
++ LiteLLM spend) and the monthly key audit timer. Units are in
+scripts/systemd/ (key-watch.service/.timer, key-audit-monthly.service/.timer);
+the installer copies them to /etc/systemd/system, reloads, enables + starts.
+Command:
+  sudo scripts/key-watch-install-timers.sh
+Validation:
+- systemctl list-timers 'key-*' --all shows key-watch.timer (next run ~5 min)
+  + key-audit-monthly.timer (next run 1st of month 06:00 UTC)
+- sudo systemctl start key-watch.service && journalctl -u key-watch.service -n 10
+  shows "key-auth-watch: ok" + "key-spend-watch: ok"
+- Grafana "Security Monitoring" → "Key & Auth — Phase 6" row: Watch healthy = 1
+Rollback:
+  sudo systemctl disable --now key-watch.timer key-audit-monthly.timer
+  (removing the units is optional: sudo rm /etc/systemd/system/key-*.{service,timer} && sudo systemctl daemon-reload)
+```
+
+---
+
+## Phase 6 - Post-absence log review (log-review habit)
+
+> **WHEN:** After any trip/absence (or whenever you haven't looked at the
+> box for a while). ~2 minutes. The 5-min `key-watch` timer + Grafana cover
+> continuous detection; this is the human skim for the period you were away.
+
+```text
+MANUAL TASK FOR CHUCK (owner: chuck; host: thor):
+Reason:
+SEC Phase 6 item 5 — a standing habit: skim the public-route auth logs and
+LiteLLM spend for the absence window, so a slow-burn anomaly (a leaked key
+being used at low volume, a misconfigured client 401-ing all week) gets a
+human look even though the automated thresholds didn't trip.
+Command:
+1. 401s on the gated public routes for the last 7 days (access logs are
+   JSON on caddy stdout; the `log @llm` / `log @siri` directives landed
+   2026-11-27):
+     docker logs caddy --since 7d 2>&1 | grep 'http.log.access' \
+       | python3 -c "import sys,json,collections; c=collections.Counter(); [c[(json.loads(l).get('request') or {}).get('host','?')] += 1 for l in sys.stdin if l.strip().startswith('{') and json.loads(l).get('status')==401]; print(dict(c)) or 'no 401s in window'"
+   Expected: {} (no 401s) or a handful (stale client / scanner). Sustained
+   volume = the key-auth-401 alert would have fired — check
+   /home/chuck/data/security/alerts.log if it did.
+2. LiteLLM spend for the keys (totals since creation; compare against the
+   Grafana "Key & Auth — Phase 6" spend trend for the period):
+     ./homelab.sh key audit
+   (also runs the full inventory audit — drift vs snapshot, rotation-due
+   flags >90d, blocked keys). Or just the spend line:
+     source .env && curl -s -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+       http://192.168.4.54:4000/spend/keys | python3 -m json.tool | grep -E 'key_alias|"spend"'
+3. Unread security alerts (Phase 10 feed — includes key-auth-401 / key-spend
+   / key-audit lines):
+     ./homelab.sh security status
+Rollback:
+n/a (read-only checks).
+Validation:
+- Step 1 prints a host->count map (or "no 401s in window")
+- Step 2 report: /home/chuck/data/security/reports/key-audit-<date>.md
+- Step 3 prints "alerts: N total, M unread since last status"
+```
+
+---
+
 ## Summary of Pending Manual Tasks
 
 | # | Phase | Task | Priority |
@@ -415,3 +486,5 @@ Validation:
 | 11 | 15 | Cloudflare cache rules: `/media/pipeline/dl/*` (siri) + `/files/*` (portal, 60s edge TTL) + purge stale video entry | Done — 2026-09-07 (verified: /files/* 60s revalidation; /dl/* DYNAMIC = bypass; T1 overwrite test passed) |
 | 12 | 16 | SSH hardening on thor (key-only, no root; optional ufw) | **OPEN** — High — **LAN session only (at home), not via OpenVPN** |
 | 13 | 12 (file bridge) | Matrix 8189 → LAN-only (rebind/ufw on matrix after P12-A cutover is live) | ✅ DONE 2026-11-26 — validated from thor: LAN 200, external vantage timeout, public chain via bridge 200 + sha256 identical |
+| 14 | 6 | Install key-watch timers (one-time sudo: `sudo scripts/key-watch-install-timers.sh`) | **OPEN** — High — 30s; until then the watch scripts run on demand |
+| 15 | 6 | Post-absence log review (401s + spend + alerts) | **OPEN — habit** — ~2 min after any trip/absence (commands in the Phase 6 section above) |

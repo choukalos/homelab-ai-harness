@@ -1,0 +1,11 @@
+[Unit]
+Description=SEC Phase 6 LiteLLM key audit — monthly (1st, 06:00 UTC)
+
+[Timer]
+OnCalendar=*-*-01 06:00:00
+# if the host was off on the 1st, run on next boot (don't skip a month)
+Persistent=true
+Unit=key-audit-monthly.service
+
+[Install]
+WantedBy=timers.target

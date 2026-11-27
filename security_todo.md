@@ -413,13 +413,50 @@ deny does **not** break it.)
 
 Rollback: `sudo ufw disable`.
 
-### Phase 6 — Monitoring & detection
+### Phase 6 — Monitoring & detection — **DEPLOYED 2026-11-27** (timer install pending — sudo, see `docs/thor_manual_tasks.md`)
 
-- [ ] **401 spike alert** on `llm.choukalos.com` + `siri.choukalos.com` (Caddy access logs → Victoria Metrics → Grafana alert): sustained >N 401s/min = brute force or leaked key. (Exact metric wiring per `docs/thor_observability_plan.md`.)
-- [ ] **Spend alert** per LiteLLM key (now that spend tracking is on, Phase 3): alert if `chuck`/`dylan` spend > $X/day.
-- [ ] **Key audit script** `scripts/audit-litellm-keys.sh`: list keys (alias, user, budget, rpm/tpm, models, MCP group) + compare against the §1 inventory table; run monthly / after any key change.
-- [ ] **Quarterly key rotation** cadence for `LITELLM_KEY_CHUCK` / `LITELLM_KEY_DYLAN` (rotate → update `.env` → Caddy reload → old key deleted in LiteLLM). GitHub PAT rotation has a one-command tool since 2026-11-21: `scripts/rotate-github-tokens.sh` (see `docs/thor_public_access_model.md` § Key Strategy → GitHub Tokens).
-- [ ] Log-review habit: after any trip/absence, skim Caddy logs for 401s + LiteLLM spend for the period.
+**Design (2026-11-27, built on the Phase 10 pattern — D7 decision: metrics via node-exporter
+TextFile → VM → Grafana; alerts to `alerts.log` + on-demand status; Siri push later):**
+
+Caddy's `metrics` handler was evaluated and rejected: it is marked EXPERIMENTAL in
+Caddy 2.11, exposes no status-code label (only `server`/`handler`/optional `host`), and
+the 401 gate is a plain `respond 401` (not a middleware error) — it would not capture
+the signal. Caddy also emits **no access logs by default** (verified live 2026-11-27), so
+the 401 source requires enabling them. Wiring:
+
+```
+@llm / @siri routes: `log` directive (JSON → stdout)          [Caddyfile, additive]
+caddy compose: json-file log rotation (max-size 10m, max-file 3)  [was UNBOUNDED]
+  → docker logs caddy --since 6m
+  → scripts/key-auth-watch.sh (systemd timer, 5 min)
+     → metrics/key_auth.prom   (caddy_unauthorized_total{host=...})
+     → alerts.log              (sustained 401s > threshold)
+LiteLLM /spend/keys (master key)
+  → scripts/key-spend-watch.sh (same timer)
+     → state/key-spend-state.json (per-key totals; 24h rolling window from deltas)
+     → metrics/key_spend.prom  (litellm_key_spend_24h_usd{alias=...}, limit, total)
+     → alerts.log              (24h spend > per-key limit)
+node-exporter TextFile collector (existing, /home/chuck/data/security/metrics)
+  → Victoria Metrics → Grafana ("Key & Auth — Phase 6" row on Security Monitoring)
+On-demand: ./homelab.sh security status (existing — counts alerts.log unread)
+           ./homelab.sh key audit (new — full audit report)
+```
+
+**Thresholds (defaults in `scripts/key-watch.conf`, tunable without code changes):**
+- 401 spike: >10 in a 5-min window (≈ sustained >2/min) per gated host. Baseline
+  expectation: ~0 (only wrong/stale keys + scanners); tune after 2-week observation.
+- Spend: 24h rolling per key — chuck/dylan/service $50/day (chuck's observed average
+  ≈ $22.6/day across Oct 4–Nov 27, $1220.60 total; headroom for heavy work days),
+  agent + unknown keys $20/day.
+- Rotation due: key `created_at` > 90 days (quarterly cadence).
+- `OBSERVATION_MODE=1` for the first 2 weeks (Phase 10 convention): threshold breaches
+  log at `note` severity instead of `alert`; metrics always recorded.
+
+- [x] **401 spike alert** on `llm.choukalos.com` + `siri.choukalos.com` — **done 2026-11-27**: `log { output stdout; format json }` in the `:80` site block (Caddy 2.11 server-level access log — captures gate 401s; Authorization REDACTED by default; per-host scoping rejected: `log_name` Caddyfile directive sets a `[]string` var that `wrapLogger` only accepts as `[]any` — JSON config would be required, not worth it) + `compose.core.yml` caddy log rotation (was unbounded) + `scripts/key-auth-watch.sh` (5-min cadence; episode alerting — one line per breach, not per run) + `key_auth.prom` + Grafana panels. **Verified live 2026-11-27**: caddy recreated (all 4 public routes identical pre/post), access logs flowing, real 401 counted in metrics + alert fired at test threshold, VM series live (`caddy_unauthorized_total{host=...}`), dashboard row provisioned. Timer: `sudo scripts/key-watch-install-timers.sh` (manual).
+- [x] **Spend alert** per LiteLLM key — **done 2026-11-27**: `key-spend-watch.sh` (same timer): `/spend/keys` totals diffed against a state file → 24h rolling window → `key_spend.prom` (24h/limit/total per key) + alerts. Verified: baseline run + real delta (chuck $0.16 in 2 min) + simulated $60 spike → alert fired, episode dedup confirmed. (Note: `/spend/keys` exposes totals only — the window is built from deltas; first run establishes the baseline. Unaliased keys labeled by token prefix — `/spend/keys` hash field is `token`, not `key_hash`.)
+- [x] **Key audit script** `scripts/audit-litellm-keys.sh` — **done 2026-11-27**: live inventory (via `lib/litellm-keys.sh` `_key_fetch_all` + MCP group resolution) diffed against the snapshot (`/home/chuck/data/security/key-inventory-snapshot.json`, Phase 10 baseline pattern; `--update-snapshot` after review) + rotation-due flag (>90d) + spend totals + blocked-key flags → report + alerts. `./homelab.sh key audit` wrapper + `--json`. Verified: first run (7 NEW), snapshot, clean run (0 findings, exit 0), simulated drift (removed key + model change both detected). Monthly timer in the same installer (manual, sudo).
+- [x] **Quarterly key rotation** cadence — **done 2026-11-27**: the flow already existed (`./homelab.sh key rotate`, Phase 13.2); this item = the cadence, now operational: audit script flags keys >90d old (rotation due), documented in `docs/thor_manual_tasks.md` (Phase 6 section). GitHub PAT rotation: `scripts/rotate-github-tokens.sh` (see `docs/thor_public_access_model.md` § Key Strategy → GitHub Tokens).
+- [x] Log-review habit — **done 2026-11-27**: `docs/thor_manual_tasks.md` section (summary table row 14): after any trip/absence, `docker logs caddy --since 7d` 401 skim (access logs now exist) + `./homelab.sh key audit` + `./homelab.sh security status` (unread alerts incl. key-auth-401 / key-spend / key-audit lines).
 
 ### Phase 7 — Docs sync — **DONE 2026-11-21**
 

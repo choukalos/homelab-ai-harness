@@ -1,0 +1,22 @@
+[Unit]
+Description=SEC Phase 6 key/auth watch (401 spike + LiteLLM spend)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# both watches always run; a failure is logged to the journal and shows
+# as *_watch_healthy 0 in the metrics — it must not stop the other watch.
+ExecStart=-/home/chuck/homelab/scripts/key-auth-watch.sh
+ExecStart=-/home/chuck/homelab/scripts/key-spend-watch.sh
+WorkingDirectory=/home/chuck/homelab
+# docker logs read + two API calls; 2 min is generous headroom
+TimeoutStartSec=120
+# be a good citizen: low CPU/nice, best-effort I/O
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

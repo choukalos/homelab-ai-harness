@@ -1,0 +1,14 @@
+[Unit]
+Description=SEC Phase 6 key/auth watch — every 5 min (401 spike + spend)
+
+[Timer]
+# self-paced 5-min cadence (drift-resistant); start 1 min after boot
+OnUnitActiveSec=5min
+OnBootSec=1min
+# if the host was off, run on next boot (don't skip the window)
+Persistent=true
+AccuracySec=1min
+Unit=key-watch.service
+
+[Install]
+WantedBy=timers.target

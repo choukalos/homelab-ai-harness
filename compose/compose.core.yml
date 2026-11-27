@@ -29,5 +29,13 @@ services:
       - /home/chuck/homelab/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /home/chuck/data/caddy/data:/data
       - /home/chuck/data/caddy/config:/config
+    # SEC Phase 6 (2026-11-27): access logs (all hosts in the :80 site
+    # block, JSON on stdout — the key-auth-watch 401 source) now flow to
+    # docker logs — cap them. Was unbounded json-file.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 
