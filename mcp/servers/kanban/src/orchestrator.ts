@@ -1,7 +1,7 @@
 /**
  * Orchestrator (PLAN.md §4/§7, Slice 3a/3b): queue, per-category task slots
- * (media vs non-media), dependency gating, and the task lifecycle state
- * machine.
+ * (agent / media / non-media), dependency gating, and the task lifecycle
+ * state machine.
  *
  * State machine (PLAN.md §4):
  *   backlog ──category slot free + all deps done──► running
@@ -106,6 +106,21 @@ async function dirExists(dir: string): Promise<boolean> {
  */
 function isMediaTask(task: { spec?: { kind?: string } | null }): boolean {
   return task.spec?.kind === "media";
+}
+
+/**
+ * Slot category for a task, classified by executor identity first: cards
+ * owned by a standing agent (owner in AGENT_SLUGS) count against the agent
+ * slot regardless of work kind (WS3 step 6); everything else splits by spec
+ * kind (media vs non-media). An empty AGENT_SLUGS leaves the agent slot
+ * inert (legacy media/non-media behavior).
+ */
+function slotCategory(
+  task: { owner?: string | null; spec?: { kind?: string } | null },
+  agentSlugs: readonly string[],
+): "agent" | "media" | "nonMedia" {
+  if (task.owner && agentSlugs.includes(task.owner)) return "agent";
+  return isMediaTask(task) ? "media" : "nonMedia";
 }
 
 /** QA gate as driven by the orchestrator (QaGate or a mock in tests). */
@@ -221,7 +236,8 @@ export class Orchestrator {
     if (this.running) return;
     this.running = true;
     console.log(
-      `[orchestrator] started (mediaSlots=${this.deps.cfg.mediaConcurrentTasks}, ` +
+      `[orchestrator] started (agentSlots=${this.deps.cfg.agentConcurrentTasks}, ` +
+        `mediaSlots=${this.deps.cfg.mediaConcurrentTasks}, ` +
         `nonMediaSlots=${this.deps.cfg.nonMediaConcurrentTasks}, ` +
         `workspace=${this.workspaceRoot}, files=${this.filesRoot})`,
     );
@@ -275,24 +291,30 @@ export class Orchestrator {
 
   /**
    * One pickup pass: fill free slots with eligible backlog tasks (deps
-   * satisfied, not paused), oldest first. Slots are per-category: media-kind
-   * tasks (spec.kind === "media") count against mediaConcurrentTasks, every
-   * other kind against nonMediaConcurrentTasks — so a running media job never
-   * blocks non-media work (and vice versa). Public so tests (and Slice 5's
-   * auto-resume) can drive it manually.
+   * satisfied, not paused), oldest first. Slots are per-category: standing-
+   * agent cards (owner in AGENT_SLUGS) count against agentConcurrentTasks
+   * regardless of work kind, media-kind tasks (spec.kind === "media") against
+   * mediaConcurrentTasks, every other kind against nonMediaConcurrentTasks —
+   * so a running media job never blocks non-media work (and vice versa), and
+   * agent work never contends with board workers. Public so tests (and
+   * Slice 5's auto-resume) can drive it manually.
    */
   async tick(): Promise<void> {
     if (!this.running) return;
-    const counts = await this.countRunningByKind();
-    let freeMedia = Math.max(0, this.deps.cfg.mediaConcurrentTasks - counts.media);
-    let freeNonMedia = Math.max(0, this.deps.cfg.nonMediaConcurrentTasks - counts.nonMedia);
-    if (freeMedia === 0 && freeNonMedia === 0) return;
-    for (const task of await this.listEligibleBacklog(freeMedia + freeNonMedia)) {
-      const isMedia = isMediaTask(task);
-      if (isMedia ? freeMedia === 0 : freeNonMedia === 0) continue; // category full
+    const counts = await this.countRunningBySlot();
+    const cfg = this.deps.cfg;
+    let freeAgent = Math.max(0, cfg.agentConcurrentTasks - counts.agent);
+    let freeMedia = Math.max(0, cfg.mediaConcurrentTasks - counts.media);
+    let freeNonMedia = Math.max(0, cfg.nonMediaConcurrentTasks - counts.nonMedia);
+    if (freeAgent === 0 && freeMedia === 0 && freeNonMedia === 0) return;
+    for (const task of await this.listEligibleBacklog(freeAgent + freeMedia + freeNonMedia)) {
+      const cat = slotCategory(task, cfg.agentSlugs);
+      const free = cat === "agent" ? freeAgent : cat === "media" ? freeMedia : freeNonMedia;
+      if (free === 0) continue; // category full
       try {
         await this.startTask(task.id);
-        if (isMedia) freeMedia--;
+        if (cat === "agent") freeAgent--;
+        else if (cat === "media") freeMedia--;
         else freeNonMedia--;
       } catch (err) {
         // A concurrent tick may have taken the slot/state; log and move on.
@@ -330,14 +352,20 @@ export class Orchestrator {
       const names = await this.ideaTexts(deps.waitingOn);
       throw new ServiceError(409, `task ${taskId} is waiting on: ${names.join(", ") || deps.waitingOn.join(", ")}`);
     }
-    const counts = await this.countRunningByKind();
-    const isMedia = isMediaTask(task);
-    const cap = isMedia ? this.deps.cfg.mediaConcurrentTasks : this.deps.cfg.nonMediaConcurrentTasks;
-    const running = isMedia ? counts.media : counts.nonMedia;
+    const counts = await this.countRunningBySlot();
+    const cat = slotCategory(task, this.deps.cfg.agentSlugs);
+    const cap =
+      cat === "agent"
+        ? this.deps.cfg.agentConcurrentTasks
+        : cat === "media"
+          ? this.deps.cfg.mediaConcurrentTasks
+          : this.deps.cfg.nonMediaConcurrentTasks;
+    const running = counts[cat];
     if (running >= cap) {
+      const label = cat === "nonMedia" ? "non-media " : `${cat} `;
       throw new ServiceError(
         409,
-        `no free ${isMedia ? "media " : ""}task slots (${running}/${cap} ${isMedia ? "media " : "non-media "}running)`,
+        `no free ${cat === "nonMedia" ? "" : label}task slots (${running}/${cap} ${label}running)`,
       );
     }
     await this.transition(taskId, "backlog", "running", {
@@ -1097,17 +1125,25 @@ export class Orchestrator {
 
   /**
    * Running tasks that hold a slot (running and not paused), split by
-   * category: media-kind tasks (spec.kind === "media") vs everything else.
-   * Classification happens in JS (not SQL) so the query stays driver-
-   * agnostic — the spec is a JSON column with driver-specific accessors.
+   * category: standing-agent cards (owner in AGENT_SLUGS) vs media-kind
+   * tasks (spec.kind === "media") vs everything else. Classification happens
+   * in JS (not SQL) so the query stays driver-agnostic — the spec is a JSON
+   * column with driver-specific accessors.
    */
-  private async countRunningByKind(): Promise<{ media: number; nonMedia: number }> {
+  private async countRunningBySlot(): Promise<{ agent: number; media: number; nonMedia: number }> {
     const rows = await this.db
-      .select({ spec: tasks.spec })
+      .select({ spec: tasks.spec, owner: tasks.owner })
       .from(tasks)
       .where(and(eq(tasks.state, "running"), eq(tasks.paused, false)));
-    const media = rows.filter((r) => isMediaTask({ spec: r.spec } as TaskRow)).length;
-    return { media, nonMedia: rows.length - media };
+    const slugs = this.deps.cfg.agentSlugs;
+    let agent = 0;
+    let media = 0;
+    for (const r of rows) {
+      const cat = slotCategory(r, slugs);
+      if (cat === "agent") agent++;
+      else if (cat === "media") media++;
+    }
+    return { agent, media, nonMedia: rows.length - agent - media };
   }
 
   /** Backlog tasks (oldest first) that are not paused and have deps satisfied. */

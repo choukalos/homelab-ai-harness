@@ -10,6 +10,7 @@ import {
   loadConfig,
   loadEnv,
   loadEnvFileVars,
+  parseAgentSlugs,
   parseConfig,
   parseDotEnv,
   parseUserKeys,
@@ -44,6 +45,8 @@ test("applies defaults for optional vars", () => {
   });
   assert.equal(cfg.mediaConcurrentTasks, 1);
   assert.equal(cfg.nonMediaConcurrentTasks, 2);
+  assert.equal(cfg.agentConcurrentTasks, 1);
+  assert.deepEqual(cfg.agentSlugs, []);
   assert.equal(cfg.server.bindAddr, DEFAULTS.BIND_ADDR);
   assert.equal(cfg.server.port, 3000);
 });
@@ -122,10 +125,26 @@ test("media/non-media concurrency must be positive integers", () => {
       /NON_MEDIA_CONCURRENT_TASKS/,
       `expected NON_MEDIA_CONCURRENT_TASKS=${bad} to fail`,
     );
+    assert.throws(
+      () => parseConfig({ ...baseEnv, AGENT_CONCURRENT_TASKS: bad }),
+      /AGENT_CONCURRENT_TASKS/,
+      `expected AGENT_CONCURRENT_TASKS=${bad} to fail`,
+    );
   }
   const cfg = parseConfig({ ...baseEnv, MEDIA_CONCURRENT_TASKS: "2", NON_MEDIA_CONCURRENT_TASKS: "3" });
   assert.equal(cfg.mediaConcurrentTasks, 2);
   assert.equal(cfg.nonMediaConcurrentTasks, 3);
+});
+
+test("AGENT_SLUGS: comma-separated slugs (trimmed, unique); empty/unset = []", () => {
+  const cfg = parseConfig({ ...baseEnv, AGENT_SLUGS: "product, analyst ,marketing" });
+  assert.deepEqual(cfg.agentSlugs, ["product", "analyst", "marketing"]);
+  assert.throws(
+    () => parseConfig({ ...baseEnv, AGENT_SLUGS: "product,product" }),
+    /duplicate slug/,
+  );
+  assert.deepEqual(parseAgentSlugs(undefined), []);
+  assert.deepEqual(parseAgentSlugs("   "), []);
 });
 
 test("PORT must be a valid port", () => {
@@ -347,7 +366,7 @@ test("validateUserKeysAtBoot: accepts keys the proxy serves, fails on rejection"
 
 test("loadConfig reads .env and skips model validation when told", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "ai-kanban-cfg-"));
-  const keys = ["LITELLM_BASE_URL", "LITELLM_API_KEY", "MODEL", "MEDIA_CONCURRENT_TASKS", "NON_MEDIA_CONCURRENT_TASKS", "PORT"];
+  const keys = ["LITELLM_BASE_URL", "LITELLM_API_KEY", "MODEL", "MEDIA_CONCURRENT_TASKS", "NON_MEDIA_CONCURRENT_TASKS", "AGENT_CONCURRENT_TASKS", "AGENT_SLUGS", "PORT"];
   const saved: Record<string, string | undefined> = {};
   try {
     for (const k of keys) saved[k] = process.env[k];
@@ -360,6 +379,8 @@ test("loadConfig reads .env and skips model validation when told", async () => {
         "MODEL=file-model",
         "MEDIA_CONCURRENT_TASKS=1",
         "NON_MEDIA_CONCURRENT_TASKS=2",
+        "AGENT_CONCURRENT_TASKS=1",
+        "AGENT_SLUGS=product,analyst",
         "PORT=4567",
       ].join("\n"),
     );
@@ -369,6 +390,8 @@ test("loadConfig reads .env and skips model validation when told", async () => {
     assert.equal(cfg.mediaConcurrentTasks, 1);
     assert.equal(cfg.nonMediaConcurrentTasks, 2);
     assert.equal(cfg.server.port, 4567);
+    assert.equal(cfg.agentConcurrentTasks, 1);
+    assert.deepEqual(cfg.agentSlugs, ["product", "analyst"]);
   } finally {
     for (const k of keys) {
       if (saved[k] === undefined) delete process.env[k];

@@ -8,10 +8,16 @@
   trust+traffic, O2 product-define), alignment report
   `docs/org/alignment/2026-11-26-first-pass.md`, 4 charter drafts
   `docs/agents/<slug>/charter.md` (pending chuck's review); Q13 decided
-  2026-11-26: stand up `strategist` first, then `marketing` (chuck — the ones
-  that can start sooner; serves Homelab O1, the cycle's main goal); `product`
-  follows. Goal model + S13 acceptance
-  2026-11-24; decisions 2026-11-25; Q15 2026-11-26)
+  2026-11-26, **revised 2026-11-27 (chuck): stand up `product` first** (product
+  first; `strategist`/`marketing`/`analyst` stand up but stay OFF — keys +
+  workspaces only, no cron targeting, no board cards, charters not approved —
+  until chuck activates them). Goal model + S13 acceptance
+  2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
+  done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
+  4 agent keys + workspaces (product active; strategist/marketing/analyst
+  OFF), review crons registered + hot-reload verified, product charter
+  completed as DRAFT (pending chuck's review) — evidence below +
+  `todo_agentic_framework_build-report-2026-11-27.md`)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
@@ -527,8 +533,8 @@ list verified). Belongs to WS3 (the org/agent goal system), not workstream 2.
 ## Remaining open design questions
 
 (From the 2026-11-22 seed list; goal model — Q2 — is now decided above.)
-**All questions decided except Q13** (first agent — deferred to the first
-org-goals pass). Q15 (domain knowledge) decided 2026-11-26.
+**All questions decided** (Q13 first agent decided 2026-11-26, revised
+2026-11-27 — product first). Q15 (domain knowledge) decided 2026-11-26.
 
 1. ~~**Identity**~~ — **decided 2026-11-25 (chuck)**: one LiteLLM key per
    agent (the `USER_KEYS` pattern extended to agents), created when the agent
@@ -580,11 +586,15 @@ New from the 2026-11-24 interview:
     tests, schema, resolvable citations — MVV rule 3), quality-KR status in
     the weekly review (part 4), and the BA's KPI digest consuming the same
     records.
-13. **First agent** — which agent stands up first (skills-doc Q1, deferred
-    here). **Decide after the first org-goals pass** (2026-11-25): the
-    goals show which agent has the sharpest starting KR (candidates:
-    `marketing` for the homelab content goal, `product` for the bluebovine
-    product-definition goal).
+13. ~~**First agent**~~ — **decided 2026-11-26, revised 2026-11-27 (chuck):
+    stand up `product` first** (product first — the 2026-11-27 revision
+    supersedes the 2026-11-26 strategist-first order; `strategist`/
+    `marketing`/`analyst` stand up alongside but stay OFF — keys + workspaces
+    only, no cron targeting, no board cards, charters not approved — until
+    chuck activates them). Was deferred to the first org-goals pass
+    (2026-11-25): the goals show which agent has the sharpest starting KR
+    (candidates: `marketing` for the homelab content goal, `product` for the
+    bluebovine product-definition goal).
 14. ~~**Sub-agent capacity / concurrency**~~ — **decided 2026-11-25** (model
     assignment, not separation; `AGENT_CONCURRENT_TASKS=1` + existing
     `NON_MEDIA_CONCURRENT_TASKS=2` = 3-session budget, env-var tunable;
@@ -634,14 +644,18 @@ New from the 2026-11-24 interview:
    4 charter drafts `docs/agents/<slug>/charter.md` — pending chuck's review).
    The monthly cycle starts; Q13 first-agent decision pending (recommendation:
    `product`).
-4. ~~First agent (Q13)~~ — **decided 2026-11-26 (chuck)**: stand up
-   `strategist` first, then `marketing` (sooner-starting; serves Homelab O1);
-   `product` follows. Charter drafts in `docs/agents/<slug>/charter.md` —
+4. ~~First agent (Q13)~~ — **decided 2026-11-26, revised 2026-11-27 (chuck):
+   stand up `product` first** (product first — the 2026-11-27 revision
+   supersedes the 2026-11-26 strategist-first order; `strategist`/
+   `marketing`/`analyst` stand up alongside but stay OFF — keys + workspaces
+   only, no cron targeting, no board cards, charters not approved — until
+   chuck activates them). Charter drafts in `docs/agents/<slug>/charter.md` —
    reviewed with chuck 2026-11-26 (slow-burn targets, 6-pillar set, market =
    PM consulting, O2-before-O1).
    **Prerequisite: security Phase 13 (automated key management) lands first**
-   (chuck 2026-11-26) — agent keys via the new `key add`/`key rotate` ops
-   layer, not the manual 5-step loop.
+   (chuck 2026-11-26) — **MET 2026-11-26** (Phase 13 DONE 2026-11-26): agent
+   keys via the new `key add-agent`/`key rotate` ops layer, not the manual
+   5-step loop.
 5. First agent's charter draft: agent suggests from the org goals → chuck
    approves.
 6. Stand up the first agent: `pi-agent-<slug>` workspace, LiteLLM key
@@ -652,24 +666,100 @@ New from the 2026-11-24 interview:
    **Step-6 build checklist** (added 2026-11-26 — the thin WS3 build layer;
    everything else in the framework reuses existing infrastructure):
 
-   - [ ] `AGENT_CONCURRENT_TASKS` slot category (default **1**) — env var in
+   - [x] `AGENT_CONCURRENT_TASKS` slot category (default **1**) — env var in
          `data/ai-kanban/harness/mcp/servers/kanban/.env` (+ `.env.example`),
          read in `src/config.ts`; slot classification by **executor identity**
          (cards assigned to a standing agent count against this slot regardless
-         of work kind) in the orchestrator (`src/mcp/server.ts`)
-   - [ ] Per-agent LiteLLM key — mint via `./homelab.sh key add <slug>`
-         (proxy API; token → `.env` as `LITELLM_KEY_<SLUG>`); per-key default
-         model by work type (`matrix-coder` for product/analyst,
-         `matrix-copywriter` for strategist/marketing); key lifecycle per
-         security_todo.md **Phase 13** (one `.env`, `key rotate`,
-         alias-based kanban capability map, `MEMORY_USER_KEYS` entry)
-   - [ ] Cron jobs in `homelab/scheduler/schedules.json` (hot-reload,
+         of work kind) in the orchestrator (`src/mcp/server.ts`) — **done
+         2026-11-27**: dev clone `task/17` (`626eb61` + `4a67b91` +
+         `5266831`, pushed to GitHub); live build context synced (file-diff
+         clean); `mcp_kanban` rebuilt + healthy with the env vars live in the
+         container; full suite green (237 tests — 236 pass, 1 skip, 0 fail,
+         `npm test`)
+   - [x] Per-agent LiteLLM key — mint via `./homelab.sh key add-agent <slug>
+         [--work-type coding|writing] [--capability read|control|admin]`
+         (Phase 13 delivered `key add-agent` 2026-11-26; proxy API; token →
+         `.env` as `LITELLM_KEY_<SLUG>`); per-key default model by work type
+         (`matrix-coder` for product/analyst, `matrix-copywriter` for
+         strategist/marketing); key lifecycle per security_todo.md **Phase 13**
+         (one `.env`, `key rotate`, alias-based kanban capability map,
+         `MEMORY_USER_KEYS` entry) — **done 2026-11-27**: 4 keys active in
+         LiteLLM (product/analyst → matrix-coder; strategist/marketing →
+         matrix-copywriter); `.env` wired; skill-runner + mcp_kanban in sync
+         per key-sync-check (20 pre-existing drifts in 8 other containers —
+         see build report)
+   - [x] Cron jobs in `scheduler/schedules.json` (hot-reload,
          America/Chicago): `weekly-agent-reviews` Fri 15:00, `monthly-org-review`
-         first Fri 15:00
-   - [ ] `pi-agent-<slug>` workspace under `data/ai-kanban/` (alongside
-         `pi-agent-chuck` / `pi-agent-dylan`)
-   - [ ] Charter names the agent's domain KB ownership (Q15) — the collection
-         creates on first write, nothing to pre-create
+         first Fri 15:00 — **done 2026-11-27**: both jobs registered (12
+         schedules total), hot-reload verified via the skill-runner API
+         (enabled, next_run_at set). **GAP**: the `weekly_agent_reviews` /
+         `monthly_org_review` skill modules are missing from `skills/` — the
+         jobs fail at first fire (2026-11-27 15:00 CT) until the modules land
+         (build report)
+   - [x] `pi-agent-<slug>` workspace under `data/ai-kanban/` (alongside
+         `pi-agent-chuck` / `pi-agent-dylan`) — **done 2026-11-27**:
+         `pi-agent-{product,analyst,strategist,marketing}` created
+   - [x] Charter names the agent's domain KB ownership (Q15) — the collection
+         creates on first write, nothing to pre-create — **done 2026-11-27**:
+         product charter completed as a DRAFT (all 7 sections; owns
+         `kb_bluebovine` — creates on first write); pending chuck's
+         review/approval
 7. First weekly review cycle — and the monthly clock starts.
 
-All framework design questions decided 2026-11-25 (Q13 deferred to step 4).
+All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
+revised 2026-11-27 — product first).
+
+## Step-6 build evidence (2026-11-27 — product-first stand-up)
+
+Commands + results recorded by the pi long-task run (worker sessions; no git
+commits in the homelab repo — everything above is uncommitted in the working
+tree). Full per-item evidence + gaps: `todo_agentic_framework_build-report-
+2026-11-27.md`.
+
+- **Slot gate (harness)** — dev clone `task/17`: `git log --oneline -3` →
+  `5266831` (test helper — `testCfg()` signature kept at base so the homelab
+  diff stays clear of the legacy key-fixture line) + `4a67b91` (test-
+  assertion placement) + `626eb61` (AGENT_CONCURRENT_TASKS slot, executor-
+  identity classification); pushed to GitHub (`git ls-remote origin
+  task/17` → `5266831…` on `refs/heads/task/17`). Live build context
+  (`mcp/servers/kanban`) file-diff clean vs the dev clone for
+  `src/config.ts`, `src/orchestrator.ts`, `src/mcp/server.ts`,
+  `src/orchestrator.test.ts`, `.env.example`. `docker compose -f
+  compose/compose.mcp.yml ps` → mcp_kanban healthy; `docker exec mcp_kanban
+  env` shows `AGENT_CONCURRENT_TASKS=1` + `AGENT_SLUGS=product,analyst,
+  strategist,marketing` (+ `KANBAN_`-prefixed copies). Full suite (`npm
+  test` = build + node --test, re-run after `5266831`): **237 tests —
+  236 pass, 0 fail, 1 skip**; agent-slot tests: "agent-owned cards count
+  against the agent slot (default 1); non-agent cards unaffected", "agent-
+  owned media-kind card counts against the agent slot, not the media slot",
+  "agent slot is env-tunable; owners outside AGENT_SLUGS stay board work".
+- **Agent keys** — `./homelab.sh key list` → product/analyst (matrix-coder)
+  + strategist/marketing (matrix-copywriter) all **active**, $0 spend,
+  unlimited budget; `.env` carries `LITELLM_KEY_{PRODUCT,ANALYST,STRATEGIST,
+  MARKETING}` + `MEMORY_USER_KEYS` + `KANBAN_MCP_KEY_CAPABILITIES` (values
+  deliberately not quoted). `scripts/key-sync-check.sh`: skill-runner +
+  mcp_kanban **OK** (recreated by `key add-agent`); 20 pre-existing drifts
+  across 8 other containers (caddy/cloudflared/data-hub/invest-hub/
+  plausible/report-hub/searxng — `MEMORY_USER_KEYS` template + GitHub token
+  drift) — caddy is off-limits per the task constraints; flagged for the
+  main session.
+- **Cron jobs** — `schedules.json` valid JSON, 12 schedules;
+  `weekly-agent-reviews` (`0 15 * * 5`, product-only targeting, non-stacking
+  note) + `monthly-org-review` (`0 15 1-7 * 5`, first-Friday gate caveat
+  noted). Skill-runner API `GET /api/schedule` → 12 loaded, both enabled,
+  `next_run_at` 2026-11-27T15:00 CT (hot-reload confirmed). **GAP**: the
+  referenced skill modules are missing from `skills/` — see build report.
+- **Workspaces** — `ls data/ai-kanban/` → `pi-agent-{product,analyst,
+  strategist,marketing}` (alongside `pi-agent-chuck` / `pi-agent-dylan`);
+  leftover `pi-agent-testagent` removed (TODO 1).
+- **Charter** — `docs/agents/product/charter.md`: all 7 sections present
+  (Identity, Objectives, Key results, Projects, Constraints, Autonomy tiers,
+  Quality metrics) as a **DRAFT** — "pending chuck's review" intact, not
+  approved.
+- **Secret scan** — `git diff | grep` for the 3-char LiteLLM key prefix
+  (s, k, hyphen): **0 lines — clean** (no added, removed, or context line
+  carries the pattern). Achieved by keeping `testCfg()`'s signature at base
+  in `mcp/servers/kanban/src/orchestrator.test.ts` (agent-slot knobs moved to
+  `setup()`, dev-clone `5266831`), so the pre-existing fake key-fixture line
+  (committed in HEAD, unchanged by this run) never enters a diff hunk. No
+  secrets in any file.

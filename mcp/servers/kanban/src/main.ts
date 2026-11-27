@@ -15,9 +15,11 @@ async function main(): Promise<void> {
   const cfg = await loadConfig();
   console.log(
     `[config] model=${cfg.model} db=${cfg.db.driver} ` +
-      `workspace=${cfg.workspace.dir} mediaSlots=${cfg.mediaConcurrentTasks} ` +
+      `workspace=${cfg.workspace.dir} agentSlots=${cfg.agentConcurrentTasks} ` +
+      `mediaSlots=${cfg.mediaConcurrentTasks} ` +
       `nonMediaSlots=${cfg.nonMediaConcurrentTasks} ` +
       `cleanupDays=${cfg.workspaceCleanupDays}` +
+      (cfg.agentSlugs.length > 0 ? ` agentSlugs=${cfg.agentSlugs.join(",")}` : "") +
       (Object.keys(cfg.userKeys).length > 0 ? ` userKeys=${Object.keys(cfg.userKeys).join(",")}` : ""),
   );
 

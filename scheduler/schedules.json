@@ -109,6 +109,47 @@
       "params": {},
       "enabled": true,
       "timezone": "America/Chicago"
+    },
+    {
+      "id": "weekly-agent-reviews",
+      "name": "Weekly Agent Reviews (active agents only — product for now)",
+      "cron": "0 15 * * 5",
+      "skill": "weekly_agent_reviews",
+      "params": {
+        "agents": ["product"],
+        "output": "docs/agents/<slug>/reviews/YYYY-WW.md",
+        "parts": [
+          "prior-week accomplishments with evidence/links",
+          "KR progress vs trajectory",
+          "work-mix check (bau vs OKR vs exec + spend line)",
+          "quality KR status",
+          "upcoming plan (proposed cards)",
+          "learnings + domain-KB line (facts added/corrected/forgotten + collision log)",
+          "chuck's feedback (appended after he responds)"
+        ],
+        "non_stacking": true,
+        "note": "Generate the 7-part weekly review for each ACTIVE agent (Q13: product is the only active agent; strategist/marketing/analyst are OFF — do not target them). Non-stacking rule: if the previous week's review doc has no part-7 feedback (or explicit ack) appended, skip this cycle for that agent until chuck interacts."
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
+    },
+    {
+      "id": "monthly-org-review",
+      "name": "Monthly Org Review (KR scoring + retro + goal adaptation + KB staleness pass)",
+      "cron": "0 15 1-7 * 5",
+      "skill": "monthly_org_review",
+      "params": {
+        "output": "docs/org/reviews/YYYY-MM.md",
+        "includes": [
+          "KR scoring 0-1",
+          "retro",
+          "goal adaptation (the only place org goals may change — rewrite at the cycle boundary, don't append)",
+          "domain-KB staleness pass (kb_forget superseded facts)"
+        ],
+        "note": "First Friday 15:00 CT (cron idiom 0 15 1-7 * 5 — CAVEAT: the skill-runner scheduler uses standard-cron OR semantics for day/day-of-week, so this fires every Friday; the skill must gate on first-Friday-of-month and skip otherwise). Runs after that week's agent reviews land so it can consume them. Record at docs/org/reviews/YYYY-MM.md; docs/org/goals.md updated in the same pass."
+      },
+      "enabled": true,
+      "timezone": "America/Chicago"
     }
   ]
 }

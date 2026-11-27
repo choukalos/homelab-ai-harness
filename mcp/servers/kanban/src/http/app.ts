@@ -113,6 +113,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     db: deps.db.driver,
     mediaConcurrentTasks: deps.cfg.mediaConcurrentTasks,
     nonMediaConcurrentTasks: deps.cfg.nonMediaConcurrentTasks,
+    agentConcurrentTasks: deps.cfg.agentConcurrentTasks,
+    /** Standing-agent slugs (cards owned by one of them count against the agent slot). */
+    agentSlugs: deps.cfg.agentSlugs,
     /** Owner names with a dedicated LLM key profile (USER_KEYS; Phase 2). */
     userKeys: Object.keys(deps.cfg.userKeys),
   }));

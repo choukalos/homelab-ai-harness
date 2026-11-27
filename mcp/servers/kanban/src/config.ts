@@ -49,6 +49,8 @@ export const DEFAULTS = {
   SUMMARY_THINKING: "medium",
   MEDIA_CONCURRENT_TASKS: "1",
   NON_MEDIA_CONCURRENT_TASKS: "2",
+  AGENT_CONCURRENT_TASKS: "1",
+  AGENT_SLUGS: "",
   BIND_ADDR: "0.0.0.0",
   PORT: "3000",
 } as const;
@@ -165,6 +167,17 @@ const envSchema = z
       .min(1, "NON_MEDIA_CONCURRENT_TASKS must be >= 1")
       .default(2)
       .describe("max non-media tasks running at once"),
+    AGENT_CONCURRENT_TASKS: z.coerce
+      .number()
+      .int("AGENT_CONCURRENT_TASKS must be an integer")
+      .min(1, "AGENT_CONCURRENT_TASKS must be >= 1")
+      .default(1)
+      .describe("max standing-agent tasks running at once (owner in AGENT_SLUGS)"),
+    AGENT_SLUGS: optionalNonEmpty().describe(
+      "comma-separated standing-agent slugs; cards owned by one of them count " +
+        "against AGENT_CONCURRENT_TASKS regardless of work kind (unset/empty = " +
+        "no agent slot in use)",
+    ),
     WORKSPACE_CLEANUP_DAYS: z.coerce
       .number()
       .int("WORKSPACE_CLEANUP_DAYS must be an integer")
@@ -229,6 +242,10 @@ export interface KanbanConfig {
   mediaConcurrentTasks: number;
   /** Max non-media tasks running at once. */
   nonMediaConcurrentTasks: number;
+  /** Max standing-agent tasks (owner in agentSlugs) running at once. */
+  agentConcurrentTasks: number;
+  /** Standing-agent slugs (cards owned by one of them count against the agent slot). */
+  agentSlugs: string[];
   /** Age (days) before workspace scratch dirs are swept (default 7). */
   workspaceCleanupDays: number;
   server: { bindAddr: string; port: number };
@@ -284,6 +301,8 @@ export function parseConfig(
     },
     mediaConcurrentTasks: v.MEDIA_CONCURRENT_TASKS,
     nonMediaConcurrentTasks: v.NON_MEDIA_CONCURRENT_TASKS,
+    agentConcurrentTasks: v.AGENT_CONCURRENT_TASKS,
+    agentSlugs: parseAgentSlugs(v.AGENT_SLUGS),
     workspaceCleanupDays: v.WORKSPACE_CLEANUP_DAYS,
     server: { bindAddr: v.BIND_ADDR, port: v.PORT },
   };
@@ -340,6 +359,25 @@ export function parseUserKeys(value: string | undefined): Record<string, string>
     }
     if (name in out) throw new ConfigError(`USER_KEYS has duplicate name ${JSON.stringify(name)}`);
     out[name] = key;
+  }
+  return out;
+}
+
+/**
+ * Parse AGENT_SLUGS (`slug1,slug2`, comma-separated). Slugs are trimmed, must
+ * be non-empty and unique. Malformed entries throw a ConfigError (fail fast,
+ * PLAN.md §1). Empty/unset → [] (no standing agents; the agent slot is inert).
+ */
+export function parseAgentSlugs(value: string | undefined): string[] {
+  if (!value || value.trim() === "") return [];
+  const out: string[] = [];
+  for (const part of value.split(",")) {
+    const slug = part.trim();
+    if (slug === "") continue;
+    if (out.includes(slug)) {
+      throw new ConfigError(`AGENT_SLUGS has duplicate slug ${JSON.stringify(slug)}`);
+    }
+    out.push(slug);
   }
   return out;
 }

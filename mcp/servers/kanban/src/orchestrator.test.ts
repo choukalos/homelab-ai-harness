@@ -46,6 +46,8 @@ function testCfg(
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     mediaConcurrentTasks: slots.media ?? 1,
     nonMediaConcurrentTasks: slots.nonMedia ?? 2,
+    agentConcurrentTasks: 1,
+    agentSlugs: [],
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -125,12 +127,15 @@ class FixedSummaryUpdater implements SummaryUpdaterLike {
   }
 }
 
-async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; tickMs?: number; noTimer?: boolean } = {}) {
+async function setup(opts: { mediaSlots?: number; nonMediaSlots?: number; agentSlots?: number; agentSlugs?: string[]; tickMs?: number; noTimer?: boolean } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "ai-kanban-orch-"));
   const cfg = testCfg(path.join(dir, "kanban.db"), {
     media: opts.mediaSlots,
     nonMedia: opts.nonMediaSlots,
   });
+  // Standing-agent slot knobs (KanbanConfig requires them; tests vary them here).
+  cfg.agentConcurrentTasks = opts.agentSlots ?? 1;
+  cfg.agentSlugs = opts.agentSlugs ?? [];
   const db = await initDb(cfg);
   const q = db.db as unknown as BetterSQLite3Database<any>;
   const services = createKanbanServices(db);
@@ -433,6 +438,92 @@ test("slots: mixed — 1 media + 2 non-media run, third non-media waits", async 
   await awaitRuns(runner, [c3.task.id]);
   assert.equal((await getTask(q, c3.task.id)).state, "running");
   runner.abort(c3.task.id);
+  await orch.settled();
+});
+
+test("slots: agent-owned cards count against the agent slot (default 1); non-agent cards unaffected", async () => {
+  const { q, services, runner, orch } = await setup({ agentSlugs: ["product"] });
+  const p = await services.createProject({ name: "Alpha" });
+  const a1 = await makeBacklogTask(q, services, p.id, "Agent one", [], "product");
+  const a2 = await makeBacklogTask(q, services, p.id, "Agent two", [], "product");
+  const c1 = await makeBacklogTask(q, services, p.id, "Board worker one");
+
+  // Hold all in-flight tasks so the caps stay taken deterministically.
+  runner.behavior.set(a1.task.id, "hang");
+  runner.behavior.set(a2.task.id, "hang");
+  runner.behavior.set(c1.task.id, "hang");
+
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [a1.task.id, c1.task.id]);
+  assert.equal((await getTask(q, a1.task.id)).state, "running", "agent slot 1/1 used");
+  assert.equal((await getTask(q, a2.task.id)).state, "backlog", "second agent card waits for the agent slot");
+  assert.equal((await getTask(q, c1.task.id)).state, "running", "non-agent board work runs alongside the agent run");
+
+  // Manual start of the second agent card is refused with the agent message.
+  await assert.rejects(
+    orch.startTask(a2.task.id),
+    (err: unknown) =>
+      err instanceof Error && /no free agent task slots \(1\/1 agent running\)/.test(err.message),
+  );
+
+  // Free the agent slot → the second agent card starts. (Abort the board
+  // worker too — settled() waits for every in-flight pipeline.)
+  runner.abort(a1.task.id);
+  runner.abort(c1.task.id);
+  await orch.settled();
+  assert.equal((await getTask(q, a1.task.id)).state, "done");
+  assert.equal((await getTask(q, c1.task.id)).state, "done", "board worker finished too");
+  await orch.tick();
+  await awaitRuns(runner, [a2.task.id]);
+  assert.equal((await getTask(q, a2.task.id)).state, "running");
+  runner.abort(a2.task.id);
+  await orch.settled();
+});
+
+test("slots: agent-owned media-kind card counts against the agent slot, not the media slot", async () => {
+  const { q, services, runner, orch } = await setup({ mediaSlots: 1, agentSlugs: ["product"] });
+  const p = await services.createProject({ name: "Alpha" });
+  // A media-kind card owned by a standing agent + a media-kind board card:
+  // different slots, so both run (no media/media contention).
+  const am = await makeBacklogTask(q, services, p.id, "Agent media", [], "product", "media");
+  const bm = await makeBacklogTask(q, services, p.id, "Board media", [], "", "media");
+
+  runner.behavior.set(am.task.id, "hang");
+  runner.behavior.set(bm.task.id, "hang");
+
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [am.task.id, bm.task.id]);
+  assert.equal((await getTask(q, am.task.id)).state, "running", "agent media card holds the agent slot");
+  assert.equal((await getTask(q, bm.task.id)).state, "running", "board media card holds the media slot");
+  runner.abort(am.task.id);
+  runner.abort(bm.task.id);
+  await orch.settled();
+});
+
+test("slots: agent slot is env-tunable; owners outside AGENT_SLUGS stay board work", async () => {
+  const { q, services, runner, orch } = await setup({ agentSlots: 2, agentSlugs: ["product", "analyst"] });
+  const p = await services.createProject({ name: "Alpha" });
+  const a1 = await makeBacklogTask(q, services, p.id, "Product card", [], "product");
+  const a2 = await makeBacklogTask(q, services, p.id, "Analyst card", [], "analyst");
+  const a3 = await makeBacklogTask(q, services, p.id, "Marketing card", [], "marketing");
+
+  for (const t of [a1, a2, a3]) runner.behavior.set(t.task.id, "hang");
+
+  await orch.start();
+  await orch.tick();
+  await awaitRuns(runner, [a1.task.id, a2.task.id, a3.task.id]);
+  assert.equal((await getTask(q, a1.task.id)).state, "running");
+  assert.equal((await getTask(q, a2.task.id)).state, "running", "agent slot 2/2 used");
+  assert.equal(
+    (await getTask(q, a3.task.id)).state,
+    "running",
+    "owner not in AGENT_SLUGS → counts as board (non-media) work",
+  );
+  runner.abort(a1.task.id);
+  runner.abort(a2.task.id);
+  runner.abort(a3.task.id);
   await orch.settled();
 });
 

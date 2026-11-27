@@ -63,6 +63,8 @@ function sqliteConfig(dbPath: string): KanbanConfig {
     thinking: { groom: "xhigh", task: "medium", qa: "xhigh", summary: "medium" },
     mediaConcurrentTasks: 1,
     nonMediaConcurrentTasks: 1,
+    agentConcurrentTasks: 1,
+    agentSlugs: [],
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
