@@ -56,12 +56,18 @@ import {
   type StageFileResult,
   type StageRefResult,
 } from "./files.js";
+import {
+  mergeTask as mergeTaskFn,
+  type MergeGit,
+  type MergeTaskResult,
+} from "./merge-task.js";
 import type { FetchLike } from "./reachability.js";
 
 export { ServiceError } from "./common.js";
 export type { Project, ProjectInput, ProjectSummary } from "./projects.js";
 export type { ProjectStatus } from "./projects.js";
 export type { StageFileResult, StageRefResult } from "./files.js";
+export type { MergeTaskResult } from "./merge-task.js";
 export type { Idea } from "./ideas.js";
 export type { BoardData, BoardCard, BoardStatus, BoardStatusFilters } from "./board.js";
 export type { IceboxMoveResult } from "./icebox.js";
@@ -131,6 +137,15 @@ export interface KanbanServices {
   retryDeploy(taskId: number): Promise<TaskRow>;
   /** needs_attention → backlog (resume from last_commit, QA reset; optional note). */
   restartTask(taskId: number, note?: string): Promise<TaskRow>;
+  /**
+   * Merge a done code task's pushed branch into the project's default branch
+   * with a merge commit (item 13, admin — the Q7 single-approval merge gate).
+   * Eligibility: state done + branch + kind code + project repo_url +
+   * default_branch. Idempotent (already-merged → {alreadyMerged: true},
+   * never a failure); a conflict is rejected (nothing partial, task stays
+   * done). Records a `merge` task_event. `by` = caller identity (audit).
+   */
+  mergeTask(taskId: number, note?: string, by?: string): Promise<MergeTaskResult>;
   /** Icebox → Backlog: create the 1:1 task per idea (owner inherited), flip idea to `moved`. */
   moveIceboxToBacklog(ideaIds: number[]): Promise<IceboxMoveResult>;
 
@@ -218,6 +233,10 @@ export interface KanbanServicesDeps {
   fetchImpl?: FetchLike;
   /** Standing agent slugs (AGENT_SLUGS) — validates per-slug switch writes. */
   agentSlugs?: readonly string[];
+  /** Git ops for merge_task (default: real git; tests inject a mock). */
+  mergeGit?: MergeGit;
+  /** Temp dir root for merge_task's fresh clones (default: os.tmpdir()). */
+  mergeTmpRoot?: string;
 }
 
 /** Bind the service functions to a db handle. */
@@ -287,6 +306,16 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     stopTask: (taskId) => orchestrator().then((o) => o.stopTask(taskId)),
     retryDeploy: (taskId) => orchestrator().then((o) => o.retryDeploy(taskId)),
     restartTask: (taskId, note) => orchestrator().then((o) => o.restartTask(taskId, note)),
+    // merge_task (item 13, admin): merge a done task's branch into the
+    // project's default branch (merge commit + push + `merge` task_event).
+    mergeTask: (taskId, note, by) =>
+      mergeTaskFn(db, {
+        taskId,
+        note,
+        by: by ?? "mcp",
+        git: deps.mergeGit,
+        tmpRoot: deps.mergeTmpRoot,
+      }),
     moveIceboxToBacklog: (ideaIds) => moveIceboxToBacklog(db, ideaIds),
 
     // Agents master switch (admin gate for all standing agents).
