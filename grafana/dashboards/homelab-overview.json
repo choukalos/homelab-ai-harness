@@ -10,7 +10,7 @@
  "timezone": "browser",
  "editable": true,
  "schemaVersion": 39,
- "version": 3,
+ "version": 4,
  "refresh": "10s",
  "time": {
   "from": "now-30d",
@@ -48,6 +48,391 @@
  },
  "panels": [
   {
+   "id": 48,
+   "title": "Security",
+   "type": "row",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 49,
+   "title": "Security Status",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short",
+     "mappings": [
+      {
+       "options": {
+        "0": "ALL CLEAR"
+       },
+       "type": "value"
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 0,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(((security_scan_anomalies_total > 0) or (security_surface_anomalies_total > 0) or (sum(security_probe_failures_total) > 0) or (time() - security_scan_last_run_timestamp_seconds > 93600) or (time() - security_surface_last_run_timestamp_seconds > 93600)) or vector(0))",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "id": 50,
+   "title": "Host Scan Anomalies (P10)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 4,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "security_scan_anomalies_total",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "title": "Surface Scan Anomalies (P11)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 8,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "security_surface_anomalies_total",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "title": "Host Scan Last Run",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 12
+       },
+       {
+        "color": "red",
+        "value": 26
+       }
+      ]
+     },
+     "unit": "h",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 12,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "(time() - security_scan_last_run_timestamp_seconds)/3600",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "title": "Surface Scan Last Run",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 12
+       },
+       {
+        "color": "red",
+        "value": 26
+       }
+      ]
+     },
+     "unit": "h",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 16,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "(time() - security_surface_last_run_timestamp_seconds)/3600",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
+   "id": 54,
+   "title": "Probe Failures (all domains)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 20,
+    "y": 1
+   },
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "sum(security_probe_failures_total)",
+     "legendFormat": "",
+     "refId": "A"
+    }
+   ]
+  },
+  {
    "id": 1,
    "title": "Servers",
    "type": "row",
@@ -55,7 +440,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 0
+    "y": 6
    },
    "collapsed": false
   },
@@ -67,7 +452,7 @@
     "h": 5,
     "w": 4,
     "x": 0,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -134,7 +519,7 @@
     "h": 5,
     "w": 4,
     "x": 4,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -196,7 +581,7 @@
     "h": 5,
     "w": 4,
     "x": 8,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -258,7 +643,7 @@
     "h": 5,
     "w": 4,
     "x": 12,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -441,7 +826,7 @@
     "h": 7,
     "w": 12,
     "x": 0,
-    "y": 6
+    "y": 12
    },
    "datasource": {
     "type": "prometheus",
@@ -482,7 +867,7 @@
     "h": 7,
     "w": 12,
     "x": 12,
-    "y": 6
+    "y": 12
    },
    "datasource": {
     "type": "prometheus",
@@ -523,7 +908,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 13
+    "y": 19
    },
    "collapsed": false
   },
@@ -535,7 +920,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 27
+    "y": 33
    },
    "collapsed": false
   },
@@ -547,7 +932,7 @@
     "h": 12,
     "w": 24,
     "x": 0,
-    "y": 28
+    "y": 34
    },
    "datasource": {
     "type": "prometheus",
@@ -636,7 +1021,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 40
+    "y": 46
    },
    "collapsed": false
   },
@@ -648,7 +1033,7 @@
     "h": 5,
     "w": 8,
     "x": 0,
-    "y": 41
+    "y": 47
    },
    "datasource": {
     "type": "prometheus",
@@ -700,7 +1085,7 @@
     "h": 5,
     "w": 8,
     "x": 8,
-    "y": 41
+    "y": 47
    },
    "datasource": {
     "type": "prometheus",
@@ -752,7 +1137,7 @@
     "h": 5,
     "w": 8,
     "x": 16,
-    "y": 41
+    "y": 47
    },
    "datasource": {
     "type": "prometheus",
@@ -804,7 +1189,7 @@
     "h": 7,
     "w": 24,
     "x": 0,
-    "y": 46
+    "y": 52
    },
    "datasource": {
     "type": "prometheus",
@@ -916,7 +1301,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 53
+    "y": 59
    },
    "collapsed": false
   },
@@ -928,7 +1313,7 @@
     "h": 7,
     "w": 4,
     "x": 0,
-    "y": 54
+    "y": 60
    },
    "datasource": {
     "type": "prometheus",
@@ -987,7 +1372,7 @@
     "h": 7,
     "w": 4,
     "x": 4,
-    "y": 54
+    "y": 60
    },
    "datasource": {
     "type": "prometheus",
@@ -1046,7 +1431,7 @@
     "h": 7,
     "w": 4,
     "x": 8,
-    "y": 54
+    "y": 60
    },
    "datasource": {
     "type": "prometheus",
@@ -1105,7 +1490,7 @@
     "h": 7,
     "w": 4,
     "x": 12,
-    "y": 54
+    "y": 60
    },
    "datasource": {
     "type": "prometheus",
@@ -1164,7 +1549,7 @@
     "h": 7,
     "w": 8,
     "x": 16,
-    "y": 54
+    "y": 60
    },
    "datasource": {
     "type": "prometheus",
@@ -1205,7 +1590,7 @@
     "h": 7,
     "w": 8,
     "x": 0,
-    "y": 61
+    "y": 67
    },
    "datasource": {
     "type": "prometheus",
@@ -1290,7 +1675,7 @@
     "h": 7,
     "w": 8,
     "x": 8,
-    "y": 61
+    "y": 67
    },
    "datasource": {
     "type": "prometheus",
@@ -1336,7 +1721,7 @@
     "h": 7,
     "w": 8,
     "x": 16,
-    "y": 61
+    "y": 67
    },
    "datasource": {
     "type": "prometheus",
@@ -1399,7 +1784,7 @@
     "h": 5,
     "w": 4,
     "x": 16,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -1463,7 +1848,7 @@
     "h": 5,
     "w": 4,
     "x": 20,
-    "y": 1
+    "y": 7
    },
    "datasource": {
     "type": "prometheus",
@@ -1617,7 +2002,7 @@
     "h": 5,
     "w": 6,
     "x": 0,
-    "y": 14
+    "y": 20
    },
    "datasource": {
     "type": "prometheus",
@@ -1680,7 +2065,7 @@
     "h": 5,
     "w": 6,
     "x": 6,
-    "y": 14
+    "y": 20
    },
    "datasource": {
     "type": "prometheus",
@@ -1742,7 +2127,7 @@
     "h": 5,
     "w": 6,
     "x": 12,
-    "y": 14
+    "y": 20
    },
    "datasource": {
     "type": "prometheus",
@@ -1806,7 +2191,7 @@
     "h": 5,
     "w": 6,
     "x": 18,
-    "y": 14
+    "y": 20
    },
    "datasource": {
     "type": "prometheus",
@@ -1868,7 +2253,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 19
+    "y": 25
    },
    "datasource": {
     "type": "prometheus",
