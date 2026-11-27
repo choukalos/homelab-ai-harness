@@ -38,6 +38,10 @@
 # =====================================================================
 set -euo pipefail
 
+# Byte-order collation for sort/grep (consistent with security-scan.sh,
+# which diffs this file).
+export LC_ALL=C
+
 DEFAULT_BASELINE="/home/chuck/data/security/baseline.txt"
 BASELINE_FILE="$DEFAULT_BASELINE"
 MODE="status"
