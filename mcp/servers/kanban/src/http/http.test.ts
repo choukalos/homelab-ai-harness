@@ -33,7 +33,7 @@ function testCfg(sqlitePath: string, userKeys: Record<string, string> = {}): Kan
     mediaConcurrentTasks: 1,
     nonMediaConcurrentTasks: 1,
     agentConcurrentTasks: 1,
-    agentSlugs: [],
+    agentSlugs: ["product", "analyst"],
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   };
@@ -143,6 +143,7 @@ async function makeApp(opts: {
     orchestrator,
     mediaStoreRoot,
     fetchImpl,
+    agentSlugs: cfg.agentSlugs,
   });
   const app = buildApp({
     cfg,
@@ -1448,22 +1449,48 @@ test("MCP: agents_switch is admin-only — control keys rejected, admin reads/se
   assert.equal(ctrlRpc.result.isError, true, "agents_switch rejected for the control key");
   assert.match(ctrlRpc.result.content[0].text, /not available for this key/);
 
-  // admin key: read (fail-safe default off), set on, set off — durable round-trip.
+  // admin key: read (fail-safe default off), set global on, per-slug off,
+  // unknown slug rejected, set off — durable round-trip.
   const read1 = parseRpc((await call("sk-admin-admin88", "agents_switch", {})).payload).result;
   assert.ok(!read1.isError, `read failed: ${JSON.stringify(read1)}`);
-  assert.deepEqual(JSON.parse(read1.content[0].text), { state: "off", setAt: null, setBy: null },
-    "missing row -> fail-safe OFF");
+  assert.deepEqual(JSON.parse(read1.content[0].text), {
+    global: { state: "off", setAt: null, setBy: null },
+    slugs: {},
+  }, "missing row -> fail-safe OFF, no slugs");
   const setOn = parseRpc((await call("sk-admin-admin88", "agents_switch", { state: "on" })).payload).result;
   assert.ok(!setOn.isError, `set on failed: ${JSON.stringify(setOn)}`);
-  assert.deepEqual(JSON.parse(setOn.content[0].text), {
-    state: "on",
-    setAt: JSON.parse(setOn.content[0].text).setAt,
-    setBy: "admin88",
-  }, "set attributes the caller");
+  const setOnDoc = JSON.parse(setOn.content[0].text);
+  assert.equal(setOnDoc.global.state, "on");
+  assert.equal(setOnDoc.global.setBy, "admin88", "set attributes the caller");
+  // Per-slug: product off (global stays on, preserved).
+  const setSlug = parseRpc(
+    (await call("sk-admin-admin88", "agents_switch", { slug: "product", state: "off" })).payload,
+  ).result;
+  assert.ok(!setSlug.isError, `set slug failed: ${JSON.stringify(setSlug)}`);
+  const slugDoc = JSON.parse(setSlug.content[0].text);
+  assert.equal(slugDoc.global.state, "on", "global preserved by a slug write");
+  assert.equal(slugDoc.slugs.product.state, "off");
+  assert.equal(slugDoc.slugs.product.setBy, "admin88");
+  // Unknown slug: rejected, no phantom entry.
+  const badSlug = parseRpc(
+    (await call("sk-admin-admin88", "agents_switch", { slug: "ghost", state: "off" })).payload,
+  ).result;
+  assert.equal(badSlug.isError, true, "unknown slug rejected");
+  assert.match(badSlug.content[0].text, /unknown agent slug 'ghost'/);
+  // Missing state with a slug: rejected.
+  const noState = parseRpc(
+    (await call("sk-admin-admin88", "agents_switch", { slug: "product" })).payload,
+  ).result;
+  assert.equal(noState.isError, true, "state required when slug is given");
+  // Read back: global on + product off, durable.
   const read2 = parseRpc((await call("sk-admin-admin88", "agents_switch", {})).payload).result;
-  assert.equal(JSON.parse(read2.content[0].text).state, "on", "state persists (durable kv)");
+  const read2Doc = JSON.parse(read2.content[0].text);
+  assert.equal(read2Doc.global.state, "on", "global persists (durable kv)");
+  assert.equal(read2Doc.slugs.product.state, "off", "slug entry persists (durable kv)");
   const setOff = parseRpc((await call("sk-admin-admin88", "agents_switch", { state: "off" })).payload).result;
-  assert.equal(JSON.parse(setOff.content[0].text).state, "off");
+  const setOffDoc = JSON.parse(setOff.content[0].text);
+  assert.equal(setOffDoc.global.state, "off");
+  assert.equal(setOffDoc.slugs.product.state, "off", "global write preserves slug entries");
   await app.close();
 });
 

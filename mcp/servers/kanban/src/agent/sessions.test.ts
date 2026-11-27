@@ -335,6 +335,30 @@ test("buildMissionBrief: project + task spec, deps, resolution, progress", () =>
   assert.ok(!fresh.includes("Accepted resolution plan"), "no resolution section");
 });
 
+test("buildMissionBrief: minimal spec ({goal} only) degrades, never crashes", () => {
+  // The spec is JSON from the DB — a task can carry a minimal spec with no
+  // steps/acceptance/kind (the 2026-11-27 live probe that crashed the
+  // session pipeline). The brief must degrade to placeholders, not throw.
+  const minimal = { goal: "Do the thing" } as unknown as IdeaSpec;
+  const brief = buildMissionBrief(taskCtx({ spec: minimal }), "/workspace/task-7");
+  assert.ok(brief.includes("Goal: Do the thing"), "the goal is present");
+  assert.ok(!brief.includes("Steps:"), "no steps section for a missing field");
+  assert.ok(!brief.includes("Acceptance criteria:"), "no acceptance section for a missing field");
+  assert.ok(brief.includes("Kind: (unspecified"), "kind degrades to a placeholder");
+  assert.ok(!brief.includes("undefined"), "no 'undefined' leaks into the brief");
+
+  // Even an empty object must not crash.
+  const empty = {} as unknown as IdeaSpec;
+  const emptyBrief = buildMissionBrief(taskCtx({ spec: empty }), "/workspace/task-7");
+  assert.ok(emptyBrief.includes("Goal: (not specified"), "missing goal degrades to a placeholder");
+
+  // Non-array steps/acceptance (corrupt JSON) must not crash either.
+  const corrupt = { goal: "x", steps: "nope", acceptance: 42 } as unknown as IdeaSpec;
+  const corruptBrief = buildMissionBrief(taskCtx({ spec: corrupt }), "/workspace/task-7");
+  assert.ok(corruptBrief.includes("Goal: x"));
+  assert.ok(!corruptBrief.includes("Steps:"), "non-array steps ignored");
+});
+
 test("formatTaskLogLine maps session events to log lines", () => {
   assert.equal(formatTaskLogLine({ type: "tool_execution_start", toolName: "bash", args: { command: "ls" } }),
     '[tool] bash: {"command":"ls"}');

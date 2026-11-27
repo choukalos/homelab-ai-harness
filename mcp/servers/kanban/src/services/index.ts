@@ -15,7 +15,8 @@ import { addIdea, editIdea, getIdea, listIdeas, type Idea } from "./ideas.js";
 import { moveIceboxToBacklog, type IceboxMoveResult } from "./icebox.js";
 import {
   getAgentsSwitch as readAgentsSwitch,
-  setAgentsSwitch as writeAgentsSwitch,
+  setAgentsSwitchGlobal as writeAgentsSwitch,
+  setAgentsSwitchSlug as writeAgentsSwitchSlug,
   type AgentsSwitchState,
   type AgentsSwitchView,
 } from "./agents-switch.js";
@@ -64,7 +65,12 @@ export type { StageFileResult, StageRefResult } from "./files.js";
 export type { Idea } from "./ideas.js";
 export type { BoardData, BoardCard, BoardStatus, BoardStatusFilters } from "./board.js";
 export type { IceboxMoveResult } from "./icebox.js";
-export type { AgentsSwitchState, AgentsSwitchView } from "./agents-switch.js";
+export type {
+  AgentsSwitchEntry,
+  AgentsSwitchState,
+  AgentsSwitchView,
+} from "./agents-switch.js";
+export { effectiveSwitchState } from "./agents-switch.js";
 export type { TaskDetail, TaskStatus, DependencyStatus } from "./tasks.js";
 export type {
   SpendReport,
@@ -129,10 +135,12 @@ export interface KanbanServices {
   moveIceboxToBacklog(ideaIds: number[]): Promise<IceboxMoveResult>;
 
   // -- Agents master switch (admin; kv `agents_master_switch`) ------------
-  /** Read the agents master switch (missing/malformed row -> off, fail-safe). */
+  /** Read the agents master switch (global + per-slug; missing/malformed row -> off, fail-safe). */
   getAgentsSwitch(): Promise<AgentsSwitchView>;
-  /** Set the agents master switch; `setBy` = caller identity (audit). */
+  /** Set the GLOBAL agents switch (preserves per-slug entries); `setBy` = caller identity (audit). */
   setAgentsSwitch(state: AgentsSwitchState, setBy: string): Promise<AgentsSwitchView>;
+  /** Set a PER-SLUG agents switch (slug must be in AGENT_SLUGS). */
+  setAgentsSwitchSlug(slug: string, state: AgentsSwitchState, setBy: string): Promise<AgentsSwitchView>;
 
   // -- Interactive grooming (MCP tools; the web UI is read-only) -----------
   /**
@@ -208,6 +216,8 @@ export interface KanbanServicesDeps {
   mediaStoreRoot?: string;
   /** HTTP client for URL reachability checks (default global fetch). */
   fetchImpl?: FetchLike;
+  /** Standing agent slugs (AGENT_SLUGS) — validates per-slug switch writes. */
+  agentSlugs?: readonly string[];
 }
 
 /** Bind the service functions to a db handle. */
@@ -282,6 +292,8 @@ export function createKanbanServices(handle: DbHandle, deps: KanbanServicesDeps 
     // Agents master switch (admin gate for all standing agents).
     getAgentsSwitch: () => readAgentsSwitch(db),
     setAgentsSwitch: (state, setBy) => writeAgentsSwitch(db, state, setBy),
+    setAgentsSwitchSlug: (slug, state, setBy) =>
+      writeAgentsSwitchSlug(db, slug, state, setBy, deps.agentSlugs ?? []),
 
     // Interactive grooming (thin wrappers over the GroomingManager state
     // machine — the web UI is read-only, MCP is the mutation path).
