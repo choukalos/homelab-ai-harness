@@ -19,7 +19,14 @@
   4 agent keys + workspaces (product active; strategist/marketing/analyst
   OFF), review crons registered + hot-reload verified, product charter
   completed as DRAFT (pending chuck's review) — evidence below +
-  `todo_agentic_framework_build-report-2026-11-27.md`)
+  `todo_agentic_framework_build-report-2026-11-27.md`; **review skill
+  modules BUILT 2026-11-27** (`weekly_agent_reviews` + `monthly_org_review`
+  — conservative-apply: the monthly goals rewrite + `kb_forget` are
+  PROPOSALS by default, applied only with explicit params) — bootstrap
+  weekly review `docs/agents/product/reviews/2026-W48.md`, both skills
+  registered in the Skill Hub, the first real cron fire (2026-11-27 15:00
+  CT) will now run the real skills — evidence below +
+  `todo_agentic_framework_review-skills-report-2026-11-27.md`)
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
@@ -697,10 +704,17 @@ New from the 2026-11-24 interview:
          America/Chicago): `weekly-agent-reviews` Fri 15:00, `monthly-org-review`
          first Fri 15:00 — **done 2026-11-27**: both jobs registered (12
          schedules total), hot-reload verified via the skill-runner API
-         (enabled, next_run_at set). **GAP**: the `weekly_agent_reviews` /
-         `monthly_org_review` skill modules are missing from `skills/` — the
-         jobs fail at first fire (2026-11-27 15:00 CT) until the modules land
-         (build report)
+         (enabled, next_run_at set). **GAP CLOSED 2026-11-27**: the
+         `weekly_agent_reviews` / `monthly_org_review` skill modules are
+         BUILT (`skills/weekly_agent_reviews/` + `skills/monthly_org_review/`
+         — 75/75 + 108/108 unit tests; real bootstrap weekly review
+         `docs/agents/product/reviews/2026-W48.md`; monthly gate-skip proof
+         + forced temp run; both registered in the Skill Hub) — the first
+         real cron fire (2026-11-27 15:00 CT) will now run the real skills;
+         conservative-apply design: the monthly goals rewrite + `kb_forget`
+         are PROPOSALS by default, applied only with explicit params
+         (`apply_goals` / `apply_kb_forget`, default false) —
+         `todo_agentic_framework_review-skills-report-2026-11-27.md`
    - [x] `pi-agent-<slug>` workspace under `data/ai-kanban/` (alongside
          `pi-agent-chuck` / `pi-agent-dylan`) — **done 2026-11-27**:
          `pi-agent-{product,analyst,strategist,marketing}` created
@@ -709,6 +723,23 @@ New from the 2026-11-24 interview:
          product charter completed (all 7 sections; owns `kb_bluebovine` —
          creates on first write) and **APPROVED by chuck 2026-11-27**
 7. First weekly review cycle — and the monthly clock starts.
+   **Review skill modules BUILT 2026-11-27** (`skills/weekly_agent_reviews/`
+   + `skills/monthly_org_review/`): the weekly skill generates the 7-part
+   review per active agent (non-stacking gate; bootstrap runs
+   unconditionally — the product bootstrap review
+   `docs/agents/product/reviews/2026-W48.md` exists, all 7 parts, honest
+   content: agent stood up 2026-11-27, 0 board cards, spend $0.00); the
+   monthly skill gates on first-Friday-of-month (2026-11-27 = 4th Friday →
+   real invocation skips, nothing written) and uses the **conservative-
+   apply design**: the goals rewrite + `kb_forget` are PROPOSALS by default
+   (sidecar `docs/org/goals.proposed-YYYY-MM.md` + candidates list),
+   applied only with explicit params `apply_goals` / `apply_kb_forget`
+   (default false — org-doc edits are single-approval per the Q7 table).
+   Both registered in the Skill Hub ("2 added, 0 failed"); the first real
+   cron fire — **today 2026-11-27 15:00 CT** (both jobs enabled,
+   `next_run_at` 2026-11-27T15:00 CT per the skill-runner API) — will now
+   run the real skills. Evidence:
+   `todo_agentic_framework_review-skills-report-2026-11-27.md`.
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
 revised 2026-11-27 — product first).
@@ -767,3 +798,76 @@ tree). Full per-item evidence + gaps: `todo_agentic_framework_build-report-
   `setup()`, dev-clone `5266831`), so the pre-existing fake key-fixture line
   (committed in HEAD, unchanged by this run) never enters a diff hunk. No
   secrets in any file.
+
+## Review skill modules build evidence (2026-11-27 — the step-6 GAP closeout)
+
+Commands + results recorded by the pi long-task run (worker sessions; no git
+commits in the homelab repo — everything above is uncommitted in the working
+tree). Full per-item evidence + the conservative-apply rationale:
+`todo_agentic_framework_review-skills-report-2026-11-27.md`.
+
+- **weekly_agent_reviews** — `skills/weekly_agent_reviews/` (skill.py +
+  skill.yml + test_skill.py; `max_runtime: 300`, channels [cli, pi, n8n]):
+  non-stacking gate (prior doc w/o part-7 feedback/ack → skip; no prior doc
+  → bootstrap), deterministic collection (board owner tasks + task_events
+  window + per-project done counts — bigint ms timestamps verified against
+  live rows; charter KR table; org goals; prior-review delta; domain KB via
+  the injected MCP client; agent-key spend via LiteLLM /spend/keys with
+  honest n/a fallback), ONE matrix-coder synthesis call → the 7-part review,
+  deterministic guardrails (evidence refs vs real board/file data, KRs
+  restricted to the charter, window dates, zero-activity → honest doc),
+  output `docs/agents/<slug>/reviews/YYYY-WW.md`. `python3
+  skills/weekly_agent_reviews/test_skill.py` → **PASS: 75 FAIL: 0**
+  (re-verified 2026-11-27 by TODO 4).
+- **monthly_org_review** — `skills/monthly_org_review/` (same layout):
+  first-Friday gate (the cron `0 15 1-7 * 5` fires every Friday under
+  standard-cron OR semantics — the skill owns the gate; any other Friday →
+  `{"status": "skipped", ...}` + nothing written), deterministic collection
+  (goals.md all KRs — 12 on the real file; the month's weekly reviews;
+  board done-in-month + agent cards; latest alignment report; domain KB),
+  ONE matrix-coder synthesis call → KR scoring 0-1 with real evidence refs /
+  retro / PROPOSED goals rewrite / kb_forget candidates, deterministic
+  guardrails (KRs restricted to goals.md, scores clamped [0,1], refs
+  validated, the rewrite must cover every domain). **Conservative-apply
+  design**: the review doc + the sidecar `docs/org/goals.proposed-YYYY-MM.md`
+  are written by default; `docs/org/goals.md` is NOT overwritten and
+  `kb_forget` is NOT called unless `params.apply_goals=true` /
+  `params.apply_kb_forget=true` (both default false — chuck applies after
+  reading the review; org-doc edits are single-approval per the Q7 table;
+  `kb_forget` is a deletion of durable state; even with `apply_goals=true`
+  the guardrails still veto a bad rewrite). `python3
+  skills/monthly_org_review/test_skill.py` → **PASS: 108 FAIL: 0**
+  (re-verified 2026-11-27 by TODO 4).
+- **Bootstrap weekly review (real run, real LLM)** —
+  `docs/agents/product/reviews/2026-W48.md`: all 7 parts; honest bootstrap
+  content (part 1 "Agent stood up 2026-11-27; no board cards assigned yet";
+  part 2 — 6 charter KRs: 5 "no movement", 1 "on track"; part 3 spend
+  "$0.00 (agent-key total — LiteLLM /spend/keys)"; part 4 both quality KRs
+  machine-checked "pass" at 0/0; part 6 KB line "n/a (no MCP client
+  injected — KB unavailable)" — the runner injects the client at cron time;
+  part 7 = the empty placeholder); mode `bootstrap + llm`; guardrails
+  applied (zero-activity line, duplicate KR dropped).
+- **Monthly gate proof** — real invocation on 2026-11-27 (4th Friday) →
+  `{"status": "skipped", "reason": "not the first Friday of November 2026
+  (today 2026-11-27 is the 4th Friday; first Friday was 2026-11-06)"}`;
+  nothing written (`docs/org/reviews/` absent, no sidecar, `git diff`
+  empty) — re-verified 2026-11-27 by TODO 4. Forced temp run
+  (`force_date=2026-11-06`, TEMP output path,
+  `MONTHLY_ORG_REVIEW_LLM_TIMEOUT=200`) → `generated (forced + llm)`: 12 KRs
+  scored with real evidence refs (task:15, the alignment report, the
+  2026-W48 product review), sidecar=proposed, 0 guardrail notes; temp
+  artifacts deleted after capture.
+- **Skill Hub registration** — `./scripts/skill-hub-register.sh` →
+  "2 added, 54 already registered, 0 failed" (`weekly-agent-reviews` +
+  `monthly-org-review` — hyphenated wrappers in `agents-skills/`,
+  descriptions copied from the skill.yml manifests so the
+  `tests/test_skills_yaml.py` drift check passes, 7/7 OK); `--list` shows
+  both (56 total) — re-verified 2026-11-27 by TODO 4.
+- **Secret scan** — `git diff` + all untracked files → **0 matches** for
+  `sk-[A-Za-z0-9]{8,}`; no .env secret values or hardcoded credentials in
+  any new file (env-only).
+- **First real cron fire** — both jobs enabled, `next_run_at`
+  2026-11-27T15:00:00-06:00 (skill-runner API, re-verified 2026-11-27) —
+  the fire will now run the real skills (the weekly job regenerates the
+  current week's doc — the gate finds no *prior-week* doc, so it runs
+  unconditionally with the injected MCP client).

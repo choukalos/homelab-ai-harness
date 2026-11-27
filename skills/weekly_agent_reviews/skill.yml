@@ -1,0 +1,44 @@
+name: weekly_agent_reviews
+version: "1.0"
+description: "Weekly 7-part review for each ACTIVE agent (product only — Q13; strategist/marketing/analyst are OFF and never targeted): prior-week accomplishments with real evidence refs, KR progress vs trajectory, work-mix check (bau vs OKR vs exec + agent-key spend line), machine-checked quality KR status, upcoming plan (suggestions only), learnings + domain-KB line, and a placeholder part 7 for chuck's feedback. Non-stacking gate: skips an agent when the most recent prior review's part 7 has no feedback/ack; bootstrap (no prior doc) runs unconditionally. One LLM synthesis call (matrix-coder) with deterministic guardrails (evidence refs must match real board card ids / commit shas / file paths; KRs restricted to the charter; window dates enforced; deterministic skeleton on LLM failure). Writes docs/agents/<slug>/reviews/YYYY-WW.md."
+inputs:
+  - name: agents
+    type: list
+    required: false
+    default: ["product"]
+    description: "Agent slugs to review (active agents only — strategist/marketing/analyst are OFF and are skipped even if listed)."
+  - name: output
+    type: string
+    required: false
+    default: "docs/agents/<slug>/reviews/YYYY-WW.md"
+    description: "Output path template (repo-relative); <slug> and YYYY-WW (ISO week of the run date) are substituted."
+  - name: parts
+    type: list
+    required: false
+    description: "The 7-part parts list (informational — the doc format is canonical so the non-stacking gate can read part 7)."
+  - name: non_stacking
+    type: boolean
+    required: false
+    default: true
+    description: "Non-stacking rule: if the most recent prior YYYY-WW.md has no part-7 feedback (or explicit ack), skip this agent this cycle until chuck interacts. No prior doc (first cycle) -> run unconditionally (bootstrap)."
+config:
+  # Inputs (all best-effort; the run works with any subset present).
+  repo_root: /home/chuck/homelab        # rw for docs/agents/<slug>/reviews/ only
+  window_days: 7                        # ISO-week window (last 7 days)
+  model_alias: matrix-coder             # the ONE synthesis call
+  # Board (MySQL ai_kanban — KANBAN_DB_* env; timestamps are bigint ms).
+  kanban_db_host: thor.local
+  kanban_db_port: 3306
+  # Spend: LiteLLM admin /spend/keys (LITELLM_MASTER_KEY), matched by
+  # sha256(LITELLM_KEY_<SLUG>); n/a when unavailable — never fabricated.
+  # Domain KB: mcp_knowledge (kb_search / kb_list_documents) for the
+  # agent's owned collection (product -> kb_bluebovine; Q15).
+  max_tasks: 50
+  max_events: 200
+  max_kb_hits: 10
+tools:
+  - mcp_knowledge
+model_alias: matrix-coder
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 300  # seconds (board + charter/goals + KB + spend collection, one LLM call, doc write)

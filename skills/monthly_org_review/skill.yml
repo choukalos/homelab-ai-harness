@@ -1,0 +1,53 @@
+name: monthly_org_review
+version: "1.0"
+description: "Monthly org review, run only on the FIRST Friday of the month (the cron fires every Friday — the skill owns the gate and skips otherwise with {\"status\": \"skipped\", \"reason\": \"not the first Friday of <month>\"}). One LLM synthesis call (matrix-coder) produces: (1) KR scoring 0-1 per org KR with real evidence refs, (2) retro (worked / didn't / friction), (3) goal adaptation — a full PROPOSED rewrite of docs/org/goals.md for the next cycle (rewrite at the cycle boundary, don't append), (4) domain-KB staleness pass — superseded/stale KB facts as kb_forget CANDIDATES with evidence. Conservative application (safety): writes docs/org/reviews/YYYY-MM.md + the sidecar docs/org/goals.proposed-YYYY-MM.md; does NOT overwrite docs/org/goals.md and does NOT call kb_forget UNLESS params.apply_goals=true / params.apply_kb_forget=true (both default false — chuck applies after reading the review; org-doc edits are single-approval per the Q7 autonomy table). Deterministic guardrails: KRs restricted to goals.md, scores clamped to [0,1], evidence refs must match real board card ids / commit shas / file paths / weekly-review paths, the proposed rewrite must cover every domain, kb_forget is two-step (confirm + ids) with at most one point per candidate."
+inputs:
+  - name: output
+    type: string
+    required: false
+    default: "docs/org/reviews/YYYY-MM.md"
+    description: "Review doc path template (repo-relative); YYYY-MM (calendar month of the run date) is substituted."
+  - name: goals_sidecar
+    type: string
+    required: false
+    default: "docs/org/goals.proposed-YYYY-MM.md"
+    description: "Sidecar path template for the PROPOSED goals rewrite (always written; never touches docs/org/goals.md by itself)."
+  - name: apply_goals
+    type: boolean
+    required: false
+    default: false
+    description: "CONSERVATIVE-APPLY: overwrite docs/org/goals.md with the guardrail-valid proposed rewrite. Default false — chuck applies after reading the review (single-approval per the Q7 autonomy table)."
+  - name: apply_kb_forget
+    type: boolean
+    required: false
+    default: false
+    description: "CONSERVATIVE-APPLY: call the two-step kb_forget (confirm + ids, at most one point per candidate) for the stale-fact candidates. Default false — candidates are listed in the review only."
+  - name: force_date
+    type: string
+    required: false
+    description: "Ops/test override: 'YYYY-MM-DD' — run the review for that date instead of today (the first-Friday gate still applies to the forced date — it must be the first Friday of its month, e.g. force_date=2026-12-04 from a 4th-Friday run day). The cron never sets it; forced runs pair it with a TEMP output path."
+  - name: includes
+    type: list
+    required: false
+    description: "Informational — the 4-part includes list from the schedule (KR scoring 0-1 / retro / goal adaptation / domain-KB staleness pass); the doc format is canonical."
+config:
+  # Inputs (all best-effort; the run works with any subset present).
+  repo_root: /home/chuck/homelab        # rw for docs/org/reviews/ + the goals sidecar only
+  window: calendar-month                # the month of the run date (UTC)
+  model_alias: matrix-coder             # the ONE synthesis call
+  # Board (MySQL ai_kanban — KANBAN_DB_* env; timestamps are bigint ms).
+  kanban_db_host: thor.local
+  kanban_db_port: 3306
+  # Domain KB: mcp_knowledge (kb_list_documents all-KB + kb_search per
+  # goals domain; kb_forget ONLY with apply_kb_forget=true, two-step).
+  # Alignment report: docs/org/alignment/<date>-*.md (latest).
+  max_weekly_reviews: 12
+  max_board_cards: 100
+  max_kb_hits_per_domain: 10
+  max_kb_candidates: 10
+tools:
+  - mcp_knowledge
+model_alias: matrix-coder
+approval_gates: []
+channels: [cli, pi, n8n]
+max_runtime: 300  # seconds (gate, collection, one LLM call, doc + sidecar write, optional applies)
