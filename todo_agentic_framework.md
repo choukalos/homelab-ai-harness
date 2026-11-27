@@ -43,7 +43,15 @@
   strategist strategy during the E2E; task/20 + task/22 + task/23 merged
   via merge_task 2026-11-27 — market analysis, content inventory, KPI
   digest); QA now a fresh-context requirements-only reviewer (worker's
-  completion summary removed from the QA prompt). Goal model + S13 acceptance
+  completion summary removed from the QA prompt). **Monthly org review
+  updated 2026-11-27 (item 19)**: consumes the board's `byModel` usage
+  data (LLM payload + deterministic doc footer), and a window-semantics
+  bug found in the E2E was fixed before the 2026-12-04 first live fire
+  (the review now covers the JUST-ENDED month per the org's documented
+  design — a Dec 4 run reviews November and proposes the 2026-12 cycle;
+  the first full-cycle review is Jan 8 for December); LLM timeout
+  120s → 300s (live synthesis took 180s); live E2E green (12 KRs scored
+  with real evidence refs + real byModel footer). Goal model + S13 acceptance
   2026-11-24; decisions 2026-11-25; Q15 2026-11-26; **WS3 step-6 build layer
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
@@ -1009,9 +1017,10 @@ New from the 2026-11-24 interview:
      level report shapes) — tokens in/out + cost per model.
    - `task_status`: usage total + by role + **by model**.
    - No schema change (the column exists); the existing `task_id` index
-     covers the per-task aggregates. The weekly/monthly review skills can
-     read it from the board going forward (skill-side consumption is a
-     follow-up, not part of this build).
+     covers the per-task aggregates. Skill-side consumption: the monthly
+     org review consumes `byModel` from 2026-11-27 (item 19); the weekly
+     review skill still reads per-key totals from LiteLLM `/spend/keys`
+     (per-key, not per-model — fine for its work-mix check).
    - **BUILT + LIVE 2026-11-27** (dev clone `task/19`, `c47f87b`, pushed;
      live in the rebuilt `mcp_kanban`): `byModel` (tokensIn/tokensOut/
      cost) at every `byRole` level in reports + task_status + GUI report;
@@ -1084,10 +1093,58 @@ New from the 2026-11-24 interview:
     inverse): agents interact via the kanban board + files, **not with
     each other** (depth 1). No delegation machinery will be built; a
     future revisit would be a new decision, not a default.
+19. **Monthly org review: per-model usage consumption + window-semantics
+    fix (2026-11-27, DONE)** — chuck: "update the monthly review skills to
+    use the board's new byModel data." Three changes to
+    `skills/monthly_org_review` (skill is hot via bind mount — live
+    immediately, no rebuild):
+   - **byModel consumption (item 16's follow-up)**: `_collect_board` now
+     aggregates the board's `usage` table per model for the review window
+     (`SELECT model, COUNT(*), SUM(tokens_in/out), SUM(cost) FROM `usage`
+     WHERE ts in window GROUP BY model ORDER BY SUM(cost) DESC` —
+     backticks: `usage` is a reserved word; the ORDER BY repeats the
+     aggregate: the DB runs `ONLY_FULL_GROUP_BY` and a bare `ORDER BY
+     cost` resolves to the table column). The LLM payload carries
+     `board.usage_by_model` (evidence for cost KRs + the retro — which
+     model did the work, at what cost), and the review doc renders a
+     deterministic footer line (`_usage by model (month): matrix-coder —
+     2,971 calls, 194,728,240 tokens, $154.42 (total $154.42)_` in the
+     live E2E). The usage query is isolated in its own try: a failure
+     degrades to an empty list, never the whole board evidence.
+   - **Window-semantics bug (found in the E2E, fixed BEFORE the first
+     live fire on 2026-12-04)**: the skill reviewed the RUN month's
+     calendar window — a Dec 4 run would have scored every monthly KR on
+     ~4 days of data, and a cycle would never be reviewed as a whole.
+     The org's documented design (docs/org/goals.md: "Cycle 2026-12 ... 
+     first review: first Friday of January 2027") is the JUST-ENDED
+     month: a run on the first Friday of month M reviews month M-1 (full
+     data) and proposes the goals rewrite for cycle M. Fixed in `run()`
+     (window = previous month; the review doc is named after the reviewed
+     month; `next_cycle` = the run month). Docs updated to match
+     (skill.yml `window:` line + output description, SKILL.md, module
+     docstring). First-run consequence (honest, not a bug): the Dec 4
+     run reviews November (pre-cycle — org stood up Nov 24-27) and
+     proposes a 2026-12 cycle refresh; the first full-cycle review is
+     Jan 8 (the December cycle).
+   - **LLM timeout 120s → 300s default** (env-overridable as before): the
+     live E2E synthesis took 180s (12 KRs + full goals rewrite + KB pass
+     in one call) — the old default would have timed out the first live
+     fire and degraded to the deterministic skeleton.
+   - **Verified live (E2E in the skill-runner container, scratch repo
+     root, real DB + real LLM, `force_date=2026-12-04`)**: month 2026-11,
+     window 2026-11-01 → 2026-11-30, mode `llm`, 12 KRs scored with real
+     evidence refs (task:16, task:20-23), board footer (20 done cards in
+     November: Homelab 5 / Media 9 / TipCalc 6), usage footer (real
+     byModel data), sidecar `goals.proposed-2026-11.md` = full 2026-12
+     cycle rewrite (NOT applied — conservative-apply), goals.md
+     untouched. Test suite 119/119 (was 108: +10 new checks — byModel
+     collection/payload/footer/degradation + window-semantics boundary
+     expectations).
 
 All framework design questions decided 2026-11-25 (Q13 decided 2026-11-26,
 revised 2026-11-27 — product first; all 4 agents activated 2026-11-27;
-board improvements items 13–18 decided 2026-11-27).
+board improvements items 13–18 decided 2026-11-27; item 19 — monthly
+review byModel consumption + window fix — done 2026-11-27).
 
 ## Step-6 build evidence (2026-11-27 — product-first stand-up)
 

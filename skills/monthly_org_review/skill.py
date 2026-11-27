@@ -18,6 +18,12 @@ Purpose:
   ONLY scheduled place org goals may change (docs/org/goals.md cadence
   note, 2026-11-24):
 
+  WINDOW: the review covers the JUST-ENDED month — a run on the first
+  Friday of month M reviews month M-1 (full data) and proposes the goals
+  rewrite for cycle M (the org's documented design: docs/org/goals.md
+  "Cycle 2026-12 ... first review: first Friday of January 2027"). The
+  review doc is named after the reviewed month (M-1).
+
     1. KR scoring 0-1 per org KR (WITH evidence refs — only real refs)
     2. Retro (what worked / what didn't / process friction)
     3. Goal adaptation — a full PROPOSED rewrite of docs/org/goals.md
@@ -108,7 +114,10 @@ logger = logging.getLogger("skill.monthly_org_review")
 REPO_ROOT = Path(os.environ.get("MONTHLY_ORG_REVIEW_REPO_ROOT", "/home/chuck/homelab"))
 MODEL_ALIAS = os.environ.get("MONTHLY_ORG_REVIEW_MODEL_ALIAS", "matrix-coder")
 LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://litellm-proxy:4000").rstrip("/")
-LLM_TIMEOUT = int(os.environ.get("MONTHLY_ORG_REVIEW_LLM_TIMEOUT", "120"))
+# 300s default (not 120s like the weekly skill): the monthly synthesis is
+# materially heavier — 12+ KRs scored with evidence, a FULL goals.md
+# rewrite (up to ~20k chars), and the KB staleness pass in one call.
+LLM_TIMEOUT = int(os.environ.get("MONTHLY_ORG_REVIEW_LLM_TIMEOUT", "300"))
 
 DEFAULT_OUTPUT = "docs/org/reviews/YYYY-MM.md"
 DEFAULT_SIDECAR = "docs/org/goals.proposed-YYYY-MM.md"
@@ -118,6 +127,7 @@ MAX_REVIEW_CHARS = 2500
 MAX_ALIGNMENT_CHARS = 4000
 MAX_BOARD_CARDS = 100
 MAX_DONE_IN_MONTH = 50
+MAX_USAGE_MODELS = 20
 MAX_KB_HITS_PER_DOMAIN = 10
 MAX_PAYLOAD_CHARS = 20000
 MAX_PROPOSED_GOALS_CHARS = 20000
@@ -143,7 +153,7 @@ Write the monthly org review for {month} (window {mstart} to {mend}, calendar mo
 INPUTS (the ONLY facts you may use — never invent anything else):
 - ORG GOALS: docs/org/goals.md — every domain, objective, and KR (definition / source / target / cadence)
 - WEEKLY REVIEWS: the month's agent weekly reviews (7-part docs; part 7 may be an empty placeholder)
-- BOARD: done cards in the month (per project) + agent-owned cards (owner = executor identity)
+- BOARD: done cards in the month (per project) + agent-owned cards (owner = executor identity) + per-model usage (calls / tokens in+out / cost per model for the month)
 - ALIGNMENT: the latest OKR alignment report (may be null)
 - KB: domain-KB collections + current facts (may be empty or not exist yet)
 
@@ -158,7 +168,7 @@ Return STRICT JSON (no markdown fences, no commentary) with exactly these keys:
 Rules (violating items are dropped by deterministic guardrails):
 - kr_scores: cover EVERY KR in the ORG GOALS input (exact domain / objective / num / name). score is a NUMBER 0.0-1.0 (0.0 = no evidence of progress toward the target; 1.0 = target met with evidence). Honest low scores are the norm early in a cycle — do not inflate.
 - Evidence refs use ONLY these forms and ONLY real ids/paths from the INPUTS: task:<board card id from the BOARD input>, commit:<commit sha from the BOARD input>, file:<repo-relative path that exists>, review:<agent>/<ISO week> for a weekly review in the WEEKLY REVIEWS input. Never invent refs.
-- retro: grounded in the inputs only (weekly reviews + board + alignment); one line per item; an empty list is valid.
+- retro: grounded in the inputs only (weekly reviews + board, including per-model usage + alignment); one line per item; an empty list is valid.
 - goal_adaptation.proposed_goals_md: a FULL rewrite of docs/org/goals.md for the next cycle (next calendar month) — same document structure ('# Org Goals' header, a '## Cycle <YYYY-MM>' header, '### <domain>' sections, '**O# — ...**' objectives, 6-column KR tables with # / KR / Definition / Source / Target / Cadence). Rewrite at the cycle boundary — do NOT append. Keep every domain from the current goals.md; keep a mandatory quality KR on every objective; keep 'proxy' marks where data sources are not wired; carry forward KRs that are still open (update target/cadence as justified by the inputs).
 - kb_staleness: only facts genuinely superseded/stale per the inputs (newer weekly reviews or board state contradicting them); each candidate needs at least one evidence ref. An empty list is valid.
 - If an input is empty, write the honest empty state. Do not pad."""
@@ -433,14 +443,17 @@ def _db_conn():
 
 def _collect_board(mstart_ms: int, mend_ms: int) -> dict:
     """Board state for the month: done cards (state_changed_at in month),
-    per-project done counts, agent-owned cards (owner = executor identity).
-    Degrades to an empty (available=False) dict on any failure."""
+    per-project done counts, agent-owned cards (owner = executor identity),
+    and per-model usage (calls/tokens/cost per model in the month window —
+    the board's byModel data, item 16). Degrades to an empty
+    (available=False) dict on any failure."""
     out: dict[str, Any] = {
         "available": False,
         "cards": [],
         "done_in_month": [],
         "done_by_project": {},
         "agent_owned": [],
+        "usage_by_model": [],
     }
     try:
         conn = _db_conn()
@@ -502,6 +515,39 @@ def _collect_board(mstart_ms: int, mend_ms: int) -> dict:
             {"project": k[0], "owner": k[1], "state": k[2], "count": v}
             for k, v in sorted(grouped.items())
         ]
+        # Per-model usage for the month window (the board's byModel data):
+        # calls/tokens/cost per model — evidence for cost KRs and the retro
+        # (which model did the work, at what cost). `usage` is a reserved
+        # SQL word — backticks required. Isolated in its own try: a usage
+        # failure degrades to an empty list, never the whole board evidence.
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT model, COUNT(*),
+                           COALESCE(SUM(tokens_in), 0),
+                           COALESCE(SUM(tokens_out), 0),
+                           COALESCE(SUM(cost), 0)
+                    FROM `usage`
+                    WHERE ts >= %s AND ts < %s
+                    GROUP BY model
+                    ORDER BY SUM(cost) DESC
+                    LIMIT %s
+                    """,
+                    (mstart_ms, mend_ms, MAX_USAGE_MODELS),
+                )
+                for r in cur.fetchall():
+                    out["usage_by_model"].append(
+                        {
+                            "model": str(r[0]),
+                            "calls": int(r[1] or 0),
+                            "tokens_in": int(r[2] or 0),
+                            "tokens_out": int(r[3] or 0),
+                            "cost": float(r[4] or 0.0),
+                        }
+                    )
+        except Exception as exc:  # noqa: BLE001 - degrade, keep the rest
+            logger.warning("monthly_org_review: usage-by-model query failed: %s", exc)
         out["available"] = True
     except Exception as exc:  # noqa: BLE001
         logger.warning("monthly_org_review: board query failed: %s", exc)
@@ -709,6 +755,7 @@ def _analysis_payload(
             "done_in_month": board["done_in_month"],
             "done_by_project": board["done_by_project"],
             "agent_owned": board["agent_owned"],
+            "usage_by_model": board.get("usage_by_model") or [],
         },
         "alignment": alignment,
         "kb": kb,
@@ -1157,6 +1204,17 @@ def _render_doc(
             f"({', '.join(f'{k}: {v}' for k, v in sorted(done.items())) or 'none'}); "
             f"{len(board.get('cards') or [])} board card(s) collected for evidence validation_",
         ]
+        usage = board.get("usage_by_model") or []
+        if usage:
+            parts = ", ".join(
+                f"{u['model']} — {u['calls']:,} calls, "
+                f"{u['tokens_in'] + u['tokens_out']:,} tokens, ${u['cost']:.2f}"
+                for u in usage
+            )
+            total_cost = sum(u["cost"] for u in usage)
+            lines.append(f"_usage by model (month): {parts} (total ${total_cost:.2f})_")
+        else:
+            lines.append("_usage by model (month): no usage rows in window_")
     else:
         lines += ["", "_board: unavailable this run — no board evidence could be verified_"]
 
@@ -1293,7 +1351,18 @@ def run(params: dict, job: Any, client: Any = None) -> dict:
         ref = _now()
     gate_run, gate_reason = _gate(ref)
 
-    month_label = f"{ref.year:04d}-{ref.month:02d}"
+    # The review is of the JUST-ENDED month (the org cycle that just closed):
+    # a run on the first Friday of month M reviews month M-1 with full data
+    # and proposes the goals rewrite for cycle M. This matches the org's
+    # documented design (docs/org/goals.md: "Cycle 2026-12 ... first review:
+    # first Friday of January 2027") — a current-month window would score
+    # every monthly KR on ~4 days of data and a cycle would never be
+    # reviewed as a whole. The review doc is named after the reviewed month.
+    if ref.month == 1:
+        wyear, wmonth = ref.year - 1, 12
+    else:
+        wyear, wmonth = ref.year, ref.month - 1
+    month_label = f"{wyear:04d}-{wmonth:02d}"
     if job is not None and hasattr(job, "add_log"):
         job.add_log(f"monthly_org_review: month={month_label} gate: {gate_reason}")
 
@@ -1311,13 +1380,13 @@ def run(params: dict, job: Any, client: Any = None) -> dict:
             "goals_sidecar": None,
         }
 
-    mstart, mend = _month_bounds(ref)
+    mstart, mend = _month_bounds(datetime(wyear, wmonth, 1, tzinfo=timezone.utc))
     mstart_ms = int(mstart.timestamp() * 1000)
     mend_ms = int(mend.timestamp() * 1000)
 
     # --- deterministic collection (all best-effort) ---
     goals = _parse_org_goals()
-    reviews = _collect_weekly_reviews(ref.year, ref.month)
+    reviews = _collect_weekly_reviews(wyear, wmonth)
     board = _collect_board(mstart_ms, mend_ms)
     alignment = _latest_alignment_report()
     kb = _collect_kb(client, list(goals["domains"].keys()), mstart, mend)

@@ -127,15 +127,18 @@ class FakeBoardCursor:
     def fetchall(self):
         if "state = 'done'" in self.conn.last_sql:
             return self.conn.done_rows
+        if "FROM `usage`" in self.conn.last_sql:
+            return self.conn.usage_rows
         return self.conn.agent_rows
 
 
 class FakeBoardConn:
-    """Routes canned rows by SQL shape (done-in-month / agent-owned)."""
+    """Routes canned rows by SQL shape (done-in-month / agent-owned / usage)."""
 
-    def __init__(self, done_rows=(), agent_rows=()):
+    def __init__(self, done_rows=(), agent_rows=(), usage_rows=()):
         self.done_rows = list(done_rows)
         self.agent_rows = list(agent_rows)
+        self.usage_rows = list(usage_rows)
         self.last_sql = ""
         self.last_args = None
 
@@ -258,7 +261,7 @@ PROPOSED_GOALS = (
     "**O2 — The product is defined and validated.**\n\n"
     "| # | KR | Definition | Source | Target | Cadence |\n"
     "|---|----|------------|--------|--------|---------|\n"
-    "| 1 | Market analysis | Complete market analysis | docs/roles/pm | 1, by 2026-01-15 | this cycle |\n"
+    "| 1 | Market analysis | Complete market analysis | docs/roles/pm | 1, by 2026-12-15 | this cycle |\n"
 )
 
 GOOD_LLM = {
@@ -292,8 +295,8 @@ GOOD_LLM = {
         "friction": ["Plausible not wired — traffic KRs stay proxy"],
     },
     "goal_adaptation": {
-        "rationale": "Cycle 2026-12 closes; carry the open Bluebovine O2 KRs into 2026-01.",
-        "changes": ["carry Market analysis into 2026-01", "keep Homelab O1 targets"],
+        "rationale": "Nov window (pre-cycle) closes; the Dec cycle's KRs have early evidence — carry the open KRs into 2026-12.",
+        "changes": ["carry Market analysis into 2026-12", "keep Homelab O1 targets"],
         "proposed_goals_md": PROPOSED_GOALS,
     },
     "kb_staleness": [
@@ -329,18 +332,19 @@ def write_fixtures(tmp: Path) -> None:
 
 
 def make_done_rows() -> list:
-    """Two done cards whose state_changed_at falls in Dec 2026."""
+    """Two done cards whose state_changed_at falls in Nov 2026 (the review
+    window for the standard 2026-12-04 forced run — the just-ended month)."""
     return [
         (
             15,
             "chuck",
-            int(datetime(2026, 12, 3, 12, 0, tzinfo=timezone.utc).timestamp() * 1000),
+            int(datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc).timestamp() * 1000),
             "Homelab",
         ),
         (
             16,
             "product",
-            int(datetime(2026, 12, 10, 9, 30, tzinfo=timezone.utc).timestamp() * 1000),
+            int(datetime(2026, 11, 10, 9, 30, tzinfo=timezone.utc).timestamp() * 1000),
             "Bluebovine",
         ),
     ]
@@ -350,6 +354,14 @@ def make_agent_rows() -> list:
     return [
         (15, "chuck", "done", "abc123def456", "Homelab"),
         (16, "product", "running", None, "Bluebovine"),
+    ]
+
+
+def make_usage_rows() -> list:
+    """Per-model usage rows: (model, calls, tokens_in, tokens_out, cost)."""
+    return [
+        ("matrix-coder", 120, 90000, 30000, 42.5),
+        ("matrix-copywriter", 30, 20000, 8000, 7.25),
     ]
 
 
@@ -440,12 +452,14 @@ def test_gate_run_first_friday():
         job = FakeJob()
         res = run_dec(mod, {}, job, make_client())
         check("status generated", res.get("status") == "generated", str(res))
-        check("month label", res.get("month") == "2026-12")
-        expected = tmp / "repo" / "docs" / "org" / "reviews" / "2026-12.md"
+        # The 2026-12-04 run reviews the JUST-ENDED month (2026-11) — the
+        # review doc is named after the reviewed month.
+        check("month label (reviewed month)", res.get("month") == "2026-11")
+        expected = tmp / "repo" / "docs" / "org" / "reviews" / "2026-11.md"
         check("artifact path matches template", res.get("artifact_path") == str(expected),
               str(res.get("artifact_path")))
         check("review doc exists", expected.is_file())
-        sidecar = tmp / "repo" / "docs" / "org" / "goals.proposed-2026-12.md"
+        sidecar = tmp / "repo" / "docs" / "org" / "goals.proposed-2026-11.md"
         check("sidecar path matches template", res.get("goals_sidecar") == str(sidecar))
         check("sidecar exists", sidecar.is_file())
         check("exactly one LLM call", state["calls"] == 1, f"got {state['calls']}")
@@ -462,13 +476,13 @@ def test_gate_boundaries():
         wire_fakes(mod, FakeBoardConn(), GOOD_LLM, make_client())
         job = FakeJob()
         res = mod.run({"force_date": "2027-01-01"}, job, make_client())
-        check("2027-01-01 (1st is a Friday) -> run",
-              res.get("status") == "generated" and res.get("month") == "2027-01", str(res))
-        check("2027-01 artifact path",
-              res.get("artifact_path") == str(tmp / "repo" / "docs" / "org" / "reviews" / "2027-01.md"))
+        check("2027-01-01 (1st is a Friday) -> run, reviews 2026-12",
+              res.get("status") == "generated" and res.get("month") == "2026-12", str(res))
+        check("2026-12 artifact path (reviewed month)",
+              res.get("artifact_path") == str(tmp / "repo" / "docs" / "org" / "reviews" / "2026-12.md"))
         res = mod.run({"force_date": "2026-02-06"}, job, make_client())
-        check("2026-02-06 (first Friday) -> run",
-              res.get("status") == "generated" and res.get("month") == "2026-02", str(res))
+        check("2026-02-06 (first Friday) -> run, reviews 2026-01",
+              res.get("status") == "generated" and res.get("month") == "2026-01", str(res))
         res = mod.run({"force_date": "2026-02-01"}, job, make_client())
         check("2026-02-01 (Sunday) -> skip",
               res.get("status") == "skipped" and "not a Friday" in res.get("reason", ""),
@@ -496,7 +510,7 @@ def test_conservative_apply_defaults():
         check("goals.md NOT overwritten",
               goals_path.read_text(encoding="utf-8") == before)
         check("goals_applied False", res.get("goals_applied") is False)
-        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-12.md").read_text(
+        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-11.md").read_text(
             encoding="utf-8")
         check("sidecar carries the PROPOSED rewrite",
               "PROPOSED rewrite" in sidecar_text and "Cycle 2026-01" in sidecar_text)
@@ -563,15 +577,16 @@ def test_output_path_and_format():
         ]
         pos = [doc.index(h) for h in heads]
         check("4 parts present in order", pos == sorted(pos), str(pos))
-        check("month label in doc header", "# Monthly org review — 2026-12" in doc)
-        check("window line (calendar month)", "window: 2026-12-01 → 2026-12-31" in doc)
-        check("gate line", "gate: first Friday of December 2026 (2026-12-04)" in doc)
+        check("month label in doc header (reviewed month)",
+              "# Monthly org review — 2026-11" in doc)
+        check("window line (just-ended month)", "window: 2026-11-01 → 2026-11-30" in doc)
+        check("gate line (run date)", "gate: first Friday of December 2026 (2026-12-04)" in doc)
         check("domains as sub-sections", "### Homelab" in doc and "### Bluebovine" in doc)
         check("KR scores rendered", "**0.50**" in doc and "**0.80**" in doc)
         check("evidence refs rendered", "task:15" in doc and "review:product/2026-W49" in doc)
         check("retro rendered", "Plausible not wired" in doc)
         check("sidecar referenced in part 3",
-              "docs/org/goals.proposed-2026-12.md" in doc)
+              "docs/org/goals.proposed-2026-11.md" in doc)
 
 
 def test_llm_failure_fallback():
@@ -594,7 +609,7 @@ def test_llm_failure_fallback():
         heads = ["## 1.", "## 2.", "## 3.", "## 4."]
         pos = [doc.index(h) for h in heads]
         check("4 parts still in order", pos == sorted(pos))
-        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-12.md").read_text(
+        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-11.md").read_text(
             encoding="utf-8")
         check("sidecar says NO CHANGE PROPOSED", "NO CHANGE PROPOSED" in sidecar_text)
         check("sidecar carries the baseline", "Baseline" in sidecar_text and "Cycle 2026-12" in sidecar_text)
@@ -684,7 +699,7 @@ def test_guardrails():
         check("no-valid-evidence noted", any("no valid evidence" in n for n in notes))
         check("kb candidate A dropped (unknown collection)", "stale fact A" not in doc)
         check("kb candidate B dropped (no valid evidence)", "stale fact B" not in doc)
-        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-12.md").read_text(
+        sidecar_text = (tmp / "repo" / "docs" / "org" / "goals.proposed-2026-11.md").read_text(
             encoding="utf-8")
         check("sidecar says NO CHANGE PROPOSED (rejected rewrite)",
               "NO CHANGE PROPOSED" in sidecar_text)
@@ -722,6 +737,65 @@ def test_alignment_and_reviews_collected():
         doc = Path(res["artifact_path"]).read_text(encoding="utf-8")
         check("board line rendered", "2 done card(s) this month" in doc)
         check("kb line rendered", "KB collections: kb_bluebovine (2 doc(s))" in doc)
+
+
+def test_usage_by_model_collected_and_rendered():
+    print("test_usage_by_model_collected_and_rendered")
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        mod = load_skill(tmp)
+        write_fixtures(tmp)
+        # 1) _collect_board: per-model usage for the month window (the
+        #    board's byModel data — item 16), window args in milliseconds.
+        board_conn = FakeBoardConn(make_done_rows(), make_agent_rows(), make_usage_rows())
+        mod._db_conn = lambda: board_conn
+        mstart = datetime(2026, 12, 1, tzinfo=timezone.utc)
+        mend = datetime(2027, 1, 1, tzinfo=timezone.utc)
+        board = mod._collect_board(
+            int(mstart.timestamp() * 1000), int(mend.timestamp() * 1000)
+        )
+        check("board available", board["available"], str(board))
+        check("usage query used the month window (ms) + limit",
+              board_conn.last_args == (int(mstart.timestamp() * 1000),
+                                       int(mend.timestamp() * 1000),
+                                       mod.MAX_USAGE_MODELS),
+              str(board_conn.last_args))
+        check("usage query hit the backticked usage table",
+              "FROM `usage`" in board_conn.last_sql, board_conn.last_sql)
+        check("ORDER BY uses the aggregate (ONLY_FULL_GROUP_BY safe)",
+              "ORDER BY SUM(cost) DESC" in board_conn.last_sql, board_conn.last_sql)
+        check("usage_by_model collected", board["usage_by_model"] == [
+            {"model": "matrix-coder", "calls": 120, "tokens_in": 90000,
+             "tokens_out": 30000, "cost": 42.5},
+            {"model": "matrix-copywriter", "calls": 30, "tokens_in": 20000,
+             "tokens_out": 8000, "cost": 7.25},
+        ], str(board["usage_by_model"]))
+        # 2) the LLM payload carries usage_by_model (evidence for cost KRs
+        #    + the retro).
+        state = wire_fakes(
+            mod, FakeBoardConn(make_done_rows(), make_agent_rows(), make_usage_rows()),
+            GOOD_LLM, make_client(),
+        )
+        job = FakeJob()
+        res = run_dec(mod, {}, job, make_client())
+        check("generated", res.get("status") == "generated", str(res))
+        user_content = state["messages"][1]["content"] if state["messages"] else ""
+        check("usage_by_model in LLM payload", '"usage_by_model"' in user_content,
+              user_content[:400])
+        check("model name in payload", "matrix-copywriter" in user_content)
+        # 3) the rendered doc carries the deterministic usage footer line.
+        doc = Path(res["artifact_path"]).read_text(encoding="utf-8")
+        check("usage footer rendered",
+              "_usage by model (month): matrix-coder — 120 calls, 120,000 tokens, $42.50, "
+              "matrix-copywriter — 30 calls, 28,000 tokens, $7.25 (total $49.75)_" in doc,
+              doc[-600:])
+        # 4) board-down degrades: usage_by_model is an empty list.
+        def _db_down():
+            raise RuntimeError("board DB unreachable")
+        mod._db_conn = _db_down
+        down = mod._collect_board(1, 2)
+        check("degraded available=False", down["available"] is False)
+        check("degraded usage_by_model empty", down["usage_by_model"] == [])
 
 
 def test_board_down_degrades():
@@ -769,6 +843,7 @@ def main():
         test_llm_failure_fallback,
         test_guardrails,
         test_alignment_and_reviews_collected,
+        test_usage_by_model_collected_and_rendered,
         test_board_down_degrades,
         test_bad_params,
     ]

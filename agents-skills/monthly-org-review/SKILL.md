@@ -1,6 +1,6 @@
 ---
 name: monthly-org-review
-description: "Monthly org review, run only on the FIRST Friday of the month (the cron fires every Friday — the skill owns the gate and skips otherwise with {\"status\": \"skipped\", \"reason\": \"not the first Friday of <month>\"}). One LLM synthesis call (matrix-coder) produces: (1) KR scoring 0-1 per org KR with real evidence refs, (2) retro (worked / didn't / friction), (3) goal adaptation — a full PROPOSED rewrite of docs/org/goals.md for the next cycle (rewrite at the cycle boundary, don't append), (4) domain-KB staleness pass — superseded/stale KB facts as kb_forget CANDIDATES with evidence. Conservative application (safety): writes docs/org/reviews/YYYY-MM.md + the sidecar docs/org/goals.proposed-YYYY-MM.md; does NOT overwrite docs/org/goals.md and does NOT call kb_forget UNLESS params.apply_goals=true / params.apply_kb_forget=true (both default false — chuck applies after reading the review; org-doc edits are single-approval per the Q7 autonomy table). Deterministic guardrails: KRs restricted to goals.md, scores clamped to [0,1], evidence refs must match real board card ids / commit shas / file paths / weekly-review paths, the proposed rewrite must cover every domain, kb_forget is two-step (confirm + ids) with at most one point per candidate."
+description: "Monthly org review, run only on the FIRST Friday of the month (the cron fires every Friday — the skill owns the gate and skips otherwise with {\"status\": \"skipped\", \"reason\": \"not the first Friday of <month>\"}). Reviews the JUST-ENDED month: a run on the first Friday of month M reviews month M-1 (full data) and proposes the goals rewrite for cycle M. One LLM synthesis call (matrix-coder) produces: (1) KR scoring 0-1 per org KR with real evidence refs, (2) retro (worked / didn't / friction), (3) goal adaptation — a full PROPOSED rewrite of docs/org/goals.md for the next cycle (rewrite at the cycle boundary, don't append), (4) domain-KB staleness pass — superseded/stale KB facts as kb_forget CANDIDATES with evidence. Conservative application (safety): writes docs/org/reviews/YYYY-MM.md (YYYY-MM = the reviewed month) + the sidecar docs/org/goals.proposed-YYYY-MM.md; does NOT overwrite docs/org/goals.md and does NOT call kb_forget UNLESS params.apply_goals=true / params.apply_kb_forget=true (both default false — chuck applies after reading the review; org-doc edits are single-approval per the Q7 autonomy table). Deterministic guardrails: KRs restricted to goals.md, scores clamped to [0,1], evidence refs must match real board card ids / commit shas / file paths / weekly-review paths, the proposed rewrite must cover every domain, kb_forget is two-step (confirm + ids) with at most one point per candidate."
 ---
 
 # Monthly Org Review — KR scoring + retro + goal adaptation + KB staleness
@@ -15,6 +15,12 @@ on any other Friday it returns
 `{"status": "skipped", "reason": "not the first Friday of <Month YYYY> ..."}`
 and writes nothing. It runs after that week's agent reviews land so it can
 consume them.
+
+**Window (the just-ended month):** a run on the first Friday of month M
+reviews month **M-1** — the org cycle that just closed, with full data —
+and proposes the goals rewrite for cycle M (the org's documented design,
+docs/org/goals.md: "Cycle 2026-12 ... first review: first Friday of
+January 2027"). The review doc is named after the reviewed month.
 
 ## The 4-part review (docs/org/reviews/YYYY-MM.md)
 
@@ -64,7 +70,7 @@ Call the `mcp_skills` MCP tool **`run_skill`** with:
 
 | Input | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| output | string | no | `docs/org/reviews/YYYY-MM.md` | Review doc path template (`YYYY-MM` = calendar month of the run date). |
+| output | string | no | `docs/org/reviews/YYYY-MM.md` | Review doc path template (`YYYY-MM` = the reviewed month — the month before the run date). |
 | goals_sidecar | string | no | `docs/org/goals.proposed-YYYY-MM.md` | Sidecar for the PROPOSED goals rewrite. |
 | apply_goals | boolean | no | false | Overwrite `docs/org/goals.md` with the guardrail-valid proposed rewrite. |
 | apply_kb_forget | boolean | no | false | Call the two-step `kb_forget` for the stale-fact candidates. |

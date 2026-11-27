@@ -1,12 +1,12 @@
 name: monthly_org_review
 version: "1.0"
-description: "Monthly org review, run only on the FIRST Friday of the month (the cron fires every Friday — the skill owns the gate and skips otherwise with {\"status\": \"skipped\", \"reason\": \"not the first Friday of <month>\"}). One LLM synthesis call (matrix-coder) produces: (1) KR scoring 0-1 per org KR with real evidence refs, (2) retro (worked / didn't / friction), (3) goal adaptation — a full PROPOSED rewrite of docs/org/goals.md for the next cycle (rewrite at the cycle boundary, don't append), (4) domain-KB staleness pass — superseded/stale KB facts as kb_forget CANDIDATES with evidence. Conservative application (safety): writes docs/org/reviews/YYYY-MM.md + the sidecar docs/org/goals.proposed-YYYY-MM.md; does NOT overwrite docs/org/goals.md and does NOT call kb_forget UNLESS params.apply_goals=true / params.apply_kb_forget=true (both default false — chuck applies after reading the review; org-doc edits are single-approval per the Q7 autonomy table). Deterministic guardrails: KRs restricted to goals.md, scores clamped to [0,1], evidence refs must match real board card ids / commit shas / file paths / weekly-review paths, the proposed rewrite must cover every domain, kb_forget is two-step (confirm + ids) with at most one point per candidate."
+description: "Monthly org review, run only on the FIRST Friday of the month (the cron fires every Friday — the skill owns the gate and skips otherwise with {\"status\": \"skipped\", \"reason\": \"not the first Friday of <month>\"}). Reviews the JUST-ENDED month: a run on the first Friday of month M reviews month M-1 (full data) and proposes the goals rewrite for cycle M. One LLM synthesis call (matrix-coder) produces: (1) KR scoring 0-1 per org KR with real evidence refs, (2) retro (worked / didn't / friction), (3) goal adaptation — a full PROPOSED rewrite of docs/org/goals.md for the next cycle (rewrite at the cycle boundary, don't append), (4) domain-KB staleness pass — superseded/stale KB facts as kb_forget CANDIDATES with evidence. Conservative application (safety): writes docs/org/reviews/YYYY-MM.md (YYYY-MM = the reviewed month) + the sidecar docs/org/goals.proposed-YYYY-MM.md; does NOT overwrite docs/org/goals.md and does NOT call kb_forget UNLESS params.apply_goals=true / params.apply_kb_forget=true (both default false — chuck applies after reading the review; org-doc edits are single-approval per the Q7 autonomy table). Deterministic guardrails: KRs restricted to goals.md, scores clamped to [0,1], evidence refs must match real board card ids / commit shas / file paths / weekly-review paths, the proposed rewrite must cover every domain, kb_forget is two-step (confirm + ids) with at most one point per candidate."
 inputs:
   - name: output
     type: string
     required: false
     default: "docs/org/reviews/YYYY-MM.md"
-    description: "Review doc path template (repo-relative); YYYY-MM (calendar month of the run date) is substituted."
+    description: "Review doc path template (repo-relative); YYYY-MM (the reviewed month — the month before the run date) is substituted."
   - name: goals_sidecar
     type: string
     required: false
@@ -33,7 +33,7 @@ inputs:
 config:
   # Inputs (all best-effort; the run works with any subset present).
   repo_root: /home/chuck/homelab        # rw for docs/org/reviews/ + the goals sidecar only
-  window: calendar-month                # the month of the run date (UTC)
+  window: previous calendar month (UTC)  # first-Friday-of-M run reviews month M-1 (just-ended cycle) and proposes the rewrite for cycle M
   model_alias: matrix-coder             # the ONE synthesis call
   # Board (MySQL ai_kanban — KANBAN_DB_* env; timestamps are bigint ms).
   kanban_db_host: thor.local
