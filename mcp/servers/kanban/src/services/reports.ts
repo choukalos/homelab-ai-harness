@@ -9,7 +9,7 @@
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { type TaskState } from "../db/schema.js";
 import { ideas, projects, tasks, usage } from "../db/tables.js";
-import type { Db } from "./common.js";
+import type { Db, ModelUsage } from "./common.js";
 
 export const ROLLING_MONTHS = 12;
 
@@ -222,12 +222,14 @@ export interface TaskUsageRow {
   cost: number;
   /** Cost per role among the rows matching the filters. */
   byRole: Record<string, number>;
+  /** Tokens in/out + $ cost per model among the rows matching the filters. */
+  byModel: Record<string, ModelUsage>;
 }
 
 /**
  * Per-task usage table (filterable). One row per task that has usage
- * matching the filters; all columns (tokens, cost, byRole) reflect the
- * applied filters. Sorted by cost (desc).
+ * matching the filters; all columns (tokens, cost, byRole, byModel)
+ * reflect the applied filters. Sorted by cost (desc).
  */
 export async function taskUsageTable(db: Db, filters: TaskUsageFilters = {}): Promise<TaskUsageRow[]> {
   const [usageRows, taskRows, ideaRows, projectRows] = await Promise.all([
@@ -262,11 +264,17 @@ export async function taskUsageTable(db: Db, filters: TaskUsageFilters = {}): Pr
       tokensOut: 0,
       cost: 0,
       byRole: {},
+      byModel: {},
     };
     row.tokensIn += u.tokensIn;
     row.tokensOut += u.tokensOut;
     row.cost += u.cost;
     row.byRole[u.role] = (row.byRole[u.role] ?? 0) + u.cost;
+    const m = row.byModel[u.model] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
+    m.tokensIn += u.tokensIn;
+    m.tokensOut += u.tokensOut;
+    m.cost += u.cost;
+    row.byModel[u.model] = m;
     acc.set(t.id, row);
   }
   return [...acc.values()].sort((a, b) => b.cost - a.cost || a.taskId - b.taskId);

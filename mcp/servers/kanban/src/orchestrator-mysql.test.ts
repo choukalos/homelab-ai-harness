@@ -272,6 +272,8 @@ function makeOrch(pool: MockMysqlPool) {
     nonMediaConcurrentTasks: 1,
     agentConcurrentTasks: 1,
     agentSlugs: [],
+    ownerModels: {},
+    ownerModelCosts: {},
     workspaceCleanupDays: 7,
     server: { bindAddr: "127.0.0.1", port: 3000 },
   } as unknown as KanbanConfig;

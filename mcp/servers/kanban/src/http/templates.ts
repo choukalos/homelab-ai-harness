@@ -572,6 +572,7 @@ export interface TaskPageData {
   waitingOn: string[];
   usageTotal: number;
   usageByRole: Record<string, number>;
+  usageByModel: Record<string, { tokensIn: number; tokensOut: number; cost: number }>;
   log: TaskLogLineView[];
   /** 2s HTMX auto-refresh of the log while running. */
   live: boolean;
@@ -619,6 +620,9 @@ export function taskPage(data: TaskPageData, opts: { panel?: boolean } = {}): st
     : "";
   const usageRoles = Object.entries(data.usageByRole)
     .map(([role, cost]) => `${escapeHtml(role)} ${fmtMoney(cost)}`)
+    .join(" · ");
+  const usageModels = Object.entries(data.usageByModel)
+    .map(([model, m]) => `${escapeHtml(model)} ${fmtMoney(m.cost)}`)
     .join(" · ");
   const logAttrs = data.live ? ` hx-get="/tasks/${data.id}/log" hx-trigger="every 2s" hx-swap="innerHTML"` : "";
   const details: Array<[string, string]> = [
@@ -668,6 +672,7 @@ ${failed}
 <div class="stats">
   <div class="stat"><span class="stat-label">Usage so far</span><span class="stat-value">${fmtMoney(data.usageTotal)}</span></div>
   <div class="stat"><span class="stat-label">By role</span><span class="stat-value" style="font-size:0.9rem">${usageRoles || "—"}</span></div>
+  <div class="stat"><span class="stat-label">By model</span><span class="stat-value" style="font-size:0.9rem">${usageModels || "—"}</span></div>
 </div>
 <h2>Log ${data.live ? '<span class="muted" style="font-size:0.9rem;font-weight:400">(live, 2s refresh)</span>' : ""}</h2>
 <div id="task-log"${logAttrs}>
@@ -708,6 +713,7 @@ export interface ReportsPageData {
     tokensOut: number;
     cost: number;
     byRole: Record<string, number>;
+    byModel: Record<string, { tokensIn: number; tokensOut: number; cost: number }>;
   }>;
   /** Normalized filters (echoed into the filter form). */
   filters: { project: string; state: string; role: string; q: string };
@@ -772,6 +778,9 @@ export function reportsPage(data: ReportsPageData): string {
             const byRole = Object.entries(t.byRole)
               .map(([role, cost]) => `${escapeHtml(role)} ${fmtMoney(cost)}`)
               .join(" · ");
+            const byModel = Object.entries(t.byModel)
+              .map(([model, m]) => `${escapeHtml(model)} ${fmtMoney(m.cost)}`)
+              .join(" · ");
             return `<tr>
 <td><a href="/tasks/${t.taskId}">#${t.taskId}</a></td>
 <td>${escapeHtml(t.project)}</td>
@@ -781,10 +790,11 @@ export function reportsPage(data: ReportsPageData): string {
 <td class="num">${t.tokensOut}</td>
 <td class="num">${fmtMoney(t.cost)}</td>
 <td class="muted">${byRole || "—"}</td>
+<td class="muted">${byModel || "—"}</td>
 </tr>`;
           })
           .join("\n")
-      : `<tr><td colspan="8" class="muted">No task usage recorded${
+      : `<tr><td colspan="9" class="muted">No task usage recorded${
           data.filters.project || data.filters.state || data.filters.role || data.filters.q
             ? " for the current filters"
             : " yet"
@@ -845,7 +855,7 @@ ${data.roles.map((r) => opt(r, r, f.role === r)).join("\n")}
     <button type="submit">Filter</button>
   </form>
   <table class="usage-table">
-<tr><th>Task</th><th>Project</th><th>Title</th><th>State</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th><th>By role</th></tr>
+<tr><th>Task</th><th>Project</th><th>Title</th><th>State</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th><th>By role</th><th>By model</th></tr>
 ${taskRows}
 </table>
 </section>`;
