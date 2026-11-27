@@ -12,7 +12,11 @@
 > (9.3-O1 resolved by removal). Phase 9 (secrets management & rotation
 > program) added as a **grooming stub** 2026-11-21. Phase 10 (host security
 > monitoring & reporting) added 2026-11-24 after the `url565.planning.com`
-> alert investigation (not started). Phase 11 (public-surface security
+> alert investigation; **BUILT 2026-11-27 (pending deploy)** — baseline
+> capture + daily baseline-diff scan + weekly digest + systemd units +
+> `homelab.sh security status` + node-exporter textfile metrics; deploy
+> runbook `docs/security_phase10_deploy.md`, evidence
+> `docs/security_phase10_report.md`. Phase 11 (public-surface security
 > monitoring — CF tunnel, InvestHub, blog, extensible registry) added
 > 2026-11-24 (not started). Phase 12 (file bridge `mcp_filebridge` — unified
 > file edge: public relay + work areas + publish targets; D10–D16 decided
@@ -553,7 +557,7 @@ breach runbook + table-top done.
 
 ---
 
-### Phase 10 — Host security monitoring & reporting — **ADDED 2026-11-24 (not started)**
+### Phase 10 — Host security monitoring & reporting — **BUILT 2026-11-27 (pending deploy)**
 
 > Trigger: the 2026-11-24 manual investigation (company security alert about
 > `url565.planning.com` — result: **clean**; no mail stack on the host, no SMTP
@@ -568,31 +572,37 @@ binaries**). The scan diffs live state against a baseline file and reports
 deviations. The baseline is refreshed only by explicit `--update` after an
 intentional change — silent drift is the signal.
 
-- [ ] **Baseline capture** `scripts/security-baseline.sh` → `/home/chuck/data/security/baseline.txt`:
-  - [ ] `ss -tlnp` listeners (Phase 4 expected survivors are the expectation)
-  - [ ] user accounts UID ≥ 1000 (expected: `chuck` only)
-  - [ ] cron state: `/etc/crontab`, `/etc/cron.d/*`, `/var/spool/cron/crontabs/*` (list + hashes)
-  - [ ] `systemctl list-timers --all` (unit names)
-  - [ ] `docker ps -a` (names + images)
-  - [ ] mail-tool watchlist (`sendmail msmtp ssmtp mail mutt swaks postfix`) — expected: **none present**
-  - [ ] record capture timestamp; refresh only via explicit `--update` flag (auto-refresh would defeat the diff)
-- [ ] **Daily scan** `scripts/security-scan.sh` + `scripts/systemd/security-scan-daily.{service,timer}` (mirror the `backup-nas-daily` pattern; root service, ~00:30 UTC off-peak):
-  - [ ] **auth.log (last 24h):** failed passwords, invalid users, source IPs outside the known set (`10.8.0.2`, `192.168.4.0/24`, `192.168.5.0/24`) → anomaly
-  - [ ] **port diff:** `ss -tlnp` vs baseline → new or removed listener = anomaly (a new listener is the classic implant signature)
-  - [ ] **outbound connections:** ESTAB on SMTP ports (25/465/587) → immediate anomaly; new external peer IPs (excluding LAN + known CDN/Cloudflare ranges) → note
-  - [ ] **account/cron/timer drift:** new UID ≥ 1000 users, new crontabs, new timers → anomaly
-  - [ ] **container drift:** new/renamed containers vs baseline → anomaly (typosquatted image names are an attack vector)
-  - [ ] **mail-tool appearance:** any watchlist binary now present → anomaly (this host should never send mail)
-  - [ ] **sensitive-file changes:** mtime < 24h under `/etc` (apt/dpkg-managed filtered via `dpkg.log`), `/usr/bin`, `/usr/local/bin` → note
-  - [ ] **process check:** long-running processes not attributable to a known container or host service → note
-- [ ] **Daily report** → `/home/chuck/data/security/reports/security-report-YYYY-MM-DD.md`:
-  - [ ] verdict line (`CLEAN` / `N anomalies` / `M notes`), each finding with evidence (command + output), full baseline-diff table
-  - [ ] anomalies appended to `/home/chuck/data/security/alerts.log` (one line, machine-readable: `timestamp | severity | check | detail`)
-- [ ] **Weekly digest** (weekly timer, same pattern): summarize the last 7 daily reports → `/home/chuck/data/security/reports/security-weekly-YYYY-Www.md` (anomaly counts, recurring notes, auth.log trends — e.g. "3 failed logins from 192.168.4.56 this week vs 0 last week")
-- [ ] **Alert delivery (D7 — decide before wiring):** where do anomalies reach Chuck? Options: (a) file-only (`alerts.log`) + check on demand, (b) Siri/Shortcuts push (no notification path exists in the repo yet — would be net-new), (c) Grafana metric via `node_exporter_textfile` (`security_scan_anomalies_total`, `security_scan_last_run`) + dashboard panel. Working recommendation: **(c) + (a) now, (b) later**.
-- [ ] **On-demand status:** `./homelab.sh security status` — latest report verdict, unread alert count, baseline age (stale baseline is itself a warning)
-- [ ] **Retention:** prune daily reports > 90d, weekly digests > 52w (inside the scan)
-- [ ] **False-positive tuning:** first 2 weeks = observation mode (report only, nothing escalated); then set thresholds from observed noise (apt upgrades, container recreates, Chuck's own LAN logins)
+- [x] **Baseline capture** `scripts/security-baseline.sh` → `/home/chuck/data/security/baseline.txt` — **built + verified 2026-11-27** (TODO 1, commit on `task/security-phase10`):
+  - [x] `ss -tlnp` listeners (Phase 4 expected survivors are the expectation)
+        — note: `192.168.4.54:3000` (mcp_kanban LAN-only web UI) is a
+        legitimate survivor added after the Phase 4 list; process column is
+        populated only for root captures (deploy step 2)
+  - [x] user accounts UID ≥ 1000 (expected: `chuck` only)
+  - [x] cron state: `/etc/crontab`, `/etc/cron.d/*`, `/var/spool/cron/crontabs/*` (list + hashes)
+        — non-root capture marks the root-only spool `UNREADABLE` (honest, never silent)
+  - [x] `systemctl list-timers --all` (unit names)
+  - [x] `docker ps -a` (names + images)
+  - [x] mail-tool watchlist (`sendmail msmtp ssmtp mail mutt swaks postfix`) — expected: **none present**
+        — verified: all ABSENT
+  - [x] record capture timestamp; refresh only via explicit `--update` flag (auto-refresh would defeat the diff)
+        — verified: plain run is status-only, baseline mtime unchanged
+- [x] **Daily scan** `scripts/security-scan.sh` + `scripts/systemd/security-scan-daily.{service,timer}` (mirror the `backup-nas-daily` pattern; root service, ~00:30 UTC off-peak) — **built + verified 2026-11-27** (units NOT installed — deploy step 1):
+  - [x] **auth.log (last 24h):** failed passwords, invalid users, source IPs outside the known set (`10.8.0.2`, `192.168.4.0/24`, `192.168.5.0/24`) → anomaly
+  - [x] **port diff:** `ss -tlnp` vs baseline → new or removed listener = anomaly (a new listener is the classic implant signature)
+  - [x] **outbound connections:** ESTAB on SMTP ports (25/465/587) → immediate anomaly; new external peer IPs (excluding LAN + known CDN/Cloudflare ranges) → note
+  - [x] **account/cron/timer drift:** new UID ≥ 1000 users, new crontabs, new timers → anomaly
+  - [x] **container drift:** new/renamed containers vs baseline → anomaly (typosquatted image names are an attack vector)
+  - [x] **mail-tool appearance:** any watchlist binary now present → anomaly (this host should never send mail)
+  - [x] **sensitive-file changes:** mtime < 24h under `/etc` (apt/dpkg-managed filtered via `dpkg.log`), `/usr/bin`, `/usr/local/bin` → note
+  - [x] **process check:** long-running processes not attributable to a known container or host service → note
+- [x] **Daily report** → `/home/chuck/data/security/reports/security-report-YYYY-MM-DD.md` — **built + verified 2026-11-27**:
+  - [x] verdict line (`CLEAN` / `N anomalies` / `M notes`), each finding with evidence (command + output), full baseline-diff table
+  - [x] anomalies appended to `/home/chuck/data/security/alerts.log` (one line, machine-readable: `timestamp | severity | check | detail`)
+- [x] **Weekly digest** (weekly timer, same pattern): summarize the last 7 daily reports → `/home/chuck/data/security/reports/security-weekly-YYYY-Www.md` — **built + verified 2026-11-27** (`scripts/security-digest-weekly.sh`; anomaly counts, recurring notes, auth.log trends incl. week-over-week when 14 days of reports exist)
+- [x] **Alert delivery (D7 — decide before wiring):** decided **(c) + (a) now, (b) later** — metrics wired via `node_exporter_textfile` (`security_scan_anomalies_total`, `security_scan_notes_total`, `security_scan_last_run_timestamp_seconds` → `metrics/security_scan.prom`, node-exporter textfile collector in compose.monitoring.yml); file-only `alerts.log` + `./homelab.sh security status` on demand; Siri/Shortcuts push remains net-new (later)
+- [x] **On-demand status:** `./homelab.sh security status` — latest report verdict, unread alert count, baseline age (stale baseline is itself a warning) — **built + verified 2026-11-27**
+- [x] **Retention:** prune daily reports > 90d, weekly digests > 52w (inside the scan) — **built + verified 2026-11-27** (synthetic aged-report test)
+- [ ] **False-positive tuning:** first 2 weeks = observation mode (report only, nothing escalated); then set thresholds from observed noise (apt upgrades, container recreates, Chuck's own LAN logins) — **`OBSERVATION_MODE=1` is the conf default; the 2-week tuning step is post-deploy** (runbook §6)
 
 Rollback: `systemctl disable --now security-scan-daily.timer` (+ weekly); scripts are additive (new files only) — deletion is the full rollback. No service changes.
 

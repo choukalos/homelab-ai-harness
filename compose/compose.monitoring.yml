@@ -14,11 +14,18 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      # Phase 10 (security_todo, 2026-11-27): security scan textfile metrics
+      # (scripts/security-scan.sh writes /home/chuck/data/security/metrics/)
+      - /home/chuck/data/security/metrics:/host/security-metrics:ro
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # Phase 10 (security_todo, 2026-11-27): scrape the security scan's
+      # textfile metrics (security_scan_anomalies_total, security_scan_notes_total,
+      # security_scan_last_run_timestamp_seconds)
+      - '--collector.textfile.directory=/host/security-metrics'
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest

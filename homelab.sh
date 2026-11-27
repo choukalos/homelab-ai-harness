@@ -52,6 +52,9 @@ Commands:
   key unblock Unblock a key
   key help    Show key management help
 
+  security status  Show latest scan verdict, unread alert count, baseline age
+                   (SEC Phase 10; reads /home/chuck/data/security)
+
 Stacks:
   core        Caddy only
   edge        Caddy + Cloudflare Tunnel
@@ -302,9 +305,71 @@ run_public_stack() {
   esac
 }
 
+# Handle the security subcommand (SEC Phase 10 on-demand status).
+# Reads /home/chuck/data/security (host data path, not repo paths) so it
+# works from any checkout/worktree.
+_security() {
+  local sub="${1:-}"
+  case "$sub" in
+    status)
+      local sec_dir="/home/chuck/data/security"
+      local latest verdict now unread last_read_iso
+      latest="$(ls -1 "$sec_dir"/reports/security-report-*.md 2>/dev/null | sort | tail -n 1 || true)"
+      if [[ -z "$latest" ]]; then
+        echo "latest report: none yet (run: sudo scripts/security-scan.sh)"
+      else
+        echo "latest report: $latest"
+        verdict="$(grep -m1 '^verdict: ' "$latest" 2>/dev/null || true)"
+        [[ -n "$verdict" ]] && echo "  $verdict"
+      fi
+      local alerts=0
+      [[ -f "$sec_dir/alerts.log" ]] && alerts="$(wc -l < "$sec_dir/alerts.log")"
+      local marker="$sec_dir/.last-status-ts"
+      local last_read=0
+      [[ -f "$marker" ]] && last_read="$(cat "$marker" 2>/dev/null || echo 0)"
+      now="$(date -u +%s)"
+      unread=0
+      if [[ -f "$sec_dir/alerts.log" && $last_read -gt 0 ]]; then
+        # alerts.log lines: "ts | severity | check | detail" (ISO ts sorts)
+        last_read_iso="$(date -u -d "@$last_read" +%Y-%m-%dT%H:%M:%S)"
+        unread="$(awk -F' \\| ' -v lr="$last_read_iso" '$1 > lr { n++ } END { print n + 0 }' "$sec_dir/alerts.log")"
+      elif [[ -f "$sec_dir/alerts.log" ]]; then
+        unread="$alerts"   # never status-checked: everything is unread
+      fi
+      echo "alerts: $alerts total, $unread unread since last status"
+      if [[ -f "$sec_dir/baseline.txt" ]]; then
+        local base_epoch age
+        base_epoch="$(date -u -r "$sec_dir/baseline.txt" +%s)"
+        age=$(( (now - base_epoch) / 86400 ))
+        if (( age > 30 )); then
+          echo "baseline: STALE — $age days old (stale baseline is itself a warning)"
+        else
+          echo "baseline: $age days old ($(date -u -r "$sec_dir/baseline.txt" +%Y-%m-%dT%H:%M:%SZ))"
+        fi
+      else
+        echo "baseline: MISSING — run scripts/security-baseline.sh --update"
+      fi
+      echo "$now" > "$marker"
+      ;;
+    help|-h|--help|"")
+      echo "Usage: ./homelab.sh security status"
+      ;;
+    *)
+      echo "unknown security subcommand: $sub (try: status)" >&2
+      exit 2
+      ;;
+  esac
+}
+
 # Handle key management subcommand (doesn't follow the <command> <stack> pattern)
 if [[ "${1:-}" == "key" ]]; then
   _litellm "${@:2}"
+  exit $?
+fi
+
+# Handle security subcommand (doesn't follow the <command> <stack> pattern)
+if [[ "${1:-}" == "security" ]]; then
+  _security "${@:2}"
   exit $?
 fi
 

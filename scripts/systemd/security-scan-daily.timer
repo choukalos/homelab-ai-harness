@@ -1,0 +1,14 @@
+[Unit]
+Description=Security baseline-diff scan (daily) — run at 00:30
+
+[Timer]
+OnCalendar=*-*-* 00:30:00
+# if the host was off at 00:30, run it on next boot (don't skip a day)
+Persistent=true
+# spread load a few minutes past the top of the hour
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=security-scan-daily.service
+
+[Install]
+WantedBy=timers.target

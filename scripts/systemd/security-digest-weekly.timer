@@ -1,0 +1,13 @@
+[Unit]
+Description=Security weekly digest — run Sunday 04:30 (after the daily scan window)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+# if the host was off Sunday morning, run it on next boot
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=security-digest-weekly.service
+
+[Install]
+WantedBy=timers.target

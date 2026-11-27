@@ -1,0 +1,22 @@
+[Unit]
+Description=Security baseline-diff scan (daily) — SEC Phase 10
+Wants=network-online.target
+After=network-online.target
+# reads host state (auth.log, cron spool, ss, docker) — no network needed,
+# but the target keeps ordering sane with the rest of the boot
+
+[Service]
+Type=oneshot
+# root: /var/spool/cron/crontabs, /var/log/auth.log, full ss -tlnp process info
+WorkingDirectory=/home/chuck/homelab
+ExecStart=/home/chuck/homelab/scripts/security-scan.sh
+# the scan is a few dozen fast reads; 10 min is generous headroom
+TimeoutStartSec=600
+# be a good citizen: low CPU/nice, best-effort I/O
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
