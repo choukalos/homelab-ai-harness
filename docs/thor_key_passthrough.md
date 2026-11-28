@@ -1,7 +1,11 @@
 # Thor — Agent-Job Key Pass-Through (Thor-side contract)
 
-> Created: 2026-11-28 · **Status:** Thor side implemented (T1–T3); Matrix
-> install PENDING (chuck — see §4). T4 verification is TODO 6.
+> Created: 2026-11-28 · **Status:** Thor side implemented (T1–T3, commit
+> `505f417`); Matrix install LIVE (T4 run proved the forced command); Matrix
+> step 2 HAS run (chuck confirmed 2026-11-28). **T4 ran 2026-11-28 (partial):**
+> transport + keyless rejection + revoked-key fail-fast PASS; happy path
+> blocked on 2 Matrix wrapper fixes (`pi` PATH + LAN base URL — see
+> `docs/thor_validation_log.md` part 15).
 > Contract of record (Matrix repo): `docs/matrix_key_passthrough.md`
 > Handoff: `thor_key_passthrough_handoff.md` (T1 transport, T2 key hygiene,
 > T3 caller intake, T4 verification)
@@ -85,10 +89,12 @@ printf '%s\n' "$CALLER_KEY" | scripts/matrix-agent-launch.sh -- -p "..."
 - [x] T1 install instructions for chuck (exact `authorized_keys` line +
       wrapper stdin patch + verification steps + rollback)
 - [x] T2/T3 launch path: `scripts/matrix-agent-launch.sh`
-- [ ] chuck installs the `authorized_keys` line + wrapper patch on Matrix
-- [ ] T4 verification (TODO 6) — Matrix step 2 HAS run (chuck confirmed
-      2026-11-28); evidence → Matrix `docs/matrix_validation_log.md` +
-      `docs/thor_validation_log.md`
+- [x] chuck installs the `authorized_keys` line + wrapper patch on Matrix
+      (live — the T4 run 2026-11-28 exercised the forced command end-to-end)
+- [x] T4 verification (TODO 6) — **ran 2026-11-28 (partial)**; Matrix step 2
+      HAS run (chuck confirmed 2026-11-28); evidence → `docs/thor_validation_log.md`
+      part 15 + Matrix `docs/matrix_validation_log.md` Run 2026-11-28. Happy
+      path re-run pending the 2 Matrix wrapper fixes (PATH + LAN base URL)
 - [ ] Record the chosen transport in Matrix `docs/matrix_thor_contract.md`
       (new § or §10 note) once live (TODO 6)
 
