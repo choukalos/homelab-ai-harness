@@ -90,6 +90,23 @@ for ctr in $(docker ps --format '{{.Names}}'); do
     checked=$((checked + 1))
     ctr_checked=$((ctr_checked + 1))
 
+    if [ "$k" = "LITELLM_API_KEY" ]; then
+      # Phase 8 semantics (2026-11-28): containers' LITELLM_API_KEY is the
+      # dedicated internal-service key (supplied from LITELLM_KEY_INTERNAL)
+      # — it must NOT equal the master key anymore. The litellm-proxy
+      # container is the exception: its own LITELLM_API_KEY is the master
+      # key by design (the proxy needs it to serve /key/* admin endpoints).
+      if [ "$ctr" = "litellm-proxy" ]; then
+        [ "$cv" = "${ENVVARS[LITELLM_MASTER_KEY]}" ] && continue
+        drift=$((drift + 1)); ctr_drift[$ctr]=$((ctr_drift[$ctr] + 1))
+        drift_lines+=("DRIFT ${ctr}: LITELLM_API_KEY (proxy) should be the master key (container=$(mask "$cv") .env master=$(mask "${ENVVARS[LITELLM_MASTER_KEY]}") — fix: docker compose --env-file .env -f $(compose_of "$ctr") up -d ${ctr}")
+      else
+        [ "$cv" = "${ENVVARS[LITELLM_KEY_INTERNAL]}" ] && continue
+        drift=$((drift + 1)); ctr_drift[$ctr]=$((ctr_drift[$ctr] + 1))
+        drift_lines+=("DRIFT ${ctr}: LITELLM_API_KEY should be the internal-service key (container=$(mask "$cv") .env internal=$(mask "${ENVVARS[LITELLM_KEY_INTERNAL]}") — fix: docker compose --env-file .env -f $(compose_of "$ctr") up -d ${ctr}")
+      fi
+      continue
+    fi
     if [ "$k" = "SKILL_RUNNER_API_KEY" ] && [ "$ctr" = "skill-runner" ]; then
       # Allow-list semantics: must contain BOTH current user keys.
       ok=1

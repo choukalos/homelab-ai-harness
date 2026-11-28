@@ -7,8 +7,10 @@
 > removed), LAN exposure shrunk (all rebinds/mapping removals applied +
 > verified; `ss -tlnp` matches expected survivors; device-side confirmations
 > done from Mac Studio 2026-11-15). **Phase 7 DONE 2026-11-21** (docs sync —
-> see §5). Phases 5 + 8
-> not started (Phase 5 blocked on D4). **Phase 6 DONE 2026-11-27** (monitoring
+> see §5). Phase 5 not started (blocked on D4). **Phase 8 DONE 2026-11-28**
+> (dedicated `internal-service` key — all 7 internal LLM consumers repointed
+> off the master key; master key now admin-only; 7 carrier containers
+> purged of the stale master via recreate; key-sync-check ALL IN SYNC). **Phase 6 DONE 2026-11-27** (monitoring
 > & detection — 401 spike + per-key spend alerts via the Phase 10 pattern,
 > `scripts/audit-litellm-keys.sh` + `./homelab.sh key audit`, quarterly
 > rotation cadence via the audit's >90d flag, Caddy access logging + log
@@ -63,7 +65,7 @@
 | F3 | MED | `chuck-remote` + `dylan-v2` keys: **no model scope, no budget, no RPM/TPM limits, no expiry**. | LiteLLM DB `LiteLLM_VerificationToken` | Phase 3 |
 | F4 | MED | Spend tracking disabled (`disable_spend_logs: true`, `disable_spend_updates: true`) → budgets **cannot be enforced** even if set. | `litellm/config.yml` `general_settings` | Phase 3 |
 | F5 | MED | **3 orphaned `default_user_id` keys** (no alias, $0.25 budget each; created 07-15 / 08-15 / 08-30 via the **LiteLLM dashboard UI**). Investigated 2026-09-06: zero references anywhere in the repo (compose/scripts/code/docs), zero spend, empty AuditLog, no request-log tables; all plausible consumers ruled out (open-webui → master key, pi → Chuck's key, skill-runner/mcp_* → master, CLI → SIRI_API_KEY). Conclusion: **manual test keys, safe to retire** (block → observe → delete). | LiteLLM DB | Phase 3 |
-| F6 | MED | `LITELLM_MASTER_KEY == LITELLM_API_KEY` (same `sk-cb1678…` token) injected into 6 internal consumers (open-webui, presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner). Master key = proxy admin = all models + all MCP servers. Acceptable *while it stays internal* — which is exactly what Phases 1/4/5 guarantee. **2026-11-15: now 5 consumers** (open-webui removed). | `.env`, `compose/*.yml` | Phase 3 (document) + Phase 8 (internal-service key — decided) |
+| F6 | MED | `LITELLM_MASTER_KEY == LITELLM_API_KEY` (same `sk-cb1678…` token) injected into internal consumers. Master key = proxy admin = all models + all MCP servers. **RESOLVED 2026-11-28 (Phase 8):** consumers now use the dedicated `internal-service` key (`LITELLM_KEY_INTERNAL`); the master key is admin-only (litellm-proxy container + `./homelab.sh key ...`). Residual: the whole-file `env_file` carrier pattern (Phase 9). | `.env`, `compose/*.yml` | Phase 3 (document) + Phase 8 (internal-service key — **DONE 2026-11-28**) |
 | F7 | MED | Wide `0.0.0.0` host bindings: MySQL `3306/33060`, Qdrant `6333`, LiteLLM `4000`, SearXNG `8088`, Open WebUI `3000`, monitoring stack `3001/8081/8082/9090/9091/9100`, `mcp_memory 8005`, crawl4ai `11235`. **ufw not running.** | `compose/*.yml`, host | Phase 4/5 |
 | F8 | MED | `mcp_memory` (host `:8005`) has **no auth of its own** and falls back to `MEMORY_USER_KEY` (Chuck's key) when the caller sends none → any LAN client can search **Chuck's private memories** unauthenticated. **RESOLVED 2026-11-15 (Phase 4): host mapping removed** (no LAN consumers per log audit). | `compose/compose.mcp.yml`, `mcp/servers/memory/server.py` | Phase 4 ✅ |
 | F9 | LOW | sshd config not fully verified (password auth / root login status unknown). | host | Phase 5 |
@@ -96,6 +98,18 @@
 (verified live: 3 keys + master). MCP counts updated — `family-mcp-full`
 extended to all **14** servers (+`mcp_sessions`, +`mcp_kanban`, both
 2026-11-21; group description in the DB records the same).
+
+**2026-11-28 refresh (Phase 13 + Phase 8):** live inventory is now **8 keys
++ master** (verified via `./homelab.sh key inventory`):
+
+| key_alias | user_id | scope | notes |
+|---|---|---|---|
+| `chuck` | chuck | all models + MCP: family-mcp-full (15) | public (llm + siri routes) |
+| `dylan` | dylan | all models + MCP: family-mcp-full (15) | public (llm + siri routes) |
+| `product` / `analyst` / `strategist` / `marketing` | same | work-type model(s) + matrix-coder (pipeline) + MCP: none | agent keys (Phase 13.5, 2026-11-27); strategist/marketing: matrix-copywriter + matrix-coder |
+| `internal-service` | internal-service | all 6 model aliases + MCP: none | **NEW 2026-11-28 (Phase 8)** — the 7 internal LLM consumers' key; no budget (tracked), no MCP groups |
+| *(no alias)* | — | matrix-coder, homelab-embedding-v1 + MCP: none | memory service (`MEMORY_LITELLM_KEY`) |
+| master (`sk-cb1678…`) | — | admin, everything | **admin-only since Phase 8** — litellm-proxy container + `./homelab.sh key ...` ops only |
 
 ---
 
@@ -320,7 +334,7 @@ Rollback: re-add `allow_all_keys: true` + restart litellm-proxy (or delete the a
 turns out it was unused), so `HARNESS_API_KEY` (its only consumer) was also
 removed from `.env`; `SIRI_API_KEY` stays.
 - [x] **Document master-key usage** (F6): note added to `docs/thor_public_access_model.md` — `LITELLM_MASTER_KEY == LITELLM_API_KEY` is internal-only by design (docker network + LAN only after Phases 4/5); full doc re-synced 2026-11-15 (F10: stale `$LITELLM_PUBLIC_API_KEY` gate description replaced with the live Caddy key gate + current key table + MCP groups + rotation procedure).
-- [x] **Dedicated `internal-service` key** — decided 2026-09-06 (was optional): see **Phase 8** (not started).
+- [x] **Dedicated `internal-service` key** — decided 2026-09-06 (was optional): **DONE 2026-11-28** — see **Phase 8** (7 consumers repointed, master key admin-only, carrier purge, key-sync-check ALL IN SYNC).
 - [x] Re-run the key inventory snapshot (Phase 0 command) and paste the new table into §1 for the record — done 2026-11-15 (see §1, "Key inventory (live, 2026-11-15)").
 
 **Phase 3 apply step (Chuck):** `up -d litellm` — this time it **recreates** (the compose env changed: `LITELLM_PUBLIC_API_KEY` line removed), which loads the spend-tracking config AND drops the dead key from the container env:
@@ -474,29 +488,44 @@ On-demand: ./homelab.sh security status (existing — counts alerts.log unread)
 
 ---
 
-### Phase 8 — Dedicated `internal-service` key (decided 2026-09-06)
+### Phase 8 — Dedicated `internal-service` key — **DONE 2026-11-28**
 
 Goal: internal containers stop using the master key; the master key becomes
 admin-only (key management via `./homelab.sh key ...`, dashboard).
 
-Master-key consumers found 2026-09-06 (6 services; **5 as of 2026-11-15** — open-webui removed):
+**Executed 2026-11-28.** Consumer list grew since the 2026-09-06 table:
+`mcp_kanban` (service LLM profile + kanban-MCP key) and `data-hub` (payee
+categorization) were added later. All 7 repointed to the new key:
+
 | Service | Env var | Location |
 |---|---|---|
 | ~~open-webui~~ | ~~`OPENAI_API_KEY=${LITELLM_MASTER_KEY}`~~ | **removed 2026-11-15** (service gone) |
-| presenton | `CUSTOM_LLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.ai-core.yml:179` |
-| mcp_knowledge | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.mcp.yml:22` (embeddings + vision fallback) |
-| mcp_mysql | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.mcp.yml:84` (matrix-coder nl→sql) |
-| mcp_vision | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.mcp.yml:152` (matrix-coder frame analysis) |
-| skill-runner | `LITELLM_API_KEY=${LITELLM_API_KEY}` | `compose/compose.skill-runner.yml:17` |
+| presenton | `CUSTOM_LLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.ai-core.yml` |
+| mcp_knowledge | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.mcp.yml` (embeddings + vision fallback) |
+| mcp_mysql | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.mcp.yml` (matrix-coder nl→sql) |
+| mcp_vision | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.mcp.yml` (matrix-coder frame analysis) |
+| mcp_kanban | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.mcp.yml` (service profile + kanban-MCP key) |
+| data-hub | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.data-hub.yml` (categorization) |
+| skill-runner | `LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}` | `compose/compose.skill-runner.yml` |
 
-- [ ] Mint key: `./homelab.sh key add internal-service --alias internal-service` (all models, **no MCP group**, no budget — internal trust; per-service model scoping is a later nicety)
-- [ ] Add `LITELLM_KEY_INTERNAL=${sk-...}` to `.env` (Phase 0 backup first)
-- [ ] Point each consumer env var above at `${LITELLM_KEY_INTERNAL}` — the litellm-proxy container keeps its own `LITELLM_MASTER_KEY`/`LITELLM_API_KEY` (the proxy needs its master key)
-- [ ] Recreate affected containers one stack at a time; verify each (presenton render, MCP tool calls, skill run)
-- [ ] Confirm the master key is now used only by: the litellm-proxy container itself + `./homelab.sh key ...` admin ops
-- [ ] Update docs (Phase 7) + key inventory (§1)
+- [x] Mint key: `./homelab.sh key add internal-service --alias internal-service` — all 6 model aliases, **no MCP group**, no budget (internal trust; per-service model scoping is a later nicety). Key verified live (matrix-coder completion OK, attributes confirmed via `/key/info`).
+- [x] `LITELLM_KEY_INTERNAL` in `.env` (backup `env-20261128-0324.bak` first). The old `.env` var `LITELLM_API_KEY` (== master) was **removed** — the master key now exists in `.env` only as `LITELLM_MASTER_KEY`.
+- [x] All 7 consumer env vars repointed (table above) — the litellm-proxy container keeps `LITELLM_MASTER_KEY`/`LITELLM_API_KEY` (the proxy needs its master key; its `LITELLM_API_KEY` is compose-set from `${LITELLM_MASTER_KEY}`, not from `.env`).
+- [x] Recreated + verified each (2026-11-28):
+  - data-hub: `/api/health` ok
+  - mcp_knowledge: `kb_search` vector mode ok (embedding path)
+  - mcp_mysql: `nl_to_sql_then_run` generated valid SQL via matrix-coder
+  - mcp_vision: `vision_analyze_image` ok (VLM path)
+  - mcp_kanban: `/health` ok + MCP auth matrix verified — internal key = full kanban toolset (owner "kanban"), **master key now 401** (no longer the kanban key), chuck key admin unchanged
+  - skill-runner: the skills' exact LLM call path (urllib → `/chat/completions`) ok
+  - presenton: full 3-slide deck generated + PPTX exported (LLM content verified)
+- [x] Master key now used only by: the litellm-proxy container + `./homelab.sh key ...` admin ops + `scripts/mcp-verify.py` (admin verification tool). No compose service references `${LITELLM_API_KEY}` anymore.
+- [x] **Carrier purge:** 7 containers (caddy, cloudflared, searxng, plausible, invest-hub-client/server, report-hub) carried the master key via whole-file `env_file` without using it — recreated 2026-11-28; the var is now absent from their env. (The carrier *pattern* itself is Phase 9's agenda.)
+- [x] `scripts/key-sync-check.sh` updated with Phase 8 semantics: container `LITELLM_API_KEY` must equal `LITELLM_KEY_INTERNAL` (litellm-proxy excepted: must equal the master key). Result: **ALL IN SYNC**.
+- [x] Phase 6: `internal-service=50` spend-limit override in `scripts/key-watch.conf`; spend watch baselines the key (8 keys tracked); key-audit snapshot updated (0 findings).
+- [x] Docs updated (this section + F6 + status header).
 
-Rollback: revert consumer env vars to `${LITELLM_API_KEY}`/`${LITELLM_MASTER_KEY}`, recreate, `./homelab.sh key delete internal-service`.
+Rollback: repoint consumer env vars to `${LITELLM_MASTER_KEY}`, recreate, `./homelab.sh key delete internal-service`.
 
 ---
 

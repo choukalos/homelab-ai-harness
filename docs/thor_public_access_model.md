@@ -207,14 +207,16 @@ All other host/path combinations return `404`.
 
 ## Key Strategy
 
-### LiteLLM Keys (live inventory, 2026-11-15)
+### LiteLLM Keys (live inventory, 2026-11-28)
 
 | Key | User | Model Scope | MCP Scope | Used By |
 |---|---|---|---|---|
-| `chuck` | chuck | all models | all 14 servers (`family-mcp-full` group) | public (llm + siri routes), CLI, pi sessions |
-| `dylan` | dylan | all models | all 14 servers (`family-mcp-full` group) | public (llm + siri routes), Dylan's devices |
+| `chuck` | chuck | all models | all 15 servers (`family-mcp-full` group) | public (llm + siri routes), CLI, pi sessions |
+| `dylan` | dylan | all models | all 15 servers (`family-mcp-full` group) | public (llm + siri routes), Dylan's devices |
+| `product` / `analyst` / `strategist` / `marketing` | same | work-type model(s) + `matrix-coder` (pipeline) | **none** | kanban agent sessions (Phase 13.5, 2026-11-27) |
+| `internal-service` | internal-service | all 6 model aliases | **none** | **the 7 internal LLM consumers** (presenton, data-hub, mcp_knowledge, mcp_mysql, mcp_vision, mcp_kanban service profile, skill-runner) — Phase 8, 2026-11-28 |
 | *(no alias, `memory-service`)* | — | `matrix-coder`, `homelab-embedding-v1` only | **none** (default-deny) | skill-runner mem0 embed/extract (`MEMORY_LITELLM_KEY`) |
-| master (`sk-cb1678…`) | proxy admin | everything | everything (`admin_view_unscoped` — admin keys without explicit `object_permission` resolve the whole MCP registry) | **internal only** — presenton, mcp_knowledge, mcp_mysql, mcp_vision, skill-runner (`LITELLM_MASTER_KEY == LITELLM_API_KEY`, finding F6; 5 consumers after open-webui removal 2026-11-15) |
+| master (`sk-cb1678…`) | proxy admin | everything | everything (`admin_view_unscoped` — admin keys without explicit `object_permission` resolve the whole MCP registry) | **admin-only since Phase 8 (2026-11-28)** — litellm-proxy container + `./homelab.sh key ...` ops (was: 7 internal consumers, finding F6) |
 | *(no alias, `sk-...sOsg`)* | default_user_id | all models | none | **BLOCKED 2026-11-15** — orphaned dashboard test key (F5); already expired 2026-10-05; delete after observation window |
 
 **MCP scoping (security_todo Phase 2, 2026-11-15):** `allow_all_keys` is off on
@@ -226,10 +228,13 @@ runner; `mcp_sessions` added to the group 2026-11-21; `mcp_kanban` added
 all servers via the admin path — intentional, it never crosses the public
 path (Caddy gate) and, after Phases 4/5, the LAN edge.
 
-**Master-key note (F6):** `LITELLM_MASTER_KEY == LITELLM_API_KEY` is
-internal-only by design (docker network + LAN; LAN-only after Phases 4/5).
-A dedicated `internal-service` key for the 6 internal consumers is Phase 8
-(decided 2026-09-06).
+**Master-key note (F6) — RESOLVED 2026-11-28 (Phase 8):** the 7 internal
+consumers now use the dedicated `internal-service` key
+(`LITELLM_KEY_INTERNAL` in `.env`); the master key is admin-only. The old
+`.env` var `LITELLM_API_KEY` (== master) was removed; containers' env var
+`LITELLM_API_KEY` is now compose-set from `${LITELLM_KEY_INTERNAL}` (the
+litellm-proxy container excepted — its own `LITELLM_API_KEY` is the master
+key by design). `key-sync-check` enforces the new semantics.
 
 ### App-Level (Non-Caddy) Keys
 
