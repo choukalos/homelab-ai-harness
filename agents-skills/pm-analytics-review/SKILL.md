@@ -8,7 +8,7 @@ description: Consume the product analytics (Plausible traffic/engagement/custom 
 Product analytics → prioritization input — the PM workflow step that sits
 between signal (PM-1 market analysis, BA reports) and decision (PM-4
 ideation, PM-5 prioritization). G3 is wired (Plausible → data-hub + Grafana
-Product KPIs, `todo_plausible.md` P5), so the data exists: this skill is the
+Product KPIs, `docs/plausible_ops.md`), so the data exists: this skill is the
 PM's way of *reading* it.
 
 ## When to use

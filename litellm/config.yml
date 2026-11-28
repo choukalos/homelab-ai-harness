@@ -136,8 +136,10 @@ model_list:
   # matrix-coder instead of erroring. Manual override (Matrix):
   # `model-manager gpu1 swap {media|copywriter}`.
   # Added 2026-11-25 via POST /model/new (zero-downtime, no proxy
-  # restart) + this file for persistence — plan:
-  # thor_copywriter_litellm_plan.md. Capability tags deliberately absent:
+  # restart) + this file for persistence — verification + the LiteLLM
+  # fallback gotchas: docs/thor_model_alias_registry.md (matrix-copywriter
+  # entry + "LiteLLM proxy ops gotchas"). Capability tags deliberately
+  # absent:
   # config convention is verified-only tags (probe live before tagging).
   - model_name: matrix-copywriter
     model_info:

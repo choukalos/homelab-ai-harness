@@ -2,7 +2,7 @@
 
 > **Gap G4 from `todo_agent_skills.md`** — "No BA→role analytics handoff
 > contract (report format + location)". Defined 2026-11-27 when the G3 wiring
-> landed (Plausible → data-hub feed + Grafana Product KPIs, `todo_plausible.md`
+> landed (Plausible → data-hub feed + Grafana Product KPIs, `docs/plausible_ops.md`
 > P5). This is the contract the Business Analyst role follows when it measures
 > what shipped and routes insights back to every role (BA workflow step 3).
 

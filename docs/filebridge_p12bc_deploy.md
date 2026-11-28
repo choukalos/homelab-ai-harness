@@ -441,3 +441,16 @@ before.
 - `@Recently-Snapshot` (102 B) on the NAS could not be removed from thor
   (CIFS read-only) — optional manual cleanup from the NAS admin UI /
   Windows client (see `docs/nas_cleanup_2026-11-26.md` §4).
+
+## Deploy gotchas (P12-A, 2026-11-26)
+
+- **Caddy bind-mount inode pin:** the bind mount
+  (`/home/chuck/homelab/caddy/Caddyfile → /etc/caddy/Caddyfile`, ro) is
+  pinned to the file's **inode** from container creation. A git merge that
+  replaces the file via rename (new inode) leaves the running container on
+  the **stale** file — `caddy validate` + `caddy reload` report success but
+  load the old content. Detected via md5 mismatch (container vs host file).
+  **Fix:** `docker restart caddy` (re-binds the mount) — or verify with an
+  md5 compare after any Caddyfile change. (General rule: editing a mounted
+  config does not affect the running container; `up -d --force-recreate`
+  or an explicit recreate + md5sum verification is the pattern.)

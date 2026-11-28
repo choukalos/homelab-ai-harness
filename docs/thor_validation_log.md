@@ -1157,3 +1157,92 @@ then the script takes it (`--new-token-file` or hidden paste), verifies it
 --dry-run` → `--new-token-file ...` → revoke old in UI → verify runners +
 kanban. The runner-token architecture (per-repo fine-grained PATs vs GitHub
 App) is tracked in `security_todo.md` Phase 9, item 7.
+
+## Validation Entry — 2026-11-28 (part 15): T4 verification — agent-job key pass-through (5 checks over the restricted SSH transport)
+
+**Context:** Thor key pass-through (T1 transport now live, T4 verification
+per `thor_key_passthrough_handoff.md` §T4 + Matrix contract
+`docs/matrix_key_passthrough.md`). T1: dedicated restricted ed25519 keypair
+on Thor (`~/.ssh/id_ed25519_matrix`, ssh alias `matrix-agent` →
+chuck@192.168.4.55), Matrix `authorized_keys` line command-restricted to
+`/home/chuck/homelab/scripts/run-with-key.sh` (no shell, no pty,
+no-forwarding). Job envelope rides ssh stdin (line 1 = caller key, line 2 =
+pi args JSON); `scripts/matrix-agent-launch.sh` is the Thor-side entry
+(intake validation + redaction + never-argv key handling). Test key:
+`t4-test-20261128` (user_id `t4-test`, hash `eb2ce4b2…`, max_budget $1.0,
+24 h expiry) minted via the LiteLLM admin API and **revoked at the end of
+the run** (keys by name/prefix only — no key values in this log).
+
+**Admin API note:** the LiteLLM admin endpoints (`/key/list`, `/key/info`,
+`/key/generate`, `/key/delete`, `/spend/keys`) answer **401 on the public
+route** (`https://llm.choukalos.com`) with the master key and **200 on the
+LAN proxy** (`http://192.168.4.54:4000`) — consistent with the Phase-8
+master-key-admin-only posture; admin work stays on the LAN, model calls use
+the public route.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Trivial job with the test key — `MATRIX_CALLER_KEY=<test-key> scripts/matrix-agent-launch.sh -- -p "Reply OK"` | ❌ **BLOCKED (Matrix wrapper)** — exit 127: `run-with-key.sh: line 68: exec: pi: not found` (see below) |
+| 2 | Success + spend on the TEST key in LiteLLM, not chuck's | ⚠️ **PARTIAL (proxy-side)** — test key spend **$0.00** (job never reached `pi` → no LLM call); no test-job spend on chuck's key; end-to-end attribution unverified until check 1 passes |
+| 3 | Keyless launch fails with no fallback — `ssh matrix-agent </dev/null` | ✅ **PASS** — exit 2, `run-with-key.sh: no key on stdin (keyless launches are rejected)`; Thor-side intake also rejects (exit 2, `no caller key … T3`) |
+| 4 | Revoked key fails fast with proxy 401/403, no fallback to chuck's key | ⚠️ **PARTIAL (proxy-side)** — revoked test key → **HTTP 401 in 0.048 s** (`token_not_found_in_db`); session-level launch blocked by the same wrapper issue |
+| 5 | Evidence recorded in both validation logs | ✅ **PASS** — this entry + Matrix-side entry in `docs/matrix_validation_log.md` (Run 2026-11-28) |
+
+**Captured evidence (redacted):**
+
+```
+# Check 1 (FAIL — blocker)
+$ MATRIX_CALLER_KEY=<t4-test-20261128> scripts/matrix-agent-launch.sh -- -p "Reply OK"
+matrix-agent-launch: launching agent job on matrix-agent (/home/chuck/homelab/scripts/run-with-key.sh)
+matrix-agent-launch: pi args (redacted): -p Reply OK
+matrix-agent-launch: key: via stdin only (env/stdin, never argv); not stored; all output redacted
+/home/chuck/homelab/scripts/run-with-key.sh: line 68: exec: pi: not found
+matrix-agent-launch: job ended with exit code 127 (output above is redacted)   # exit=127 elapsed=0s
+
+# Check 3 (PASS)
+$ ssh matrix-agent </dev/null
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+run-with-key.sh: no key on stdin (keyless launches are rejected)              # exit=2
+
+# Check 4 (proxy-side PASS)
+$ POST /key/delete {"keys":["eb2ce4b2…"]} → {"deleted_keys":["eb2ce4b2…"]}
+$ GET /v1/models with the revoked key → http=401 time=0.047990s
+  "Authentication Error, Invalid proxy server token passed … token_not_found_in_db"
+$ GET /key/list → 8 keys (test key absent) · GET /spend/keys → no t4-test row
+
+# Check 2 (proxy-side) — /spend/keys snapshots
+baseline: chuck $1310.66 · post-run: chuck $1313.15 (delta = this verification
+session's own usage on chuck's key; the test job made no LLM call)
+t4-test: $0.00 throughout · all other keys unchanged
+```
+
+**Blocker — Matrix-side wrapper fixes required (2 items):**
+1. **`pi` not in the forced-command PATH** — in the ssh forced-command
+   context `~/.pi/agent/bin` is not on the PATH, so the live wrapper's
+   `exec pi` (line 68) exits 127. Fix: `export PATH="$HOME/.pi/agent/bin:$PATH"`
+   (or absolute-path exec) before the `exec pi` line. Stdin envelope
+   mechanics verified working (key read from stdin line 1; keyless → exit 2).
+2. **Base URL must be the LAN proxy** — the committed wrapper pins
+   `LITELLM_BASE_URL="https://llm.choukalos.com"`, but the public route is
+   Caddy key-gated to chuck's + dylan's keys only (Caddyfile `@llm` handle,
+   security Phase 1): verified 2026-11-28 — test key **401 public / 200
+   LAN** (`http://192.168.4.54:4000`), chuck's key 200 on both. Caller keys
+   can only traverse the LAN; if the live wrapper still pins the public
+   URL, switch it to the LAN proxy.
+
+**Notes:**
+- T1 transport verified live end-to-end at the envelope level: ssh forced
+  command executes, stdin envelope delivered, key intake + keyless
+  rejection work, all remote output redacted before it reaches Thor stdout.
+- The live stdin-patched wrapper is **ahead of the pushed Matrix repo**
+  (as of `ca618d0` the repo still carries the argv-only `run-with-key.sh`)
+  — the stdin patch + the two fixes above need to be committed from the
+  Matrix working tree.
+- **Cleanup:** test key `t4-test-20261128` revoked via the admin API
+  (`deleted_keys` confirmed), absent from `/key/list` + `/spend/keys`;
+  transient key file shredded; no key values persisted (launch output
+  redacted, API responses referenced by name/hash only).
+- **Re-run:** once the wrapper fixes are live on Matrix, re-run T4 checks
+  1/2/4 with a fresh small-budget test key: expect `Reply OK` session
+  success, spend on the test key only, fast 401 on the revoked-key launch
+  with no fallback to chuck's key.

@@ -67,5 +67,5 @@ surface it — don't fabricate numbers.
 - An orphaned `site_id` from a previous Plausible instance (if present) shows
   as `site-<id>`; the 3 live sites are `choukalos.com`,
   `invest.choukalos.com`, `bluebovinegroup.com`.
-- The tracker snippet is live on all 3 sites (see `todo_plausible.md`, P3);
-  real traffic accumulates from there.
+- The tracker snippet is live on all 3 sites (see `docs/plausible_ops.md`,
+  site registry); real traffic accumulates from there.

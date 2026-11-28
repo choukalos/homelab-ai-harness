@@ -57,15 +57,16 @@
   done 2026-11-27** (product-first): slot gate (harness `task/17`, pushed),
   4 agent keys + workspaces (product active; strategist/marketing/analyst
   OFF), review crons registered + hot-reload verified, product charter
-  completed as DRAFT (pending chuck's review) — evidence below +
-  `todo_agentic_framework_build-report-2026-11-27.md`; **review skill
+  completed as DRAFT (pending chuck's review) — evidence below (per-item
+  "done" notes carry the commit refs; the run's build report was retired
+  2026-11-28); **review skill
   modules BUILT 2026-11-27** (`weekly_agent_reviews` + `monthly_org_review`
   — conservative-apply: the monthly goals rewrite + `kb_forget` are
   PROPOSALS by default, applied only with explicit params) — bootstrap
   weekly review `docs/agents/product/reviews/2026-W48.md`, both skills
   registered in the Skill Hub, the first real cron fire (2026-11-27 15:00
-  CT) will now run the real skills — evidence below +
-  `todo_agentic_framework_review-skills-report-2026-11-27.md`).
+  CT) will now run the real skills — evidence below (per-item notes carry
+  the commit refs; the run's build report was retired 2026-11-28).
   **FRAMEWORK LIVE — VERIFICATION WINDOW (2026-11-27):** all 4 agents
   ACTIVE (chuck activated strategist/marketing/analyst 2026-11-27 — the
   "product first, rest OFF" state above is superseded), all 4 first-run
@@ -81,7 +82,7 @@
 - source: workstreams 3–4 of `todo_agent_skills.md` (decomposed 2026-11-22);
   this is the own-TODO-doc that doc proposed for WS3+WS4
 - companions: `todo_agent_skills.md` (WS2 — the role/step skills the agents
-  follow), `todo_plausible.md` (WS1 — the instrumentation the KRs measure against)
+  follow), `docs/plausible_ops.md` (WS1 — the instrumentation the KRs measure against; own plan retired 2026-11-28)
 
 ## Scope
 
@@ -768,8 +769,8 @@ New from the 2026-11-24 interview:
          real cron fire (2026-11-27 15:00 CT) will now run the real skills;
          conservative-apply design: the monthly goals rewrite + `kb_forget`
          are PROPOSALS by default, applied only with explicit params
-         (`apply_goals` / `apply_kb_forget`, default false) —
-         `todo_agentic_framework_review-skills-report-2026-11-27.md`
+         (`apply_goals` / `apply_kb_forget`, default false) — the run's
+         build report (retired 2026-11-28) carried the per-item evidence
    - [x] `pi-agent-<slug>` workspace under `data/ai-kanban/` (alongside
          `pi-agent-chuck` / `pi-agent-dylan`) — **done 2026-11-27**:
          `pi-agent-{product,analyst,strategist,marketing}` created
@@ -793,8 +794,8 @@ New from the 2026-11-24 interview:
    Both registered in the Skill Hub ("2 added, 0 failed"); the first real
    cron fire — **today 2026-11-27 15:00 CT** (both jobs enabled,
    `next_run_at` 2026-11-27T15:00 CT per the skill-runner API) — will now
-   run the real skills. Evidence:
-   `todo_agentic_framework_review-skills-report-2026-11-27.md`.
+   run the real skills. Evidence: the per-item "done" notes above (the run's
+   build report was retired 2026-11-28).
 8. **Agents master switch (chuck's ask, 2026-11-27)** — one global on/off
    for ALL standing agents, flippable from any client session via MCP.
    **DONE 2026-11-27** (dev clone `task/18`, `03f08dc`, pushed; live build
@@ -1218,8 +1219,9 @@ tree). Full per-item evidence + gaps: `todo_agentic_framework_build-report-
 
 Commands + results recorded by the pi long-task run (worker sessions; no git
 commits in the homelab repo — everything above is uncommitted in the working
-tree). Full per-item evidence + the conservative-apply rationale:
-`todo_agentic_framework_review-skills-report-2026-11-27.md`.
+tree). Full per-item evidence + the conservative-apply rationale: the run's
+build report (retired 2026-11-28; the durable remainder is the per-item
+"done" notes in this doc).
 
 - **weekly_agent_reviews** — `skills/weekly_agent_reviews/` (skill.py +
   skill.yml + test_skill.py; `max_runtime: 300`, channels [cli, pi, n8n]):
