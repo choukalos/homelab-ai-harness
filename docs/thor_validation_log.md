@@ -1332,3 +1332,87 @@ $ GET /key/list → 9 keys; probe token absent; t4-test2 present
   end-to-end: expect `Reply OK` session success, spend on `t4-test2` only
   (chuck unchanged vs the $1315.85 baseline), and a fast 401 on the
   revoked-key launch with no fallback to chuck's key.
+
+## Validation Entry — 2026-11-28 (part 17): T4 verification re-run (attempt 3) — check 3 re-verified PASS; checks 1/2/4 end-to-end still blocked — Matrix-side manual fix not yet applied
+
+**Context:** follow-up to part 16. As of 04:20 UTC the manual task
+(`tmp/pi-long-task/2026-11-28T03-56-11-368Z-cc40aca4/matrix-side-fix-instructions.md`)
+had **not yet been applied on Matrix**: the live wrapper is byte-identical
+to the pre-patch version — same `line 68: exec: pi: not found` failure
+(the PATH export would shift the `exec pi` line to 69). Polling continued
+until 04:26 UTC (4 launch probes, all exit 127 —
+`/tmp/t4-evidence/check1-poll1..4.txt`); the wrapper remained unpatched.
+All Thor-verifiable checks re-verified with fresh captures.
+
+**Test keys this run:** `t4-test3` (prefix `sk-AaFX8Gt42…`, max_budget
+$1.0, 24 h expiry) — minted, verified live (200 LAN, 0.021 s), used for
+the check-1 attempt, then revoked + confirmed absent; and `t4-test2`
+(hash `3a904dc7…`, $1.0 budget, 24 h from attempt 2) — still live,
+$0.00 spend, **left live** for the end-to-end re-run (value only in
+`/tmp/t4-evidence/t4-test2.key`, chmod 600). Keys by name/prefix/hash
+only — no key values in this log.
+
+| # | Check | Result (attempt 3) |
+|---|---|---|
+| 1 | Trivial job with the test key — `MATRIX_CALLER_KEY=<test-key> scripts/matrix-agent-launch.sh -- -p "Reply OK"` | ❌ **BLOCKED (Matrix wrapper)** — re-run with `t4-test2` and fresh `t4-test3`: both exit 127, `line 68: exec: pi: not found` (wrapper unpatched — line number unchanged) |
+| 2 | Success + spend on the TEST key in LiteLLM, not chuck's | ⚠️ **BLOCKED on check 1** — no LLM call made (wrapper exits before `pi` starts ⇒ zero proxy API calls from our launches); spend snapshots: chuck $1316.74 → $1316.96 (unrelated activity), `t4-test2` $0.00 throughout (max_budget $1.0) |
+| 3 | Keyless launch fails with no fallback — `ssh matrix-agent </dev/null` | ✅ **PASS (re-verified)** — exit 2, `run-with-key.sh: no key on stdin (keyless launches are rejected)`; Thor intake also rejects (exit 2, `no caller key … T3`) |
+| 4 | Revoked/over-budget key fails fast with proxy 401/403, no fallback to chuck's key | ⚠️ **PARTIAL (proxy-side, re-verified)** — fresh probe `t4-test3` minted → 200 LAN 0.021 s → revoked (`deleted_keys`) → **HTTP 401 in 0.045 s** (`token_not_found_in_db`); absent from `/key/list` (9 keys) + `/spend/keys`; launch with the revoked key over the wrapper → 127 (fails before the proxy; no fallback, no API call) |
+| 5 | Evidence recorded in both validation logs | ✅ **PASS** — this entry + Matrix-side entry in `docs/matrix_validation_log.md` (Run 2026-11-28 attempt 3) |
+
+**Captured evidence (redacted; full captures in `/tmp/t4-evidence/`):**
+
+```
+# Check 3 (PASS, re-verified)
+$ ssh matrix-agent </dev/null
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+run-with-key.sh: no key on stdin (keyless launches are rejected)              # exit=2
+$ MATRIX_CALLER_KEY= scripts/matrix-agent-launch.sh -- -p "Reply OK" </dev/null
+matrix-agent-launch: ERROR: no caller key — … (keyless launches are rejected; T3)   # exit=2
+
+# Check 1 blocker (re-confirmed, both test keys)
+$ MATRIX_CALLER_KEY=<t4-test2> scripts/matrix-agent-launch.sh -- -p "Reply OK"
+/home/chuck/homelab/scripts/run-with-key.sh: line 68: exec: pi: not found     # exit=127
+$ MATRIX_CALLER_KEY=<t4-test3> scripts/matrix-agent-launch.sh -- -p "Reply OK"
+/home/chuck/homelab/scripts/run-with-key.sh: line 68: exec: pi: not found     # exit=127
+
+# Check 2 (proxy-side spend snapshots, /spend/keys, master key)
+baseline (04:19 UTC):  chuck $1316.74 · t4-test2 $0.00 (max_budget $1.0)
+post-run   (04:24 UTC): chuck $1316.96 (delta = unrelated activity — our launches
+                        made no API calls) · t4-test2 $0.00 · t4-test3 ABSENT
+
+# Check 4 (proxy-side, re-verified) — probe key t4-test3 (prefix sk-AaFX8Gt42…)
+$ POST /key/generate (max_budget 1.0, 24 h) → token sk-AaFX8Gt42…
+$ GET /v1/models, http://192.168.4.54:4000   → http=200 time=0.020910s
+$ POST /key/delete {"keys":["sk-AaFX8Gt42…"]} → {"deleted_keys":[…]}
+$ GET /v1/models with the revoked key (LAN) → http=401 time=0.045214s
+  "Authentication Error, Invalid proxy server token passed … token_not_found_in_db"
+$ GET /key/list → 9 keys; t4-test3 ABSENT; t4-test2 (3a904dc7…) present
+$ MATRIX_CALLER_KEY=<revoked t4-test3> scripts/matrix-agent-launch.sh -- -p "Reply OK"
+/home/chuck/homelab/scripts/run-with-key.sh: line 68: exec: pi: not found     # exit=127 (no proxy call, no fallback)
+```
+
+**Notes:**
+- **Blocker unchanged:** the wrapper patch + step-2 cutover remain a
+  **manual task for chuck on Matrix** — turnkey instructions at
+  `tmp/pi-long-task/2026-11-28T03-56-11-368Z-cc40aca4/matrix-side-fix-instructions.md`
+  (patch: `export PATH="$HOME/.pi/agent/bin:$PATH"` before `exec pi` +
+  `LITELLM_BASE_URL` → `http://192.168.4.54:4000`; cutover:
+  `scripts/enable-key-passthrough.sh`, gate cleared — films plan CLOSED
+  `ca618d0`). No other Thor→Matrix execution channel exists (no shell key;
+  filebridge = file relay only; media-pipeline/ComfyUI APIs keyless +
+  non-shell), so the fix cannot be delivered over the transport itself.
+- **No fallback demonstrated (proxy-side):** with the revoked `t4-test3`
+  the proxy answers 401 in 0.045 s and the key is absent from the DB; the
+  wrapper launch with that key dies at `exec pi` before any proxy call —
+  chuck's key is never substituted (T2 rule 4 holds by construction; the
+  wrapper carries only the caller key from stdin).
+- **Cleanup:** `t4-test3` revoked + confirmed absent (`/key/list` 9 keys,
+  no `t4-test3` row in `/spend/keys`); gen response redacted; key value
+  only in `/tmp/t4-evidence/t4-test3.key` (chmod 600). `t4-test2` left
+  live for the end-to-end re-run (revoke via `POST /key/delete
+  {"keys":["3a904dc7…"]}`, admin API LAN, if the window lapses).
+- **Re-run:** once the manual task is applied, re-run T4 checks 1/2/4
+  end-to-end with `t4-test2`: expect `Reply OK` session success, spend on
+  `t4-test2` only (chuck unchanged vs the $1316.96 baseline), and a fast
+  401 on the revoked-key launch with no fallback.
