@@ -309,6 +309,14 @@ class MediaPipelineClient:
             return {k: out[k] for k in ("analysis", "tab", "lyrics", "midi",
                                         "audio") if k in out} | {
                        "location": "gpu_host"}
+        if "frames" in out:
+            # Films B2 extract_frame (2026-11-27): frame extraction -> PNG
+            # path(s) (no single video/image/audio key) — carry the GPU-host
+            # location marker through to the poll result.
+            res = {"frames": out["frames"], "location": "gpu_host"}
+            if "count" in out:
+                res["count"] = out["count"]
+            return res
         for k in ("video", "image", "audio"):
             if k in out:
                 res = {"path": out[k], "location": "gpu_host"}
