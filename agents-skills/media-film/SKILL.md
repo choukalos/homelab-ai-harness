@@ -1,6 +1,6 @@
 ---
 name: media-film
-description: "Orchestrate a multi-shot short film through the mcp_media GPU pipeline — keyframes (Qwen-Image 2.1), I2V clips (Wan 2.2 / LTXV), TTS/music/SFX, assembly, vision QC, and publish. Crash-proof by design: on-disk state file written after every submit, retried MCP calls, timeboxed codemode chunks, and a resume protocol built on the durable job ledger (media_list_jobs)."
+description: "Orchestrate a multi-shot short film through the mcp_media GPU pipeline — keyframes (Qwen-Image 2.1), I2V clips (Wan 2.2 / LTXV), TTS/music/SFX, assembly, vision QC, and publish. Crash-proof by design: on-disk state file written after every submit, retried MCP calls, timeboxed codemode chunks, and a resume protocol built on the durable job ledger (media_list_jobs). Film projects (2026-11-27): starts from the NAS-durable project store (media_project_get), enforces the approve gate, and runs the 4-tier flow — keyframes → animatic gate → drafts (high-risk only) → heroes (FLF2V + frame-chaining) — with takes, audio-first dialogue timing, and the editorial finish (in/out trims, J-cut SFX, LUT + grain)."
 ---
 
 # media-film — multi-shot film orchestration
@@ -23,11 +23,98 @@ n8n). The Mac is **off-LAN** — all pipeline access goes through the MCP gatewa
 ## When to use
 
 - Multi-shot film/commercial: storyboard → keyframes → I2V → audio → assemble → publish.
+- **Film projects approved by `media-storyboard`** — production from the
+  NAS-durable project store (the F1–F8 items below).
 - Any long mcp_media orchestration where a dead client must not lose job IDs.
 - Resuming a crashed film run (jump straight to the **Resume protocol**).
 
 Not for: single-image or single-clip jobs (call the tool directly), song
-transcription (use the `song-transcribe` skill).
+transcription (use the `song-transcribe` skill). Pre-production (storyboard,
+shotplan, approve gate) is the `media-storyboard` skill — this skill
+refuses to render an unapproved project (F2).
+
+## Film projects (2026-11-27, films handoff — F1–F8)
+
+For **film projects** (a `media-storyboard`-approved project in the
+NAS-durable store), production starts from the project store and runs the
+4-tier flow (animatic → draft → hero → polish). F1–F8 are the
+films-handoff additions on top of the crash-proofing rules above — R1–R6
+and C1–C14 all still apply: the state file is still written after every
+submit, the retry wrapper wraps every call, chunks are still timeboxed.
+
+- **F1 — Project-first.** Start from `media_project_get(slug)` (the durable
+  store — approval state, assets, shotplan, takes, `nas_sync`), not just the
+  local state file. The local state file (R1) is **still written after every
+  submit — both, always**: the store survives the GPU host, the state file
+  survives a dead client; neither replaces the other.
+- **F2 — Gate check.** Refuse to render drafts/heroes if
+  `approval.storyboard` is null — point the user at the `media-storyboard`
+  skill (the anti-suck-atude gate: no I2V/draft spend before
+  `media_project_approve` lands). P0 step 0.
+- **F3 — Phase-batched submission** (matches the 1-job-serial GPU queue —
+  submit a phase, poll it to completion, then the next phase):
+  1. **All keyframe refreshes** (the S4 keyframes are the anchor — refresh
+     any that drifted since storyboard approval).
+  2. **Animatic gate** — `media_animatic` (manifest from the shotplan:
+     `[{image: <keyframe path>, duration: duration_frames/16, move:
+     animatic_move}]` + the combined dialogue track) → **user watch/review**
+     before any video diffusion (the Tier-0 pacing gate — the whole scene
+     in ~20 s).
+  3. **Drafts** — `ltxv2b` on **high-risk shots only** (`risk_level: high`
+     — fight impacts, two-character interaction, lunges); **macro inserts +
+     slow dialogue skip straight to hero**.
+  4. **Heroes** — `wan14b`; **FLF2V** (`media_generate_shot`
+     `end_keyframe`) when `use_end_frame_anchor`; **frame-chaining** —
+     `media_extract_frame` the previous shot's last clean frame → this
+     shot's `start` when `chain_from_prev_shot`.
+- **F4 — Audio-first dialogue timing.** For dialogue shots, TTS **before**
+  video: `media_text_to_speech` with the shot's `audio.voice_id`, measure
+  the line (`media_info`), then
+  `duration_frames = ceil((ffprobe_duration + 0.35) × 16)` **snapped to
+  4k+1** (the +0.35 s is breathing room past the last phoneme). The clip is
+  generated to the measured length — never the other way around.
+- **F5 — Takes, never overwrite.** Every finished clip is registered as a
+  take in the state's `takes` table (the project store's `takes.json`
+  format: `{shot_id: [{take, job_id, seed, model, path, active, created}]}`)
+  — the GPU-host clip is never overwritten. **Re-roll = a new take entry**
+  (new job, new seed); **swap = flip the `active` pointer** — the assembler
+  uses only the active take's path. Keep the durable mirror in sync: write
+  the full `takes.json` via `media_project_asset(slug, "takes.json",
+  <local file>)` after each registration (the store's own `/shots`
+  project/shot_id auto-registration is not exposed through the MCP tool).
+- **F6 — QC retry budget.** Vision-check keyframes **pre-I2V** (cheap —
+  ~1 min regen vs ~11 min I2V) and **2–3 frames per clip post-I2V** via
+  `media_qc_montage` (one labeled hstack PNG → one vision call). Spatial/
+  anatomy fail (character flipped sides, missing weapon, extra limbs, zero
+  motion) → **re-seed ≤3×, then flag the shot to the user** (a fourth
+  attempt is a scope decision for the owner).
+- **F7 — Editorial finish.** Trim **~8–12 dead frames head/tail** via
+  assemble `in`/`out` (the diffusion models take ~0.5 s to settle and
+  degrade in the last second — the raw head/tail is the "AI ramp-up");
+  **SFX pre-lap −4…−6 frames (J-cut)** via timestamped SFX (`sfx:
+  [{path, at}]` with `at` = the visual cut time minus the pre-lap, in
+  absolute timeline seconds); the **final assemble carries `lut` + `grain`**
+  (the scene's `color_grade_lut` — bundled names `cinematic_teal_amber` /
+  `warm_neutral` / `cool_noir` or a .cube path — + `grain` 0.0–1.0; a
+  single grade pass glues clips generated at different times into one
+  sensor look); `media_qc_montage` on the **final cut at 6–8 timeline
+  points** before publish (P6).
+- **F8 — Mouths closed.** Dialogue `motion_prompt`s **never** ask the video
+  model to talk (diffusion video models produce rubbery, unconvincing mouth
+  shapes when prompted to speak — prompt for eye/head acting, "mouth closed
+  at rest"). `lip_sync_required` shots get **`media_lipsync` post-render**
+  (MuseTalk v1.5 — the lower face is re-animated to the TTS line; the
+  source audio is muxed in unchanged; output duration ≈ the line's length,
+  so the F4 timing keeps the line shorter than the shot).
+
+**Project store tools** (sync — no `job_id`/queue/`non_blocking`; full
+contract in `references/pipeline-contract.md`): `media_project_create` /
+`media_project_list` / `media_project_get` / `media_project_asset` /
+`media_project_shotplan` / `media_project_storyboard_pages` /
+`media_project_approve` / `media_project_sync`. Project files (GPU-host
+paths under `media_projects/`) are accepted directly by the films tools
+(`media_animatic` / `media_extract_frame` / `media_qc_montage` /
+`media_montage` / `media_lipsync`) — no `media_jobs` round-trip.
 
 ## Environment map (verified 2026-11-04)
 
@@ -215,14 +302,27 @@ diff: the submitted prompt must equal the card's `i2v_prompt` exactly
   "i2v_pending": ["S13"],
   "audio": { "vo": "<combined uploaded track>", "music": "<path>", "sfx": "<path>" },
   "audio_jobs": { "tts_S1": { "job_id": "...", "path": "...", "status": "done" }, "music_cue_main": { "job_id": "...", "status": "submitted" } },
+  "takes": { "S1": [ { "take": 1, "job_id": "def456", "seed": 42, "model": "wan14b", "path": "...", "active": true, "created": "2026-11-28T00:00:00Z" } ] },
   "assemble": { "job_id": "...", "path": "...", "shots": ["<gpu path>", ...], "text_overlays": [{ "text": "...", "start": 0, "end": 3 }] }
 }
 ```
+
+**F5 — `takes` (film projects):** the project store's `takes.json` format —
+`{shot_id: [{take, job_id, seed, model, path, active, created}]}`. Takes are
+**never overwritten**: re-roll = a new take entry (new job, new seed); swap
+= flip the `active` pointer. The assembler uses **only the active take's
+path**. Keep the durable mirror in the project store in sync (write the full
+`takes.json` via `media_project_asset` after each registration).
 
 ## Workflow
 
 ### P0 — Preflight
 
+0. **Film projects (F1/F2):** `media_project_get(slug)` — the durable store
+   is the starting point (F1). **Gate check (F2):** if `approval.storyboard`
+   is null → **STOP** — refuse to render drafts/heroes; point the user at
+   the `media-storyboard` skill (the approve gate). Non-film projects (no
+   store) continue as before.
 1. `media_list_jobs(status="running")` — pipeline up? (a response = the
    pipeline is alive; this replaces `GET /health` off-LAN). Note queue depth.
 2. Create `~/Code/media-film/<project>/state.json` with `title`, `created`
@@ -247,6 +347,14 @@ diff: the submitted prompt must equal the card's `i2v_prompt` exactly
 films). Store the shot list in `state.shots`: `beat`, `kf_prompt` (full scene
 description + the character's canonical identity text), `i2v_prompt`,
 `vo_text` if the shot carries VO.
+
+**Film projects:** the shot list IS the project store's two-tier shotplan
+(`media_project_shotplan(slug)` — Scene → Beats → Micro-shots, approved by
+`media-storyboard`); copy its fields into `state.shots` (`shot_id`,
+`shot_category`, `risk_level`, `shot_type`, `duration_frames`,
+`keyframe_prompt`, `motion_prompt`, `animatic_move`, `end_keyframe_prompt`,
+`chain_from_prev_shot`, `use_end_frame_anchor`, `audio`) — production is
+driven by the approved shotplan, not a fresh brief (F1).
 
 **C2 — shot cards are schema'd.** One card per shot in
 `<project>/shots/<id>.json`, copied from `templates/_card_template.json`
@@ -286,6 +394,12 @@ keyframe costs ~1 min to regen vs ~11 min of I2V (R6 below). For cross-shot
 character consistency, compose keyframes with `media_edit_image` using the
 character sheet / a previous keyframe as `references`.
 
+**Film projects (F3 step 1 / F6):** refresh keyframes from the project's
+look-dev assets (character sheets + env plates under `bible/` — see
+`media-storyboard` S4) with `media_edit_image` references, in the
+phase-batched order (all keyframe refreshes before the animatic gate); QC
+budget per F6 (re-seed ≤3×, then flag to the user).
+
 **C6 — bounded fix-forward:** kf = 3 attempts, then `ACCEPTED-WITH-NOTE` or
 the `shots.json` (storyboard) fallback — a fourth attempt is a scope decision
 for the owner, not the worker.
@@ -296,6 +410,16 @@ Run `chunk.js` with `phase: "i2v"` — this is the long phase (wan14b: ~11 min
 per clip, serial queue → 20 shots ≈ 4+ h; expect many chunks). QC 2–3 action
 frames per clip post-I2V (see R6). A failed clip: fix the `i2v_prompt` (or
 seed) and resubmit — the shot stays in `i2v_pending`.
+
+**Film projects (F3 steps 3–4 / F4 / F8):** drafts are `ltxv2b` on
+high-risk shots only (macro inserts + slow dialogue skip straight to hero);
+heroes are `wan14b` with **FLF2V** (`media_generate_shot` `end_keyframe`
+from the shot's end keyframe) when `use_end_frame_anchor`, and
+**frame-chaining** (`media_extract_frame` the previous shot's last clean
+frame → this shot's `start`) when `chain_from_prev_shot`. Dialogue shots are
+timed **audio-first** (F4 — TTS before video, `duration_frames` from the
+measured line) and their `motion_prompt`s keep **mouths closed** (F8) — the
+lip-sync pass comes in P4.
 
 **C6 — bounded fix-forward:** I2V clip = 2 attempts, then accept the best
 clip (record why in `qc`).
@@ -313,7 +437,15 @@ clip (record why in `qc`).
   `music_cue_<x>`.
 - **SFX:** `media_sfx(video, description)` per clip if needed; assemble
   accepts `sfx` as a list `[{path, at}]` for timestamped placement — state
-  key `sfx_<name>`.
+  key `sfx_<name>`. **Film projects (F7):** `at` = the visual cut time
+  minus the J-cut pre-lap (−4…−6 frames @16 fps) — the impact is heard a
+  split-second before the cut.
+- **Lip-sync (F8, film projects):** for every `lip_sync_required` shot,
+  `media_lipsync(video=<hero clip>, audio=<the shot's TTS wav>)` post-render
+  (MuseTalk v1.5 — the lower face is re-animated; the source audio is muxed
+  in unchanged; output duration ≈ the line's length — F4 keeps the line
+  shorter than the shot). Register the lip-synced clip as a **new take**
+  (F5) and flip the `active` pointer.
 - **C11 — canonical audio keys:** one `audio_jobs` key per audio item —
   `tts_<shot>` / `sfx_<name>` / `music_cue_<x>` — written once at submit,
   updated in place; no parallel key families (a stale `submitted` key in a
@@ -328,10 +460,17 @@ clip (record why in `qc`).
 
 - `shots`: **GPU-host paths** (from state) — never locally downloaded paths.
   Entries may be objects `{path, in?, out?, duration?}` for trims/stills.
-  **C14 — `duration` does NOT frame-hold:** the assembler concatenates each
-  clip at its **natural length**; the `duration` field is accepted but has no
-  effect (verified in the 2026-11-17 run: 36 × 5.042 s → 181.5 s output vs a
-  226 s plan). Plan on measured lengths only.
+  **C14 — `duration` IS enforced (fixed 2026-11-19, M1):** the assembler
+  now frame-holds (last frame) or trims each object shot to its requested
+  `duration` (±0.1 s tolerance = no-op), applied after `in`/`out` and before
+  `upscale_each`; every adjustment is reported in the job's
+  `duration_adjustments` (see the pipeline contract). Pre-fix history: the
+  field was silently ignored (2026-11-17 run: 36 × 5.042 s → 181.5 s output
+  vs a 226 s plan) — for pre-2026-11-19 jobs, plan on measured lengths only.
+  **Film projects (F7):** object shots with `in`/`out` trimming **~8–12
+  dead frames head/tail** (the AI ramp-up), and the final assemble carries
+  `lut` (the scene's `color_grade_lut`) + `grain` (0.0–1.0) — one grade
+  pass across the whole cut.
 - `vo` / `music` / `sfx`: GPU-host paths; `vo_start` for lead-in silence;
   `loudnorm: true` for EBU R128.
 - `text_overlays`: crisp titles (`{text, start?, end?, position?, size?, color?}`)
@@ -361,8 +500,10 @@ clip (record why in `qc`).
    numeric gate alone let a 44.5 s-short film (missing closing VO + end card)
    pass after a 4.5 h upscale render.
 2. Vision-check the final cut at **6–8 timeline points** (title card, each key
-   beat, end card): pull the cut locally (signed URL from `media_pull`),
-   extract frames with ffmpeg, vision each frame (see R6).
+   beat, end card): `media_qc_montage(final cut, n=6..8)` gives the labeled
+   frames as **one PNG → one vision call** (F7); or pull the cut locally
+   (signed URL from `media_pull`), extract the specific frames with ffmpeg,
+   and vision each frame (see R6) when exact timeline points matter.
 3. Fix-forward: a bad beat → trim/caption/replace the shot, re-assemble.
 
 ### P7 — Publish
@@ -417,6 +558,13 @@ Vision-check at every expensive boundary:
 | Every keyframe | before I2V submit | ~11 min I2V per bad keyframe |
 | 2–3 action frames per clip | after I2V, before assembly | re-cut the whole film |
 | Final cut, 6–8 timeline points | before publish | shipping a bad film |
+
+**Films (F6):** `media_qc_montage(video, n=3)` — n even-spaced frames
+(first/middle/last for n=3) → a **single labeled hstack PNG** (index +
+timestamp) → **one image → one vision call** for the 2–3 frames per clip.
+Spatial/anatomy fail (character flipped sides, missing weapon, extra limbs,
+zero motion) → **re-seed ≤3×, then flag the shot to the user** (hard
+budget — a fourth attempt is a scope decision for the owner).
 
 **Verdicts:** `PASS` / `FAIL: reason` / **`ACCEPTED-WITH-NOTE`** (C4) — a
 first-class outcome, not a cop-out: the defect is real but the beat survives
@@ -516,6 +664,14 @@ They persist state through `tools.bash` heredocs after every submit/completion.
 ## Verification plan
 
 - **Dry run:** 3-shot test film (`ltxv2b` drafts) through P0–P7.
+- **Film project run (2026-11-27):** a `media-storyboard`-approved 4-shot
+  project through F1–F8: `media_project_get` (gate check) → keyframe
+  refreshes → `media_animatic` (user review) → `ltxv2b` draft on the
+  high-risk shot → `wan14b` hero (FLF2V on the anchored shot) →
+  `media_lipsync` on the dialogue shot → takes registered +
+  `takes.json` mirrored → `media_qc_montage` per clip + on the final cut →
+  `media_assemble` with `lut` + `grain` + `in`/`out` trims + J-cut SFX.
+- **Gate test:** an unapproved project → P0 step 0 refuses to render (F2).
 - **Kill test:** mid-run, deliberately drop one just-submitted job ID from the
   state file (simulating the incident-#1 crash), then run `resume.js`; confirm
   the ledger sweep recovers the ID and the shot is **not** resubmitted

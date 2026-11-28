@@ -1,4 +1,4 @@
-# mcp_media pipeline contract (self-contained summary, updated 2026-11-21)
+# mcp_media pipeline contract (self-contained summary, updated 2026-11-28 — films handoff B1–B5 tools added)
 
 The canonical contract lives on the GPU host (`docs/matrix_media_pipeline_api.md`)
 — unreachable off-LAN. This file is the
@@ -42,11 +42,11 @@ endpoints are on `matrix:8189` (LAN-only).
 | `media_storyboard` | LLM shot list | `brief, n_shots=5, aspect="16:9"` | `{shots:[{id,visual,vo}]}` |
 | `media_generate_image` | keyframe (Qwen-Image 2.1 — best keyframe model, vision-verified 2026-11-22) | `prompt, width=1280, height=720, seed=42, steps=25, model="qwen21"\|"legacy" (legacy = 2512 Q4_0 default; Q6_K staged as a marginal upgrade)` | `{path, location}` |
 | `media_edit_image` | compose keyframe w/ identity refs | `image, prompt, references≤9 (qwen21), seed, steps` | `{path}` |
-| `media_generate_shot` | I2V clip | `keyframe, prompt, model="wan14b"\|"ltxv2b" (omit=server default), width/height/frames/fps (omit=model defaults — ltxv2b 1280×720 drafts supported → 1280×704 out; wan14b 81f recommended, 129f experimental), seed=42, strength=0.7 (ltxv2b only)` | `{path}` |
+| `media_generate_shot` | I2V clip | `keyframe, prompt, model="wan14b"\|"ltxv2b" (omit=server default), width/height/frames/fps (omit=model defaults — ltxv2b 1280×720 drafts supported → 1280×704 out; wan14b 81f recommended, 129f experimental), seed=42, strength=0.7 (ltxv2b only), end_keyframe? (Films B2 — optional SECOND keyframe → FLF2V, the clip interpolates start→end; wan14b-only: clean 400 with ltxv2b; 720p admitted)` | `{path}` (job output carries `end_keyframe: true`) |
 | `media_text_to_speech` | VO | `text, voice="trailer"\|library name\|ref wav path` | `{path}` |
 | `media_generate_music` | ACE-Step | `prompt, lyrics="", duration=30, seed=42` | `{path}` |
 | `media_sfx` | MMAudio SFX bed | `video, description, duration=8.0` | `{path}` |
-| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration? (ENFORCED since 2026-11-19 — see "Assemble semantics")}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume` | `{path}` (+ `duration_adjustments` in the job output when any shot requested a duration) |
+| `media_assemble` | final cut | `shots:[gpu path \| {path,in?,out?,duration? (ENFORCED since 2026-11-19 — see "Assemble semantics")}], vo?, music?, sfx?: path\|[{path,at}], vo_start=0, loudnorm=false, text_overlays:[{text,start?,end?,position?,size?,color?}], upscale_each=false, width=1920, height=1080, fps=24, *_volume, lut? (Films B2 — .cube 3D LUT on the final concat: bundled name `cinematic_teal_amber`/`warm_neutral`/`cool_noir`, run-dir-relative path, or absolute path; unresolvable → clean 400 at submit), grain? (Films B2 — 0.0–1.0 temporal film grain; out of range → clean 400; both absent = no grade)` | `{path}` (+ `duration_adjustments` in the job output when any shot requested a duration) |
 | `media_upscale_video` | SeedVR2 / fast | `video, pipeline="b"\|"a2", resolution=1080` | `{path}` |
 | `media_trim` / `media_freeze` / `media_caption` | ffmpeg post | source (gpu or staging path) | `{path}` |
 | `media_info` | ffprobe (sync) | `path` | `{duration_s,width,height,fps,video_codec,audio_codecs[],size_bytes,bitrate_bps}` |
@@ -58,6 +58,62 @@ endpoints are on `matrix:8189` (LAN-only).
 | `media_fetch` | → local media library (thor) | `host_path, subdirectory?` | local path under `/home/chuck/data/media/generated/pipeline` (basename collisions get `_2` suffix; never overwrites) |
 | `media_put` / `media_download` / `media_upload` | stage inputs | `media_put` = thor-local file under `/home/chuck/workspace/media`; `media_download` = http(s) URL; `media_upload` = matrix ComfyUI basedir file | `{path}` (media_jobs) |
 | `media_list_voices` | TTS library (sync) | — | `{voices:[{name,description,gender,style,...}]}` |
+| `media_project_create(slug, title?)` | film project store (sync) | `POST /projects` | `{slug, project (abs dir), status: 'draft', nas_sync}` — slug `^[a-z0-9_]{1,64}$` (400 otherwise; 409 exists) |
+| `media_project_list()` | film project store (sync) | `GET /projects` | `{projects: [{slug, title, status, updated, nas_pending}], root, nas_root}` — slug recovery after a session reset |
+| `media_project_get(slug)` | film project store (sync) | `GET /projects/{slug}` | full state (404 unknown): `{slug, title, status ('draft' → 'storyboard_approved'), created, updated, approval {storyboard: ISO\|null, by, note}, nas_sync {last, ok, pending, files, reason?}, assets {path: {size, added}}, tree {bible, storyboard, production}, takes}` — **project-first: the durable source of truth (F1); check `approval.storyboard` before rendering (F2)** |
+| `media_project_asset(slug, path, file)` | film project store (sync) | `POST /projects/{slug}/assets` | register an asset (char sheet / env plate / keyframe / voice ref / script / `takes.json`): `path` project-relative (400 on `..`/absolute), `file` = staging file or GPU-host `media_jobs` path (auto-fetched) → `{path (abs), size, location}` |
+| `media_project_shotplan(slug, shotplan?)` | film project store (sync) | `POST`/`GET /projects/{slug}/shotplan` | two-tier shotplan (Scene → Beats → Micro-shots) — pure pass-through; omitted → GET (404 when none saved) + `saved` + `schema_warnings`; given → save → `{shotplan (abs path), warnings}`; 400s carry the exact field errors (schema: `agents-skills/media-storyboard/references/shotplan-schema.md`) |
+| `media_project_storyboard_pages(slug, per_page=6, page_size='640x360')` | film project store (sync — ffmpeg-only, NOT a pipeline job) | `POST /projects/{slug}/storyboard_pages` | render the shotplan's keyframes into labeled review grid pages (missing keyframes → placeholder cells); `per_page` 1..24, `page_size` WxH (64..2048 each) → `{pages: [abs page_NN.png], n_shots, n_pages, page_size, per_page}` |
+| `media_project_approve(slug, what='storyboard', note?)` | film project store (sync) | `POST /projects/{slug}/approve` | the review/approve gate (idempotent; v1: `what='storyboard'` only, 400 otherwise) → `{slug, status, approval {storyboard: ISO, by, note}}` — **the anti-suck-atude gate (F2)** |
+| `media_project_sync(slug)` | film project store (sync) | `POST /projects/{slug}/sync` | force the NAS mirror now → success `{ok: true, pending: false, files, local_files, dest}`; failure `{ok: false, pending: true, reason, files: 0}` (not an error — hourly retry) |
+| `media_animatic(manifest, audio?, width=1280, height=720, fps=24)` | Tier-0 pacing gate (job, ffmpeg only — no GPU) | `POST /animatic` | `manifest` = `[{image, duration, move}]` (image = GPU-host/run-dir-relative path or staging file; `move` in `push_in`/`pull_out`/`pan_left`/`pan_right`/`shake`/`static`, default `static`; unknown → clean 400 at submit) → preview cut with zoompan moves + shot labels + optional audio (`-shortest`) → `{path, location, shots, duration_s, width, height, fps}` — **F3 step 2: user watch/review before any video diffusion** |
+| `media_extract_frame(video, frame?/time?/positions?/n?)` | frame chaining + QC (job, ffmpeg only) | `POST /extract_frame` | **exactly one of** `frame` (int index) / `time` (s) / `positions` (list of `first`/`middle`/`last`) / `n` (int even-spacing) — else clean 400; last frame clamped 100 ms before the end → `{frames: [abs .png], count, location}` — **F3 step 4: last clean frame → next shot's `start` when `chain_from_prev_shot`** |
+| `media_qc_montage(video, n=3, label=true)` | clip QC montage (job, ffmpeg only) | `POST /qc_montage` | n even-spaced frames (first/middle/last for n=3) → a SINGLE hstack PNG with index+timestamp labels — one image → one vision call; `n` 2..12 → `{path, location, frames, timestamps}` — **F6: 2–3 frames per clip post-I2V; F7: final cut at 6–8 points** |
+| `media_montage(video, n=9, label=true, width=480, height=270)` | video → montage grid (job, ffmpeg only) | `POST /montage` | n even-spaced frames → grid PNG (`cols=ceil(sqrt(n)) × rows=ceil(n/cols)`; default 9 = 3×3; last row padded black); `n` 2..36 → `{path, location, frames, grid, timestamps}` |
+| `media_lipsync(video, audio, face_box?, save_coord=false)` | MuseTalk v1.5 lip-sync (job, GPU 1) | `POST /lipsync` | `video` + `audio` (wav — must carry an audio stream; a TTS wav) → clip with the LOWER face re-animated to the audio (upper face untouched; source audio muxed in unchanged); `face_box` optional `[x1,y1,x2,y2]` pixel ints (absent = auto-detect; malformed → clean 400 at submit); `save_coord` → per-frame face boxes (pkl). Output duration ≈ audio length (keep the line shorter than the shot — F4). ~90 s for an 8 s clip → `{path, location, duration_s, width, height, audio_codecs, face_boxes?}` — **F8: post-render on `lip_sync_required` shots** |
+
+## Film project store + films tools (2026-11-27, films handoff)
+
+**The project store is a SYNC surface** — no `job_id`, no queue, no
+`non_blocking`, no `user`/`client` (the pipeline's sync endpoints take plain
+JSON). NAS-durable film projects on the GPU host:
+`media_projects/<slug>/` (`project.json`, `shotplan.json`, `bible/`,
+`storyboard/` + `pages/`, `production/` with an append-only `takes.json`),
+mirrored **append-only** to the NAS after every mutation — a NAS failure
+never fails a mutation (`nas_sync.pending` + hourly retry). Project files
+live OUTSIDE the 14-day media_jobs sweep (the retention sweeper never
+touches them). No DELETE endpoint (405) — projects persist until the 14-day
+retention sweep.
+
+**Films B2–B5 input path semantics** (`media_animatic` /
+`media_extract_frame` / `media_qc_montage` / `media_montage` /
+`media_lipsync`): absolute GPU-host paths and run-dir-relative paths
+(`media_jobs/…`) **pass through** — the pipeline resolves them on the host,
+so project files under `media_projects/` are accepted directly (no
+`media_jobs` round-trip; an unresolvable host path is a clean 400/404).
+LOCAL files must be under the staging dir (auto-uploaded via `/upload`).
+
+**Takes (F5):** the project store's `takes.json` format is
+`{shot_id: [{take, job_id, seed, prompt, model, path, active, created}]}` —
+takes are never overwritten (the newest take is `active`); clips are copied
+to `production/clips/<shot_id>_<take>.mp4`. The store's own auto-registration
+(fired by `/shots` `project`/`shot_id` form fields) is **not exposed through
+the MCP `media_generate_shot` tool** — the skill keeps the `takes` table in
+the state file (R1) and syncs the durable mirror via
+`media_project_asset(slug, "takes.json", <local file>)`.
+
+**Bundled LUTs (B2 grade):** `cinematic_teal_amber`, `warm_neutral`,
+`cool_noir` (33×33 .cubes under the pipeline's `luts/` — starting points,
+not masters) — `media_assemble` `lut` accepts the name, a run-dir-relative
+path, or an absolute path; `grain` 0.0–1.0 (subtle temporal film grain).
+
+**Model notes (films):** FLF2V (`end_keyframe`) is **wan14b-only** (clean
+400 with `ltxv2b`); 720p FLF2V admitted (B2 GPU QA). `media_lipsync` runs
+on GPU 1 (dedicated musetalk worker container — MuseTalk v1.5, gate PASS
+9079 MiB peak). The pipeline's `/health` `features` list carries
+`projects`, `storyboard-pages`, `animatic`, `extract-frame`,
+`assemble-grade`, `qc-montage`, `montage`, `lipsync` when all films batches
+are live.
 
 ## Models
 
