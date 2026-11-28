@@ -16,7 +16,20 @@ Tools (GPU-host media-pipeline service, MEDIA_PIPELINE_URL, :8189 on Matrix):
                                                     shape_hints surface)
   - media_sfx(video, description, duration)        Video -> synced SFX bed
   - media_upscale_video(video, pipeline, ...)      Video -> upscaled (SeedVR2 / 4xUltrasharp)
-  - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4
+  - media_assemble(shots, vo, music, sfx, ...)     Concat + mix -> final mp4 (lut/.cube grade + grain, Films B2)
+  - media_animatic(manifest, audio, ...)           Storyboard keyframes -> preview cut + zoompan moves (Films B2)
+  - media_extract_frame(video, frame|time|positions|n)  Frame(s) for chaining/QC (Films B2)
+  - media_qc_montage(video, n)                     Clip QC montage: one labeled hstack PNG (Films B3)
+  - media_montage(video, n)                        Video -> labeled grid PNG (Films B5)
+  - media_lipsync(video, audio, face_box)          MuseTalk lip-sync, lower face only (Films B4)
+  - media_project_create(slug, title)              Film project store: create (sync) (Films B1)
+  - media_project_list()                           List film projects (sync) (Films B1)
+  - media_project_get(slug)                        Full project state (sync) (Films B1)
+  - media_project_asset(slug, path, file)          Register an asset into a project (sync) (Films B1)
+  - media_project_shotplan(slug, shotplan?)        Get/save the two-tier shotplan (sync) (Films B1)
+  - media_project_storyboard_pages(slug, per_page) Render keyframes -> labeled grid pages (sync) (Films B1)
+  - media_project_approve(slug, what, note)        The review/approve gate (sync) (Films B1)
+  - media_project_sync(slug)                       Force the NAS mirror now (sync) (Films B1)
   - media_job_result(job_id, wait_seconds)          Poll a job to its final result (long-poll, <=25s)
   - media_list_jobs(status, client, user, flow, since, limit)  Durable job listing (recover lost job_ids)
   - media_fetch(host_path, subdirectory)          Download a pipeline result locally
@@ -198,7 +211,17 @@ mcp = FastMCP(
         "on long orchestrations; retry the call (the job is unaffected). "
         "Submits return 503 + retry_after_seconds when the queue is full "
         "(1 running + 5 queued) — stop submitting and poll. Wrap all calls "
-        "in retry logic (>=3 attempts)."
+        "in retry logic (>=3 attempts).\n"
+        "FILM PROJECTS (2026-11-27, films handoff): the NAS-durable film "
+        "project store — media_project_create/list/get/asset/shotplan/"
+        "storyboard_pages/approve/sync (sync tools) + production tools "
+        "media_animatic (Tier-0 pacing gate), media_extract_frame (frame "
+        "chaining), media_qc_montage / media_montage (QC grids), "
+        "media_lipsync (MuseTalk). HARD RULE: no I2V/draft spend before "
+        "media_project_approve lands. Project files (GPU-host paths under "
+        "media_projects/) are accepted directly by media_animatic / "
+        "media_extract_frame / media_qc_montage / media_montage / "
+        "media_lipsync (no media_jobs round-trip needed).\n"
     ),
     host=MCPS_HOST,
 )
@@ -319,6 +342,33 @@ def _staging_error(path: str, what: str = "file") -> Optional[dict]:
                      "root the media pipeline container can read."),
         }
     return None
+
+
+# ---------------------------------------------------------------------------
+# Films B1–B5 input validation (2026-11-27, thor_films_handoff_nov27.md)
+# ---------------------------------------------------------------------------
+
+_SLUG_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+
+
+def _validate_slug(slug: str) -> Optional[dict]:
+    """Films B1: project slugs are ^[a-z0-9_]{1,64}$ (the pipeline 400s as a
+    backstop; a clean client-side error avoids the round-trip)."""
+    if not isinstance(slug, str) or not _SLUG_RE.match(slug):
+        return {"error": f"invalid project slug: {slug!r} "
+                         "(lowercase letters, digits, underscores; 1..64)"}
+    return None
+
+
+def _films_input_error(ref: str, what: str) -> Optional[dict]:
+    """Films B2–B5 input validation: absolute GPU-host paths and run-dir-
+    relative paths (media_jobs/…) are valid — the pipeline resolves them on
+    the host (project files live under media_projects/, OUTSIDE media_jobs/).
+    LOCAL files must be under MEDIA_STAGING_DIR (auto-uploaded). Returns an
+    error dict or None."""
+    if ref.startswith("/") or ref.startswith("media_jobs/"):
+        return None
+    return _staging_error(ref, what)
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +619,12 @@ async def media_edit_image(image: str, prompt: str, seed: int = 42, steps: int =
         "but experimental (fits easily but quality degrades vs 81f — ~115 min "
         "per 720p clip). `keyframe` "
         "may be a local image path OR a GPU-host path (auto-fetched). "
+        "`end_keyframe` (Films B2, 2026-11-27): optional SECOND keyframe (same "
+        "local / GPU-host path semantics as `keyframe`) -> first-last-frame "
+        "FLF2V: the clip interpolates from `keyframe` (start pose) to "
+        "`end_keyframe` (exact end-pose control; 720p admitted). wan14b ONLY "
+        "— the pipeline returns a clean 400 when combined with "
+        "model='ltxv2b'; metered like a wan14b shot. "
         "`prompt` should describe VISUAL STYLE (not fast motion) to minimize "
         "warble. `strength` = how strongly the keyframe anchors the clip "
         "(ltxv2b only; 0.7 is the tuned default; ignored for wan14b). "
@@ -588,20 +644,32 @@ async def media_generate_shot(
     seed: int = 42,
     strength: float = 0.7,
     model: Optional[str] = None,
+    end_keyframe: Optional[str] = None,
     client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
-    """Keyframe -> I2V clip (GPU host). model: wan14b (quality) | ltxv2b (fast)."""
+    """Keyframe -> I2V clip (GPU host). model: wan14b (quality) | ltxv2b (fast).
+
+    end_keyframe (Films B2): optional second keyframe -> FLF2V (wan14b only)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     tag = client or MEDIA_CLIENT
+    if model == "ltxv2b" and end_keyframe is not None:
+        return {"error": "end_keyframe (FLF2V) is wan14b-only — the pipeline "
+                         "400s on end_keyframe + model='ltxv2b'; drop "
+                         "end_keyframe or use the default/wan14b model"}
     try:
         local_kf = await _ensure_local(keyframe)
         if not os.path.isfile(local_kf):
             return {"error": f"Keyframe not found (local or on GPU host): {keyframe}"}
+        local_ek = None
+        if end_keyframe is not None:
+            local_ek = await _ensure_local(end_keyframe)
+            if not os.path.isfile(local_ek):
+                return {"error": f"end_keyframe not found (local or on GPU host): {end_keyframe}"}
         res = await asyncio.to_thread(
             PIPELINE.generate_shot, local_kf, prompt, width, height, frames, fps,
-            seed, strength, model, user=user, client=tag,
+            seed, strength, model, end_keyframe=local_ek, user=user, client=tag,
             on_job=_job_logger("media_generate_shot", tag),
             non_blocking=non_blocking,
         )
@@ -1010,7 +1078,13 @@ async def media_upscale_video(
         "and `vo_start` are ABSOLUTE timeline seconds in the final cut — compute "
         "each shot's start as the sum of prior shots' durations (`media_info` on "
         "each shot); `vo_start` offsets the VO from t=0; `loudnorm` applies "
-        "EBU R128 to the final mix. Returns {path, location='gpu_host'}; call "
+        "EBU R128 to the final mix. Grade (Films B2, 2026-11-27): `lut` = a "
+        ".cube 3D LUT applied to the final concat in the same re-encode pass — "
+        "a bundled name (cinematic_teal_amber / warm_neutral / cool_noir), a "
+        "run-dir-relative path, or an absolute path (unresolvable -> clean 400 "
+        "at submit); `grain` in 0.0..1.0 = subtle temporal film grain (out of "
+        "range -> clean 400). Both absent = today's behavior (no grade). "
+        "Returns {path, location='gpu_host'}; call "
         "media_fetch to download the final mp4 or media_pull for a signed public URL."
 " non_blocking=true submits without waiting — returns {job_id} in ~1s; poll media_job_result(job_id) for the result."
         + _CLIENT_NOTE + _TIMEOUT_NOTE
@@ -1035,13 +1109,20 @@ async def media_assemble(
     upscale_fps: int = 24,
     upscale_seed: int = 42,
     text_overlays: Optional[List[dict]] = None,
+    lut: Optional[str] = None,
+    grain: Optional[float] = None,
     client: Optional[str] = None,
     non_blocking: bool = False,
     ctx: Context = None,
 ) -> dict:
-    """Concat shots + mix audio -> final mp4 (GPU host)."""
+    """Concat shots + mix audio -> final mp4 (GPU host). Optional grade (Films
+    B2): lut (.cube path or bundled name) + grain (0.0..1.0)."""
     user = await asyncio.to_thread(_resolve_user, ctx)
     tag = client or MEDIA_CLIENT
+    if grain is not None:
+        if not isinstance(grain, (int, float)) or isinstance(grain, bool) \
+                or not (0.0 <= float(grain) <= 1.0):
+            return {"error": f"grain must be in 0.0..1.0 (got {grain!r})"}
     try:
         res = await asyncio.to_thread(
             PIPELINE.assemble, shots, vo or None, music or None, sfx or None,
@@ -1050,6 +1131,7 @@ async def media_assemble(
             upscale_resolution=upscale_resolution,
             upscale_noise_scale=upscale_noise_scale, upscale_fps=upscale_fps,
             upscale_seed=upscale_seed, text_overlays=text_overlays,
+            lut=lut, grain=grain,
             client=tag,
             user=user, on_job=_job_logger("media_assemble", tag), non_blocking=non_blocking,
         )
@@ -1503,6 +1585,534 @@ async def media_pull(path: str, ttl_hours: float = 24, local_dir: str = "",
         return out
     except Exception as exc:
         return _pipeline_error(exc, {"path": path})
+
+
+# ---------------------------------------------------------------------------
+# Film project store (Films B1, 2026-11-27 — thor_films_handoff_nov27.md)
+# NAS-durable film projects on the GPU host: a SYNC surface (no job_id, no
+# queue) — assets, two-tier shotplan, storyboard pages, the approve gate,
+# and the append-only NAS mirror. Every mutation is mirrored to the NAS
+# (a NAS failure never fails a mutation — nas_sync.pending + hourly retry).
+# ---------------------------------------------------------------------------
+
+@mcp.tool(
+    name="media_project_create",
+    description=(
+        "Create a FILM PROJECT in the GPU-host project store (Films B1, "
+        "2026-11-27 — sync, instant): the NAS-durable store for film "
+        "pre-production (assets, shotplan, storyboard pages, approval "
+        "state). `slug` = ^[a-z0-9_]{1,64}$ (400 otherwise; 409 if it "
+        "already exists); `title` optional. Start every film here — the "
+        "store is the durable source of truth (media_project_get) that "
+        "survives session resets. Returns {slug, project (abs dir), status: "
+        "'draft', nas_sync}."
+    ),
+)
+async def media_project_create(slug: str, title: Optional[str] = None,
+                               ctx: Context = None) -> dict:
+    """POST /projects (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(PIPELINE.project_create, slug, title)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug})
+
+
+@mcp.tool(
+    name="media_project_list",
+    description=(
+        "List FILM PROJECTS in the GPU-host project store (Films B1 — sync, "
+        "instant): {projects: [{slug, title, status, updated, nas_pending}], "
+        "root, nas_root}. Use it to find an existing project's slug after a "
+        "session reset (media_project_get / media_project_approve / ...)."
+    ),
+)
+async def media_project_list(ctx: Context = None) -> dict:
+    """GET /projects (GPU host, sync)."""
+    try:
+        return await asyncio.to_thread(PIPELINE.project_list)
+    except Exception as exc:
+        return _pipeline_error(exc, {})
+
+
+@mcp.tool(
+    name="media_project_get",
+    description=(
+        "Get a FILM PROJECT's full state (Films B1 — sync, instant; 404 for "
+        "an unknown slug): {slug, title, status ('draft' -> "
+        "'storyboard_approved'), created, updated, approval (storyboard "
+        "timestamp + by + note), nas_sync (last/ok/pending/files), assets "
+        "(path -> {size, added}), tree (bible/storyboard/production file "
+        "counts), takes}. Start every film workflow here (project-first): "
+        "it is the durable source of truth, not the local state file. Check "
+        "approval.storyboard before spending on I2V drafts (the approve "
+        "gate) and nas_sync.pending before publishing."
+    ),
+)
+async def media_project_get(slug: str, ctx: Context = None) -> dict:
+    """GET /projects/{slug} (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(PIPELINE.project_get, slug)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug})
+
+
+@mcp.tool(
+    name="media_project_asset",
+    description=(
+        "Register an asset into a FILM PROJECT (Films B1 — sync, instant): "
+        "char sheet / env plate / keyframe / voice ref / script. `path` = "
+        "project-relative destination (e.g. 'bible/characters/hero/"
+        "turnaround.png', 'storyboard/script.md'; 400 on '..' or absolute "
+        "paths). `file` = a local file under the staging dir "
+        f"{MEDIA_STAGING_DIR} OR a GPU-host path (auto-fetched first) — "
+        "generate keyframes with media_generate_image, fetch them with "
+        "media_fetch, then register them here. The project is mirrored to "
+        "the NAS after the mutation (nas_sync). Returns {path (abs), size}."
+    ),
+)
+async def media_project_asset(slug: str, path: str, file: str,
+                              ctx: Context = None) -> dict:
+    """POST /projects/{slug}/assets (GPU host, sync, multipart)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    if not path or path.startswith("/") or ".." in path.split("/"):
+        return {"error": f"invalid project-relative path: {path!r} "
+                         "(no '..' or absolute paths)"}
+    err = _staging_error(file, "file")
+    if err:
+        return err
+    try:
+        local_file = await _ensure_local(file)
+        if not os.path.isfile(local_file):
+            return {"error": f"file not found (local or on GPU host): {file}"}
+        res = await asyncio.to_thread(
+            PIPELINE.project_asset, slug, path, local_file)
+        res["location"] = "gpu_host"
+        return res
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug, "path": path})
+
+
+@mcp.tool(
+    name="media_project_shotplan",
+    description=(
+        "Get or save the two-tier SHOTPLAN of a film project (Films B1 — "
+        "sync, pure pass-through): `shotplan` omitted -> GET the saved plan "
+        "(404 when none saved): the scene object (Scene -> Beats -> "
+        "Micro-shots) + server-managed `saved` (ISO ts) + `schema_warnings` "
+        "(non-fatal, e.g. motion verbs in a keyframe_prompt). `shotplan` "
+        "given -> POST/replace it. The pipeline validates server-side "
+        "(enums, duration_frames 4k+1, action_impact <=49f, unique "
+        "shot_id, end_keyframe_prompt when use_end_frame_anchor) — 400s "
+        "carry the exact field errors (detail: 'shotplan validation "
+        "failed: <field> ...') and are surfaced verbatim. Returns the save "
+        "response {shotplan (abs path), warnings} or the saved document."
+    ),
+)
+async def media_project_shotplan(slug: str, shotplan: Optional[dict] = None,
+                                 ctx: Context = None) -> dict:
+    """POST/GET /projects/{slug}/shotplan (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(PIPELINE.project_shotplan, slug,
+                                       shotplan)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug,
+                                     "saving": shotplan is not None})
+
+
+@mcp.tool(
+    name="media_project_storyboard_pages",
+    description=(
+        "Render a film project's shotplan keyframes into labeled review "
+        "GRID PAGES (Films B1 — SYNC ffmpeg-only pass-through, not a "
+        "pipeline job — returns directly): `per_page` 1..24 (default 6), "
+        "`page_size` 'WxH' (64..2048 each; default '640x360'). Missing "
+        "keyframes render as placeholder cells. 400 on bad params or a "
+        "missing shotplan. Returns {pages: [abs page paths], n_shots, "
+        "n_pages, page_size, per_page} — media_fetch the pages for human "
+        "review (the review loop: present -> accept/revise -> regenerate "
+        "only changed keyframes -> re-render)."
+        + _TIMEOUT_NOTE
+    ),
+)
+async def media_project_storyboard_pages(slug: str, per_page: int = 6,
+                                         page_size: str = "640x360",
+                                         ctx: Context = None) -> dict:
+    """POST /projects/{slug}/storyboard_pages (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    if not isinstance(per_page, int) or isinstance(per_page, bool) \
+            or not (1 <= per_page <= 24):
+        return {"error": f"per_page must be an int in 1..24 (got {per_page!r})"}
+    m = re.fullmatch(r"(\d{1,4})x(\d{1,4})", (page_size or "").strip())
+    if not m or not (64 <= int(m.group(1)) <= 2048
+                     and 64 <= int(m.group(2)) <= 2048):
+        return {"error": f"page_size must be 'WxH' with 64..2048 each "
+                         f"(got {page_size!r})"}
+    try:
+        return await asyncio.to_thread(
+            PIPELINE.project_storyboard_pages, slug, per_page, page_size)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug})
+
+
+@mcp.tool(
+    name="media_project_approve",
+    description=(
+        "The review/APPROVE GATE for a film project (Films B1 — sync, "
+        "idempotent): records the storyboard approval (status -> "
+        "'storyboard_approved'; v1: what='storyboard' only, 400 on "
+        "anything else). HARD RULE: no I2V/draft spend before this lands "
+        "(anti-suck-atude gate). Call it after the user explicitly accepts "
+        "the storyboard pages, then media_project_sync (the NAS copy is "
+        "permanent). Returns {slug, status, approval: {storyboard: ISO, by, "
+        "note}}."
+    ),
+)
+async def media_project_approve(slug: str, what: str = "storyboard",
+                                note: Optional[str] = None,
+                                ctx: Context = None) -> dict:
+    """POST /projects/{slug}/approve (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(PIPELINE.project_approve, slug, what,
+                                       note)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug, "what": what})
+
+
+@mcp.tool(
+    name="media_project_sync",
+    description=(
+        "Force the NAS mirror of a film project NOW (Films B1 — sync): the "
+        "store auto-mirrors after every mutation (append-only; a NAS "
+        "failure never fails a mutation — it sets nas_sync.pending and "
+        "retries hourly). Use it after media_project_approve (the NAS copy "
+        "is permanent) and before publishing to confirm the mirror is "
+        "complete. Success: {ok: true, pending: false, files, local_files, "
+        "dest}; failure: {ok: false, pending: true, reason, files: 0} (not "
+        "an error — the project is intact on the GPU host)."
+        + _TIMEOUT_NOTE
+    ),
+)
+async def media_project_sync(slug: str, ctx: Context = None) -> dict:
+    """POST /projects/{slug}/sync (GPU host, sync)."""
+    err = _validate_slug(slug)
+    if err:
+        return err
+    try:
+        return await asyncio.to_thread(PIPELINE.project_sync, slug)
+    except Exception as exc:
+        return _pipeline_error(exc, {"slug": slug})
+
+
+# ---------------------------------------------------------------------------
+# Film production flows (Films B2–B5, 2026-11-27)
+# Job tools (non_blocking + media_job_result polling, user/client identity,
+# {path, location} results). Inputs: absolute GPU-host paths and run-dir-
+# relative paths pass through (the pipeline resolves them on the host —
+# project files live under media_projects/); local files must be under the
+# staging dir (auto-uploaded).
+# ---------------------------------------------------------------------------
+
+@mcp.tool(
+    name="media_animatic",
+    description=(
+        "Tier-0 PACING GATE (Films B2, 2026-11-27 — job, ffmpeg only, no "
+        "GPU): stitch the storyboard keyframes into a preview cut with "
+        "simulated camera moves + shot labels + optional audio, so a whole "
+        "scene can be watched in ~20 s before burning video-diffusion time. "
+        "`manifest` = [{image, duration, move}]: image = absolute GPU-host "
+        "path or run-dir-relative path (project keyframes pass through) OR "
+        f"a local staging file ({MEDIA_STAGING_DIR}, auto-uploaded); "
+        "duration = seconds (default 2.0); move in push_in/pull_out/"
+        "pan_left/pan_right/shake/static (default static; unknown -> clean "
+        "400 at submit). `audio` optional (same path semantics) — muxed "
+        "with -shortest. width/height/fps default 1280x720@24. Returns "
+        "{path (video), location, shots, duration_s, width, height, fps}; "
+        "media_fetch / media_pull it for the user to watch. non_blocking=true "
+        "submits without waiting — returns {job_id} in ~1s; poll "
+        "media_job_result(job_id) for the result."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
+    ),
+)
+async def media_animatic(
+    manifest: List[dict],
+    audio: Optional[str] = None,
+    width: int = 1280,
+    height: int = 720,
+    fps: int = 24,
+    client: Optional[str] = None,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Storyboard keyframes -> preview cut (GPU host, ffmpeg)."""
+    if not isinstance(manifest, list) or not manifest:
+        return {"error": "manifest must be a non-empty list of "
+                         "{image, duration, move}"}
+    for i, shot in enumerate(manifest):
+        if not isinstance(shot, dict) or not shot.get("image"):
+            return {"error": f"manifest[{i}] must be an object with an "
+                             f"'image' (got {shot!r})"}
+        err = _films_input_error(str(shot["image"]), f"manifest[{i}].image")
+        if err:
+            return err
+    if audio is not None:
+        err = _films_input_error(audio, "audio")
+        if err:
+            return err
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.animatic, manifest, audio, width, height, fps,
+            client=tag,
+            user=user, on_job=_job_logger("media_animatic", tag),
+            non_blocking=non_blocking,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"shots": len(manifest)})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["path"] = out.pop("video")
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
+
+
+@mcp.tool(
+    name="media_extract_frame",
+    description=(
+        "Extract frame(s) from a video (Films B2 — job, ffmpeg only): for "
+        "frame-chaining (last clean frame -> the next shot's start "
+        "keyframe) and QC. `video` = absolute GPU-host path or run-dir-"
+        "relative path OR a local staging file ("
+        f"{MEDIA_STAGING_DIR}, auto-uploaded). EXACTLY ONE of: `frame` (int "
+        "index, 0-based), `time` (seconds), `positions` (list of "
+        "'first'/'middle'/'last'), `n` (int -> n frames evenly spaced "
+        "across the duration) — anything else is a clean 400 at submit. "
+        "The last frame is clamped 100 ms before the end. Returns {frames: "
+        "[abs .png paths], count, location} — media_fetch them (a chained "
+        "frame is passed to media_generate_shot's keyframe after media_put, "
+        "or registered with media_project_asset)."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
+    ),
+)
+async def media_extract_frame(
+    video: str,
+    frame: Optional[int] = None,
+    time: Optional[float] = None,
+    positions: Optional[List[str]] = None,
+    n: Optional[int] = None,
+    client: Optional[str] = None,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Video -> frame(s) (GPU host, ffmpeg)."""
+    err = _films_input_error(video, "video")
+    if err:
+        return err
+    if sum(x is not None for x in (frame, time, positions, n)) != 1:
+        return {"error": "provide exactly one of: frame (int), time (s), "
+                         "positions (list), n (int even-spacing)"}
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.extract_frame, video, frame, time, positions, n,
+            client=tag,
+            user=user, on_job=_job_logger("media_extract_frame", tag),
+            non_blocking=non_blocking,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"video": video})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
+
+
+@mcp.tool(
+    name="media_qc_montage",
+    description=(
+        "Clip QC montage (Films B3 — job, ffmpeg only): n even-spaced frames "
+        "(first/middle/last for n=3) -> a SINGLE hstack PNG with index + "
+        "timestamp labels — one image -> one vision call (the QC pattern: "
+        "vision-check 2-3 frames per clip post-I2V; spatial/anatomy fail -> "
+        "re-seed <=3x then flag to user). `video` = absolute GPU-host path "
+        "or run-dir-relative path OR a local staging file "
+        f"({MEDIA_STAGING_DIR}, auto-uploaded). `n` 2..12 (default 3); "
+        "`label` default true. Returns {path (image), location, frames, "
+        "timestamps}; media_fetch it for a vision read."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
+    ),
+)
+async def media_qc_montage(
+    video: str,
+    n: int = 3,
+    label: bool = True,
+    client: Optional[str] = None,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Video -> one labeled hstack QC PNG (GPU host, ffmpeg)."""
+    err = _films_input_error(video, "video")
+    if err:
+        return err
+    if not isinstance(n, int) or isinstance(n, bool) or not (2 <= n <= 12):
+        return {"error": f"n must be an int in 2..12 (got {n!r})"}
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.qc_montage, video, n, label,
+            client=tag,
+            user=user, on_job=_job_logger("media_qc_montage", tag),
+            non_blocking=non_blocking,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"video": video})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["path"] = out.pop("image")
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
+
+
+@mcp.tool(
+    name="media_montage",
+    description=(
+        "Generic video -> montage GRID (Films B5 — job, ffmpeg only): n "
+        "even-spaced frames (inclusive ends; last clamped 100 ms before the "
+        "end) -> a grid PNG of cols=ceil(sqrt(n)) x rows=ceil(n/cols) cells "
+        "(default 9 = 3x3; the last row is padded with black cells), each "
+        "cell scaled to width x height with an optional index+timestamp "
+        "label. Fun tool + long-render review. `video` = absolute GPU-host "
+        "path or run-dir-relative path OR a local staging file "
+        f"({MEDIA_STAGING_DIR}, auto-uploaded). `n` 2..36 (default 9); "
+        "`label` default true. Returns {path (image), location, frames, "
+        "grid ('<cols>x<rows>'), timestamps}; media_fetch it."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
+    ),
+)
+async def media_montage(
+    video: str,
+    n: int = 9,
+    label: bool = True,
+    width: int = 480,
+    height: int = 270,
+    client: Optional[str] = None,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Video -> grid PNG montage (GPU host, ffmpeg)."""
+    err = _films_input_error(video, "video")
+    if err:
+        return err
+    if not isinstance(n, int) or isinstance(n, bool) or not (2 <= n <= 36):
+        return {"error": f"n must be an int in 2..36 (got {n!r})"}
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.montage, video, n, label, width, height,
+            client=tag,
+            user=user, on_job=_job_logger("media_montage", tag),
+            non_blocking=non_blocking,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"video": video})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["path"] = out.pop("image")
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
+
+
+@mcp.tool(
+    name="media_lipsync",
+    description=(
+        "Lip-sync a clip to a dialogue line (Films B4 — job, GPU 1, "
+        "MuseTalk v1.5): the LOWER face is re-animated to the audio (upper "
+        "face untouched; the source audio is muxed in unchanged). Use it "
+        "post-render on lip_sync_required shots (the dialogue motion prompts "
+        "keep mouths closed — the video model never talks). `video` and "
+        "`audio` = absolute GPU-host paths or run-dir-relative paths OR "
+        f"local staging files ({MEDIA_STAGING_DIR}, auto-uploaded); the "
+        "audio must carry an audio stream (a TTS wav from "
+        "media_text_to_speech). `face_box` optional [x1,y1,x2,y2] pixel "
+        "ints (absent = MuseTalk auto-detects the face; malformed -> clean "
+        "400 at submit). `save_coord=true` also returns the per-frame face "
+        "boxes (a pkl path). Output duration ~= the audio length — keep the "
+        "line shorter than the shot (audio longer than the video cycles the "
+        "face). ~90 s for an 8 s clip. Returns {path (video), location, "
+        "duration_s, width, height, audio_codecs, face_boxes?}."
+        + _CLIENT_NOTE + _TIMEOUT_NOTE
+    ),
+)
+async def media_lipsync(
+    video: str,
+    audio: str,
+    face_box: Optional[List[int]] = None,
+    save_coord: bool = False,
+    client: Optional[str] = None,
+    non_blocking: bool = False,
+    ctx: Context = None,
+) -> dict:
+    """Video + wav -> lip-synced clip (GPU host, MuseTalk)."""
+    err = _films_input_error(video, "video")
+    if err:
+        return err
+    err = _films_input_error(audio, "audio")
+    if err:
+        return err
+    if face_box is not None:
+        try:
+            fb = [int(x) for x in face_box]
+        except (TypeError, ValueError):
+            return {"error": "face_box must be [x1,y1,x2,y2] pixel ints"}
+        if len(fb) != 4 or any(x < 0 for x in fb) \
+                or fb[2] <= fb[0] or fb[3] <= fb[1]:
+            return {"error": "face_box must be [x1,y1,x2,y2] with x2>x1 "
+                             "and y2>y1"}
+    user = await asyncio.to_thread(_resolve_user, ctx)
+    tag = client or MEDIA_CLIENT
+    try:
+        res = await asyncio.to_thread(
+            PIPELINE.lipsync, video, audio, face_box, save_coord,
+            client=tag,
+            user=user, on_job=_job_logger("media_lipsync", tag),
+            non_blocking=non_blocking,
+        )
+    except Exception as exc:
+        return _pipeline_error(exc, {"video": video})
+    if non_blocking:
+        return _non_blocking_result(res)
+    out = dict(res)
+    out["path"] = out.pop("video")
+    out["location"] = "gpu_host"
+    out["note"] = _HOST_PATH_NOTE
+    return out
 
 
 # ---------------------------------------------------------------------------

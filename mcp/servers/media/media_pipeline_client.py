@@ -93,6 +93,41 @@ class MediaPipelineClient:
             on_job(jid, "submitted", None)
         return jid
 
+    def _post_multipart_files(self, endpoint: str, files: list[tuple[str, str]],
+                              fields: dict, user: str | None = None,
+                              client: str | None = None,
+                              on_job: OnJob | None = None) -> str:
+        """Multipart POST with MULTIPLE files (each (field_name, local_path))
+        + form fields; returns the job_id (job endpoints)."""
+        if user:
+            fields["user"] = user
+        if client:
+            fields["client"] = client
+        boundary = "----mpb" + uuid.uuid4().hex
+        body = b""
+        for k, v in fields.items():
+            body += (f"--{boundary}\r\nContent-Disposition: form-data; "
+                     f"name=\"{k}\"\r\n\r\n{v}\r\n").encode()
+        for field, filepath in files:
+            fname = os.path.basename(filepath)
+            ctype = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+            with open(filepath, "rb") as f:
+                fdata = f.read()
+            body += (f"--{boundary}\r\nContent-Disposition: form-data; "
+                     f"name=\"{field}\"; filename=\"{fname}\"\r\n"
+                     f"Content-Type: {ctype}\r\n\r\n").encode()
+            body += fdata
+        body += f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            f"{self.base}{endpoint}", data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=300) as r:
+            jid = json.loads(r.read())["job_id"]
+        if on_job:
+            on_job(jid, "submitted", None)
+        return jid
+
     def _post_multipart(self, endpoint: str, filepath: str, fields: dict,
                         user: str | None = None, client: str | None = None,
                         on_job: OnJob | None = None) -> str:
@@ -169,6 +204,23 @@ class MediaPipelineClient:
         if not os.path.isfile(source):
             raise PipelineError(f"source not found (local or on GPU host): {source}")
         return self._post_multipart_sync("/upload", source, {})["path"]
+
+    def _resolve_input(self, ref: str) -> str:
+        """Films B2–B5 input resolution: run-dir-relative paths (media_jobs/…)
+        and ABSOLUTE GPU-host paths pass through — the pipeline resolves
+        host paths directly (project keyframes live under media_projects/,
+        OUTSIDE media_jobs/). LOCAL files (relative, or absolute under the
+        staging mount) are uploaded via /upload and the resulting media_jobs
+        path is returned. An absolute path that exists locally is a local
+        file; one that doesn't is assumed to be a GPU-host path (the
+        pipeline validates existence with a clean 400/404)."""
+        if ref.startswith("media_jobs/"):
+            return ref
+        if os.path.isfile(ref):
+            return self._post_multipart_sync("/upload", ref, {})["path"]
+        if not ref.startswith("/"):
+            raise PipelineError(f"file not found (local or on GPU host): {ref}")
+        return ref
 
     def _resolve_path(self, ref: str) -> str:
         """Accept an absolute GPU-host path, a relative media_jobs path
@@ -259,7 +311,15 @@ class MediaPipelineClient:
                        "location": "gpu_host"}
         for k in ("video", "image", "audio"):
             if k in out:
-                return {"path": out[k], "location": "gpu_host"}
+                res = {"path": out[k], "location": "gpu_host"}
+                # Films B2–B5 (2026-11-27): carry the sibling metadata
+                # (frame counts, timestamps, grid shape, shot count, duration)
+                # through to the non-blocking poll result.
+                for extra in ("frames", "timestamps", "grid", "count",
+                              "shots", "duration_s"):
+                    if extra in out:
+                        res[extra] = out[extra]
+                return res
         return dict(out)
 
     # ------------------------------------------------------------- utilities
@@ -463,6 +523,7 @@ class MediaPipelineClient:
                       height: int | None = None, frames: int | None = None,
                       fps: float | None = None, seed: int = 42,
                       strength: float = 0.7, model: str | None = None,
+                      end_keyframe: str | None = None,
                       user: str | None = None, client: str | None = None,
                       on_job: Callable[[str, str, dict | None], None] | None = None,
                       non_blocking: bool = False, timeout: float = 3600) -> str | dict:
@@ -480,6 +541,11 @@ class MediaPipelineClient:
         native defaults.
         strength: ltxv2b only — how strongly the keyframe anchors the clip
         (0.7 is the tuned default; lower = less warble). Ignored for wan14b.
+        end_keyframe (Films B2, 2026-11-27): optional SECOND keyframe (LOCAL
+        path) -> first-last-frame (FLF2V) — the clip interpolates from
+        `keyframe` (start pose) to `end_keyframe` (exact end-pose control).
+        wan14b ONLY (the pipeline 400s on end_keyframe + model=ltxv2b);
+        metered like a wan14b shot; the job output carries end_keyframe:true.
         non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
         fields = {"prompt": prompt, "seed": str(seed),
@@ -490,8 +556,13 @@ class MediaPipelineClient:
                 fields[k] = str(v)
         if model is not None:
             fields["model"] = model
-        jid = self._post_multipart("/shots", keyframe, fields, user, client,
-                                   on_job)
+        if end_keyframe is not None:
+            jid = self._post_multipart_files(
+                "/shots", [("file", keyframe), ("end_keyframe", end_keyframe)],
+                fields, user, client, on_job)
+        else:
+            jid = self._post_multipart("/shots", keyframe, fields, user, client,
+                                       on_job)
         if non_blocking:
             return {"job_id": jid}
         return self._wait(jid, timeout, on_job)["video"]
@@ -604,7 +675,8 @@ class MediaPipelineClient:
                  loudnorm: bool = False, upscale_each: bool = False,
                  upscale_resolution: int = 1080, upscale_noise_scale: float = 0.0,
                  upscale_fps: int = 24, upscale_seed: int = 42,
-                 text_overlays: list | None = None, user: str | None = None,
+                 text_overlays: list | None = None, lut: str | None = None,
+                 grain: float | None = None, user: str | None = None,
                  client: str | None = None, on_job: OnJob | None = None,
                  non_blocking: bool = False,
                  timeout: float = 1800) -> str | dict:
@@ -622,6 +694,13 @@ class MediaPipelineClient:
         `text_overlays` burns crisp titles into shots post-I2V (list of
         {text, start?, end?, position?, size?, color?} — LTXV warps baked-in
         text, so composite titles in post, not in the I2V prompt).
+
+        Grade extensions (Films B2, 2026-11-27): `lut` = a .cube 3D LUT
+        applied to the final concat in the same re-encode pass — a bundled
+        name (cinematic_teal_amber / warm_neutral / cool_noir), a
+        RUN_DIR-relative path, or an absolute path (unresolvable -> clean
+        400 at submit); `grain` in [0,1] = subtle temporal film grain
+        (out of range -> clean 400). Both absent = today's behavior.
         non_blocking=True -> submit only; returns {"job_id"} immediately.
         """
         payload = {"shots": shots, "width": width, "height": height, "fps": fps,
@@ -642,6 +721,10 @@ class MediaPipelineClient:
                             "upscale_seed": upscale_seed})
         if text_overlays:
             payload["text_overlays"] = text_overlays
+        if lut is not None:
+            payload["lut"] = lut
+        if grain is not None:
+            payload["grain"] = grain
         jid = self._post_json("/assemble", payload, user, client, on_job)
         if non_blocking:
             return {"job_id": jid}
@@ -831,6 +914,244 @@ class MediaPipelineClient:
         if local_dir:
             out["local_path"] = self.fetch(p, local_dir)
         return out
+
+    # ------------------------------------------- film project store (Films B1)
+    # NAS-durable film projects (2026-11-27): a SYNC surface — no job_id, no
+    # queue. On-disk layout under RUN_DIR/media_projects/<slug>/ (project.json,
+    # shotplan.json, bible/, storyboard/ + pages/, production/ with an
+    # append-only takes.json), mirrored append-only to the NAS after every
+    # mutation. A NAS failure never fails a mutation (nas_sync.pending=true +
+    # hourly retry). Slugs: ^[a-z0-9_]{1,64}$ (400 otherwise; 409 if exists).
+
+    def project_create(self, slug: str, title: str | None = None,
+                       timeout: float = 60) -> dict:
+        """POST /projects (sync): create a film project.
+        -> {slug, project (abs dir), status: 'draft',
+           nas_sync: {last, ok, pending, files}}"""
+        payload: dict = {"slug": slug}
+        if title is not None:
+            payload["title"] = title
+        return self._post_json_sync("/projects", payload, timeout)
+
+    def project_list(self, timeout: float = 60) -> dict:
+        """GET /projects (sync) -> {projects: [{slug, title, status, updated,
+        nas_pending}], root, nas_root}."""
+        return self._get_json("/projects", timeout)
+
+    def project_get(self, slug: str, timeout: float = 60) -> dict:
+        """GET /projects/{slug} (sync): full project state (404 unknown):
+        {slug, title, status ('draft' -> 'storyboard_approved'), created,
+        updated, approval: {storyboard: ISO|null, by, note},
+        nas_sync: {last, ok, pending, files, reason?}, assets: {path: {size,
+        added}}, tree: {bible, storyboard, production} (file counts),
+        takes: {...}}."""
+        return self._get_json(f"/projects/{slug}", timeout)
+
+    def project_asset(self, slug: str, path: str, local_file: str,
+                      timeout: float = 900) -> dict:
+        """POST /projects/{slug}/assets (sync, multipart): register an asset
+        (char sheet / env plate / keyframe / voice ref). `path` = project-
+        relative destination (e.g. bible/characters/hero/turnaround.png; 400
+        on '..'/absolute). `local_file` = a LOCAL file (the MCP server
+        auto-fetches GPU-host paths before calling). -> {path (abs), size}."""
+        return self._post_multipart_sync(
+            f"/projects/{slug}/assets", local_file, {"path": path}, timeout)
+
+    def project_shotplan(self, slug: str, shotplan: dict | None = None,
+                         timeout: float = 120) -> dict:
+        """POST/GET /projects/{slug}/shotplan (sync pass-through).
+        shotplan=None -> GET the saved plan (404 when none saved):
+        the scene object + server-managed `saved` (ISO ts) + `schema_warnings`
+        (non-fatal, e.g. motion verbs in a keyframe_prompt).
+        shotplan={...} -> POST/replace: the two-tier scene (scene_id, beats[]
+        -> micro_shots[]). Validated server-side (enums, duration_frames
+        4k+1, action_impact <=49f, unique shot_id) — 400s carry the exact
+        field errors (detail: 'shotplan validation failed: <field> ...').
+        -> save: {shotplan (abs path), warnings}; get: the saved doc."""
+        if shotplan is None:
+            return self._get_json(f"/projects/{slug}/shotplan", timeout)
+        return self._post_json_sync(
+            f"/projects/{slug}/shotplan", {"shotplan": shotplan}, timeout)
+
+    def project_storyboard_pages(self, slug: str, per_page: int = 6,
+                                 page_size: str = "640x360",
+                                 timeout: float = 900) -> dict:
+        """POST /projects/{slug}/storyboard_pages (SYNC — ffmpeg-only, not a
+        pipeline job): render the shotplan's keyframes into labeled review
+        grid pages. per_page 1..24 (default 6); page_size WxH (64..2048 each,
+        default '640x360'). Missing keyframes -> placeholder cell. 400 on bad
+        params or a missing shotplan.
+        -> {pages: [abs page_NN.png], n_shots, n_pages, page_size, per_page}."""
+        return self._post_json_sync(
+            f"/projects/{slug}/storyboard_pages",
+            {"per_page": per_page, "page_size": page_size}, timeout)
+
+    def project_approve(self, slug: str, what: str = "storyboard",
+                        note: str | None = None, timeout: float = 60) -> dict:
+        """POST /projects/{slug}/approve (sync): the review/approve gate
+        (status -> storyboard_approved; idempotent). v1: what='storyboard'
+        only (400 on anything else). -> {slug, status,
+        approval: {storyboard: ISO, by, note}}."""
+        payload: dict = {"what": what}
+        if note is not None:
+            payload["note"] = note
+        return self._post_json_sync(f"/projects/{slug}/approve", payload,
+                                    timeout)
+
+    def project_sync(self, slug: str, timeout: float = 600) -> dict:
+        """POST /projects/{slug}/sync (sync): force the NAS rsync now (the
+        CIFS mount probe always runs). -> success: {ok: true, pending: false,
+        files, local_files, dest}; failure: {ok: false, pending: true,
+        reason, files: 0} (a NAS failure never fails a job — hourly retry)."""
+        return self._post_json_sync(f"/projects/{slug}/sync", {}, timeout)
+
+    # ------------------------------------ film production flows (Films B2–B5)
+    def animatic(self, manifest: list, audio: str | None = None,
+                 width: int = 1280, height: int = 720, fps: int = 24,
+                 font: str | None = None, user: str | None = None,
+                 client: str | None = None, on_job: OnJob | None = None,
+                 non_blocking: bool = False, timeout: float = 1800) -> dict:
+        """POST /animatic (job, ffmpeg only, no GPU) — the Tier-0 pacing gate
+        (Films B2, 2026-11-27): stitch storyboard keyframes into a preview
+        cut with simulated zoompan camera moves + shot labels + optional
+        audio, so a whole scene can be watched before burning video-
+        diffusion time. `manifest` = [{image, duration, move}] — image =
+        absolute GPU-host path or run-dir-relative (project keyframes pass
+        through; LOCAL files are auto-uploaded), move in
+        push_in/pull_out/pan_left/pan_right/shake/static (unknown -> clean
+        400 at submit). `audio` optional (same path semantics) — muxed with
+        -shortest. -> {video, shots, duration_s, width, height, fps}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        shots = []
+        for i, shot in enumerate(manifest):
+            if not isinstance(shot, dict) or not shot.get("image"):
+                raise PipelineError(
+                    f"manifest[{i}]: {{image, duration, move}} object "
+                    f"required")
+            s = dict(shot)
+            s["image"] = self._resolve_input(str(s["image"]))
+            shots.append(s)
+        payload: dict = {"shots": shots, "width": width, "height": height,
+                         "fps": fps}
+        if audio is not None:
+            payload["audio"] = self._resolve_input(audio)
+        if font is not None:
+            payload["font"] = font
+        jid = self._post_json("/animatic", payload, user, client, on_job)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout, on_job)
+
+    def extract_frame(self, source: str, frame: int | None = None,
+                      time: float | None = None,
+                      positions: list | None = None, n: int | None = None,
+                      user: str | None = None, client: str | None = None,
+                      on_job: OnJob | None = None, non_blocking: bool = False,
+                      timeout: float = 1800) -> dict:
+        """POST /extract_frame (job, ffmpeg only, Films B2): extract frame(s)
+        from a video for frame-chaining (last clean frame -> next shot's
+        start) and QC. EXACTLY ONE of: frame (int index), time (seconds),
+        positions (list of 'first'/'middle'/'last'), n (int -> n frames
+        evenly spaced). Wrong count -> 400 (client-side check here too).
+        `source` = absolute GPU-host path or LOCAL file (auto-uploaded).
+        The last frame is clamped 100 ms before the end; a job that produces
+        no frame errors loudly. -> {frames: [abs .png paths], count}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        if sum(x is not None for x in (frame, time, positions, n)) != 1:
+            raise PipelineError(
+                "provide exactly one of: frame (int), time (s), positions "
+                "(list), n (int even-spacing)")
+        payload: dict = {"source": self._resolve_input(source)}
+        for k, v in (("frame", frame), ("time", time),
+                     ("positions", positions), ("n", n)):
+            if v is not None:
+                payload[k] = v
+        jid = self._post_json("/extract_frame", payload, user, client, on_job)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout, on_job)
+
+    def qc_montage(self, source: str, n: int = 3, label: bool = True,
+                   width: int = 480, height: int = 270,
+                   user: str | None = None, client: str | None = None,
+                   on_job: OnJob | None = None, non_blocking: bool = False,
+                   timeout: float = 1800) -> dict:
+        """POST /qc_montage (job, ffmpeg only, Films B3): clip QC montage —
+        n even-spaced frames (first/middle/last for n=3) -> a SINGLE hstack
+        PNG with index+timestamp labels (one image -> one vision call). n in
+        [2,12] (out of range / non-int -> clean 400 at submit). `source` =
+        absolute GPU-host path or LOCAL file (auto-uploaded). -> {image
+        (abs .png), frames, timestamps}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        if not isinstance(n, int) or isinstance(n, bool) or not (2 <= n <= 12):
+            raise PipelineError("n must be an int in 2..12")
+        payload = {"source": self._resolve_input(source), "n": n, "label": label,
+                   "width": width, "height": height}
+        jid = self._post_json("/qc_montage", payload, user, client, on_job)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout, on_job)
+
+    def montage(self, source: str, n: int = 9, label: bool = True,
+                width: int = 480, height: int = 270,
+                user: str | None = None, client: str | None = None,
+                on_job: OnJob | None = None, non_blocking: bool = False,
+                timeout: float = 1800) -> dict:
+        """POST /montage (job, ffmpeg only, Films B5): generic video ->
+        montage grid — n even-spaced frames (inclusive ends; last clamped
+        100 ms before the end) -> a grid PNG of cols=ceil(sqrt(n)) x
+        rows=ceil(n/cols) cells (default 9 = 3x3), each cell scaled to
+        width x height with an optional index+timestamp label; the last row
+        is padded with black cells. n in [2,36] (out of range / non-int ->
+        clean 400 at submit). `source` = absolute GPU-host path or LOCAL
+        file (auto-uploaded). -> {image (abs .png), frames, grid
+        ('<cols>x<rows>'), timestamps}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        if not isinstance(n, int) or isinstance(n, bool) or not (2 <= n <= 36):
+            raise PipelineError("n must be an int in 2..36")
+        payload = {"source": self._resolve_input(source), "n": n, "label": label,
+                   "width": width, "height": height}
+        jid = self._post_json("/montage", payload, user, client, on_job)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout, on_job)
+
+    def lipsync(self, video: str, audio: str, face_box: list | None = None,
+                save_coord: bool = False, user: str | None = None,
+                client: str | None = None, on_job: OnJob | None = None,
+                non_blocking: bool = False, timeout: float = 7200) -> dict:
+        """POST /lipsync (job, GPU 1 — MuseTalk v1.5 in the dedicated
+        musetalk worker container, Films B4, 2026-11-27): video + wav ->
+        clip with the LOWER face re-animated to the audio (upper face
+        untouched; the source audio is muxed in unchanged). `video`/`audio`
+        = absolute GPU-host paths or LOCAL files (auto-uploaded); audio must
+        carry an audio stream. `face_box` optional [x1,y1,x2,y2] pixel ints
+        (malformed -> clean 400 at submit; absent = MuseTalk auto-detects
+        the face). `save_coord=true` also returns the per-frame face boxes
+        (pkl). Output duration ~= audio length (audio longer than the video
+        cycles the face — keep the line shorter than the shot). ~90 s for an
+        8 s clip. -> {video (abs .mp4), duration_s, width, height,
+        audio_codecs, face_boxes (save_coord only)}.
+        non_blocking=True -> submit only; returns {"job_id"} immediately."""
+        fb = None
+        if face_box is not None:
+            try:
+                fb = [int(x) for x in face_box]
+            except (TypeError, ValueError):
+                raise PipelineError("face_box must be [x1,y1,x2,y2] pixel ints")
+            if (len(fb) != 4 or any(x < 0 for x in fb)
+                    or fb[2] <= fb[0] or fb[3] <= fb[1]):
+                raise PipelineError(
+                    "face_box must be [x1,y1,x2,y2] with x2>x1 and y2>y1")
+        payload: dict = {"video": self._resolve_input(video),
+                         "audio": self._resolve_input(audio),
+                         "save_coord": bool(save_coord)}
+        if fb is not None:
+            payload["face_box"] = fb
+        jid = self._post_json("/lipsync", payload, user, client, on_job)
+        if non_blocking:
+            return {"job_id": jid}
+        return self._wait(jid, timeout, on_job)
 
 
 # Convenience singleton (reads MEDIA_PIPELINE_URL from env)
