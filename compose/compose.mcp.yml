@@ -21,8 +21,9 @@ services:
       # collection create). The `kb_` prefix gate in code is the boundary.
       - KB_API_KEY=${KB_API_KEY}
       # LiteLLM for embeddings (768-dim nomic) + vision fallback (matrix-coder).
+      # Phase 8: internal-service key (not the master — master is admin-only).
       - LITELLM_API_BASE=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
       - EMBED_MODEL=embeddings
       - VISION_MODEL=matrix-coder
       # Source-path allowlist for kb_ingest_file (container paths).
@@ -94,8 +95,9 @@ services:
       - MYSQL_PORT=3306
       - MYSQL_USER=${AI_DB_USER}
       - MYSQL_PASSWORD=${AI_DB_PASS}
+      # Phase 8: internal-service key (not the master — master is admin-only).
       - LITELLM_API_BASE=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
       - LITELLM_MODEL=matrix-coder
       - CSV_OUTPUT_DIR=/home/chuck/data/media/csv
       # Allow analytical full-table scans for the business_analyst skill.
@@ -236,8 +238,9 @@ services:
     environment:
       # Vision model via LiteLLM REST (alias as-is; thinking OFF in code).
       # Cap: 5 images per request (probed 2026-08-27) — server batches.
+      # Phase 8: internal-service key (not the master — master is admin-only).
       - LITELLM_API_BASE=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
       - VISION_MODEL=matrix-coder
       # Artifacts: NON-public (no Caddy route). rw vision dir nested in the
       # ro workspace mount; sources read from media/ + ai-kb/raw/ (ro).
@@ -352,7 +355,7 @@ services:
     # Run as chuck (uid/gid 1000): /data writes must be chuck-owned.
     user: "1000:1000"
     # Compose v5 project dir = compose/ (no .env there) — load the repo .env
-    # explicitly so ${KANBAN_*} / ${LITELLM_API_KEY} interpolate (searxng pattern).
+    # explicitly so ${KANBAN_*} / ${LITELLM_KEY_INTERNAL} interpolate (searxng pattern).
     env_file:
       - ../.env
     environment:
@@ -360,7 +363,9 @@ services:
       - LITELLM_BASE_URL=http://litellm-proxy:4000/v1
       # Service key: outbound LLM calls AND the "kanban key" (full MCP set).
       # Owner attribution: the kanban key stamps items with owner "kanban".
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      # Phase 8: the internal-service key is the service key (was the master);
+      # the master key is admin-only. Per-user sessions still use USER_KEYS.
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
       # Model + concurrency: .env-tunable (KANBAN_MODEL / KANBAN_MEDIA_CONCURRENT_TASKS /
       # KANBAN_NON_MEDIA_CONCURRENT_TASKS / KANBAN_AGENT_CONCURRENT_TASKS — per-category
       # slots: media serialized, non-media parallel, standing-agent cards (owner in

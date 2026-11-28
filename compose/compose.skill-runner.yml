@@ -19,7 +19,8 @@ services:
       - "${THOR_IP}:8091:8091"
     environment:
       - LITELLM_BASE_URL=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      # Phase 8: internal-service key (not the master — master is admin-only).
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
       - ARTIFACT_ROOT=/home/chuck/data/media
       - SKILL_RUNNER_LOG_DIR=/home/chuck/data/logs/skill_runner
       - SKILL_RUNNER_PORT=8091

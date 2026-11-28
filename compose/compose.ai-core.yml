@@ -162,7 +162,8 @@ services:
       - CAN_CHANGE_KEYS=false
       - LLM=custom
       - CUSTOM_LLM_URL=http://litellm-proxy:4000/v1
-      - CUSTOM_LLM_API_KEY=${LITELLM_API_KEY}
+      # Phase 8: internal-service key (not the master — master is admin-only).
+      - CUSTOM_LLM_API_KEY=${LITELLM_KEY_INTERNAL}
       - CUSTOM_MODEL=${HARNESS_MODEL}
       - IMAGE_PROVIDER=pexels
       - SEARXNG_BASE_URL=http://searxng:8080

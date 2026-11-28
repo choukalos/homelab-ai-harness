@@ -309,10 +309,12 @@ class MediaPipelineClient:
             return {k: out[k] for k in ("analysis", "tab", "lyrics", "midi",
                                         "audio") if k in out} | {
                        "location": "gpu_host"}
-        if "frames" in out:
+        if isinstance(out.get("frames"), list):
             # Films B2 extract_frame (2026-11-27): frame extraction -> PNG
             # path(s) (no single video/image/audio key) — carry the GPU-host
-            # location marker through to the poll result.
+            # location marker through to the poll result. (Guarded on list:
+            # the shots flow reports `frames` as an int frame count alongside
+            # its `video` key — that must fall through to the branch below.)
             res = {"frames": out["frames"], "location": "gpu_host"}
             if "count" in out:
                 res["count"] = out["count"]

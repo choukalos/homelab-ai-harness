@@ -33,7 +33,8 @@ services:
       - FINANCE_DB=finance
       - INBOX_ROOT=/data
       - LITELLM_API_BASE=http://litellm-proxy:4000
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      # Phase 8: internal-service key (not the master — master is admin-only).
+      - LITELLM_API_KEY=${LITELLM_KEY_INTERNAL}
     ports:
       - "192.168.4.54:8100:8100"
     volumes:
